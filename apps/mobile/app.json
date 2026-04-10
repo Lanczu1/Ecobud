@@ -1,0 +1,8 @@
+{
+  "android": {
+    "package": "com.anonymous.ecobudmobile"
+  },
+  "plugins": [
+    "expo-font"
+  ]
+}
