@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String               @id @default(cuid())
+  email             String               @unique
+  passwordHash      String
+  role              String               @default("USER")
+  points            Int                  @default(0)
+  currentStreak     Int                  @default(0)
+  highestStreak     Int                  @default(0)
+  lastActionDate    DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  profile           Profile?
+  lessonProgress    UserLessonProgress[]
+  challengeProgress UserChallenge[]
+  badges            UserBadge[]
+  eventRegistrations EventRegistration[]
+  transparencyLogs TransparencyLog[]
+  habitCheckIns     HabitCheckIn[]
+  managedEvents     Event[]              @relation("ManagedEvents")
+}
+
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  displayName     String
+  avatarUrl       String?
+  headline        String?
+  city            String?
+  preferencesJson String?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Lesson {
+  id            String   @id @default(cuid())
+  title         String
+  summary       String
+  content       String   
+  category      String
+  imageUrl      String?
+  durationMinutes Int    @default(8)
+  rating        Float    @default(4.8)
+  pointsReward  Int      @default(10)
+  featured      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  progress      UserLessonProgress[]
+}
+
+model UserLessonProgress {
+  id          String               @id @default(cuid())
+  userId      String
+  lessonId    String
+  status      String               @default("STARTED")
+  completedAt DateTime?
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+model Challenge {
+  id             String              @id @default(cuid())
+  title          String
+  description    String
+  difficulty     String
+  category       String?
+  durationDays   Int
+  pointsReward   Int
+  imageUrl       String?
+  badgeLabel     String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  userChallenges UserChallenge[]
+}
+
+model UserChallenge {
+  id                  String          @id @default(cuid())
+  userId              String
+  challengeId         String
+  progressPercentage  Int      @default(0)
+  status              String          @default("IN_PROGRESS")
+  startedAt           DateTime        @default(now())
+  completedAt         DateTime?
+  expirationDate      DateTime?
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge           Challenge       @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, challengeId])
+}
+
+model Habit {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  title        String
+  pointsReward Int
+  active       Boolean        @default(true)
+  checkIns     HabitCheckIn[]
+}
+
+model HabitCheckIn {
+  id            String   @id @default(cuid())
+  userId        String
+  habitId       String
+  dateKey       String
+  pointsAwarded Int
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habit         Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, habitId, dateKey])
+}
+
+model Badge {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String
+  iconUrl        String
+  requiredPoints Int
+  accentColor    String?
+  users          UserBadge[]
+}
+
+model UserBadge {
+  id          String   @id @default(cuid())
+  userId      String
+  badgeId     String
+  unlockedAt  DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge       Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model Event {
+  id            String              @id @default(cuid())
+  title         String
+  description   String
+  location      String
+  date          DateTime
+  capacity      Int
+  pointsReward  Int
+  adminId       String
+  imageUrl      String?
+  latitude      Float?
+  longitude     Float?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  admin         User                @relation("ManagedEvents", fields: [adminId], references: [id], onDelete: Cascade)
+  registrations EventRegistration[]
+}
+
+model EventRegistration {
+  id          String                  @id @default(cuid())
+  userId      String
+  eventId     String
+  status      String                  @default("REGISTERED")
+  registeredAt DateTime               @default(now())
+  attendedAt  DateTime?
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+}
+
+model TransparencyLog {
+  id             String   @id @default(cuid())
+  userId         String
+  actionType     String   
+  publicLabel    String
+  pointsAwarded  Int
+  metadata       String?  
+  previousHash   String
+  currentHash    String   @unique
+  timestamp      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
