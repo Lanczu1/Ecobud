@@ -70,7 +70,6 @@ async function main() {
         create: {
           displayName: 'EcoBud Admin',
           headline: 'Keeping the platform green and verified.',
-          avatarUrl: 'https://i.pravatar.cc/150?img=12',
           city: 'Manila',
         },
       },
@@ -90,7 +89,6 @@ async function main() {
         create: {
           displayName: 'Mila Green',
           headline: 'Community event moderator.',
-          avatarUrl: 'https://i.pravatar.cc/150?img=32',
           city: 'Quezon City',
         },
       },
@@ -110,7 +108,6 @@ async function main() {
         create: {
           displayName: 'Lanczu',
           headline: 'Turning daily habits into measurable impact.',
-          avatarUrl: 'https://i.pravatar.cc/150?img=15',
           city: 'Manila',
           preferencesJson: JSON.stringify({
             reminders: true,

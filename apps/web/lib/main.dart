@@ -34,7 +34,7 @@ class EcoBudWebApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'ECOBUD - Learn, Act, Earn',
+      title: 'ECO-BUD',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
