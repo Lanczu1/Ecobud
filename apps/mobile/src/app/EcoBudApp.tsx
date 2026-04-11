@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   ImageBackground,
@@ -22,6 +21,9 @@ import {
   View,
   Animated,
   Easing,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -39,6 +41,7 @@ import {
   type TransparencyFeed,
 } from '../shared/api/ecobudApi';
 import { ecoTheme } from '../shared/theme/ecoTheme';
+import { LoadingGlyph, LoadingScreenVisual } from '../shared/ui/OptimizedLoading';
 import { AuthView } from '../features/auth/AuthView';
 
 type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
@@ -761,72 +764,30 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
 
 function BootView() {
   const fadeIn = React.useRef(new Animated.Value(0)).current;
-  const pulse = React.useRef(new Animated.Value(0.96)).current;
-  const orbit = React.useRef(new Animated.Value(0)).current;
-
   React.useEffect(() => {
     Animated.timing(fadeIn, {
       toValue: 1,
-      duration: 820,
-      easing: Easing.out(Easing.cubic),
+      duration: 350,
       useNativeDriver: true,
     }).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1.05,
-          duration: 1700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0.97,
-          duration: 1700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.timing(orbit, {
-        toValue: 1,
-        duration: 4800,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    ).start();
-  }, [fadeIn, orbit, pulse]);
-
-  const orbitRotate = orbit.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
+  }, [fadeIn]);
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
-      <LinearGradient colors={['#081F1B', '#0E5D52', '#18A176']} style={styles.centeredScreen}>
-        <View style={styles.bootBackdropOrb} />
-        <View style={styles.bootBackdropOrbSecondary} />
-        <View style={styles.bootCenterpiece}>
-          <Animated.View style={[styles.bootOrbitalRing, { transform: [{ rotate: orbitRotate }] }]}>
-            <View style={styles.bootOrbitalDot} />
-          </Animated.View>
-          <Animated.View style={[styles.bootLogoModern, { opacity: fadeIn, transform: [{ scale: pulse }] }]}>
-            <EcoLogo light emphasis="hero" />
-          </Animated.View>
-        </View>
-        <Animated.Text style={[styles.bootTitleModern, { opacity: fadeIn }]}>Growing your EcoBud journey</Animated.Text>
-        <Animated.Text style={[styles.bootSubtitleModern, { opacity: fadeIn }]}>
-          Loading lessons, rewards, streaks, and your next green move.
-        </Animated.Text>
-        <Animated.View style={[styles.bootLoaderChip, { opacity: fadeIn }]}>
-          <ActivityIndicator size="small" color="#C9FFE8" />
-          <Text style={styles.bootLoaderText}>Preparing your experience</Text>
-        </Animated.View>
-      </LinearGradient>
+      <StatusBar style='dark' />
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            
+            opacity: fadeIn,
+          },
+        ]}
+      >
+        <LoadingScreenVisual
+          label="Growing your EcoBud journey"
+          message="Preparing your dashboard with a lighter Android-safe loading flow."
+        />
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -834,75 +795,18 @@ function BootView() {
 function LaunchBackdrop() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
-      <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={styles.landingScreen}>
-        <View style={styles.landingBackdropOrbPrimary} />
-        <View style={styles.landingBackdropOrbSecondary} />
-        <View style={styles.launchBackdropCenter}>
-          <View style={styles.launchBackdropCore}>
-            <EcoLogo light emphasis="hero" />
-          </View>
-          <Text style={styles.launchBackdropCopy}>Preparing your EcoBud welcome...</Text>
-        </View>
-      </LinearGradient>
+      <StatusBar style='dark' />
+      <LoadingScreenVisual label="Preparing your EcoBud welcome" />
     </SafeAreaView>
   );
 }
 
 function EcobudActionOverlay({ label }: { label: string }) {
-  const pulse = React.useRef(new Animated.Value(0.96)).current;
-  const orbit = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1.02,
-          duration: 760,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0.98,
-          duration: 760,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-
-    Animated.loop(
-      Animated.timing(orbit, {
-        toValue: 1,
-        duration: 2600,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    ).start();
-  }, [orbit, pulse]);
-
-  const orbitRotate = orbit.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   return (
-    <View style={styles.actionOverlay}>
-      <Animated.View style={[styles.actionOverlayCard, { transform: [{ scale: pulse }] }]}>
-        <View style={styles.actionOverlayLogoWrap}>
-          <View style={styles.actionOverlaySpinnerShell}>
-            <Animated.View style={[styles.actionOverlaySpinnerRing, { transform: [{ rotate: orbitRotate }] }]}>
-              <View style={styles.actionOverlaySpinnerDot} />
-            </Animated.View>
-            <View style={styles.actionOverlayLogoCore}>
-              <EcoLogo light emphasis="hero" />
-            </View>
-          </View>
-        </View>
-        <Text style={styles.actionOverlayTitle}>{label}</Text>
-        <Text style={styles.actionOverlayCopy}>Ecobud is getting things ready for you.</Text>
-      </Animated.View>
-    </View>
+    <LoadingScreenVisual
+      label={label}
+      message="Optimized for smoother loading on older and newer Android devices."
+    />
   );
 }
 
@@ -1129,7 +1033,12 @@ function TopNavbar({ model, title, showBack }: { model: EcoBudMobileModel; title
             <Feather name="arrow-left" size={24} color="#1A211D" />
           </TouchableOpacity>
         ) : (
-          <Image source={{ uri: model.session?.user.avatarUrl ?? 'https://i.pravatar.cc/150?u=' + (model.session?.user.id || '1') }} style={styles.topNavAvatar} />
+          <AvatarBubble
+            label={model.userDisplayName}
+            size={44}
+            style={styles.topNavAvatar}
+            textStyle={styles.topNavAvatarText}
+          />
         )}
       </View>
       <Text style={[styles.topNavTitle, title ? styles.topNavTitleDark : {}]}>{title || 'ECOBUD'}</Text>
@@ -1240,9 +1149,15 @@ function LearnView({ model }: { model: EcoBudMobileModel }) {
                </TouchableOpacity>
 
                <View style={{ flexDirection: 'row', gap: -8 }}>
-                  <View style={styles.nftAvatar}><Image source={{uri: 'https://i.pravatar.cc/100?img=1'}} style={{width:'100%', height:'100%', borderRadius: 12}}/></View>
-                  <View style={styles.nftAvatar}><Image source={{uri: 'https://i.pravatar.cc/100?img=2'}} style={{width:'100%', height:'100%', borderRadius: 12}}/></View>
-                  <View style={styles.nftAvatar}><Image source={{uri: 'https://i.pravatar.cc/100?img=3'}} style={{width:'100%', height:'100%', borderRadius: 12}}/></View>
+                  {['Mia', 'Noah', 'Sage'].map((name) => (
+                    <AvatarBubble
+                      key={name}
+                      label={name}
+                      size={28}
+                      style={styles.nftAvatar}
+                      textStyle={styles.nftAvatarText}
+                    />
+                  ))}
                   <View style={[styles.nftAvatar, {backgroundColor: '#1E4C31'}]}><Text style={{color: '#FFF', fontSize: 10, fontWeight: 'bold'}}>+12k</Text></View>
                </View>
             </View>
@@ -1686,7 +1601,9 @@ function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
               <Text style={message.role === 'user' ? styles.chatTimeUser : styles.chatTimeBot}>{message.time}</Text>
             </View>
           ))}
-          {model.sendingMessage ? <ActivityIndicator color="#126027" style={{ marginTop: 12, alignSelf: 'flex-start' }} /> : null}
+          {model.sendingMessage ? (
+            <LoadingGlyph size="md" style={{ marginTop: 8, alignSelf: 'flex-start' }} />
+          ) : null}
         </ScrollView>
 
         <View style={{paddingHorizontal: 24, paddingBottom: 12}}>
@@ -1752,9 +1669,15 @@ function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
             
             <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
                <View style={{ flexDirection: 'row', gap: -8 }}>
-                  <View style={styles.nftAvatar}><Image source={{uri: 'https://i.pravatar.cc/100?img=4'}} style={{width:'100%', height:'100%', borderRadius: 12}}/></View>
-                  <View style={styles.nftAvatar}><Image source={{uri: 'https://i.pravatar.cc/100?img=5'}} style={{width:'100%', height:'100%', borderRadius: 12}}/></View>
-                  <View style={styles.nftAvatar}><Image source={{uri: 'https://i.pravatar.cc/100?img=6'}} style={{width:'100%', height:'100%', borderRadius: 12}}/></View>
+                  {['Theo', 'Luna', 'Kai'].map((name) => (
+                    <AvatarBubble
+                      key={name}
+                      label={name}
+                      size={28}
+                      style={styles.nftAvatar}
+                      textStyle={styles.nftAvatarText}
+                    />
+                  ))}
                   <View style={[styles.nftAvatar, {backgroundColor: '#1E4C31'}]}><Text style={{color: '#FFF', fontSize: 10, fontWeight: 'bold'}}>+142</Text></View>
                </View>
                <TouchableOpacity style={styles.eventJoinBtnInfo}>
@@ -1846,6 +1769,39 @@ function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
+  const featuredLeaders: Array<{
+    rank: number;
+    name: string;
+    points: string;
+    badgeColor: string;
+    avatarSize: number;
+    cardStyle?: StyleProp<ViewStyle>;
+  }> = [
+    {
+      rank: 2,
+      name: 'Sarah M.',
+      points: '12.4k pts',
+      badgeColor: '#B0BEC5',
+      avatarSize: 64,
+      cardStyle: { marginTop: 40 },
+    },
+    {
+      rank: 1,
+      name: 'Alex Eco',
+      points: '15.2k pts',
+      badgeColor: '#FFD700',
+      avatarSize: 80,
+    },
+    {
+      rank: 3,
+      name: 'John D.',
+      points: '11.1k pts',
+      badgeColor: '#CD7F32',
+      avatarSize: 64,
+      cardStyle: { marginTop: 40 },
+    },
+  ];
+
   return (
     <View style={styles.fullscreenOverlay}>
       <TopNavbar model={model} showBack={true} title="Leaderboard" />
@@ -1856,37 +1812,59 @@ function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
         </View>
 
         <View style={styles.leaderboardTop3}>
-           <View style={[styles.lbTopCard, {marginTop: 40}]}>
+          {featuredLeaders.map((leader) => (
+            <View key={leader.rank} style={[styles.lbTopCard, leader.cardStyle]}>
               <View style={styles.lbAvatarWrap}>
-                 <Image source={{uri: 'https://i.pravatar.cc/150?img=12'}} style={styles.lbAvatarImg} />
-                 <View style={[styles.lbRankBadge, {backgroundColor: '#B0BEC5'}]}><Text style={styles.lbRankText}>2</Text></View>
+                <AvatarBubble
+                  label={leader.name}
+                  size={leader.avatarSize}
+                  style={styles.lbAvatarImg}
+                  textStyle={leader.avatarSize > 64 ? styles.lbAvatarTextLarge : styles.lbAvatarText}
+                />
+                <View
+                  style={[
+                    styles.lbRankBadge,
+                    {
+                      backgroundColor: leader.badgeColor,
+                      width: leader.rank === 1 ? 28 : 24,
+                      height: leader.rank === 1 ? 28 : 24,
+                      borderRadius: leader.rank === 1 ? 14 : 12,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.lbRankText, leader.rank === 1 ? { fontSize: 14 } : null]}>{leader.rank}</Text>
+                </View>
               </View>
-              <Text style={styles.lbTopName}>Sarah M.</Text>
-              <Text style={styles.lbTopPoints}>12.4k pts</Text>
-           </View>
-           <View style={styles.lbTopCard}>
-              <View style={styles.lbAvatarWrap}>
-                 <Image source={{uri: 'https://i.pravatar.cc/150?img=33'}} style={[styles.lbAvatarImg, {width: 80, height: 80}]} />
-                 <View style={[styles.lbRankBadge, {backgroundColor: '#FFD700', width: 28, height: 28, borderRadius: 14}]}><Text style={[styles.lbRankText, {fontSize: 14}]}>1</Text></View>
-              </View>
-              <Text style={[styles.lbTopName, {fontSize: 18, fontWeight: 'bold'}]}>Alex Eco</Text>
-              <Text style={[styles.lbTopPoints, {color: '#126027', fontWeight: 'bold'}]}>15.2k pts</Text>
-           </View>
-           <View style={[styles.lbTopCard, {marginTop: 40}]}>
-              <View style={styles.lbAvatarWrap}>
-                 <Image source={{uri: 'https://i.pravatar.cc/150?img=44'}} style={styles.lbAvatarImg} />
-                 <View style={[styles.lbRankBadge, {backgroundColor: '#CD7F32'}]}><Text style={styles.lbRankText}>3</Text></View>
-              </View>
-              <Text style={styles.lbTopName}>John D.</Text>
-              <Text style={styles.lbTopPoints}>11.1k pts</Text>
-           </View>
+              <Text
+                style={[
+                  styles.lbTopName,
+                  leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
+                ]}
+              >
+                {leader.name}
+              </Text>
+              <Text
+                style={[
+                  styles.lbTopPoints,
+                  leader.rank === 1 ? { color: '#126027', fontWeight: 'bold' } : null,
+                ]}
+              >
+                {leader.points}
+              </Text>
+            </View>
+          ))}
         </View>
 
         <ScrollView style={{flex: 1, marginTop: 24, paddingHorizontal: 4}}>
            {[4,5,6,7,8,9,10].map(rank => (
              <View key={rank} style={styles.lbListRow}>
                 <Text style={styles.lbListRank}>{rank}</Text>
-                <Image source={{uri: `https://i.pravatar.cc/100?img=${rank+10}`}} style={styles.lbListAvatar} />
+                <AvatarBubble
+                  label={`User ${rank}`}
+                  size={40}
+                  style={styles.lbListAvatar}
+                  textStyle={styles.lbListAvatarText}
+                />
                 <View style={{flex: 1, marginLeft: 16}}>
                    <Text style={styles.cardTitle}>User {rank}</Text>
                 </View>
@@ -1897,9 +1875,14 @@ function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
         
         <View style={styles.lbCurrentUserCard}>
            <Text style={styles.lbListRank}>42</Text>
-           <Image source={{uri: model.session?.user.avatarUrl ?? 'https://i.pravatar.cc/100'}} style={styles.lbListAvatar} />
+           <AvatarBubble
+             label={model.userDisplayName}
+             size={40}
+             style={[styles.lbListAvatar, styles.lbCurrentUserAvatar]}
+             textStyle={styles.lbCurrentUserAvatarText}
+           />
            <View style={{flex: 1, marginLeft: 16}}>
-              <Text style={[styles.cardTitle, {color: '#FFF'}]}>You</Text>
+              <Text style={[styles.cardTitle, {color: '#FFF'}]}>{model.userDisplayName}</Text>
            </View>
            <Text style={[styles.lbListPoints, {color: '#FFF'}]}>{model.dashboard?.user?.points ?? 2450} pts</Text>
         </View>
@@ -2281,10 +2264,20 @@ function ChallengeMeta({
   );
 }
 
-function AvatarBubble({ label, size }: { label: string; size: number }) {
+function AvatarBubble({
+  label,
+  size,
+  style,
+  textStyle,
+}: {
+  label: string;
+  size: number;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+}) {
   return (
-    <View style={[styles.avatarBubble, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={styles.avatarInitials}>{initialsFromLabel(label)}</Text>
+    <View style={[styles.avatarBubble, style, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Text style={[styles.avatarInitials, textStyle]}>{initialsFromLabel(label)}</Text>
     </View>
   );
 }
@@ -2431,8 +2424,7 @@ function buildCalendarCells(month: string, completedDays: string[]) {
 }
 
 function initialsFromLabel(label: string) {
-  const [first = '', second = ''] = label.trim().split(/\s+/);
-  return `${first.slice(0, 1)}${second.slice(0, 1)}`.toUpperCase() || 'EB';
+  return label.trim().slice(0, 1).toUpperCase() || 'E';
 }
 
 function shortHash(hash: string) {
@@ -5027,11 +5019,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F9F7',
   },
   topNavAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
     borderWidth: 2,
     borderColor: '#4ADE80',
+  },
+  topNavAvatarText: {
+    fontSize: 18,
   },
   topNavTitle: {
     fontSize: 22,
@@ -5390,6 +5382,7 @@ const styles = StyleSheet.create({
   nftPromoTitle: { fontSize: 24, fontWeight: '800', color: '#FFF', marginBottom: 8 },
   nftPromoDesc: { fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 20 },
   nftAvatar: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#126027', alignItems: 'center', justifyContent: 'center' },
+  nftAvatarText: { fontSize: 11, fontWeight: '900' },
   availablePointsCard: { backgroundColor: '#126027', padding: 24, borderRadius: 24, marginTop: 16 },
   pointsLabel: { color: '#4ADE80', fontSize: 12, fontWeight: '800', letterSpacing: 1, marginBottom: 12 },
   pointsBigValue: { color: '#FFF', fontSize: 48, fontWeight: '800' },
@@ -5465,6 +5458,8 @@ const styles = StyleSheet.create({
   lbTopCard: { alignItems: 'center', width: '30%' },
   lbAvatarWrap: { marginBottom: 12, alignItems: 'center' },
   lbAvatarImg: { width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: '#FFF' },
+  lbAvatarText: { fontSize: 26, fontWeight: '900' },
+  lbAvatarTextLarge: { fontSize: 32, fontWeight: '900' },
   lbRankBadge: { position: 'absolute', bottom: -8, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFF' },
   lbRankText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   lbTopName: { fontSize: 16, fontWeight: '700', color: '#1A211D', marginBottom: 4 },
@@ -5472,8 +5467,11 @@ const styles = StyleSheet.create({
   lbListRow: { flexDirection: 'row', backgroundColor: '#FFF', alignItems: 'center', padding: 12, borderRadius: 20, marginBottom: 8 },
   lbListRank: { width: 30, fontSize: 16, fontWeight: '800', color: '#6B7A75', textAlign: 'center' },
   lbListAvatar: { width: 40, height: 40, borderRadius: 20 },
+  lbListAvatarText: { fontSize: 16, fontWeight: '900' },
   lbListPoints: { fontSize: 14, fontWeight: '800', color: '#126027' },
   lbCurrentUserCard: { flexDirection: 'row', backgroundColor: '#126027', alignItems: 'center', padding: 16, borderRadius: 24, position: 'absolute', bottom: 32, left: 24, right: 24, shadowColor: '#126027', shadowOpacity: 0.2, shadowRadius: 10 },
+  lbCurrentUserAvatar: { backgroundColor: '#ECFAEF' },
+  lbCurrentUserAvatarText: { color: '#126027', fontSize: 16, fontWeight: '900' },
 
   chatBubble: {
     padding: 16,

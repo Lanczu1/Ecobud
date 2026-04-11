@@ -1,6 +1,14 @@
 {
+  "name": "ECO-BUD",
+  "slug": "eco-bud",
+  "icon": "./assets/logo.png",
   "android": {
     "package": "com.anonymous.ecobudmobile"
+  },
+  "web": {
+    "name": "ECO-BUD",
+    "shortName": "ECO-BUD",
+    "favicon": "./assets/logo.png"
   },
   "plugins": [
     "expo-font"
