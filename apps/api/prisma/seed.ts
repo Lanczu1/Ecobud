@@ -42,11 +42,16 @@ const createLogRecord = (
 
 async function main() {
   await prisma.habitCheckIn.deleteMany();
+  await prisma.challengeSubmission.deleteMany();
   await prisma.userBadge.deleteMany();
   await prisma.eventRegistration.deleteMany();
   await prisma.userChallenge.deleteMany();
   await prisma.userLessonProgress.deleteMany();
+  await prisma.userWeeklyGoal.deleteMany();
+  await prisma.userStats.deleteMany();
   await prisma.transparencyLog.deleteMany();
+  await prisma.systemSetting.deleteMany();
+  await prisma.faq.deleteMany();
   await prisma.profile.deleteMany();
   await prisma.habit.deleteMany();
   await prisma.badge.deleteMany();
@@ -63,9 +68,11 @@ async function main() {
 
   const admin = await prisma.user.create({
     data: {
+      name: 'EcoBud Admin',
       email: 'admin@ecobud.app',
       passwordHash: adminPassword,
-      role: 'ADMIN',
+      role: 'admin',
+      status: 'active',
       profile: {
         create: {
           displayName: 'EcoBud Admin',
@@ -78,12 +85,13 @@ async function main() {
 
   const moderator = await prisma.user.create({
     data: {
+      name: 'Mila Green',
       email: 'moderator@ecobud.app',
       passwordHash: moderatorPassword,
-      role: 'MODERATOR',
-      points: 410,
-      currentStreak: 9,
-      highestStreak: 15,
+      role: 'moderator',
+      status: 'active',
+      points: 240,
+      currentStreak: 3,
       lastActionDate: new Date(),
       profile: {
         create: {
@@ -97,12 +105,13 @@ async function main() {
 
   const member = await prisma.user.create({
     data: {
+      name: 'Lanczu',
       email: 'lanczu@ecobud.app',
       passwordHash: memberPassword,
-      role: 'USER',
-      points: 530,
-      currentStreak: 12,
-      highestStreak: 12,
+      role: 'user',
+      status: 'active',
+      points: 120,
+      currentStreak: 1,
       lastActionDate: new Date(),
       profile: {
         create: {
@@ -116,6 +125,46 @@ async function main() {
         },
       },
     },
+  });
+
+  await prisma.userStats.createMany({
+    data: [
+      {
+        userId: admin.id,
+        currentStreak: 0,
+        ecoPoints: 0,
+        knowledgePoints: 0,
+      },
+      {
+        userId: moderator.id,
+        currentStreak: 3,
+        ecoPoints: 240,
+        knowledgePoints: 35,
+      },
+      {
+        userId: member.id,
+        currentStreak: 1,
+        ecoPoints: 120,
+        knowledgePoints: 60,
+      },
+    ],
+  });
+
+  await prisma.userWeeklyGoal.createMany({
+    data: [
+      {
+        userId: admin.id,
+        weeklyGoal: 0,
+      },
+      {
+        userId: moderator.id,
+        weeklyGoal: 4,
+      },
+      {
+        userId: member.id,
+        weeklyGoal: 5,
+      },
+    ],
   });
 
   const badgeData = [
@@ -139,56 +188,32 @@ async function main() {
   const lessons = await Promise.all(
     [
       {
-        title: 'Introduction to Composting',
-        summary: 'Learn how kitchen scraps can become nutrient-rich compost.',
-        content:
-          'Composting starts with a healthy balance of green materials like peels and coffee grounds, and brown materials like dry leaves or cardboard. Keep the pile slightly moist and turn it once a week for airflow.',
-        category: 'Composting',
-        imageUrl:
-          'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=1200&q=80',
-        durationMinutes: 8,
-        rating: 4.8,
-        pointsReward: 20,
-        featured: true,
-      },
-      {
         title: 'Waste Management Basics',
-        summary: 'Sort waste better and understand the difference between recyclable and residual materials.',
+        description: 'Learn how to sort, reduce, and handle household waste correctly.',
         content:
-          'Start by separating biodegradable, recyclable, residual, and hazardous waste. Clear labels and small family routines help reduce contamination and improve recycling outcomes.',
+          'Waste management starts with separating biodegradable, recyclable, residual, and hazardous waste. Use clearly labelled bins, rinse recyclable containers before disposal, and keep hazardous items like batteries and chemicals away from regular trash. A simple daily routine makes segregation easier and helps keep reusable materials clean enough for recovery.',
         category: 'Waste',
         imageUrl:
           'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80',
         durationMinutes: 6,
-        rating: 4.7,
+        rating: 4.8,
         pointsReward: 15,
         featured: true,
+        isPublished: true,
       },
       {
-        title: 'Solar Energy for Beginners',
-        summary: 'Discover the basics of rooftop solar and community solar benefits.',
+        title: 'Sustainable Living 101',
+        description: 'Build everyday habits that lower your environmental impact at home.',
         content:
-          'Solar panels convert sunlight into electricity through photovoltaic cells. Even if you cannot install a full system, small solar habits and community programs can reduce your footprint.',
-        category: 'Energy',
+          'Sustainable living begins with small repeatable actions: carry reusables, choose durable products, reduce energy waste, conserve water, and support local low-impact options when possible. Start with one habit at a time, track what you can maintain each week, and focus on consistency over perfection.',
+        category: 'Lifestyle',
         imageUrl:
-          'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80',
-        durationMinutes: 10,
+          'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=1200&q=80',
+        durationMinutes: 8,
         rating: 4.9,
-        pointsReward: 18,
+        pointsReward: 20,
         featured: true,
-      },
-      {
-        title: 'Blockchain for Sustainability',
-        summary: 'See how transparent ledgers can verify positive environmental actions.',
-        content:
-          'ECOBUD uses a blockchain-inspired chain of hashes to make every verified reward auditable. Each entry links to the previous record so tampering becomes easy to detect.',
-        category: 'Transparency',
-        imageUrl:
-          'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=1200&q=80',
-        durationMinutes: 9,
-        rating: 4.6,
-        pointsReward: 15,
-        featured: false,
+        isPublished: true,
       },
     ].map((lesson) => prisma.lesson.create({ data: lesson })),
   );
@@ -231,14 +256,16 @@ async function main() {
     ].map((challenge) => prisma.challenge.create({ data: challenge })),
   );
 
+  const habitData = [
+    ['used-reusable-water-bottle', 'Used reusable water bottle', 5],
+    ['walked-instead-of-using-motorbike', 'Walked instead of using motorbike', 3],
+    ['reused-container', 'Reused container', 2],
+    ['ate-plant-based-meal', 'Ate plant-based meal', 5],
+    ['refused-single-use-plastic', 'Refused single-use plastic', 5],
+  ] as const;
+
   const habits = await Promise.all(
-    [
-      ['used-reusable-water-bottle', 'Used reusable water bottle', 5],
-      ['walked-instead-of-using-motorbike', 'Walked instead of using motorbike', 3],
-      ['reused-container', 'Reused container', 2],
-      ['ate-plant-based-meal', 'Ate plant-based meal', 5],
-      ['refused-single-use-plastic', 'Refused single-use plastic', 5],
-    ].map(([slug, title, pointsReward]) =>
+    habitData.map(([slug, title, pointsReward]) =>
       prisma.habit.create({
         data: {
           slug,
@@ -258,7 +285,7 @@ async function main() {
         date: addDays(5),
         capacity: 120,
         pointsReward: 40,
-        adminId: admin.id,
+        managedById: admin.id,
         imageUrl:
           'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=80',
         latitude: 14.5995,
@@ -271,7 +298,7 @@ async function main() {
         date: addDays(12),
         capacity: 80,
         pointsReward: 35,
-        adminId: admin.id,
+        managedById: admin.id,
         imageUrl:
           'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=1200&q=80',
         latitude: 14.6091,
@@ -284,7 +311,7 @@ async function main() {
         date: addDays(18),
         capacity: 140,
         pointsReward: 50,
-        adminId: moderator.id,
+        managedById: moderator.id,
         imageUrl:
           'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
         latitude: 13.7565,
@@ -298,19 +325,8 @@ async function main() {
       {
         userId: member.id,
         lessonId: lessons[0].id,
-        status: 'COMPLETED',
-        completedAt: addDays(-6),
-      },
-      {
-        userId: member.id,
-        lessonId: lessons[1].id,
-        status: 'COMPLETED',
-        completedAt: addDays(-5),
-      },
-      {
-        userId: member.id,
-        lessonId: lessons[2].id,
-        status: 'STARTED',
+        status: 'seen',
+        progress: 0,
       },
     ],
   });
@@ -342,13 +358,6 @@ async function main() {
     ],
   });
 
-  await prisma.userBadge.createMany({
-    data: badges.slice(0, 4).map((badge) => ({
-      userId: member.id,
-      badgeId: badge.id,
-    })),
-  });
-
   await prisma.eventRegistration.createMany({
     data: [
       {
@@ -361,6 +370,30 @@ async function main() {
         eventId: events[1].id,
         status: 'ATTENDED',
         attendedAt: addDays(-2),
+      },
+    ],
+  });
+
+  await prisma.challengeSubmission.createMany({
+    data: [
+      {
+        userId: member.id,
+        challengeId: challenges[0].id,
+        proofText:
+          'Uploaded a daily waste segregation tracker with labeled bins and end-of-day photos.',
+        proofUrl: 'https://example.com/proofs/waste-segregation-week.jpg',
+        status: 'pending',
+      },
+      {
+        userId: member.id,
+        challengeId: challenges[1].id,
+        proofText:
+          'Submitted meter snapshots and a two-week reduction summary for the energy saver challenge.',
+        proofUrl: 'https://example.com/proofs/energy-saver-report.pdf',
+        status: 'approved',
+        moderatorNotes: 'Evidence is complete and matches the reported reduction.',
+        reviewedById: moderator.id,
+        reviewedAt: new Date(),
       },
     ],
   });
@@ -405,9 +438,50 @@ async function main() {
     data: [logA, logB, logC],
   });
 
+  await prisma.faq.createMany({
+    data: [
+      {
+        question: 'Do I need an account to view ECOBUD transparency metrics?',
+        answer:
+          'No. Guests can browse the landing page, FAQs, and public transparency metrics without signing in.',
+        sortOrder: 1,
+      },
+      {
+        question: 'How do challenge proof submissions work?',
+        answer:
+          'Users can optionally submit proof text or a proof URL for challenges. Moderators and admins can approve, reject, or flag those submissions.',
+        sortOrder: 2,
+      },
+      {
+        question: 'Who can create moderators and admins?',
+        answer:
+          'Only admins can manually create moderator or admin accounts, activate them, or suspend them.',
+        sortOrder: 3,
+      },
+    ],
+  });
+
+  await prisma.systemSetting.createMany({
+    data: [
+      {
+        key: 'event.autoAttendanceReward',
+        value: 'enabled',
+        description: 'Controls whether verified attendance triggers automatic point rewards.',
+        updatedById: admin.id,
+      },
+      {
+        key: 'challenge.proofModeration',
+        value: 'optional',
+        description: 'Defines whether challenge proof moderation is optional, required, or disabled.',
+        updatedById: admin.id,
+      },
+    ],
+  });
+
   console.log('ECOBUD seed complete.');
   console.log('Member login: lanczu@ecobud.app / eco12345');
   console.log('Admin login: admin@ecobud.app / admin12345');
+  console.log('Moderator login: moderator@ecobud.app / moderator123');
 }
 
 main()

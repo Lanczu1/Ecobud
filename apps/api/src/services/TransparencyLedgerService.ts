@@ -50,8 +50,9 @@ export class TransparencyLedgerService {
       prisma.user.count({
         where: {
           role: {
-            in: ['USER', 'MODERATOR'],
+            in: ['user', 'moderator'],
           },
+          status: 'active',
         },
       }),
       prisma.transparencyLog.aggregate({

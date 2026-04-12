@@ -83,8 +83,10 @@ const apiOrigin = API_BASE.replace(/\/api$/, '');
 
 export interface SessionUser {
   id: string;
+  name: string;
   email: string;
   role: string;
+  status: string;
   points: number;
   currentStreak: number;
   displayName: string;
@@ -93,36 +95,29 @@ export interface SessionUser {
 
 export interface SessionPayload {
   token: string;
+  redirectPath: string;
   user: SessionUser;
 }
 
 export interface DashboardData {
-  user: {
-    displayName: string;
-    points: number;
-    currentStreak: number;
-  };
-  notificationsCount: number;
-  weeklyProgress: number;
-  dailyChallenge: ChallengeWithProgress | null;
-  learningHighlights: LessonWithProgress[];
-  upcomingEvents: EcoEvent[];
-  todayHabitCount: number;
+  streak: number;
+  ecoPoints: number;
+  weeklyGoal: number;
 }
 
 export interface LessonWithProgress {
   id: string;
   title: string;
-  summary: string;
+  description: string;
   content: string;
-  category: string;
-  imageUrl?: string | null;
-  durationMinutes: number;
-  rating: number;
-  pointsReward: number;
-  featured: boolean;
-  progress?: {
-    status: string;
+  is_published: boolean;
+  created_at: string;
+  progress: number;
+  status: 'not_started' | 'seen' | 'completed';
+  author?: {
+    id: string;
+    name: string;
+    displayName: string;
   } | null;
 }
 
@@ -235,11 +230,12 @@ export interface TransparencyFeed {
 
 export interface ProfileData {
   id: string;
+  name?: string | null;
   email: string;
   role: string;
+  status?: string | null;
   points: number;
   currentStreak: number;
-  highestStreak: number;
   profile: {
     displayName: string;
     avatarUrl?: string | null;
@@ -314,6 +310,10 @@ export const ecobudApi = {
       method: 'POST',
       body: { email, password },
     }),
+  checkUsernameAvailability: (displayName: string) =>
+    request<{ available: boolean; message: string }>(
+      `/auth/check-username?displayName=${encodeURIComponent(displayName.trim())}`,
+    ),
   register: (email: string, password: string, displayName: string, otpCode: string) =>
     request<SessionPayload>('/auth/register', {
       method: 'POST',
@@ -325,13 +325,27 @@ export const ecobudApi = {
       body: { email },
     }),
   fetchDashboard: (token: string) =>
-    request<DashboardData>('/experience/dashboard', { token }),
+    request<DashboardData>('/home/dashboard', { token }),
   fetchLessons: (token: string) =>
-    request<{ items: LessonWithProgress[] }>('/lessons', { token }),
-  fetchLesson: (token: string, lessonId: string) =>
-    request<{ item: LessonWithProgress }>(`/lessons/${lessonId}`, { token }),
+    request<LessonWithProgress[]>('/learn/lessons', { token }),
+  markLessonSeen: (token: string, lessonId: string) =>
+    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number }>('/learn/seen', {
+      method: 'POST',
+      token,
+      body: { lessonId },
+    }),
   completeLesson: (token: string, lessonId: string) =>
-    request(`/lessons/${lessonId}/complete`, { method: 'POST', token }),
+    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number }>('/learn/complete', {
+      method: 'POST',
+      token,
+      body: { lessonId },
+    }),
+  resetKnowledgePoints: (token: string, userId?: string) =>
+    request<{ userId: string; previousKnowledgePoints: number; knowledgePoints: number }>('/user/reset-knowledge', {
+      method: 'POST',
+      token,
+      body: userId ? { userId } : {},
+    }),
   fetchChallenges: (token: string) =>
     request<{ items: ChallengeWithProgress[] }>('/challenges/active', { token }),
   updateChallengeProgress: (token: string, challengeId: string, progressPercentage: number) =>
@@ -362,6 +376,14 @@ export const ecobudApi = {
       request<{ items: TransparencyFeed['logs'] }>('/transparency/logs?page=1&pageSize=12', {
         token,
       }),
+    ]);
+
+    return { metrics, logs: logs.items };
+  },
+  fetchPublicTransparency: async () => {
+    const [metrics, logs] = await Promise.all([
+      request<TransparencyFeed['metrics']>('/transparency/metrics'),
+      request<{ items: TransparencyFeed['logs'] }>('/transparency/logs?page=1&pageSize=12'),
     ]);
 
     return { metrics, logs: logs.items };

@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { PasswordService } from '../security/passwordService';
-import { AccessRole, TokenService } from '../security/tokenService';
+import { AccessRole, getRoleRedirectPath, TokenService } from '../security/tokenService';
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import nodemailer from 'nodemailer';
 
@@ -27,8 +27,12 @@ const authLimiter = rateLimit({
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  displayName: z.string().min(2).max(50),
+  name: z.string().min(2).max(50).optional(),
+  displayName: z.string().min(2).max(50).optional(),
   otpCode: z.string().length(6),
+}).refine((payload) => Boolean(payload.name ?? payload.displayName), {
+  message: 'A display name is required.',
+  path: ['displayName'],
 });
 
 const otpSchema = z.object({
@@ -40,48 +44,91 @@ const loginSchema = z.object({
   password: z.string().min(8),
 });
 
+const usernameAvailabilitySchema = z.object({
+  displayName: z.string().trim().min(2).max(50),
+});
+
 const toAuthResponse = (user: {
   id: string;
+  name: string;
   email: string;
-  role: string;
+  role: AccessRole;
+  status: 'active' | 'pending' | 'suspended';
   points: number;
   currentStreak: number;
   profile: { displayName: string; avatarUrl: string | null } | null;
 }) => {
-  const role = (['USER', 'MODERATOR', 'ADMIN'].includes(user.role)
-    ? user.role
-    : 'USER') as AccessRole;
-
   const token = TokenService.sign({
     userId: user.id,
+    name: user.name,
     email: user.email,
-    role,
+    role: user.role,
+    status: user.status,
   });
 
   return {
     token,
+    redirectPath: getRoleRedirectPath(user.role),
     user: {
       id: user.id,
+      name: user.name,
       email: user.email,
-      role,
+      role: user.role,
+      status: user.status,
       points: user.points,
       currentStreak: user.currentStreak,
-      displayName: user.profile?.displayName ?? user.email,
+      displayName: user.profile?.displayName ?? user.name,
       avatarUrl: user.profile?.avatarUrl ?? null,
     },
   };
 };
 
+const getInactiveStatusMessage = (status: 'pending' | 'suspended') =>
+  status === 'suspended'
+    ? 'Your ECOBUD account is suspended. Please contact an administrator.'
+    : 'Your ECOBUD account is pending activation.';
+
+const findProfileByDisplayName = (displayName: string) =>
+  prisma.profile.findFirst({
+    where: {
+      displayName: displayName.trim(),
+    },
+    select: {
+      id: true,
+    },
+  });
+
 authRoutes.use(authLimiter);
+
+authRoutes.get(
+  '/check-username',
+  errorBoundary(async (req, res) => {
+    const { displayName } = usernameAvailabilitySchema.parse(req.query);
+    const existingProfile = await findProfileByDisplayName(displayName);
+
+    return res.json({
+      available: !existingProfile,
+      message: existingProfile
+        ? 'That username is already in use.'
+        : 'That username is available.',
+    });
+  }),
+);
 
 authRoutes.post(
   '/register',
   errorBoundary(async (req, res) => {
     const payload = registerSchema.parse(req.body);
+    const displayName = payload.name ?? payload.displayName!;
     const existingUser = await prisma.user.findUnique({ where: { email: payload.email } });
+    const existingProfile = await findProfileByDisplayName(displayName);
 
     if (existingUser) {
       throw new HttpError(409, 'An ECOBUD account already exists for this email.');
+    }
+
+    if (existingProfile) {
+      throw new HttpError(409, 'That username is already taken. Please choose another one.');
     }
 
     const otpRecord = await prisma.otpCode.findUnique({ where: { email: payload.email } });
@@ -103,11 +150,26 @@ authRoutes.post(
     const passwordHash = await PasswordService.hash(payload.password);
     const user = await prisma.user.create({
       data: {
+        name: displayName,
         email: payload.email,
         passwordHash,
+        role: 'user',
+        status: 'active',
+        stats: {
+          create: {
+            currentStreak: 0,
+            ecoPoints: 0,
+            knowledgePoints: 0,
+          },
+        },
+        weeklyGoal: {
+          create: {
+            weeklyGoal: 5,
+          },
+        },
         profile: {
           create: {
-            displayName: payload.displayName,
+            displayName,
             headline: 'Growing sustainable habits every day.',
           },
         },
@@ -125,6 +187,11 @@ authRoutes.post(
   '/send-otp',
   errorBoundary(async (req, res) => {
     const { email } = otpSchema.parse(req.body);
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+
+    if (existingUser) {
+      throw new HttpError(409, 'An ECOBUD account already exists for this email.');
+    }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -168,6 +235,10 @@ authRoutes.post(
 
     if (!passwordMatches) {
       throw new HttpError(401, 'Incorrect email or password.');
+    }
+
+    if (user.status !== 'active') {
+      throw new HttpError(403, getInactiveStatusMessage(user.status));
     }
 
     return res.json(toAuthResponse(user));

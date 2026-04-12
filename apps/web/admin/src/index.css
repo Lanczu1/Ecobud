@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest: #2E7D32;
+  --color-fresh: #66BB6A;
+  --color-eco-gradient: linear-gradient(135deg, #2E7D32 0%, #66BB6A 100%);
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased font-sans;
+  }
+}
+
+@layer components {
+  .btn-eco-primary {
+    @apply bg-forest text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest 
+           hover:bg-fresh transition-all duration-300 shadow-md hover:shadow-forest/20 
+           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-eco-secondary {
+    @apply bg-white text-forest border-2 border-forest/10 px-8 py-3 rounded-2xl font-black text-sm 
+           uppercase tracking-widest hover:bg-emerald-50 transition-all duration-300;
+  }
+
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-xl border border-white/50 rounded-[32px] shadow-sm;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-4 px-6 py-4 rounded-2xl font-bold text-slate-500 
+           transition-all duration-300 hover:bg-emerald-50 hover:text-forest;
+  }
+
+  .nav-link.active {
+    @apply bg-emerald-50 text-forest shadow-sm;
+  }
+}

@@ -38,9 +38,9 @@ ECOBUD is a multi-platform gamified environmental awareness application. It moti
 | Role | Auth Required | Capabilities |
 | :--- | :--- | :--- |
 | **Guest** | No | View landing page, basic FAQ, read public transparency metrics. |
-| **User** | Yes | Post challenges, track streaks, earn points, join events, chat with bot, edit profile. |
-| **Moderator** | Yes | User capabilities + Manage events, moderate challenge submissions (if proof required). |
-| **Admin** | Yes | Moderator capabilities + User management, content creation (lessons/FAQs), view system analytics. |
+| **User** | Yes | Post challenges, track streaks, earn points, join events, chat with bot, edit profile, submit optional challenge proof. |
+| **Moderator** | Yes | All User permissions + manage events, moderate challenge submissions, approve/reject proof uploads, flag inappropriate content. |
+| **Admin** | Yes | All Moderator permissions + user management (create, suspend, delete), content creation (lessons/FAQs), manage rewards, view system analytics, system configuration. |
 
 ### 5. Information Architecture / Sitemap
 **Mobile App:**
@@ -68,25 +68,39 @@ ECOBUD is a multi-platform gamified environmental awareness application. It moti
 - **Learning Flow:** User opens 'Learn' -> selects "Composting Basics" -> reads step 1 to 4 -> completes mini-quiz -> earns "Sprout" badge.
 
 ### 8. Database Schema (Entities overview)
-- `User`: id, email, password_hash, role, points, current_streak, highest_streak, created_at
+- `users`: id, name, email, password, role (`user|moderator|admin`), status (`active|pending|suspended`), points, streak_count, created_at, updated_at
 - `Profile`: id, user_id, display_name, avatar_url, preferences_json
 - `Lesson`: id, title, content, category, points_reward
 - `UserLessonProgress`: id, user_id, lesson_id, status (started/completed), completed_at
 - `Challenge`: id, title, description, difficulty, duration_days, points_reward, active
 - `UserChallenge`: id, user_id, challenge_id, progress_percentage, status, expiration_date
+- `ChallengeSubmission`: id, user_id, challenge_id, proof_text, proof_url, status (`pending|approved|rejected|flagged`), reviewed_by_id, reviewed_at
 - `Badge`: id, name, description, icon_url, required_points
 - `UserBadge`: id, user_id, badge_id, unlocked_at
-- `Event`: id, title, description, location, date, capacity, points_reward, admin_id
+- `Event`: id, title, description, location, date, capacity, points_reward, managed_by_id
 - `EventRegistration`: id, user_id, event_id, status (registered/attended)
 - `TransparencyLog`: id, user_id, action_type, points_awarded, metadata, previous_hash, current_hash, timestamp
+- `Faq`: id, question, answer, sort_order
+- `SystemSetting`: id, key, value, description, updated_by_id
+
+**User storage rule**
+- Guests are never persisted in the database.
+- Signup creates `role = user`.
+- Moderator and admin accounts are created manually by admins.
+- Suspended users are blocked from login and protected routes.
 
 ### 9. Entity-Relationship Structure
 - `User` 1:1 `Profile`
 - `User` 1:M `UserLessonProgress` M:1 `Lesson`
 - `User` 1:M `UserChallenge` M:1 `Challenge`
+- `User` 1:M `ChallengeSubmission` M:1 `Challenge`
+- `User` 1:M `ChallengeSubmission` (as reviewer) for moderated proof decisions
 - `User` 1:M `UserBadge` M:1 `Badge`
+- `User` 1:M `Event` (as event manager)
 - `Event` 1:M `EventRegistration` M:1 `User`
 - `User` 1:M `TransparencyLog`
+- `User` 1:M `SystemSetting` (as last editor)
+- `Faq` is public content readable by guests and editable by admins
 
 ### 10. API Endpoints (Express.js RESTful)
 **Auth:**
@@ -101,20 +115,51 @@ ECOBUD is a multi-platform gamified environmental awareness application. It moti
 **Challenges & Streaks:**
 - `GET /api/challenges/active`
 - `POST /api/challenges/:id/progress` (Increment progress, trigger transparency log if complete)
-- `GET /api/streaks/summary`
+- `POST /api/challenges/:id/submissions` (Submit optional proof)
+- `GET /api/challenges/submissions/mine`
+- `GET /api/challenges/streaks/summary`
 **Events:**
 - `GET /api/events`
 - `POST /api/events/:id/join`
+**FAQ (Public):**
+- `GET /api/faqs`
 **Transparency (Public):**
 - `GET /api/transparency/metrics` (Aggregated block stats)
 - `GET /api/transparency/logs?page=1` (Paginated hashes)
+**Moderation:**
+- `GET /api/moderation/dashboard`
+- `GET /api/moderation/events`
+- `POST /api/moderation/events`
+- `POST /api/moderation/challenge-submissions/:id/approve`
+- `POST /api/moderation/challenge-submissions/:id/reject`
+- `POST /api/moderation/challenge-submissions/:id/flag`
+**Admin:**
+- `GET /api/admin/dashboard`
+- `GET /api/admin/analytics`
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `PATCH /api/admin/users/:id/status`
+- `GET /api/admin/faqs`
+- `GET /api/admin/rewards/badges`
+- `GET /api/admin/system-settings`
 
 ### 11. Backend Module Architecture
 - **Controllers:** Handle HTTP requests and responses.
 - **Services:** Core business logic (e.g., `GamificationService` handles points and streaks, calling `TransparencyService` on success).
 - **Repositories (Data Access):** Prisma client wrappers for DB operations.
-- **Middlewares:** Authentication (`verifyToken`), Role Guards (`isAdmin`), Error Handling.
+- **Middlewares:** Authentication (`authenticateRequest`), role guards (`requireUserAccess`, `requireModeratorAccess`, `requireAdminAccess`), error handling.
 - **Utils:** Hashing configurations (`generateBlockHash`), date manipulation logic.
+
+**RBAC middleware mapping**
+- `Guest` -> public routes only (`/api/faqs`, `/api/events`, `/api/transparency/*`)
+- `User` -> authenticated dashboard routes (`/api/users/*`, `/api/experience/*`, `/api/challenges/*`, `/api/events/:id/join`)
+- `Moderator` -> moderation routes (`/api/moderation/*`) plus user routes
+- `Admin` -> full system access (`/api/admin/*`) plus moderator and user routes
+
+**Login redirect logic**
+- `user` -> `/app/dashboard`
+- `moderator` -> `/moderation`
+- `admin` -> `/admin`
 
 ### 12. Frontend Screen/Component Architecture (React)
 - **Atoms:** Buttons, Icons, Avatars, Badges, Input fields, Progress Bars.
@@ -125,8 +170,9 @@ ECOBUD is a multi-platform gamified environmental awareness application. It moti
 
 ### 13. Admin Dashboard Architecture
 - Flutter Web app with role-gated admin routes backed by authenticated API endpoints.
-- Sidebar Navigation: Dashboard, Users, Events, Gamification/Content, Transparency Verifier.
-- Tables with Server-Side Pagination, Forms for CRUD operations on lessons and events, Chart.js for usage analytics.
+- Moderator workspace focuses on events, attendance verification, and proof moderation.
+- Admin workspace adds users, FAQs, rewards, system settings, and analytics.
+- Tables with Server-Side Pagination, Forms for CRUD operations, and analytics views protected behind admin-only guards.
 
 ### 14. Offline Support Strategy
 - Store essential data (current streak, active challenges, downloaded lesson textual content) in React Native `AsyncStorage` or `zustand` persist middleware.
@@ -156,6 +202,7 @@ ECOBUD is a multi-platform gamified environmental awareness application. It moti
 
 ### 18. Security and Privacy Considerations
 - **Auth:** Passwords stored via bcrypt. JWTs have strict expirations.
+- **Account Status:** Pending or suspended users cannot access authenticated routes.
 - **Privacy:** The public Transparency dashboard redacts PII. Display generic identifiers (e.g., "EcoWarrior#3491 logged a tree planting").
 - **Rate-Limiting:** Express-rate-limit to prevent point-farming attacks on the completion endpoint.
 
