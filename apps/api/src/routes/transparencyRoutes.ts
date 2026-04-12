@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateRequest, AuthenticatedRequest } from '../http/authentication';
+import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
 import { TransparencyLedgerService } from '../services/TransparencyLedgerService';
 
@@ -27,6 +27,7 @@ transparencyRoutes.get(
 transparencyRoutes.get(
   '/mine',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     return res.json(await ledgerService.getLogs(1, 20, req.auth!.userId));
   }),

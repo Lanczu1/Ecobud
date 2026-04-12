@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient';
-import { authenticateRequest, AuthenticatedRequest } from '../http/authentication';
+import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
 
 const experienceRoutes = Router();
@@ -28,6 +28,7 @@ const buildAssistantReply = (message: string) => {
 experienceRoutes.get(
   '/dashboard',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
     const today = getDateKey();
@@ -90,7 +91,7 @@ experienceRoutes.get(
 
     return res.json({
       user: {
-        displayName: user?.profile?.displayName ?? 'Eco Explorer',
+        displayName: user?.profile?.displayName ?? user?.name ?? 'Eco Explorer',
         points: user?.points ?? 0,
         currentStreak: user?.currentStreak ?? 0,
       },
@@ -113,6 +114,7 @@ experienceRoutes.get(
 experienceRoutes.get(
   '/tracker',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
     const month = typeof req.query.month === 'string' ? req.query.month : getDateKey().slice(0, 7);
@@ -156,9 +158,13 @@ experienceRoutes.get(
 experienceRoutes.get(
   '/leaderboard',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const currentUserId = req.auth!.userId;
     const users = await prisma.user.findMany({
+      where: {
+        status: 'active',
+      },
       include: { profile: true, badges: { include: { badge: true } } },
       orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],
       take: 50,
@@ -171,7 +177,7 @@ experienceRoutes.get(
       items: users.map((user, index) => ({
         rank: index + 1,
         id: user.id,
-        displayName: user.profile?.displayName ?? user.email,
+        displayName: user.profile?.displayName ?? user.name,
         points: user.points,
         badges: user.badges.slice(0, 3).map((item) => item.badge.name),
         isCurrentUser: user.id === currentUserId,
@@ -184,6 +190,7 @@ experienceRoutes.get(
 experienceRoutes.get(
   '/rewards',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
     const [user, badges, userBadges, challengeCount, eventCount] = await Promise.all([
@@ -240,6 +247,7 @@ experienceRoutes.get(
 experienceRoutes.post(
   '/assistant/chat',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const message = typeof req.body?.message === 'string' ? req.body.message : '';
 

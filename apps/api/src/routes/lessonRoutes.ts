@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient';
-import { authenticateRequest, AuthenticatedRequest } from '../http/authentication';
+import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
 import { GamificationService } from '../services/GamificationService';
 
@@ -10,6 +10,7 @@ const gamificationService = new GamificationService();
 lessonRoutes.get(
   '/',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const featuredOnly = req.query.featured === 'true';
@@ -21,7 +22,7 @@ lessonRoutes.get(
           ? [
               { title: { contains: search } },
               { category: { contains: search } },
-              { summary: { contains: search } },
+              { description: { contains: search } },
             ]
           : undefined,
       },
@@ -46,6 +47,7 @@ lessonRoutes.get(
 lessonRoutes.get(
   '/:lessonId',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const lesson = await prisma.lesson.findUnique({
       where: { id: req.params.lessonId },
@@ -64,6 +66,7 @@ lessonRoutes.get(
 lessonRoutes.post(
   '/:lessonId/complete',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const result = await gamificationService.completeLesson(req.auth!.userId, req.params.lessonId);
     return res.json(result);

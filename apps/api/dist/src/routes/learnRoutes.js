@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.learnRoutes = void 0;
+const express_1 = require("express");
+const learnController_1 = require("../controllers/learnController");
+const authentication_1 = require("../http/authentication");
+const errorResponder_1 = require("../http/errorResponder");
+const learnRoutes = (0, express_1.Router)();
+exports.learnRoutes = learnRoutes;
+learnRoutes.get('/lessons', authentication_1.authenticateRequest, authentication_1.requireUserAccess, (0, errorResponder_1.errorBoundary)(learnController_1.learnController.getLessons));
+learnRoutes.post('/seen', authentication_1.authenticateRequest, authentication_1.requireUserAccess, (0, errorResponder_1.errorBoundary)(learnController_1.learnController.markSeen));
+learnRoutes.post('/complete', authentication_1.authenticateRequest, authentication_1.requireUserAccess, (0, errorResponder_1.errorBoundary)(learnController_1.learnController.completeLesson));

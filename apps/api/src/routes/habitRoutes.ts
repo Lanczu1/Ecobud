@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient';
-import { authenticateRequest, AuthenticatedRequest } from '../http/authentication';
+import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
 import { GamificationService } from '../services/GamificationService';
 
@@ -12,6 +12,7 @@ const getDateKey = (date = new Date()) => date.toISOString().slice(0, 10);
 habitRoutes.get(
   '/today',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
     const dateKey = getDateKey();
@@ -44,6 +45,7 @@ habitRoutes.get(
 habitRoutes.post(
   '/:habitId/check-in',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const result = await gamificationService.checkInHabit(
       req.auth!.userId,

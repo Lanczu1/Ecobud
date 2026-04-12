@@ -2,11 +2,13 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { HttpError } from '../http/errorResponder';
 import { TransparencyLedgerService } from './TransparencyLedgerService';
+import { UserStatsService } from './UserStatsService';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
 interface AwardActionInput {
   actionType: string;
+  knowledgePointsAwarded?: number;
   metadata?: Record<string, unknown>;
   pointsAwarded: number;
   userId: string;
@@ -15,7 +17,11 @@ interface AwardActionInput {
 const ledgerService = new TransparencyLedgerService();
 
 export class GamificationService {
-  constructor(private readonly database: PrismaClient = prisma) {}
+  private readonly userStatsService: UserStatsService;
+
+  constructor(private readonly database: PrismaClient = prisma) {
+    this.userStatsService = new UserStatsService(database);
+  }
 
   async completeLesson(userId: string, lessonId: string) {
     return this.database.$transaction(async (tx) => {
@@ -31,7 +37,7 @@ export class GamificationService {
         },
       });
 
-      if (existingProgress?.status === 'COMPLETED') {
+      if (existingProgress?.status === 'completed') {
         return {
           alreadyCompleted: true,
           lessonId,
@@ -43,13 +49,15 @@ export class GamificationService {
           userId_lessonId: { userId, lessonId },
         },
         update: {
-          status: 'COMPLETED',
+          status: 'completed',
+          progress: 100,
           completedAt: new Date(),
         },
         create: {
           userId,
           lessonId,
-          status: 'COMPLETED',
+          status: 'completed',
+          progress: 100,
           completedAt: new Date(),
         },
       });
@@ -57,6 +65,7 @@ export class GamificationService {
       return this.awardAction(tx, {
         userId,
         actionType: `Lesson completed: ${lesson.title}`,
+        knowledgePointsAwarded: lesson.pointsReward,
         pointsAwarded: lesson.pointsReward,
         metadata: {
           lessonId: lesson.id,
@@ -180,7 +189,7 @@ export class GamificationService {
     });
   }
 
-  async markEventAttendance(adminId: string, eventId: string, registrationId: string) {
+  async markEventAttendance(eventId: string, registrationId: string) {
     return this.database.$transaction(async (tx) => {
       const event = await tx.event.findUnique({
         where: { id: eventId },
@@ -188,10 +197,6 @@ export class GamificationService {
 
       if (!event) {
         throw new HttpError(404, 'Event not found.');
-      }
-
-      if (event.adminId !== adminId) {
-        throw new HttpError(403, 'Only the event owner can mark attendance.');
       }
 
       const registration = await tx.eventRegistration.findUnique({
@@ -246,46 +251,53 @@ export class GamificationService {
     }
 
     const now = new Date();
-    const streakUpdate = this.resolveStreak(user.lastActionDate, now, user.currentStreak, user.highestStreak);
+    const nextStreak = this.resolveStreak(user.lastActionDate, now, user.currentStreak);
 
-    const updatedUser = await tx.user.update({
-      where: { id: user.id },
-      data: {
-        points: { increment: action.pointsAwarded },
-        currentStreak: streakUpdate.currentStreak,
-        highestStreak: streakUpdate.highestStreak,
-        lastActionDate: now,
-      },
-    });
+      const updatedUser = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          points: { increment: action.pointsAwarded },
+          currentStreak: nextStreak,
+          lastActionDate: now,
+        },
+      });
 
-    const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
-    const log = await ledgerService.appendLog(tx, action);
+      const updatedStats = await this.userStatsService.syncEcoPointsAndStreak(
+        tx,
+        user.id,
+        updatedUser.points,
+        updatedUser.currentStreak,
+        action.knowledgePointsAwarded ?? 0,
+      );
 
-    return {
-      alreadyCompleted: false,
-      awardedBadges,
-      currentHash: log.currentHash,
-      pointsAwarded: action.pointsAwarded,
-      pointsTotal: updatedUser.points,
-      streak: updatedUser.currentStreak,
-    };
+      const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
+      const log = await ledgerService.appendLog(tx, action);
+
+      return {
+        alreadyCompleted: false,
+        awardedBadges,
+        currentHash: log.currentHash,
+        knowledgePointsTotal: updatedStats.knowledgePoints,
+        pointsAwarded: action.pointsAwarded,
+        pointsTotal: updatedUser.points,
+        streak: updatedUser.currentStreak,
+      };
   }
 
   private resolveStreak(
     lastActionDate: Date | null,
     actionDate: Date,
     currentStreak: number,
-    highestStreak: number,
   ) {
     if (!lastActionDate) {
-      return { currentStreak: 1, highestStreak: Math.max(1, highestStreak) };
+      return 1;
     }
 
     const actionDay = actionDate.toISOString().slice(0, 10);
     const lastDay = lastActionDate.toISOString().slice(0, 10);
 
     if (actionDay === lastDay) {
-      return { currentStreak, highestStreak };
+      return currentStreak;
     }
 
     const previousDate = new Date(actionDate);
@@ -293,11 +305,10 @@ export class GamificationService {
     const previousDay = previousDate.toISOString().slice(0, 10);
 
     if (lastDay === previousDay) {
-      const nextStreak = currentStreak + 1;
-      return { currentStreak: nextStreak, highestStreak: Math.max(nextStreak, highestStreak) };
+      return currentStreak + 1;
     }
 
-    return { currentStreak: 1, highestStreak: Math.max(1, highestStreak) };
+    return 1;
   }
 
   private async unlockBadges(tx: DatabaseSession, userId: string, totalPoints: number) {

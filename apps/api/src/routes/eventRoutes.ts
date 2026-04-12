@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient';
-import { authenticateRequest, AuthenticatedRequest } from '../http/authentication';
+import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { HttpError, errorBoundary } from '../http/errorResponder';
 
 const eventRoutes = Router();
@@ -27,6 +27,7 @@ eventRoutes.get(
 eventRoutes.post(
   '/:eventId/join',
   authenticateRequest,
+  requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const event = await prisma.event.findUnique({
       where: { id: req.params.eventId },
