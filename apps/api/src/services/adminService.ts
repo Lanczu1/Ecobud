@@ -1,10 +1,7 @@
 import { prisma } from "../prismaClient";
+import { presenceQueryService } from './presenceQueryService';
+import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
-import {
-  ONLINE_ACTIVITY_WINDOW_MS,
-  isUserCurrentlyOnline,
-  UserActivityService,
-} from './userActivityService';
 
 export class AdminService {
   static async getAllLessons() {
@@ -146,35 +143,7 @@ export class AdminService {
   }
 
   static async getUsers() {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        points: true,
-        currentStreak: true,
-        lastActionDate: true,
-        createdAt: true,
-        profile: {
-          select: {
-            displayName: true,
-            avatarUrl: true
-          }
-        }
-      }
-    });
-
-    const now = new Date();
-
-    return users.map((user) => ({
-      ...user,
-      createdAt: user.createdAt.toISOString(),
-      isOnlineNow: isUserCurrentlyOnline(user.lastActionDate, now),
-      lastActionDate: user.lastActionDate?.toISOString() ?? null,
-    }));
+    return presenceQueryService.getAdminUsers();
   }
 
   // Challenge Management
@@ -274,13 +243,10 @@ export class AdminService {
     startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date(snapshotDate);
     endOfToday.setHours(23, 59, 59, 999);
-    const userActivityService = new UserActivityService();
-    const onlineThreshold = userActivityService.getOnlineThreshold(snapshotDate);
+    const presenceOverview = await presenceQueryService.getPresenceOverview(snapshotDate);
 
     const [
       totalUsers,
-      activeToday,
-      onlineNow,
       signupsToday,
       totalLessons,
       totalChallenges,
@@ -288,21 +254,6 @@ export class AdminService {
       lessonCompletions,
     ] = await Promise.all([
       prisma.user.count(),
-      prisma.user.count({
-        where: {
-          lastActionDate: {
-            gte: startOfToday,
-            lte: endOfToday,
-          },
-        },
-      }),
-      prisma.user.count({
-        where: {
-          lastActionDate: {
-            gte: onlineThreshold,
-          },
-        },
-      }),
       prisma.user.count({
         where: {
           createdAt: {
@@ -369,10 +320,10 @@ export class AdminService {
 
     return {
       overview: {
-        activeToday,
+        activeToday: presenceOverview.activeToday,
         lessonCompletions,
-        onlineNow,
-        onlineWindowMinutes: ONLINE_ACTIVITY_WINDOW_MS / 60000,
+        onlineNow: presenceOverview.activeToday,
+        onlineWindowMinutes: PRESENCE_STALE_TTL_MS / 60000,
         signupsToday,
         snapshotDate: snapshotDate.toISOString(),
         totalChallenges,
@@ -381,6 +332,7 @@ export class AdminService {
         totalUsers,
         totalSignups: totalUsers,
       },
+      presence: presenceOverview,
       activityTrend,
     };
   }

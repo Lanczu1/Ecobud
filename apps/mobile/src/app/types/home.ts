@@ -62,7 +62,7 @@ export interface AssistantMessage {
 export interface HeaderProps {
   userDisplayName: string;
   notificationCount: number;
-  isUserOnline: boolean;
+  hasUsableInternet: boolean;
   showBack?: boolean;
   title?: string;
   onBack?: () => void;
@@ -134,6 +134,7 @@ export interface EcoBudMobileModel {
   transparency: TransparencyFeed | null;
   todaysCompletedHabits: number;
   userDisplayName: string;
+  hasUsableInternet: boolean;
   isUserOnline: boolean;
   notificationCount: number;
   setActiveTab: (tab: AppTab) => void;

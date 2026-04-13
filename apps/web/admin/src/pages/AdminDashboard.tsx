@@ -19,6 +19,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { PresenceIndicator } from '../components/PresenceIndicator';
+import { OnlineUsersPanel } from '../components/OnlineUsersPanel';
 import { adminRealtimeService } from '../services/adminRealtimeService';
 import { adminService } from '../services/adminService';
 import type { AdminDashboardStats } from '../types/admin';
@@ -26,10 +27,7 @@ import type { AdminDashboardStats } from '../types/admin';
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [livePresence, setLivePresence] = useState<{ count: number; ready: boolean }>({
-    count: 0,
-    ready: false,
-  });
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async (showLoader = false) => {
     if (showLoader) {
@@ -39,8 +37,10 @@ export const AdminDashboard: React.FC = () => {
     try {
       const data = await adminService.getDashboardStats();
       setStats(data);
+      setError(null);
     } catch (err) {
       console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to load the executive dashboard.');
     } finally {
       if (showLoader) {
         setLoading(false);
@@ -61,11 +61,8 @@ export const AdminDashboard: React.FC = () => {
         onDashboardRefresh: () => {
           void fetchStats();
         },
-        onPresenceChange: (presence) => {
-          setLivePresence({
-            count: presence.count,
-            ready: true,
-          });
+        onUsersRefresh: () => {
+          void fetchStats();
         },
       })
       .then((cleanup) => {
@@ -78,7 +75,21 @@ export const AdminDashboard: React.FC = () => {
     };
   }, []);
 
-  if (loading || !stats) return <div className="p-8 text-center text-slate-500 animate-pulse uppercase font-black tracking-widest">Analyzing ecosystem...</div>;
+  if (loading && !stats) {
+    return (
+      <div className="p-8 text-center text-slate-500 animate-pulse uppercase font-black tracking-widest">
+        Analyzing ecosystem...
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="p-8 text-center text-rose-600 font-black">
+        {error ?? 'The dashboard could not be loaded.'}
+      </div>
+    );
+  }
 
   const snapshotDate = new Date(stats.overview.snapshotDate);
   const snapshotLabel = snapshotDate.toLocaleDateString('en-US', {
@@ -86,7 +97,7 @@ export const AdminDashboard: React.FC = () => {
     day: 'numeric',
     year: 'numeric',
   });
-  const activeTodayCount = livePresence.ready ? livePresence.count : stats.overview.activeToday;
+  const activeTodayCount = stats.presence.activeToday;
   const hasUsersOnline = activeTodayCount > 0;
 
   const cards = [
@@ -141,12 +152,20 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="p-8 space-y-10 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-4xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-          <LayoutDashboard className="text-forest" size={36} />
-          Executive Overview
-        </h1>
-        <p className="text-slate-500 font-medium mt-1">Real-time health monitoring of the EcoBud ecosystem.</p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-4xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+            <LayoutDashboard className="text-forest" size={36} />
+            Executive Overview
+          </h1>
+          <p className="text-slate-500 font-medium mt-1">Real-time health monitoring of the EcoBud ecosystem.</p>
+        </div>
+
+        {error ? (
+          <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+            {error}
+          </div>
+        ) : null}
       </div>
 
       {/* Stat Cards */}
@@ -292,6 +311,13 @@ export const AdminDashboard: React.FC = () => {
            </button>
         </div>
       </div>
+
+      <OnlineUsersPanel
+        users={stats.presence.onlineUsers}
+        snapshotDate={stats.presence.snapshotDate}
+        loading={loading}
+        error={error}
+      />
     </div>
   );
 };

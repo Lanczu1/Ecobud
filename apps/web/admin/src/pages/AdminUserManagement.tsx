@@ -15,26 +15,12 @@ import {
   RefreshCcw,
 } from 'lucide-react';
 
-const ONLINE_ACTIVITY_WINDOW_MS = 5 * 60 * 1000;
-
-const isUserOnline = (lastActionDate: string | null, now: number) => {
-  if (!lastActionDate) {
-    return false;
-  }
-
-  return now - new Date(lastActionDate).getTime() <= ONLINE_ACTIVITY_WINDOW_MS;
-};
-
 export const AdminUserManagement: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [resettingId, setResettingId] = useState<string | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  const [livePresence, setLivePresence] = useState<{ onlineUserIds: Set<string>; ready: boolean }>({
-    onlineUserIds: new Set<string>(),
-    ready: false,
-  });
 
   const fetchUsers = async (showLoader = false) => {
     if (showLoader) {
@@ -44,8 +30,10 @@ export const AdminUserManagement: React.FC = () => {
     try {
       const data = await adminService.getUsers();
       setUsers(data);
+      setError(null);
     } catch (err) {
       console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to load users.');
     } finally {
       if (showLoader) {
         setLoading(false);
@@ -57,19 +45,13 @@ export const AdminUserManagement: React.FC = () => {
     void fetchUsers(true);
 
     let unsubscribe: () => void = () => {};
-    const statusTimer = window.setInterval(() => {
-      setNowTick(Date.now());
-    }, 30_000);
 
     void adminRealtimeService
       .connect({
-        onPresenceChange: (presence) => {
-          setLivePresence({
-            onlineUserIds: new Set(presence.onlineUserIds),
-            ready: true,
-          });
-        },
         onUsersRefresh: () => {
+          void fetchUsers();
+        },
+        onDashboardRefresh: () => {
           void fetchUsers();
         },
       })
@@ -78,7 +60,6 @@ export const AdminUserManagement: React.FC = () => {
       });
 
     return () => {
-      window.clearInterval(statusTimer);
       unsubscribe();
     };
   }, []);
@@ -102,7 +83,13 @@ export const AdminUserManagement: React.FC = () => {
     (u.profile?.displayName || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) return <div className="p-8 text-center text-slate-500 animate-pulse">Loading Users...</div>;
+  if (loading && users.length === 0) {
+    return <div className="p-8 text-center text-slate-500 animate-pulse">Loading Users...</div>;
+  }
+
+  if (!loading && users.length === 0 && error) {
+    return <div className="p-8 text-center text-rose-600 font-black">{error}</div>;
+  }
 
   return (
     <div className="p-8 space-y-12 animate-in fade-in duration-500 max-w-7xl mx-auto">
@@ -130,12 +117,16 @@ export const AdminUserManagement: React.FC = () => {
         </div>
       </div>
 
+      {error ? (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+          {error}
+        </div>
+      ) : null}
+
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredUsers.map((user, index) => {
-          const onlineNow = livePresence.ready
-            ? livePresence.onlineUserIds.has(user.id)
-            : isUserOnline(user.lastActionDate, nowTick);
+          const onlineNow = user.isOnlineNow;
 
           return (
             <div
@@ -178,14 +169,14 @@ export const AdminUserManagement: React.FC = () => {
                   <span className="text-xs font-bold truncate">{user.email}</span>
                 </div>
                 <div className="text-[11px] font-bold text-slate-400">
-                  {user.lastActionDate
-                    ? `Last activity: ${new Date(user.lastActionDate).toLocaleString('en-US', {
+                  {user.lastSeenAt
+                    ? `Last seen: ${new Date(user.lastSeenAt).toLocaleString('en-US', {
                         month: 'short',
                         day: 'numeric',
                         hour: 'numeric',
                         minute: '2-digit',
                       })}`
-                    : 'No activity recorded yet'}
+                    : 'No presence signal recorded yet'}
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                   <div className="flex items-center gap-1.5">
@@ -196,6 +187,21 @@ export const AdminUserManagement: React.FC = () => {
                     <Zap size={14} className="text-forest" />
                     <span className="text-xs font-black text-slate-700">{user.currentStreak} <span className="text-slate-400 font-bold">STREAK</span></span>
                   </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  <span className="rounded-full bg-slate-50 px-2.5 py-1">
+                    {user.activeSessionCount} session{user.activeSessionCount === 1 ? '' : 's'}
+                  </span>
+                  {user.connectionState ? (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                      {user.connectionState}
+                    </span>
+                  ) : null}
+                  {user.appState ? (
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
+                      {user.appState}
+                    </span>
+                  ) : null}
                 </div>
               </div>
 

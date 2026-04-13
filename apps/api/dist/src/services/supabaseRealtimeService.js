@@ -11,6 +11,9 @@ const ADMIN_CHANNELS = {
     dashboard: 'ecobud:admin:dashboard',
     users: 'ecobud:admin:users',
 };
+const PRESENCE_CHANNELS = {
+    members: 'ecobud:presence:members',
+};
 const trimValue = (value) => value?.trim() || null;
 const getSupabaseConfig = () => {
     const url = trimValue(process.env.SUPABASE_URL);
@@ -79,6 +82,7 @@ class SupabaseRealtimeService {
         const channels = {
             globalChallenges: GLOBAL_CHANNELS.challenges,
             globalLearn: GLOBAL_CHANNELS.learn,
+            presenceMembers: PRESENCE_CHANNELS.members,
             userChallenges: this.buildUserChannel(userId, 'challenges'),
             userLearn: this.buildUserChannel(userId, 'learn'),
             userNotice: this.buildUserChannel(userId, 'notice'),
@@ -86,6 +90,7 @@ class SupabaseRealtimeService {
         };
         if (role === 'moderator' || role === 'admin') {
             channels.adminDashboard = ADMIN_CHANNELS.dashboard;
+            channels.adminPresence = PRESENCE_CHANNELS.members;
             channels.adminUsers = ADMIN_CHANNELS.users;
         }
         return {

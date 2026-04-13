@@ -1,7 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
-  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 
 import { type HeaderProps } from '../types/home';
+import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndicator';
 
 function initialsFromLabel(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || 'E';
@@ -35,70 +35,14 @@ function AvatarBubble({
   );
 }
 
-function PresenceDot({ isOnline }: { isOnline: boolean }) {
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const opacity = React.useRef(new Animated.Value(1)).current;
-
-  React.useEffect(() => {
-    if (isOnline) {
-      scale.stopAnimation();
-      opacity.stopAnimation();
-      scale.setValue(1);
-      opacity.setValue(1);
-      return;
-    }
-
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(scale, {
-            toValue: 1.22,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0.5,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(scale, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]),
-    );
-
-    pulse.start();
-
-    return () => {
-      pulse.stop();
-    };
-  }, [isOnline, opacity, scale]);
-
-  return (
-    <Animated.View
-      style={[
-        styles.presenceDot,
-        isOnline ? styles.presenceDotOnline : styles.presenceDotOffline,
-        {
-          opacity,
-          transform: [{ scale }],
-        },
-      ]}
-    />
-  );
-}
-
-export function Header({ userDisplayName, notificationCount, isUserOnline, showBack, title, onBack }: HeaderProps) {
+export function Header({
+  userDisplayName,
+  notificationCount,
+  hasUsableInternet,
+  showBack,
+  title,
+  onBack,
+}: HeaderProps) {
   return (
     <View style={styles.topNavbar}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -114,7 +58,11 @@ export function Header({ userDisplayName, notificationCount, isUserOnline, showB
               style={styles.topNavAvatar}
               textStyle={styles.topNavAvatarText}
             />
-            <PresenceDot isOnline={isUserOnline} />
+            <ConnectionStatusIndicator
+              hasUsableInternet={hasUsableInternet}
+              size={11}
+              style={styles.connectionIndicator}
+            />
           </View>
         )}
       </View>
@@ -169,21 +117,10 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#F59E0B',
   },
-  presenceDot: {
+  connectionIndicator: {
     position: 'absolute',
     top: 1,
     right: 1,
-    width: 11,
-    height: 11,
-    borderRadius: 5.5,
-    borderWidth: 2,
-    borderColor: '#F7F9F7',
-  },
-  presenceDotOnline: {
-    backgroundColor: '#22C55E',
-  },
-  presenceDotOffline: {
-    backgroundColor: '#EF4444',
   },
   avatarBubble: {
     backgroundColor: '#CBEFD6',

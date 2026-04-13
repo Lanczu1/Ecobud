@@ -37,12 +37,19 @@ export interface AdminUser {
   currentStreak: number;
   createdAt: string;
   lastActionDate: string | null;
+  lastSeenAt: string | null;
+  connectedAt: string | null;
+  activeSessionCount: number;
+  appState: 'active' | 'background' | 'inactive' | null;
+  connectionState: 'online' | 'offline' | 'reconnecting' | 'stale' | null;
   isOnlineNow: boolean;
   profile: {
     displayName: string;
     avatarUrl: string | null;
   } | null;
 }
+
+export interface AdminOnlineUser extends AdminUser {}
 
 export interface AdminDashboardActivityPoint {
   active: number;
@@ -65,6 +72,11 @@ export interface AdminDashboardStats {
     totalPoints: number;
     totalSignups: number;
     totalUsers: number;
+  };
+  presence: {
+    activeToday: number;
+    snapshotDate: string;
+    onlineUsers: AdminOnlineUser[];
   };
   activityTrend: AdminDashboardActivityPoint[];
 }
