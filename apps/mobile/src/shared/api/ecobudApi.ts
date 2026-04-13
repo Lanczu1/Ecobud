@@ -1,5 +1,10 @@
 import Constants from 'expo-constants';
 import { NativeModules, Platform } from 'react-native';
+import type {
+  PresenceAppState,
+  PresenceConnectionState,
+  PresenceSyncResponse,
+} from '../types/presence';
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
@@ -115,6 +120,12 @@ export interface RealtimeChannelMap {
 export interface RealtimeSessionPayload {
   enabled: boolean;
   channels: RealtimeChannelMap | null;
+}
+
+export interface PresenceSyncRequest {
+  sessionId?: string;
+  appState: PresenceAppState;
+  connectionState: PresenceConnectionState;
 }
 
 export interface DashboardData {
@@ -344,6 +355,24 @@ export const ecobudApi = {
     }),
   fetchRealtimeSession: (token: string) =>
     request<RealtimeSessionPayload>('/realtime/session', { token }),
+  connectPresence: (token: string, payload: PresenceSyncRequest) =>
+    request<PresenceSyncResponse>('/realtime/presence/connect', {
+      method: 'POST',
+      token,
+      body: payload,
+    }),
+  heartbeatPresence: (token: string, payload: PresenceSyncRequest) =>
+    request<PresenceSyncResponse>('/realtime/presence/heartbeat', {
+      method: 'POST',
+      token,
+      body: payload,
+    }),
+  disconnectPresence: (token: string, payload: PresenceSyncRequest) =>
+    request<PresenceSyncResponse>('/realtime/presence/disconnect', {
+      method: 'POST',
+      token,
+      body: payload,
+    }),
   fetchDashboard: (token: string) =>
     request<DashboardData>('/home/dashboard', { token }),
   fetchLessons: (token: string) =>

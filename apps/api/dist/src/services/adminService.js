@@ -2,8 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminService = void 0;
 const prismaClient_1 = require("../prismaClient");
+const presenceQueryService_1 = require("./presenceQueryService");
+const presenceService_1 = require("./presenceService");
 const supabaseRealtimeService_1 = require("./supabaseRealtimeService");
-const userActivityService_1 = require("./userActivityService");
 class AdminService {
     static async getAllLessons() {
         return await prismaClient_1.prisma.lesson.findMany({
@@ -119,33 +120,7 @@ class AdminService {
         });
     }
     static async getUsers() {
-        const users = await prismaClient_1.prisma.user.findMany({
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                status: true,
-                points: true,
-                currentStreak: true,
-                lastActionDate: true,
-                createdAt: true,
-                profile: {
-                    select: {
-                        displayName: true,
-                        avatarUrl: true
-                    }
-                }
-            }
-        });
-        const now = new Date();
-        return users.map((user) => ({
-            ...user,
-            createdAt: user.createdAt.toISOString(),
-            isOnlineNow: (0, userActivityService_1.isUserCurrentlyOnline)(user.lastActionDate, now),
-            lastActionDate: user.lastActionDate?.toISOString() ?? null,
-        }));
+        return presenceQueryService_1.presenceQueryService.getAdminUsers();
     }
     // Challenge Management
     static async getAllChallenges() {
@@ -224,25 +199,9 @@ class AdminService {
         startOfToday.setHours(0, 0, 0, 0);
         const endOfToday = new Date(snapshotDate);
         endOfToday.setHours(23, 59, 59, 999);
-        const userActivityService = new userActivityService_1.UserActivityService();
-        const onlineThreshold = userActivityService.getOnlineThreshold(snapshotDate);
-        const [totalUsers, activeToday, onlineNow, signupsToday, totalLessons, totalChallenges, userPoints, lessonCompletions,] = await Promise.all([
+        const presenceOverview = await presenceQueryService_1.presenceQueryService.getPresenceOverview(snapshotDate);
+        const [totalUsers, signupsToday, totalLessons, totalChallenges, userPoints, lessonCompletions,] = await Promise.all([
             prismaClient_1.prisma.user.count(),
-            prismaClient_1.prisma.user.count({
-                where: {
-                    lastActionDate: {
-                        gte: startOfToday,
-                        lte: endOfToday,
-                    },
-                },
-            }),
-            prismaClient_1.prisma.user.count({
-                where: {
-                    lastActionDate: {
-                        gte: onlineThreshold,
-                    },
-                },
-            }),
             prismaClient_1.prisma.user.count({
                 where: {
                     createdAt: {
@@ -301,10 +260,10 @@ class AdminService {
         }));
         return {
             overview: {
-                activeToday,
+                activeToday: presenceOverview.activeToday,
                 lessonCompletions,
-                onlineNow,
-                onlineWindowMinutes: userActivityService_1.ONLINE_ACTIVITY_WINDOW_MS / 60000,
+                onlineNow: presenceOverview.activeToday,
+                onlineWindowMinutes: presenceService_1.PRESENCE_STALE_TTL_MS / 60000,
                 signupsToday,
                 snapshotDate: snapshotDate.toISOString(),
                 totalChallenges,
@@ -313,6 +272,7 @@ class AdminService {
                 totalUsers,
                 totalSignups: totalUsers,
             },
+            presence: presenceOverview,
             activityTrend,
         };
     }

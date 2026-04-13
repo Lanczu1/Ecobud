@@ -29,6 +29,7 @@ const createLogRecord = (previousHash, userId, actionType, pointsAwarded, timest
     };
 };
 async function main() {
+    await prisma.presenceSession.deleteMany();
     await prisma.habitCheckIn.deleteMany();
     await prisma.challengeSubmission.deleteMany();
     await prisma.userBadge.deleteMany();
@@ -357,6 +358,31 @@ async function main() {
     const logC = createLogRecord(logB.currentHash, moderator.id, 'Event attended: Community Tree Planting', 35, new Date());
     await prisma.transparencyLog.createMany({
         data: [logA, logB, logC],
+    });
+    await prisma.presenceSession.createMany({
+        data: [
+            {
+                sessionId: 'seed-member-online-session',
+                userId: member.id,
+                isOnline: true,
+                connectedAt: new Date(),
+                lastSeenAt: new Date(),
+                expiresAt: addDays(1),
+                appState: 'active',
+                connectionState: 'online',
+            },
+            {
+                sessionId: 'seed-moderator-offline-session',
+                userId: moderator.id,
+                isOnline: false,
+                connectedAt: addDays(-1),
+                lastSeenAt: addDays(-1),
+                disconnectedAt: addDays(-1),
+                expiresAt: addDays(-1),
+                appState: 'background',
+                connectionState: 'offline',
+            },
+        ],
     });
     await prisma.faq.createMany({
         data: [
