@@ -9,9 +9,7 @@ import {
   Target, 
   Award,
   Search,
-  AlertCircle,
   CheckCircle2,
-  Image as ImageIcon
 } from 'lucide-react';
 
 export const AdminChallengeManagement: React.FC = () => {

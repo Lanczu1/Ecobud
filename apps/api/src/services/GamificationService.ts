@@ -1,7 +1,9 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { HttpError } from '../http/errorResponder';
+import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { TransparencyLedgerService } from './TransparencyLedgerService';
+import { UserActivityService } from './userActivityService';
 import { UserStatsService } from './UserStatsService';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
@@ -18,13 +20,15 @@ const ledgerService = new TransparencyLedgerService();
 
 export class GamificationService {
   private readonly userStatsService: UserStatsService;
+  private readonly userActivityService: UserActivityService;
 
   constructor(private readonly database: PrismaClient = prisma) {
     this.userStatsService = new UserStatsService(database);
+    this.userActivityService = new UserActivityService(database);
   }
 
   async completeLesson(userId: string, lessonId: string) {
-    return this.database.$transaction(async (tx) => {
+    const result = await this.database.$transaction(async (tx) => {
       const lesson = await tx.lesson.findUnique({ where: { id: lessonId } });
 
       if (!lesson) {
@@ -73,10 +77,19 @@ export class GamificationService {
         },
       });
     });
+
+    await this.broadcastUserActivity(userId, ['learn', 'tracker'], {
+      actorRole: 'user',
+      actorUserId: userId,
+      entityId: lessonId,
+      reason: 'lesson-completed',
+    });
+
+    return result;
   }
 
   async updateChallengeProgress(userId: string, challengeId: string, progressPercentage: number) {
-    return this.database.$transaction(async (tx) => {
+    const result = await this.database.$transaction(async (tx) => {
       const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
 
       if (!challenge) {
@@ -140,10 +153,19 @@ export class GamificationService {
         },
       });
     });
+
+    await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
+      actorRole: 'user',
+      actorUserId: userId,
+      entityId: challengeId,
+      reason: progressPercentage >= 100 ? 'challenge-completed' : 'challenge-progress-updated',
+    });
+
+    return result;
   }
 
   async checkInHabit(userId: string, habitId: string, dateKey: string) {
-    return this.database.$transaction(async (tx) => {
+    const result = await this.database.$transaction(async (tx) => {
       const habit = await tx.habit.findUnique({ where: { id: habitId } });
 
       if (!habit) {
@@ -187,10 +209,19 @@ export class GamificationService {
         },
       });
     });
+
+    await this.broadcastUserActivity(userId, ['tracker'], {
+      actorRole: 'user',
+      actorUserId: userId,
+      entityId: habitId,
+      reason: 'habit-check-in',
+    });
+
+    return result;
   }
 
   async markEventAttendance(eventId: string, registrationId: string) {
-    return this.database.$transaction(async (tx) => {
+    const result = await this.database.$transaction(async (tx) => {
       const event = await tx.event.findUnique({
         where: { id: eventId },
       });
@@ -233,6 +264,27 @@ export class GamificationService {
         },
       });
     });
+
+    const userId = 'userId' in result && typeof result.userId === 'string'
+      ? result.userId
+      : null;
+
+    if (userId) {
+      await Promise.all([
+        supabaseRealtimeService.publishUserSectionRefresh(userId, 'tracker', {
+          actorRole: 'moderator',
+          entityId: eventId,
+          reason: 'event-attendance-verified',
+        }),
+        supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+          actorRole: 'moderator',
+          entityId: userId,
+          reason: 'event-attendance-verified',
+        }),
+      ]);
+    }
+
+    return result;
   }
 
   private createExpirationDate(durationDays: number) {
@@ -281,6 +333,7 @@ export class GamificationService {
         pointsAwarded: action.pointsAwarded,
         pointsTotal: updatedUser.points,
         streak: updatedUser.currentStreak,
+        userId: updatedUser.id,
       };
   }
 
@@ -340,5 +393,28 @@ export class GamificationService {
     });
 
     return newBadges;
+  }
+
+  private async broadcastUserActivity(
+    userId: string,
+    sections: Array<'learn' | 'challenges' | 'tracker'>,
+    input: {
+      actorRole?: 'user' | 'moderator' | 'admin' | 'system';
+      actorUserId?: string;
+      entityId?: string;
+      reason: string;
+    },
+  ) {
+    await this.userActivityService.touchUserActivity(userId);
+
+    await Promise.all([
+      supabaseRealtimeService.publishUserSectionBundle(userId, sections, input),
+      supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+        actorRole: input.actorRole,
+        actorUserId: input.actorUserId,
+        entityId: userId,
+        reason: input.reason,
+      }),
+    ]);
   }
 }

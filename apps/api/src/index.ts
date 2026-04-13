@@ -14,6 +14,7 @@ import { moderationRoutes } from './routes/moderationRoutes';
 import { faqRoutes } from './routes/faqRoutes';
 import { homeRoutes } from './routes/homeRoutes';
 import { learnRoutes } from './routes/learnRoutes';
+import { realtimeRoutes } from './routes/realtimeRoutes';
 import { userActionRoutes } from './routes/userActionRoutes';
 import { errorResponder } from './http/errorResponder';
 
@@ -39,6 +40,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/home', homeRoutes);
 app.use('/api/learn', learnRoutes);
+app.use('/api/realtime', realtimeRoutes);
 app.use('/api/user', userActionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/lessons', lessonRoutes);

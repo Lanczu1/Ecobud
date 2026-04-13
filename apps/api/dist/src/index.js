@@ -19,6 +19,7 @@ const moderationRoutes_1 = require("./routes/moderationRoutes");
 const faqRoutes_1 = require("./routes/faqRoutes");
 const homeRoutes_1 = require("./routes/homeRoutes");
 const learnRoutes_1 = require("./routes/learnRoutes");
+const realtimeRoutes_1 = require("./routes/realtimeRoutes");
 const userActionRoutes_1 = require("./routes/userActionRoutes");
 const errorResponder_1 = require("./http/errorResponder");
 dotenv_1.default.config();
@@ -37,6 +38,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes_1.authRoutes);
 app.use('/api/home', homeRoutes_1.homeRoutes);
 app.use('/api/learn', learnRoutes_1.learnRoutes);
+app.use('/api/realtime', realtimeRoutes_1.realtimeRoutes);
 app.use('/api/user', userActionRoutes_1.userActionRoutes);
 app.use('/api/users', userRoutes_1.userRoutes);
 app.use('/api/lessons', lessonRoutes_1.lessonRoutes);

@@ -3,18 +3,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GamificationService = void 0;
 const prismaClient_1 = require("../prismaClient");
 const errorResponder_1 = require("../http/errorResponder");
+const supabaseRealtimeService_1 = require("./supabaseRealtimeService");
 const TransparencyLedgerService_1 = require("./TransparencyLedgerService");
+const userActivityService_1 = require("./userActivityService");
 const UserStatsService_1 = require("./UserStatsService");
 const ledgerService = new TransparencyLedgerService_1.TransparencyLedgerService();
 class GamificationService {
     database;
     userStatsService;
+    userActivityService;
     constructor(database = prismaClient_1.prisma) {
         this.database = database;
         this.userStatsService = new UserStatsService_1.UserStatsService(database);
+        this.userActivityService = new userActivityService_1.UserActivityService(database);
     }
     async completeLesson(userId, lessonId) {
-        return this.database.$transaction(async (tx) => {
+        const result = await this.database.$transaction(async (tx) => {
             const lesson = await tx.lesson.findUnique({ where: { id: lessonId } });
             if (!lesson) {
                 throw new errorResponder_1.HttpError(404, 'Lesson not found.');
@@ -58,9 +62,16 @@ class GamificationService {
                 },
             });
         });
+        await this.broadcastUserActivity(userId, ['learn', 'tracker'], {
+            actorRole: 'user',
+            actorUserId: userId,
+            entityId: lessonId,
+            reason: 'lesson-completed',
+        });
+        return result;
     }
     async updateChallengeProgress(userId, challengeId, progressPercentage) {
-        return this.database.$transaction(async (tx) => {
+        const result = await this.database.$transaction(async (tx) => {
             const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
             if (!challenge) {
                 throw new errorResponder_1.HttpError(404, 'Challenge not found.');
@@ -117,9 +128,16 @@ class GamificationService {
                 },
             });
         });
+        await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
+            actorRole: 'user',
+            actorUserId: userId,
+            entityId: challengeId,
+            reason: progressPercentage >= 100 ? 'challenge-completed' : 'challenge-progress-updated',
+        });
+        return result;
     }
     async checkInHabit(userId, habitId, dateKey) {
-        return this.database.$transaction(async (tx) => {
+        const result = await this.database.$transaction(async (tx) => {
             const habit = await tx.habit.findUnique({ where: { id: habitId } });
             if (!habit) {
                 throw new errorResponder_1.HttpError(404, 'Habit not found.');
@@ -158,9 +176,16 @@ class GamificationService {
                 },
             });
         });
+        await this.broadcastUserActivity(userId, ['tracker'], {
+            actorRole: 'user',
+            actorUserId: userId,
+            entityId: habitId,
+            reason: 'habit-check-in',
+        });
+        return result;
     }
     async markEventAttendance(eventId, registrationId) {
-        return this.database.$transaction(async (tx) => {
+        const result = await this.database.$transaction(async (tx) => {
             const event = await tx.event.findUnique({
                 where: { id: eventId },
             });
@@ -197,6 +222,24 @@ class GamificationService {
                 },
             });
         });
+        const userId = 'userId' in result && typeof result.userId === 'string'
+            ? result.userId
+            : null;
+        if (userId) {
+            await Promise.all([
+                supabaseRealtimeService_1.supabaseRealtimeService.publishUserSectionRefresh(userId, 'tracker', {
+                    actorRole: 'moderator',
+                    entityId: eventId,
+                    reason: 'event-attendance-verified',
+                }),
+                supabaseRealtimeService_1.supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+                    actorRole: 'moderator',
+                    entityId: userId,
+                    reason: 'event-attendance-verified',
+                }),
+            ]);
+        }
+        return result;
     }
     createExpirationDate(durationDays) {
         const expirationDate = new Date();
@@ -231,6 +274,7 @@ class GamificationService {
             pointsAwarded: action.pointsAwarded,
             pointsTotal: updatedUser.points,
             streak: updatedUser.currentStreak,
+            userId: updatedUser.id,
         };
     }
     resolveStreak(lastActionDate, actionDate, currentStreak) {
@@ -275,6 +319,18 @@ class GamificationService {
             })),
         });
         return newBadges;
+    }
+    async broadcastUserActivity(userId, sections, input) {
+        await this.userActivityService.touchUserActivity(userId);
+        await Promise.all([
+            supabaseRealtimeService_1.supabaseRealtimeService.publishUserSectionBundle(userId, sections, input),
+            supabaseRealtimeService_1.supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+                actorRole: input.actorRole,
+                actorUserId: input.actorUserId,
+                entityId: userId,
+                reason: input.reason,
+            }),
+        ]);
     }
 }
 exports.GamificationService = GamificationService;

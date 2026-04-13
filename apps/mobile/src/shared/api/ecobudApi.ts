@@ -99,6 +99,24 @@ export interface SessionPayload {
   user: SessionUser;
 }
 
+export interface RealtimeChannelMap {
+  adminDashboard?: string;
+  adminPresence?: string;
+  adminUsers?: string;
+  globalChallenges: string;
+  globalLearn: string;
+  presenceMembers?: string;
+  userChallenges: string;
+  userLearn: string;
+  userNotice: string;
+  userTracker: string;
+}
+
+export interface RealtimeSessionPayload {
+  enabled: boolean;
+  channels: RealtimeChannelMap | null;
+}
+
 export interface DashboardData {
   streak: number;
   ecoPoints: number;
@@ -324,6 +342,8 @@ export const ecobudApi = {
       method: 'POST',
       body: { email },
     }),
+  fetchRealtimeSession: (token: string) =>
+    request<RealtimeSessionPayload>('/realtime/session', { token }),
   fetchDashboard: (token: string) =>
     request<DashboardData>('/home/dashboard', { token }),
   fetchLessons: (token: string) =>

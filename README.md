@@ -36,7 +36,7 @@ You can inspect the database in either:
 ## 2. Run the web app
 
 ```bash
-cd apps/web
+cd apps/web/admin
 flutter pub get
 flutter run -d chrome --web-port 3001
 ```
@@ -65,6 +65,38 @@ Notes:
 ```bash
 EXPO_PUBLIC_API_BASE_URL=http://192.168.1.8:3000/api
 ```
+
+## Supabase realtime setup
+
+Supabase now acts as the live sync layer for the existing API.
+
+- Admin lesson and challenge changes publish realtime updates to mobile users
+- User learn, challenge, and tracker activity publishes targeted refresh signals
+- Moderator reviews can notify the affected user in real time
+
+### API env vars
+
+Add these to `apps/api/.env`:
+
+```bash
+SUPABASE_URL=""
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_REALTIME_CHANNEL_SECRET=""
+```
+
+Use a backend secret key here, not the `sb_publishable_...` key.
+
+### Mobile env vars
+
+Start Expo with the Supabase public config:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=""
+EXPO_PUBLIC_SUPABASE_URL=""
+EXPO_PUBLIC_SUPABASE_ANON_KEY=""
+```
+
+The app continues working without these vars; realtime sync is simply disabled until they are present.
 
 ## Demo accounts
 
