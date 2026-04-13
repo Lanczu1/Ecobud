@@ -3,13 +3,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LearnService = void 0;
 const errorResponder_1 = require("../http/errorResponder");
 const prismaClient_1 = require("../prismaClient");
+const supabaseRealtimeService_1 = require("./supabaseRealtimeService");
 const GamificationService_1 = require("./GamificationService");
+const userActivityService_1 = require("./userActivityService");
 class LearnService {
     database;
     gamificationService;
+    userActivityService;
     constructor(database = prismaClient_1.prisma) {
         this.database = database;
         this.gamificationService = new GamificationService_1.GamificationService(database);
+        this.userActivityService = new userActivityService_1.UserActivityService(database);
     }
     async getPublishedLessons(userId) {
         const lessons = await this.database.lesson.findMany({
@@ -21,6 +25,17 @@ class LearnService {
                 progress: {
                     where: { userId },
                     take: 1,
+                },
+                createdBy: {
+                    select: {
+                        id: true,
+                        name: true,
+                        profile: {
+                            select: {
+                                displayName: true,
+                            },
+                        },
+                    },
                 },
             },
         });
@@ -67,11 +82,27 @@ class LearnService {
                     progress: 0,
                 },
             });
-        return {
+        const result = {
             lessonId,
             status: progress.status,
             progress: progress.progress,
         };
+        await this.userActivityService.touchUserActivity(userId);
+        await Promise.all([
+            supabaseRealtimeService_1.supabaseRealtimeService.publishUserSectionRefresh(userId, 'learn', {
+                actorRole: 'user',
+                actorUserId: userId,
+                entityId: lessonId,
+                reason: 'lesson-seen',
+            }),
+            supabaseRealtimeService_1.supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+                actorRole: 'user',
+                actorUserId: userId,
+                entityId: userId,
+                reason: 'lesson-seen',
+            }),
+        ]);
+        return result;
     }
     async completeLesson(userId, lessonId) {
         const lesson = await this.database.lesson.findFirst({
@@ -111,6 +142,11 @@ class LearnService {
             created_at: lesson.createdAt.toISOString(),
             progress: status === 'completed' ? 100 : 0,
             status,
+            author: lesson.createdBy ? {
+                id: lesson.createdBy.id,
+                name: lesson.createdBy.name,
+                displayName: lesson.createdBy.profile?.displayName || lesson.createdBy.name,
+            } : null,
         };
     }
     normalizeStatus(status) {

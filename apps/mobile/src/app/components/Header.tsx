@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
+  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -34,7 +35,70 @@ function AvatarBubble({
   );
 }
 
-export function Header({ userDisplayName, notificationCount, showBack, title, onBack }: HeaderProps) {
+function PresenceDot({ isOnline }: { isOnline: boolean }) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const opacity = React.useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    if (isOnline) {
+      scale.stopAnimation();
+      opacity.stopAnimation();
+      scale.setValue(1);
+      opacity.setValue(1);
+      return;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1.22,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.5,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+
+    pulse.start();
+
+    return () => {
+      pulse.stop();
+    };
+  }, [isOnline, opacity, scale]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.presenceDot,
+        isOnline ? styles.presenceDotOnline : styles.presenceDotOffline,
+        {
+          opacity,
+          transform: [{ scale }],
+        },
+      ]}
+    />
+  );
+}
+
+export function Header({ userDisplayName, notificationCount, isUserOnline, showBack, title, onBack }: HeaderProps) {
   return (
     <View style={styles.topNavbar}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -43,12 +107,15 @@ export function Header({ userDisplayName, notificationCount, showBack, title, on
             <Feather name="arrow-left" size={24} color="#1A211D" />
           </TouchableOpacity>
         ) : (
-          <AvatarBubble
-            label={userDisplayName}
-            size={44}
-            style={styles.topNavAvatar}
-            textStyle={styles.topNavAvatarText}
-          />
+          <View style={styles.avatarWrap}>
+            <AvatarBubble
+              label={userDisplayName}
+              size={44}
+              style={styles.topNavAvatar}
+              textStyle={styles.topNavAvatarText}
+            />
+            <PresenceDot isOnline={isUserOnline} />
+          </View>
         )}
       </View>
       <Text style={[styles.topNavTitle, title ? styles.topNavTitleDark : {}]}>{title || 'ECOBUD'}</Text>
@@ -77,6 +144,11 @@ const styles = StyleSheet.create({
   topNavAvatarText: {
     fontSize: 18,
   },
+  avatarWrap: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+  },
   topNavTitle: {
     fontSize: 22,
     fontWeight: '900',
@@ -96,6 +168,22 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#F59E0B',
+  },
+  presenceDot: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    borderWidth: 2,
+    borderColor: '#F7F9F7',
+  },
+  presenceDotOnline: {
+    backgroundColor: '#22C55E',
+  },
+  presenceDotOffline: {
+    backgroundColor: '#EF4444',
   },
   avatarBubble: {
     backgroundColor: '#CBEFD6',

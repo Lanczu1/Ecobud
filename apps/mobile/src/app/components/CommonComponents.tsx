@@ -110,6 +110,7 @@ export function TopNavbar({ model, title, showBack }: { model: EcoBudMobileModel
     <Header
       userDisplayName={model.userDisplayName}
       notificationCount={model.notificationCount}
+      isUserOnline={model.isUserOnline}
       showBack={showBack}
       title={title}
       onBack={() => model.setActiveOverlay(null)}

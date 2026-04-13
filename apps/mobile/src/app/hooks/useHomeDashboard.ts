@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState, type AppStateStatus } from 'react-native';
 import { homeService } from '../services/homeService';
 import {
   type AppTab,
@@ -27,6 +27,7 @@ import {
   isReadOnlySession,
   showReadOnlyAccessAlert,
 } from '../ReadOnlyExperience';
+import { realtimeService } from '../../shared/supabase/realtimeService';
 
 
 
@@ -56,6 +57,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [booting, setBooting] = useState(false);
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [session, setSession] = useState<SessionPayload | null>(null);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [activeTab, setActiveTabState] = useState<AppTab>('home');
   const [activeOverlay, setActiveOverlayState] = useState<OverlayScreen>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
@@ -72,6 +75,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [actionOverlayVisible, setActionOverlayVisible] = useState(false);
   const [actionOverlayLabel, setActionOverlayLabel] = useState('Preparing EcoBud...');
   const actionOverlayTicket = React.useRef(0);
+  const realtimeRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -239,6 +243,22 @@ export function useHomeDashboard(): EcoBudMobileModel {
     void bootstrap();
   }, [hydrateApp]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      setAppState(nextState);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (realtimeRefreshTimer.current) {
+      clearTimeout(realtimeRefreshTimer.current);
+    }
+  }, []);
+
   const ensureSession = useCallback(() => {
     if (!session) {
       throw new Error('Your session expired. Please sign in again.');
@@ -358,6 +378,75 @@ export function useHomeDashboard(): EcoBudMobileModel {
       await hydrateApp(session);
     });
   }, [hydrateApp, isReadOnlyExperience, runWithActionLoader, session]);
+
+  const queueRealtimeRefresh = useCallback(
+    (reason: string) => {
+      if (!session || isReadOnlySession(session)) {
+        return;
+      }
+
+      if (realtimeRefreshTimer.current) {
+        clearTimeout(realtimeRefreshTimer.current);
+      }
+
+      realtimeRefreshTimer.current = setTimeout(() => {
+        void hydrateApp(session, true).catch((error) => {
+          console.warn(`Realtime refresh failed after ${reason}.`, error);
+        });
+      }, 450);
+    },
+    [hydrateApp, session],
+  );
+
+  useEffect(() => {
+    if (!session || isReadOnlySession(session) || appState !== 'active') {
+      setRealtimeConnected(false);
+      return;
+    }
+
+    let cleanup = () => undefined;
+    let isMounted = true;
+
+    void realtimeService
+      .connect(session, {
+        onConnectionChange: (connected) => {
+          if (!isMounted) {
+            return;
+          }
+
+          setRealtimeConnected(connected);
+        },
+        onNotice: (notice) => {
+          if (!isMounted) {
+            return;
+          }
+
+          Alert.alert(notice.title, notice.message);
+          queueRealtimeRefresh(`notice:${notice.scope}`);
+        },
+        onSignal: (signal) => {
+          if (!isMounted) {
+            return;
+          }
+
+          queueRealtimeRefresh(`${signal.channel}:${signal.reason}`);
+        },
+      })
+      .then((disconnect) => {
+        if (!isMounted) {
+          disconnect();
+          return;
+        }
+
+        cleanup = disconnect;
+      });
+
+    return () => {
+      isMounted = false;
+      setRealtimeConnected(false);
+      cleanup();
+    };
+  }, [appState, queueRealtimeRefresh, session]);
 
   const openLesson = useCallback(async (lessonId: string) => {
     await runWithActionLoader('Opening lesson...', async () => {
@@ -566,6 +655,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     profile?.profile?.displayName ??
     session?.user.displayName ??
     'EcoBud Member';
+  const isUserOnline = Boolean(session && !isReadOnlyExperience && appState === 'active' && realtimeConnected);
 
   return {
     initializing,
@@ -601,6 +691,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     transparency,
     todaysCompletedHabits,
     userDisplayName,
+    isUserOnline,
     notificationCount: isReadOnlyExperience ? 0 : Math.min(9, events.length),
     setActiveTab,
     setActiveOverlay,

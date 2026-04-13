@@ -77,5 +77,92 @@ class AdminController {
             return res.status(500).json({ message: "Failed to reset user knowledge points.", error: error.message });
         }
     }
+    static async getUsers(req, res) {
+        try {
+            const users = await adminService_1.AdminService.getUsers();
+            return res.status(200).json(users);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to retrieve users.", error: error.message });
+        }
+    }
+    // Challenges
+    static async getChallenges(req, res) {
+        try {
+            const items = await adminService_1.AdminService.getAllChallenges();
+            return res.status(200).json(items);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to fetch challenges.", error: error.message });
+        }
+    }
+    static async createChallenge(req, res) {
+        try {
+            const item = await adminService_1.AdminService.createChallenge(req.body);
+            return res.status(201).json(item);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to create challenge.", error: error.message });
+        }
+    }
+    static async updateChallenge(req, res) {
+        try {
+            const item = await adminService_1.AdminService.updateChallenge(req.params.id, req.body);
+            return res.status(200).json(item);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to update challenge.", error: error.message });
+        }
+    }
+    static async deleteChallenge(req, res) {
+        try {
+            await adminService_1.AdminService.deleteChallenge(req.params.id);
+            return res.status(204).send();
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to delete challenge.", error: error.message });
+        }
+    }
+    static async getDashboardStats(req, res) {
+        try {
+            const stats = await adminService_1.AdminService.getDashboardStats();
+            return res.status(200).json(stats);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to fetch dashboard stats.", error: error.message });
+        }
+    }
+    static async getSubmissions(req, res) {
+        try {
+            const items = await adminService_1.AdminService.getSubmissions();
+            return res.status(200).json(items);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to fetch submissions.", error: error.message });
+        }
+    }
+    static async reviewSubmission(req, res) {
+        const { id } = req.params;
+        const { status, notes } = req.body;
+        if (!['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ message: "Status must be approved or rejected." });
+        }
+        try {
+            const item = await adminService_1.AdminService.reviewSubmission(id, req.auth.userId, status, notes);
+            return res.status(200).json(item);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to review submission.", error: error.message });
+        }
+    }
+    static async getAuditLogs(req, res) {
+        try {
+            const items = await adminService_1.AdminService.getAuditLogs();
+            return res.status(200).json(items);
+        }
+        catch (error) {
+            return res.status(500).json({ message: "Failed to fetch audit logs.", error: error.message });
+        }
+    }
 }
 exports.AdminController = AdminController;

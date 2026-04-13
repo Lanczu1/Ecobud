@@ -7,8 +7,26 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  html {
+    background:
+      radial-gradient(circle at top, rgba(102, 187, 106, 0.16), transparent 30%),
+      linear-gradient(180deg, #f8fbf8 0%, #eef3ef 100%);
+  }
+
   body {
-    @apply bg-slate-50 text-slate-900 antialiased font-sans;
+    @apply text-slate-900 antialiased font-sans;
+    background: transparent;
+  }
+
+  #root {
+    min-height: 100vh;
+    background: transparent;
   }
 }
 
@@ -35,5 +53,33 @@
 
   .nav-link.active {
     @apply bg-emerald-50 text-forest shadow-sm;
+  }
+
+  .presence-dot {
+    @apply inline-block h-2.5 w-2.5 rounded-full;
+    animation: presence-breathe 3.4s ease-in-out infinite;
+  }
+
+  .presence-dot-online {
+    background: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35);
+  }
+
+  .presence-dot-offline {
+    background: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.28);
+  }
+}
+
+@keyframes presence-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
   }
 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireModeratorAccess } from '../http/authentication';
 import { HttpError, errorBoundary } from '../http/errorResponder';
+import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import { GamificationService } from '../services/GamificationService';
 
 const moderationRoutes = Router();
@@ -220,6 +221,24 @@ moderationRoutes.post(
       },
     );
 
+    await supabaseRealtimeService.publishUserSectionBundle(
+      item.userId,
+      ['challenges', 'tracker'],
+      {
+        actorRole: req.auth!.role,
+        actorUserId: req.auth!.userId,
+        entityId: item.challengeId,
+        reason: 'submission-approved',
+      },
+    );
+
+    await supabaseRealtimeService.publishUserNotice(item.userId, {
+      level: 'success',
+      message: `Your proof for "${item.challenge.title}" has been approved.`,
+      scope: 'moderation',
+      title: 'Challenge approved',
+    });
+
     return res.json({ item });
   }),
 );
@@ -236,6 +255,24 @@ moderationRoutes.post(
         moderatorNotes: payload.moderatorNotes,
       },
     );
+
+    await supabaseRealtimeService.publishUserSectionBundle(
+      item.userId,
+      ['challenges', 'tracker'],
+      {
+        actorRole: req.auth!.role,
+        actorUserId: req.auth!.userId,
+        entityId: item.challengeId,
+        reason: 'submission-rejected',
+      },
+    );
+
+    await supabaseRealtimeService.publishUserNotice(item.userId, {
+      level: 'warning',
+      message: `Your proof for "${item.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+      scope: 'moderation',
+      title: 'Challenge review update',
+    });
 
     return res.json({ item });
   }),
@@ -254,6 +291,24 @@ moderationRoutes.post(
         moderatorNotes: payload.moderatorNotes,
       },
     );
+
+    await supabaseRealtimeService.publishUserSectionBundle(
+      item.userId,
+      ['challenges', 'tracker'],
+      {
+        actorRole: req.auth!.role,
+        actorUserId: req.auth!.userId,
+        entityId: item.challengeId,
+        reason: 'submission-flagged',
+      },
+    );
+
+    await supabaseRealtimeService.publishUserNotice(item.userId, {
+      level: 'warning',
+      message: `Your proof for "${item.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+      scope: 'moderation',
+      title: 'Challenge flagged',
+    });
 
     return res.json({ item });
   }),

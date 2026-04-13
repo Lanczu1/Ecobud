@@ -5,3 +5,9 @@
 .env.*
 !.env.example
 !.env.*.example
+
+# Supabase local state and secrets
+.supabase/
+supabase/.branches/
+supabase/.temp/
+supabase/.env

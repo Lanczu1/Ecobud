@@ -1,39 +1,86 @@
 import React, { useState, useEffect } from 'react';
+import { PresenceIndicator } from '../components/PresenceIndicator';
+import { adminRealtimeService } from '../services/adminRealtimeService';
 import { adminService } from '../services/adminService';
-import { 
-  Users, 
-  Search, 
-  Shield, 
-  User as UserIcon, 
-  Mail, 
-  Trophy, 
+import type { AdminUser } from '../types/admin';
+import {
+  Users,
+  Search,
+  Shield,
+  User as UserIcon,
+  Mail,
+  Trophy,
   Zap,
-  MoreVertical,
   ChevronRight,
   RefreshCcw,
-  CheckCircle2
 } from 'lucide-react';
 
+const ONLINE_ACTIVITY_WINDOW_MS = 5 * 60 * 1000;
+
+const isUserOnline = (lastActionDate: string | null, now: number) => {
+  if (!lastActionDate) {
+    return false;
+  }
+
+  return now - new Date(lastActionDate).getTime() <= ONLINE_ACTIVITY_WINDOW_MS;
+};
+
 export const AdminUserManagement: React.FC = () => {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [livePresence, setLivePresence] = useState<{ onlineUserIds: Set<string>; ready: boolean }>({
+    onlineUserIds: new Set<string>(),
+    ready: false,
+  });
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (showLoader = false) => {
+    if (showLoader) {
+      setLoading(true);
+    }
+
     try {
       const data = await adminService.getUsers();
       setUsers(data);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    void fetchUsers(true);
+
+    let unsubscribe: () => void = () => {};
+    const statusTimer = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 30_000);
+
+    void adminRealtimeService
+      .connect({
+        onPresenceChange: (presence) => {
+          setLivePresence({
+            onlineUserIds: new Set(presence.onlineUserIds),
+            ready: true,
+          });
+        },
+        onUsersRefresh: () => {
+          void fetchUsers();
+        },
+      })
+      .then((cleanup) => {
+        unsubscribe = cleanup;
+      });
+
+    return () => {
+      window.clearInterval(statusTimer);
+      unsubscribe();
+    };
   }, []);
 
   const handleResetKnowledge = async (userId: string) => {
@@ -85,67 +132,89 @@ export const AdminUserManagement: React.FC = () => {
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUsers.map((user) => (
-          <div key={user.id} className="glass-card p-6 flex flex-col group hover:shadow-xl hover:shadow-forest/5 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-forest/10 flex items-center justify-center text-forest overflow-hidden">
-                  {user.profile?.avatarUrl ? (
-                    <img src={user.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <UserIcon size={24} />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-800 leading-tight">{user.profile?.displayName || user.name}</h3>
-                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-black text-slate-400 mt-1">
-                    {user.role === 'admin' ? (
-                      <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                        <Shield size={10} /> Admin
-                      </span>
+        {filteredUsers.map((user, index) => {
+          const onlineNow = livePresence.ready
+            ? livePresence.onlineUserIds.has(user.id)
+            : isUserOnline(user.lastActionDate, nowTick);
+
+          return (
+            <div
+              key={user.id}
+              style={{ animationDelay: `${index * 50}ms` }}
+              className="glass-card p-6 flex flex-col group hover:shadow-xl hover:shadow-forest/5 transition-all animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-forest/10 flex items-center justify-center text-forest overflow-hidden">
+                    {user.profile?.avatarUrl ? (
+                      <img src={user.profile.avatarUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="flex items-center gap-1">Member</span>
+                      <UserIcon size={24} />
                     )}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 leading-tight">{user.profile?.displayName || user.name}</h3>
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-black text-slate-400 mt-1">
+                      {user.role === 'admin' ? (
+                        <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                          <Shield size={10} /> Admin
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">Member</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <PresenceIndicator
+                  compact
+                  isOnline={onlineNow}
+                  label={onlineNow ? 'Online' : 'Offline'}
+                />
+              </div>
+
+              <div className="space-y-3 mb-6 flex-1">
+                <div className="flex items-center gap-2 text-slate-500">
+                  <Mail size={14} className="opacity-50" />
+                  <span className="text-xs font-bold truncate">{user.email}</span>
+                </div>
+                <div className="text-[11px] font-bold text-slate-400">
+                  {user.lastActionDate
+                    ? `Last activity: ${new Date(user.lastActionDate).toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}`
+                    : 'No activity recorded yet'}
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                  <div className="flex items-center gap-1.5">
+                    <Trophy size={14} className="text-amber-500" />
+                    <span className="text-xs font-black text-slate-700">{user.points} <span className="text-slate-400 font-bold">PTS</span></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Zap size={14} className="text-forest" />
+                    <span className="text-xs font-black text-slate-700">{user.currentStreak} <span className="text-slate-400 font-bold">STREAK</span></span>
                   </div>
                 </div>
               </div>
-              <button className="p-2 text-slate-300 hover:text-slate-600 transition-colors">
-                <MoreVertical size={18} />
-              </button>
-            </div>
 
-            <div className="space-y-3 mb-6 flex-1">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Mail size={14} className="opacity-50" />
-                <span className="text-xs font-bold truncate">{user.email}</span>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                <div className="flex items-center gap-1.5">
-                  <Trophy size={14} className="text-amber-500" />
-                  <span className="text-xs font-black text-slate-700">{user.points} <span className="text-slate-400 font-bold">PTS</span></span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Zap size={14} className="text-forest" />
-                  <span className="text-xs font-black text-slate-700">{user.currentStreak} <span className="text-slate-400 font-bold">STREAK</span></span>
-                </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleResetKnowledge(user.id)}
+                  disabled={resettingId === user.id}
+                  className="flex-1 py-2.5 bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-100 hover:text-slate-700 transition-all flex items-center justify-center gap-2"
+                >
+                  {resettingId === user.id ? <RefreshCcw size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
+                  Reset KP
+                </button>
+                <button className="px-4 py-2.5 bg-forest text-white rounded-xl hover:bg-forest/90 transition-all">
+                  <ChevronRight size={18} />
+                </button>
               </div>
             </div>
-
-            <div className="flex gap-2">
-              <button 
-                onClick={() => handleResetKnowledge(user.id)}
-                disabled={resettingId === user.id}
-                className="flex-1 py-2.5 bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-100 hover:text-slate-700 transition-all flex items-center justify-center gap-2"
-              >
-                {resettingId === user.id ? <RefreshCcw size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
-                Reset KP
-              </button>
-              <button className="px-4 py-2.5 bg-forest text-white rounded-xl hover:bg-forest/90 transition-all">
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {filteredUsers.length === 0 && (
           <div className="col-span-full py-20 text-center opacity-30">

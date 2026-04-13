@@ -6,6 +6,7 @@ const zod_1 = require("zod");
 const prismaClient_1 = require("../prismaClient");
 const authentication_1 = require("../http/authentication");
 const errorResponder_1 = require("../http/errorResponder");
+const supabaseRealtimeService_1 = require("../services/supabaseRealtimeService");
 const GamificationService_1 = require("../services/GamificationService");
 const moderationRoutes = (0, express_1.Router)();
 exports.moderationRoutes = moderationRoutes;
@@ -156,12 +157,36 @@ moderationRoutes.post('/challenge-submissions/:submissionId/approve', (0, errorR
     const item = await updateSubmissionStatus(req.params.submissionId, req.auth.userId, 'approved', {
         moderatorNotes: payload.moderatorNotes,
     });
+    await supabaseRealtimeService_1.supabaseRealtimeService.publishUserSectionBundle(item.userId, ['challenges', 'tracker'], {
+        actorRole: req.auth.role,
+        actorUserId: req.auth.userId,
+        entityId: item.challengeId,
+        reason: 'submission-approved',
+    });
+    await supabaseRealtimeService_1.supabaseRealtimeService.publishUserNotice(item.userId, {
+        level: 'success',
+        message: `Your proof for "${item.challenge.title}" has been approved.`,
+        scope: 'moderation',
+        title: 'Challenge approved',
+    });
     return res.json({ item });
 }));
 moderationRoutes.post('/challenge-submissions/:submissionId/reject', (0, errorResponder_1.errorBoundary)(async (req, res) => {
     const payload = moderationDecisionSchema.parse(req.body);
     const item = await updateSubmissionStatus(req.params.submissionId, req.auth.userId, 'rejected', {
         moderatorNotes: payload.moderatorNotes,
+    });
+    await supabaseRealtimeService_1.supabaseRealtimeService.publishUserSectionBundle(item.userId, ['challenges', 'tracker'], {
+        actorRole: req.auth.role,
+        actorUserId: req.auth.userId,
+        entityId: item.challengeId,
+        reason: 'submission-rejected',
+    });
+    await supabaseRealtimeService_1.supabaseRealtimeService.publishUserNotice(item.userId, {
+        level: 'warning',
+        message: `Your proof for "${item.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+        scope: 'moderation',
+        title: 'Challenge review update',
     });
     return res.json({ item });
 }));
@@ -170,6 +195,18 @@ moderationRoutes.post('/challenge-submissions/:submissionId/flag', (0, errorResp
     const item = await updateSubmissionStatus(req.params.submissionId, req.auth.userId, 'flagged', {
         flaggedReason: payload.reason,
         moderatorNotes: payload.moderatorNotes,
+    });
+    await supabaseRealtimeService_1.supabaseRealtimeService.publishUserSectionBundle(item.userId, ['challenges', 'tracker'], {
+        actorRole: req.auth.role,
+        actorUserId: req.auth.userId,
+        entityId: item.challengeId,
+        reason: 'submission-flagged',
+    });
+    await supabaseRealtimeService_1.supabaseRealtimeService.publishUserNotice(item.userId, {
+        level: 'warning',
+        message: `Your proof for "${item.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+        scope: 'moderation',
+        title: 'Challenge flagged',
     });
     return res.json({ item });
 }));

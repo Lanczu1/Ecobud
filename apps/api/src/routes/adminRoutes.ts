@@ -25,4 +25,14 @@ adminRoutes.post("/challenges", AdminController.createChallenge);
 adminRoutes.put("/challenges/:id", AdminController.updateChallenge);
 adminRoutes.delete("/challenges/:id", AdminController.deleteChallenge);
 
+// Dashboard Stats
+adminRoutes.get("/stats", AdminController.getDashboardStats);
+
+// Submissions
+adminRoutes.get("/submissions", AdminController.getSubmissions);
+adminRoutes.post("/submissions/:id/review", AdminController.reviewSubmission);
+
+// Audit Logs
+adminRoutes.get("/audit", AdminController.getAuditLogs);
+
 export { adminRoutes };

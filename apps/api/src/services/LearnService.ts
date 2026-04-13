@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { HttpError } from '../http/errorResponder';
 import { prisma } from '../prismaClient';
+import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { GamificationService } from './GamificationService';
+import { UserActivityService } from './userActivityService';
 
 export type LessonStatus = 'not_started' | 'seen' | 'completed';
 
@@ -23,9 +25,11 @@ export interface LearnLessonPayload {
 
 export class LearnService {
   private readonly gamificationService: GamificationService;
+  private readonly userActivityService: UserActivityService;
 
   constructor(private readonly database: PrismaClient = prisma) {
     this.gamificationService = new GamificationService(database);
+    this.userActivityService = new UserActivityService(database);
   }
 
   async getPublishedLessons(userId: string): Promise<LearnLessonPayload[]> {
@@ -102,11 +106,29 @@ export class LearnService {
           },
         });
 
-    return {
+    const result = {
       lessonId,
       status: progress.status as LessonStatus,
       progress: progress.progress,
     };
+
+    await this.userActivityService.touchUserActivity(userId);
+    await Promise.all([
+      supabaseRealtimeService.publishUserSectionRefresh(userId, 'learn', {
+        actorRole: 'user',
+        actorUserId: userId,
+        entityId: lessonId,
+        reason: 'lesson-seen',
+      }),
+      supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+        actorRole: 'user',
+        actorUserId: userId,
+        entityId: userId,
+        reason: 'lesson-seen',
+      }),
+    ]);
+
+    return result;
   }
 
   async completeLesson(userId: string, lessonId: string) {

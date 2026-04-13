@@ -53,6 +53,7 @@ model User {
   managedEvents              Event[]              @relation("ManagedEvents")
   updatedSettings            SystemSetting[]      @relation("SystemSettingUpdates")
   authoredLessons            Lesson[]             @relation("LessonAuthor")
+  auditLogs                  AuditLog[]
 
   @@map("users")
 }
@@ -292,4 +293,15 @@ model SystemSetting {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   updatedBy   User?    @relation("SystemSettingUpdates", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String?
+  details   String?  @db.Text
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
 }
