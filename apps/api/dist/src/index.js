@@ -3,8 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config");
 const cors_1 = __importDefault(require("cors"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const express_1 = __importDefault(require("express"));
 const authRoutes_1 = require("./routes/authRoutes");
 const userRoutes_1 = require("./routes/userRoutes");
@@ -22,7 +22,7 @@ const learnRoutes_1 = require("./routes/learnRoutes");
 const realtimeRoutes_1 = require("./routes/realtimeRoutes");
 const userActionRoutes_1 = require("./routes/userActionRoutes");
 const errorResponder_1 = require("./http/errorResponder");
-dotenv_1.default.config();
+const presenceCleanupScheduler_1 = require("./services/presenceCleanupScheduler");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: '*',
@@ -55,3 +55,9 @@ const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => {
     console.log(`ECOBUD API running at http://localhost:${port}`);
 });
+(0, presenceCleanupScheduler_1.startPresenceCleanupScheduler)();
+const shutdownPresenceCleanupScheduler = () => {
+    (0, presenceCleanupScheduler_1.stopPresenceCleanupScheduler)();
+};
+process.on('SIGINT', shutdownPresenceCleanupScheduler);
+process.on('SIGTERM', shutdownPresenceCleanupScheduler);

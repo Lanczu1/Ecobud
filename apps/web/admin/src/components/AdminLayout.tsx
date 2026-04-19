@@ -19,12 +19,14 @@ import {
   UserCog
 } from 'lucide-react';
 import logo from '../assets/logo.png';
+import { getStoredAdminUser, isAdminOnlyRole } from '../utils/adminSession';
 
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const user = JSON.parse(localStorage.getItem('admin_user') || '{}');
+  const user = getStoredAdminUser() ?? {};
+  const isAdminUser = isAdminOnlyRole(user.role);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token');
@@ -33,8 +35,8 @@ export const AdminLayout: React.FC = () => {
   };
 
   const navItems = [
-    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Users', path: '/admin/users', icon: Users },
+    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard, adminOnly: true },
+    { name: 'Users', path: '/admin/users', icon: Users, adminOnly: true },
     { name: 'Submissions', path: '/admin/submissions', icon: Send },
     { name: 'Challenges', path: '/admin/challenges', icon: Trophy },
     { name: 'Lessons', path: '/admin/learn', icon: BookOpen },
@@ -44,7 +46,7 @@ export const AdminLayout: React.FC = () => {
     { name: 'Notifications', path: '/admin/notifications', icon: Bell },
     { name: 'Feedback', path: '/admin/feedback', icon: MessageSquare },
     { name: 'Admin Settings', path: '/admin/settings', icon: Settings },
-  ];
+  ].filter((item) => isAdminUser || !item.adminOnly);
 
   return (
     <div className="flex min-h-screen flex-col bg-transparent">

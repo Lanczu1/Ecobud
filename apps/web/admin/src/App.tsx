@@ -7,14 +7,37 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminSubmissions } from './pages/AdminSubmissions';
 import { AdminAuditLogs } from './pages/AdminAuditLogs';
 import { AdminLayout } from './components/AdminLayout';
+import {
+  getAdminPortalHomePath,
+  getStoredAdminUser,
+  hasAdminPortalAccess,
+} from './utils/adminSession';
 
 // Protected Route Component
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const ProtectedRoute = ({
+  children,
+  allowedRoles = ['admin', 'moderator'],
+}: {
+  children: React.ReactNode;
+  allowedRoles?: Array<'admin' | 'moderator'>;
+}) => {
   const token = localStorage.getItem('admin_token');
-  if (!token) {
+  const user = getStoredAdminUser();
+
+  if (!token || !hasAdminPortalAccess(user?.role)) {
     return <Navigate to="/admin/login" replace />;
   }
+
+  if (!allowedRoles.includes(user.role)) {
+    return <Navigate to={getAdminPortalHomePath(user.role)} replace />;
+  }
+
   return <>{children}</>;
+};
+
+const AdminHomeRedirect = () => {
+  const user = getStoredAdminUser();
+  return <Navigate to={getAdminPortalHomePath(user?.role)} replace />;
 };
 
 // Placeholder for future expansion
@@ -45,9 +68,23 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/users" element={<AdminUserManagement />} />
+          <Route path="/admin" element={<AdminHomeRedirect />} />
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminUserManagement />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/admin/submissions" element={<AdminSubmissions />} />
           <Route path="/admin/challenges" element={<AdminChallengeManagement />} />
           <Route path="/admin/learn" element={<AdminLearnManagement />} />
@@ -62,11 +99,10 @@ function App() {
         </Route>
 
         {/* Global Fallback */}
-        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/admin" replace />} />
       </Routes>
     </Router>
   );
 }
 
 export default App;
-

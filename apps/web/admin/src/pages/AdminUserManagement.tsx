@@ -17,10 +17,15 @@ import {
 
 export const AdminUserManagement: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [livePresence, setLivePresence] = useState<{
+    onlineUserIds: string[];
+    sessionCountByUserId: Record<string, number>;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const refreshBurstTimers = React.useRef<number[]>([]);
 
   const fetchUsers = async (showLoader = false) => {
     if (showLoader) {
@@ -41,6 +46,25 @@ export const AdminUserManagement: React.FC = () => {
     }
   };
 
+  const clearRefreshBurst = React.useCallback(() => {
+    refreshBurstTimers.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    refreshBurstTimers.current = [];
+  }, []);
+
+  const scheduleRefreshBurst = React.useCallback(() => {
+    clearRefreshBurst();
+
+    [0, 1500, 5000].forEach((delayMs) => {
+      const timerId = window.setTimeout(() => {
+        void fetchUsers();
+      }, delayMs);
+
+      refreshBurstTimers.current.push(timerId);
+    });
+  }, [clearRefreshBurst]);
+
   useEffect(() => {
     void fetchUsers(true);
 
@@ -48,11 +72,18 @@ export const AdminUserManagement: React.FC = () => {
 
     void adminRealtimeService
       .connect({
+        onPresenceChange: (presence) => {
+          setLivePresence({
+            onlineUserIds: presence.onlineUserIds,
+            sessionCountByUserId: presence.sessionCountByUserId,
+          });
+          scheduleRefreshBurst();
+        },
         onUsersRefresh: () => {
-          void fetchUsers();
+          scheduleRefreshBurst();
         },
         onDashboardRefresh: () => {
-          void fetchUsers();
+          scheduleRefreshBurst();
         },
       })
       .then((cleanup) => {
@@ -60,9 +91,10 @@ export const AdminUserManagement: React.FC = () => {
       });
 
     return () => {
+      clearRefreshBurst();
       unsubscribe();
     };
-  }, []);
+  }, [clearRefreshBurst, scheduleRefreshBurst]);
 
   const handleResetKnowledge = async (userId: string) => {
     if (!confirm('Are you sure you want to reset this user\'s knowledge points?')) return;
@@ -126,7 +158,16 @@ export const AdminUserManagement: React.FC = () => {
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredUsers.map((user, index) => {
-          const onlineNow = user.isOnlineNow;
+          const onlineNow = livePresence
+            ? livePresence.onlineUserIds.includes(user.id)
+            : user.isOnlineNow;
+          const activeSessionCount = livePresence
+            ? livePresence.sessionCountByUserId[user.id] ?? 0
+            : user.activeSessionCount;
+          const connectionState = livePresence
+            ? (onlineNow ? 'online' : 'offline')
+            : user.connectionState;
+          const appState = livePresence && !onlineNow ? null : user.appState;
 
           return (
             <div
@@ -190,16 +231,16 @@ export const AdminUserManagement: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
                   <span className="rounded-full bg-slate-50 px-2.5 py-1">
-                    {user.activeSessionCount} session{user.activeSessionCount === 1 ? '' : 's'}
+                    {activeSessionCount} session{activeSessionCount === 1 ? '' : 's'}
                   </span>
-                  {user.connectionState ? (
+                  {connectionState ? (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
-                      {user.connectionState}
+                      {connectionState}
                     </span>
                   ) : null}
-                  {user.appState ? (
+                  {appState ? (
                     <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
-                      {user.appState}
+                      {appState}
                     </span>
                   ) : null}
                 </div>

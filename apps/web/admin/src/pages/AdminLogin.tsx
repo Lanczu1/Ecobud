@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { getAdminPortalHomePath } from '../utils/adminSession';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -32,9 +33,13 @@ export const AdminLogin = () => {
 
       localStorage.setItem('admin_token', token);
       localStorage.setItem('admin_user', JSON.stringify(user));
-      navigate('/admin/learn');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      navigate(getAdminPortalHomePath(user.role));
+    } catch (err: unknown) {
+      const message = axios.isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message
+        : undefined;
+
+      setError(message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -95,14 +100,14 @@ export const AdminLogin = () => {
             {loading ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
-              'Access Dashboard'
+              'Access Portal'
             )}
           </button>
         </form>
 
         <div className="text-center pt-4">
           <p className="text-xs text-slate-400 font-medium">
-            Restricted access for EcoBud administrators only.
+            Restricted access for EcoBud administrators and moderators.
           </p>
         </div>
       </div>

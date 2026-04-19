@@ -26,8 +26,14 @@ import type { AdminDashboardStats } from '../types/admin';
 
 export const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
+  const [livePresence, setLivePresence] = useState<{
+    count: number;
+    onlineUserIds: string[];
+    sessionCountByUserId: Record<string, number>;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshBurstTimers = React.useRef<number[]>([]);
 
   const fetchStats = async (showLoader = false) => {
     if (showLoader) {
@@ -36,8 +42,10 @@ export const AdminDashboard: React.FC = () => {
 
     try {
       const data = await adminService.getDashboardStats();
-      setStats(data);
-      setError(null);
+      React.startTransition(() => {
+        setStats(data);
+        setError(null);
+      });
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Unable to load the executive dashboard.');
@@ -47,6 +55,25 @@ export const AdminDashboard: React.FC = () => {
       }
     }
   };
+
+  const clearRefreshBurst = React.useCallback(() => {
+    refreshBurstTimers.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    refreshBurstTimers.current = [];
+  }, []);
+
+  const scheduleRefreshBurst = React.useCallback(() => {
+    clearRefreshBurst();
+
+    [0, 1500, 5000].forEach((delayMs) => {
+      const timerId = window.setTimeout(() => {
+        void fetchStats();
+      }, delayMs);
+
+      refreshBurstTimers.current.push(timerId);
+    });
+  }, [clearRefreshBurst]);
 
   useEffect(() => {
     void fetchStats(true);
@@ -59,10 +86,20 @@ export const AdminDashboard: React.FC = () => {
     void adminRealtimeService
       .connect({
         onDashboardRefresh: () => {
-          void fetchStats();
+          scheduleRefreshBurst();
+        },
+        onPresenceChange: (presence) => {
+          React.startTransition(() => {
+            setLivePresence({
+              count: presence.count,
+              onlineUserIds: presence.onlineUserIds,
+              sessionCountByUserId: presence.sessionCountByUserId,
+            });
+          });
+          scheduleRefreshBurst();
         },
         onUsersRefresh: () => {
-          void fetchStats();
+          scheduleRefreshBurst();
         },
       })
       .then((cleanup) => {
@@ -70,10 +107,11 @@ export const AdminDashboard: React.FC = () => {
       });
 
     return () => {
+      clearRefreshBurst();
       window.clearInterval(refreshTimer);
       unsubscribe();
     };
-  }, []);
+  }, [clearRefreshBurst, scheduleRefreshBurst]);
 
   if (loading && !stats) {
     return (
@@ -97,7 +135,19 @@ export const AdminDashboard: React.FC = () => {
     day: 'numeric',
     year: 'numeric',
   });
-  const activeTodayCount = stats.presence.activeToday;
+  const activeTodayCount = livePresence?.count ?? stats.presence.activeToday;
+  const liveOnlineUserIds = livePresence?.onlineUserIds ?? null;
+  const liveSessionCountByUserId = livePresence?.sessionCountByUserId ?? null;
+  const onlineUsers = liveOnlineUserIds
+    ? stats.presence.onlineUsers
+        .filter((user) => liveOnlineUserIds.includes(user.id))
+        .map((user) => ({
+          ...user,
+          isOnlineNow: true,
+          activeSessionCount: liveSessionCountByUserId?.[user.id] ?? user.activeSessionCount,
+          connectionState: 'online' as const,
+        }))
+    : stats.presence.onlineUsers;
   const hasUsersOnline = activeTodayCount > 0;
 
   const cards = [
@@ -313,7 +363,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       <OnlineUsersPanel
-        users={stats.presence.onlineUsers}
+        users={onlineUsers}
         snapshotDate={stats.presence.snapshotDate}
         loading={loading}
         error={error}

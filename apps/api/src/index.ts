@@ -1,5 +1,5 @@
+import 'dotenv/config';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import express from 'express';
 import { authRoutes } from './routes/authRoutes';
 import { userRoutes } from './routes/userRoutes';
@@ -17,8 +17,10 @@ import { learnRoutes } from './routes/learnRoutes';
 import { realtimeRoutes } from './routes/realtimeRoutes';
 import { userActionRoutes } from './routes/userActionRoutes';
 import { errorResponder } from './http/errorResponder';
-
-dotenv.config();
+import {
+  startPresenceCleanupScheduler,
+  stopPresenceCleanupScheduler,
+} from './services/presenceCleanupScheduler';
 
 const app = express();
 
@@ -60,3 +62,12 @@ const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => {
   console.log(`ECOBUD API running at http://localhost:${port}`);
 });
+
+startPresenceCleanupScheduler();
+
+const shutdownPresenceCleanupScheduler = () => {
+  stopPresenceCleanupScheduler();
+};
+
+process.on('SIGINT', shutdownPresenceCleanupScheduler);
+process.on('SIGTERM', shutdownPresenceCleanupScheduler);

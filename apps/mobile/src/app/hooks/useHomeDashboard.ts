@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import { homeService } from '../services/homeService';
@@ -28,6 +27,9 @@ import {
   showReadOnlyAccessAlert,
 } from '../ReadOnlyExperience';
 import { usePresence } from '../../shared/presence/usePresence';
+import { offlineSyncService } from '../../shared/offline/offlineSyncService';
+import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMutationQueue.types';
+import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 
 
@@ -76,6 +78,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [actionOverlayLabel, setActionOverlayLabel] = useState('Preparing EcoBud...');
   const actionOverlayTicket = React.useRef(0);
   const realtimeRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offlineSyncInFlightRef = React.useRef(false);
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -113,11 +116,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const persistSession = useCallback(async (nextSession: SessionPayload | null) => {
     if (nextSession) {
-      await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+      await mobileStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
       return;
     }
 
-    await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+    await mobileStorage.removeItem(SESSION_STORAGE_KEY);
   }, []);
 
   const clearAppData = useCallback(() => {
@@ -134,6 +137,180 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setAssistantMessages([]);
     setSelectedLessonId(null);
   }, []);
+
+  const isRetryableOfflineActionError = useCallback((error: unknown) => {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const normalizedMessage = error.message.toLowerCase();
+
+    return (
+      normalizedMessage.includes('unable to reach the ecobud api') ||
+      normalizedMessage.includes('network') ||
+      normalizedMessage.includes('fetch') ||
+      normalizedMessage.includes('timeout')
+    );
+  }, []);
+
+  const applyOfflineLessonSeen = useCallback((lessonId: string) => {
+    setLessons((currentLessons) =>
+      currentLessons.map((lesson) => {
+        if (lesson.id !== lessonId) {
+          return lesson;
+        }
+
+        if (lesson.status === 'completed') {
+          return lesson;
+        }
+
+        return {
+          ...lesson,
+          progress: Math.max(lesson.progress, 25),
+          status: 'seen',
+        };
+      }),
+    );
+  }, []);
+
+  const applyOfflineLessonCompletion = useCallback((lessonId: string) => {
+    setLessons((currentLessons) =>
+      currentLessons.map((lesson) =>
+        lesson.id === lessonId
+          ? {
+            ...lesson,
+            progress: 100,
+            status: 'completed',
+          }
+          : lesson,
+      ),
+    );
+  }, []);
+
+  const applyOfflineChallengeProgress = useCallback(
+    (challengeId: string, nextProgress: number) => {
+      const boundedProgress = Math.min(100, Math.max(0, nextProgress));
+
+      setChallenges((currentChallenges) =>
+        currentChallenges.map((challenge) =>
+          challenge.id === challengeId
+            ? {
+              ...challenge,
+              progressPercentage: boundedProgress,
+              progress: {
+                progressPercentage: boundedProgress,
+                status: boundedProgress >= 100 ? 'completed' : 'in_progress',
+              },
+            }
+            : challenge,
+        ),
+      );
+    },
+    [],
+  );
+
+  const applyOfflineHabitCheckIn = useCallback((habitId: string) => {
+    setHabitsToday((currentHabits) => {
+      if (!currentHabits) {
+        return currentHabits;
+      }
+
+      let awardedPoints = 0;
+      const nextItems = currentHabits.items.map((habit) => {
+        if (habit.id !== habitId || habit.completedToday) {
+          return habit;
+        }
+
+        awardedPoints = habit.pointsReward;
+        return {
+          ...habit,
+          completedToday: true,
+        };
+      });
+
+      if (awardedPoints === 0) {
+        return currentHabits;
+      }
+
+      return {
+        ...currentHabits,
+        items: nextItems,
+        pointsEarnedToday: currentHabits.pointsEarnedToday + awardedPoints,
+      };
+    });
+
+    setTracker((currentTracker) => {
+      if (!currentTracker) {
+        return currentTracker;
+      }
+
+      return {
+        ...currentTracker,
+        todayHabits: currentTracker.todayHabits.map((habit) =>
+          habit.id === habitId
+            ? {
+              ...habit,
+              completedToday: true,
+            }
+            : habit,
+        ),
+      };
+    });
+  }, []);
+
+  const queueOfflineAction = useCallback(
+    async <TType extends CreateOfflineMutationInput['type']>(
+      mutation: CreateOfflineMutationInput<TType>,
+      options?: {
+        alertMessage?: string;
+        alertTitle?: string;
+        applyOptimisticUpdate?: () => void;
+      },
+    ) => {
+      await offlineSyncService.queueMutation(mutation);
+      options?.applyOptimisticUpdate?.();
+
+      if (options?.alertMessage) {
+        Alert.alert(options.alertTitle ?? 'Saved offline', options.alertMessage);
+      }
+
+      return 'queued' as const;
+    },
+    [],
+  );
+
+  const runMutationWithOfflineFallback = useCallback(
+    async <TType extends CreateOfflineMutationInput['type']>(input: {
+      mutation: CreateOfflineMutationInput<TType>;
+      onlineAction: () => Promise<void>;
+      applyOptimisticUpdate?: () => void;
+      offlineAlertMessage?: string;
+      offlineAlertTitle?: string;
+    }) => {
+      const queueMutation = () =>
+        queueOfflineAction(input.mutation, {
+          alertMessage: input.offlineAlertMessage,
+          alertTitle: input.offlineAlertTitle,
+          applyOptimisticUpdate: input.applyOptimisticUpdate,
+        });
+
+      if (!presence.hasUsableInternet) {
+        return queueMutation();
+      }
+
+      try {
+        await input.onlineAction();
+        return 'online' as const;
+      } catch (error) {
+        if (isRetryableOfflineActionError(error)) {
+          return queueMutation();
+        }
+
+        throw error;
+      }
+    },
+    [isRetryableOfflineActionError, presence.hasUsableInternet, queueOfflineAction],
+  );
 
   const runWithActionLoader = useCallback(
     async <T,>(label: string, action: () => Promise<T> | T, minimumDuration = 720) => {
@@ -220,10 +397,42 @@ export function useHomeDashboard(): EcoBudMobileModel {
     [clearAppData],
   );
 
+  const syncQueuedOfflineActions = useCallback(
+    async (activeSession: SessionPayload) => {
+      if (offlineSyncInFlightRef.current) {
+        return;
+      }
+
+      offlineSyncInFlightRef.current = true;
+
+      try {
+        const syncResult = await offlineSyncService.syncPendingMutations({
+          token: activeSession.token,
+          userId: activeSession.user.id,
+        });
+
+        if (syncResult.syncedCount > 0) {
+          await hydrateApp(activeSession, true);
+        }
+
+        if (syncResult.failedCount > 0) {
+          console.warn(
+            `Offline sync finished with ${syncResult.failedCount} failed mutation(s).`,
+          );
+        }
+      } catch (error) {
+        console.warn('Offline sync failed during reconnect.', error);
+      } finally {
+        offlineSyncInFlightRef.current = false;
+      }
+    },
+    [hydrateApp],
+  );
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        const savedSession = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+        const savedSession = await mobileStorage.getItem(SESSION_STORAGE_KEY);
         if (savedSession) {
           try {
             const parsed = JSON.parse(savedSession) as SessionPayload;
@@ -249,6 +458,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
       clearTimeout(realtimeRefreshTimer.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (!session || isReadOnlySession(session) || !presence.hasUsableInternet) {
+      return;
+    }
+
+    void syncQueuedOfflineActions(session);
+  }, [presence.hasUsableInternet, session, syncQueuedOfflineActions]);
 
   const ensureSession = useCallback(() => {
     if (!session) {
@@ -353,13 +570,26 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const handleLogout = useCallback(async () => {
     await runWithActionLoader('Signing you out...', async () => {
-      await presence.disconnectPresence({ clearSessionId: true });
+      const disconnectResult = await presence.disconnectPresence({
+        clearSessionId: true,
+        requireImmediateSync: true,
+      });
+
+      if (presence.hasUsableInternet && !disconnectResult.synced) {
+        throw new Error('Unable to update your live status on the server. Please try signing out again.');
+      }
+
       setSession(null);
       clearAppData();
       setActiveOverlayState(null);
       setActiveTabState('home');
       await persistSession(null);
-    }, 700);
+    }, 700).catch((error) => {
+      Alert.alert(
+        'Sign out incomplete',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    });
   }, [clearAppData, persistSession, presence, runWithActionLoader]);
 
   const refreshEverything = useCallback(async () => {
@@ -445,8 +675,24 @@ export function useHomeDashboard(): EcoBudMobileModel {
     await runWithActionLoader('Opening lesson...', async () => {
       try {
         const activeSession = ensureSession();
-        await homeService.markLessonSeen(activeSession.token, lessonId);
-        await hydrateApp(activeSession, true);
+        const mutationMode = await runMutationWithOfflineFallback({
+          mutation: {
+            userId: activeSession.user.id,
+            type: 'lesson-seen',
+            payload: { lessonId },
+            dedupeKey: `lesson-seen:${lessonId}`,
+          },
+          onlineAction: async () => {
+            await homeService.markLessonSeen(activeSession.token, lessonId);
+          },
+          applyOptimisticUpdate: () => {
+            applyOfflineLessonSeen(lessonId);
+          },
+        });
+
+        if (mutationMode === 'online') {
+          await hydrateApp(activeSession, true);
+        }
       } catch (error) {
         Alert.alert('Unable to open lesson', error instanceof Error ? error.message : 'Please try again.');
         return;
@@ -455,7 +701,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
       setSelectedLessonId(lessonId);
       setActiveOverlayState('lesson');
     }, 420);
-  }, [ensureSession, hydrateApp, runWithActionLoader]);
+  }, [
+    applyOfflineLessonSeen,
+    ensureSession,
+    hydrateApp,
+    runMutationWithOfflineFallback,
+    runWithActionLoader,
+  ]);
 
   const handleCompleteLesson = useCallback(async () => {
     await runWithActionLoader('Verifying lesson completion...', async () => {
@@ -466,16 +718,41 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
 
         setRefreshing(true);
-        await homeService.completeLesson(activeSession.token, selectedLessonId);
-        await hydrateApp(activeSession, true);
-        Alert.alert('Lesson completed', 'You earned new ECO points and your progress has been verified.');
+        const mutationMode = await runMutationWithOfflineFallback({
+          mutation: {
+            userId: activeSession.user.id,
+            type: 'lesson-complete',
+            payload: { lessonId: selectedLessonId },
+            dedupeKey: `lesson-complete:${selectedLessonId}`,
+          },
+          onlineAction: async () => {
+            await homeService.completeLesson(activeSession.token, selectedLessonId);
+          },
+          applyOptimisticUpdate: () => {
+            applyOfflineLessonCompletion(selectedLessonId);
+          },
+          offlineAlertMessage:
+            'Lesson completion was saved on this device and will sync automatically when you reconnect.',
+        });
+
+        if (mutationMode === 'online') {
+          await hydrateApp(activeSession, true);
+          Alert.alert('Lesson completed', 'You earned new ECO points and your progress has been verified.');
+        }
       } catch (error) {
         Alert.alert('Unable to complete lesson', error instanceof Error ? error.message : 'Please try again.');
       } finally {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, hydrateApp, runWithActionLoader, selectedLessonId]);
+  }, [
+    applyOfflineLessonCompletion,
+    ensureSession,
+    hydrateApp,
+    runMutationWithOfflineFallback,
+    runWithActionLoader,
+    selectedLessonId,
+  ]);
 
   const handleChallengeProgress = useCallback(
     async (challenge: ChallengeWithProgress, nextProgress: number) => {
@@ -483,8 +760,32 @@ export function useHomeDashboard(): EcoBudMobileModel {
         try {
           const activeSession = ensureSession();
           setRefreshing(true);
-          await homeService.updateChallengeProgress(activeSession.token, challenge.id, Math.min(100, nextProgress));
-          await hydrateApp(activeSession, true);
+          const boundedProgress = Math.min(100, nextProgress);
+          const mutationMode = await runMutationWithOfflineFallback({
+            mutation: {
+              userId: activeSession.user.id,
+              type: 'challenge-progress',
+              payload: {
+                challengeId: challenge.id,
+                progressPercentage: boundedProgress,
+              },
+              dedupeKey: `challenge-progress:${challenge.id}`,
+            },
+            onlineAction: async () => {
+              await homeService.updateChallengeProgress(
+                activeSession.token,
+                challenge.id,
+                boundedProgress,
+              );
+            },
+            applyOptimisticUpdate: () => {
+              applyOfflineChallengeProgress(challenge.id, boundedProgress);
+            },
+          });
+
+          if (mutationMode === 'online') {
+            await hydrateApp(activeSession, true);
+          }
         } catch (error) {
           Alert.alert('Challenge update failed', error instanceof Error ? error.message : 'Please try again.');
         } finally {
@@ -492,7 +793,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       });
     },
-    [ensureSession, hydrateApp, runWithActionLoader],
+    [
+      applyOfflineChallengeProgress,
+      ensureSession,
+      hydrateApp,
+      runMutationWithOfflineFallback,
+      runWithActionLoader,
+    ],
   );
 
   const handleHabitCheckIn = useCallback(
@@ -501,8 +808,29 @@ export function useHomeDashboard(): EcoBudMobileModel {
         try {
           const activeSession = ensureSession();
           setRefreshing(true);
-          await homeService.checkInHabit(activeSession.token, habitId);
-          await hydrateApp(activeSession, true);
+          const mutationMode = await runMutationWithOfflineFallback({
+            mutation: {
+              userId: activeSession.user.id,
+              type: 'habit-check-in',
+              payload: {
+                habitId,
+                dateKey: habitsToday?.dateKey ?? new Date().toISOString().slice(0, 10),
+              },
+              dedupeKey: `habit-check-in:${habitsToday?.dateKey ?? new Date().toISOString().slice(0, 10)}:${habitId}`,
+            },
+            onlineAction: async () => {
+              await homeService.checkInHabit(activeSession.token, habitId);
+            },
+            applyOptimisticUpdate: () => {
+              applyOfflineHabitCheckIn(habitId);
+            },
+            offlineAlertMessage:
+              'Today\'s check-in was saved offline and will sync automatically when internet is back.',
+          });
+
+          if (mutationMode === 'online') {
+            await hydrateApp(activeSession, true);
+          }
         } catch (error) {
           Alert.alert('Check-in failed', error instanceof Error ? error.message : 'Please try again.');
         } finally {
@@ -510,7 +838,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       });
     },
-    [ensureSession, hydrateApp, runWithActionLoader],
+    [
+      applyOfflineHabitCheckIn,
+      ensureSession,
+      habitsToday?.dateKey,
+      hydrateApp,
+      runMutationWithOfflineFallback,
+      runWithActionLoader,
+    ],
   );
 
   const handleJoinEvent = useCallback(
@@ -519,9 +854,25 @@ export function useHomeDashboard(): EcoBudMobileModel {
         try {
           const activeSession = ensureSession();
           setRefreshing(true);
-          await homeService.joinEvent(activeSession.token, eventId);
-          await hydrateApp(activeSession, true);
-          Alert.alert('You are in', 'Your event slot is reserved. Show up to earn your verified reward.');
+          const mutationMode = await runMutationWithOfflineFallback({
+            mutation: {
+              userId: activeSession.user.id,
+              type: 'event-join',
+              payload: { eventId },
+              dedupeKey: `event-join:${eventId}`,
+            },
+            onlineAction: async () => {
+              await homeService.joinEvent(activeSession.token, eventId);
+            },
+            offlineAlertTitle: 'Join request saved offline',
+            offlineAlertMessage:
+              'Your event join request will sync automatically when you reconnect. Final slot confirmation happens on the server.',
+          });
+
+          if (mutationMode === 'online') {
+            await hydrateApp(activeSession, true);
+            Alert.alert('You are in', 'Your event slot is reserved. Show up to earn your verified reward.');
+          }
         } catch (error) {
           Alert.alert('Unable to join event', error instanceof Error ? error.message : 'Please try again.');
         } finally {
@@ -529,7 +880,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       });
     },
-    [ensureSession, hydrateApp, runWithActionLoader],
+    [ensureSession, hydrateApp, runMutationWithOfflineFallback, runWithActionLoader],
   );
 
   const handleAssistantSend = useCallback(
