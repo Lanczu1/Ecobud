@@ -5,6 +5,7 @@ import type { SessionPayload } from '../api/ecobudApi';
 import { type MobilePresenceState, type PresenceAppState } from '../types/presence';
 import {
   MOBILE_PRESENCE_HEARTBEAT_INTERVAL_MS,
+  MOBILE_PRESENCE_OFFLINE_GRACE_MS,
   MOBILE_PRESENCE_SYNC_DEBOUNCE_MS,
   presenceService,
 } from './presenceService';
@@ -13,7 +14,11 @@ interface UsePresenceResult extends MobilePresenceState {
   disconnectPresence: (options?: {
     clearSessionId?: boolean;
     connectionState?: 'offline' | 'stale';
-  }) => Promise<void>;
+    requireImmediateSync?: boolean;
+  }) => Promise<{
+    queued: boolean;
+    synced: boolean;
+  }>;
 }
 
 const normalizeAppState = (value: AppStateStatus): PresenceAppState => {
@@ -38,26 +43,32 @@ export function usePresence(
   isReadOnlyExperience: boolean,
 ): UsePresenceResult {
   const netInfo = useNetInfo();
+  const rawHasUsableInternet = hasUsableInternetAccess(
+    netInfo.isConnected,
+    netInfo.isInternetReachable,
+  );
+  const userId = session?.user.id ?? null;
   const [appState, setAppState] = React.useState<PresenceAppState>(
     normalizeAppState(AppState.currentState),
   );
   const [presenceSessionId, setPresenceSessionId] = React.useState<string | null>(null);
+  const [presenceReady, setPresenceReady] = React.useState(false);
+  const [hasUsableInternet, setHasUsableInternet] = React.useState(
+    rawHasUsableInternet || netInfo.isConnected == null,
+  );
   const [presenceSyncState, setPresenceSyncState] = React.useState<
     MobilePresenceState['presenceSyncState']
   >('idle');
   const [lastPresenceSyncAt, setLastPresenceSyncAt] = React.useState<string | null>(null);
   const [lastPresenceError, setLastPresenceError] = React.useState<string | null>(null);
 
-  const hasUsableInternet = hasUsableInternetAccess(
-    netInfo.isConnected,
-    netInfo.isInternetReachable,
-  );
   const shouldMaintainRealtimeConnection = Boolean(
     session && !isReadOnlyExperience && hasUsableInternet && appState === 'active',
   );
 
   const appStateRef = React.useRef(appState);
   const hasUsableInternetRef = React.useRef(hasUsableInternet);
+  const offlineModeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceSessionIdRef = React.useRef<string | null>(presenceSessionId);
   const mountedRef = React.useRef(true);
 
@@ -70,6 +81,31 @@ export function usePresence(
   }, [hasUsableInternet]);
 
   React.useEffect(() => {
+    if (rawHasUsableInternet) {
+      if (offlineModeTimerRef.current) {
+        clearTimeout(offlineModeTimerRef.current);
+        offlineModeTimerRef.current = null;
+      }
+
+      setHasUsableInternet(true);
+      return;
+    }
+
+    if (!hasUsableInternet || offlineModeTimerRef.current) {
+      return;
+    }
+
+    // Only mark the mobile app as fully offline after a sustained loss.
+    offlineModeTimerRef.current = setTimeout(() => {
+      offlineModeTimerRef.current = null;
+
+      if (mountedRef.current) {
+        setHasUsableInternet(false);
+      }
+    }, MOBILE_PRESENCE_OFFLINE_GRACE_MS);
+  }, [hasUsableInternet, rawHasUsableInternet]);
+
+  React.useEffect(() => {
     presenceSessionIdRef.current = presenceSessionId;
   }, [presenceSessionId]);
 
@@ -77,6 +113,11 @@ export function usePresence(
     mountedRef.current = true;
 
     return () => {
+      if (offlineModeTimerRef.current) {
+        clearTimeout(offlineModeTimerRef.current);
+        offlineModeTimerRef.current = null;
+      }
+
       mountedRef.current = false;
     };
   }, []);
@@ -92,16 +133,48 @@ export function usePresence(
   }, []);
 
   React.useEffect(() => {
-    if (!session || isReadOnlyExperience) {
+    let isActive = true;
+
+    if (!session || isReadOnlyExperience || !userId) {
       setPresenceSyncState('idle');
       setLastPresenceError(null);
       setLastPresenceSyncAt(null);
       setPresenceSessionId(null);
+      setPresenceReady(true);
+      return;
     }
-  }, [isReadOnlyExperience, session]);
+
+    setPresenceReady(false);
+
+    void presenceService
+      .restoreState(userId)
+      .then((persistedState) => {
+        if (!isActive) {
+          return;
+        }
+
+        setPresenceSessionId(persistedState.sessionId);
+        setLastPresenceSyncAt(persistedState.pendingIntent?.queuedAt ?? null);
+        setPresenceReady(true);
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+
+        setLastPresenceError(
+          error instanceof Error ? error.message : 'Unable to restore presence state.',
+        );
+        setPresenceReady(true);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isReadOnlyExperience, session, userId]);
 
   const connectPresence = React.useCallback(async () => {
-    if (!session || isReadOnlyExperience || !hasUsableInternetRef.current) {
+    if (!session || isReadOnlyExperience || !userId) {
       return;
     }
 
@@ -110,23 +183,35 @@ export function usePresence(
     );
 
     try {
-      const presence = await presenceService.connect({
+      const result = await presenceService.sync(
+        'connect',
+        {
         token: session.token,
+        userId,
+        hasUsableInternet: hasUsableInternetRef.current,
         sessionId: presenceSessionIdRef.current,
         appState: appStateRef.current,
         connectionState: presenceSessionIdRef.current ? 'reconnecting' : 'online',
-      });
+        },
+      );
 
       if (!mountedRef.current) {
         return;
       }
 
-      if (presence?.sessionId) {
-        setPresenceSessionId(presence.sessionId);
+      if (result.sessionId !== undefined) {
+        setPresenceSessionId(result.sessionId);
+      }
+
+      if (result.queued) {
+        setPresenceSyncState('offline');
+        setLastPresenceSyncAt(new Date().toISOString());
+        setLastPresenceError('Waiting for internet to synchronize live status.');
+        return;
       }
 
       setPresenceSyncState('connected');
-      setLastPresenceSyncAt(presence?.lastSeenAt ?? new Date().toISOString());
+      setLastPresenceSyncAt(result.presence?.lastSeenAt ?? new Date().toISOString());
       setLastPresenceError(null);
     } catch (error) {
       if (!mountedRef.current) {
@@ -138,36 +223,48 @@ export function usePresence(
         error instanceof Error ? error.message : 'Unable to sync presence right now.',
       );
     }
-  }, [isReadOnlyExperience, session]);
+  }, [isReadOnlyExperience, session, userId]);
 
   const heartbeatPresence = React.useCallback(async () => {
     if (
       !session ||
       isReadOnlyExperience ||
-      !hasUsableInternetRef.current ||
+      !userId ||
       !presenceSessionIdRef.current
     ) {
       return;
     }
 
     try {
-      const presence = await presenceService.heartbeat({
+      const result = await presenceService.sync(
+        'heartbeat',
+        {
         token: session.token,
+        userId,
+        hasUsableInternet: hasUsableInternetRef.current,
         sessionId: presenceSessionIdRef.current,
         appState: appStateRef.current,
         connectionState: 'online',
-      });
+        },
+      );
 
       if (!mountedRef.current) {
         return;
       }
 
-      if (presence?.sessionId && presence.sessionId !== presenceSessionIdRef.current) {
-        setPresenceSessionId(presence.sessionId);
+      if (result.sessionId !== undefined && result.sessionId !== presenceSessionIdRef.current) {
+        setPresenceSessionId(result.sessionId);
+      }
+
+      if (result.queued) {
+        setPresenceSyncState('offline');
+        setLastPresenceSyncAt(new Date().toISOString());
+        setLastPresenceError('Offline mode active. Presence will resync automatically.');
+        return;
       }
 
       setPresenceSyncState('connected');
-      setLastPresenceSyncAt(presence?.lastSeenAt ?? new Date().toISOString());
+      setLastPresenceSyncAt(result.presence?.lastSeenAt ?? new Date().toISOString());
       setLastPresenceError(null);
     } catch (error) {
       if (!mountedRef.current) {
@@ -179,7 +276,7 @@ export function usePresence(
         error instanceof Error ? error.message : 'Presence heartbeat failed.',
       );
     }
-  }, [isReadOnlyExperience, session]);
+  }, [isReadOnlyExperience, session, userId]);
 
   const disconnectPresence = React.useCallback<
     UsePresenceResult['disconnectPresence']
@@ -188,60 +285,77 @@ export function usePresence(
       const activeSessionId = presenceSessionIdRef.current;
       const clearSessionId = options?.clearSessionId ?? false;
       const connectionState = options?.connectionState ?? 'offline';
+      const requireImmediateSync = options?.requireImmediateSync ?? false;
 
       setPresenceSyncState('offline');
 
-      if (!session || isReadOnlyExperience || !activeSessionId) {
+      if (!session || isReadOnlyExperience || !userId || !activeSessionId) {
         if (clearSessionId) {
           setPresenceSessionId(null);
         }
-        return;
-      }
-
-      if (!hasUsableInternetRef.current) {
-        if (clearSessionId) {
-          setPresenceSessionId(null);
-        }
-        return;
+        return { queued: false, synced: false };
       }
 
       try {
-        const presence = await presenceService.disconnect({
+        const result = await presenceService.sync(
+          'disconnect',
+          {
           token: session.token,
+          userId,
+          hasUsableInternet: hasUsableInternetRef.current,
           sessionId: activeSessionId,
           appState: appStateRef.current,
           connectionState,
-        });
+          },
+          { clearSessionId },
+        );
 
         if (!mountedRef.current) {
-          return;
+          return { queued: result.queued, synced: result.synced };
         }
 
+        setPresenceSessionId(result.sessionId);
         setLastPresenceSyncAt(
-          presence?.lastSeenAt ?? lastPresenceSyncAt ?? new Date().toISOString(),
+          result.presence?.lastSeenAt ?? lastPresenceSyncAt ?? new Date().toISOString(),
         );
+
+        if (result.queued) {
+          if (requireImmediateSync && hasUsableInternetRef.current) {
+            throw new Error('Unable to confirm server sign-out presence update.');
+          }
+
+          setLastPresenceError('Offline mode active. Presence will sync when internet returns.');
+          return { queued: true, synced: false };
+        }
+
         setLastPresenceError(null);
+        return { queued: false, synced: true };
       } catch (error) {
         if (!mountedRef.current) {
-          return;
+          return { queued: false, synced: false };
         }
 
         setLastPresenceError(
           error instanceof Error ? error.message : 'Unable to close presence cleanly.',
         );
+        throw error;
       } finally {
         if (clearSessionId) {
           setPresenceSessionId(null);
         }
       }
     },
-    [isReadOnlyExperience, lastPresenceSyncAt, session],
+    [isReadOnlyExperience, lastPresenceSyncAt, session, userId],
   );
 
   React.useEffect(() => {
-    if (!session || isReadOnlyExperience) {
+    if (!presenceReady || !session || isReadOnlyExperience) {
       return;
     }
+
+    const presenceTransitionDelayMs = hasUsableInternet
+      ? MOBILE_PRESENCE_SYNC_DEBOUNCE_MS
+      : 0;
 
     const timeoutId = setTimeout(() => {
       if (shouldMaintainRealtimeConnection) {
@@ -250,7 +364,7 @@ export function usePresence(
       }
 
       void disconnectPresence();
-    }, MOBILE_PRESENCE_SYNC_DEBOUNCE_MS);
+    }, presenceTransitionDelayMs);
 
     return () => {
       clearTimeout(timeoutId);
@@ -258,13 +372,15 @@ export function usePresence(
   }, [
     connectPresence,
     disconnectPresence,
+    hasUsableInternet,
     isReadOnlyExperience,
+    presenceReady,
     session,
     shouldMaintainRealtimeConnection,
   ]);
 
   React.useEffect(() => {
-    if (!shouldMaintainRealtimeConnection || !presenceSessionId) {
+    if (!presenceReady || !shouldMaintainRealtimeConnection || !presenceSessionId) {
       return;
     }
 
@@ -275,7 +391,7 @@ export function usePresence(
     return () => {
       clearInterval(heartbeatTimer);
     };
-  }, [heartbeatPresence, presenceSessionId, shouldMaintainRealtimeConnection]);
+  }, [heartbeatPresence, presenceReady, presenceSessionId, shouldMaintainRealtimeConnection]);
 
   React.useEffect(() => {
     if (!session || isReadOnlyExperience) {

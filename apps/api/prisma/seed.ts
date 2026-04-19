@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PasswordService } from '../src/security/passwordService';
 import { TransparencyHasher } from '../src/utils/transparencyHasher';
@@ -437,32 +438,6 @@ async function main() {
 
   await prisma.transparencyLog.createMany({
     data: [logA, logB, logC],
-  });
-
-  await prisma.presenceSession.createMany({
-    data: [
-      {
-        sessionId: 'seed-member-online-session',
-        userId: member.id,
-        isOnline: true,
-        connectedAt: new Date(),
-        lastSeenAt: new Date(),
-        expiresAt: addDays(1),
-        appState: 'active',
-        connectionState: 'online',
-      },
-      {
-        sessionId: 'seed-moderator-offline-session',
-        userId: moderator.id,
-        isOnline: false,
-        connectedAt: addDays(-1),
-        lastSeenAt: addDays(-1),
-        disconnectedAt: addDays(-1),
-        expiresAt: addDays(-1),
-        appState: 'background',
-        connectionState: 'offline',
-      },
-    ],
   });
 
   await prisma.faq.createMany({

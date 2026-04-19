@@ -94,8 +94,7 @@ const bindPresence = (
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await channel.track({
-          onlineAt: new Date().toISOString(),
-          role: session.user.role,
+          timestamp: new Date().toISOString(),
           userId: session.user.id,
         });
       }

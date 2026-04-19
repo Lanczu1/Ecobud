@@ -14,7 +14,11 @@ interface AdminRealtimeSignal {
 
 interface AdminRealtimeHandlers {
   onDashboardRefresh?: (signal: AdminRealtimeSignal) => void;
-  onPresenceChange?: (presence: { count: number; onlineUserIds: string[] }) => void;
+  onPresenceChange?: (presence: {
+    count: number;
+    onlineUserIds: string[];
+    sessionCountByUserId: Record<string, number>;
+  }) => void;
   onUsersRefresh?: (signal: AdminRealtimeSignal) => void;
 }
 
@@ -71,47 +75,35 @@ const bindAdminBroadcast = (
 
 const bindPresenceChannel = (
   channelName: string,
-  onPresenceChange: (presence: { count: number; onlineUserIds: string[] }) => void,
+  onPresenceChange: (presence: {
+    count: number;
+    onlineUserIds: string[];
+    sessionCountByUserId: Record<string, number>;
+  }) => void,
 ) => {
   if (!adminSupabaseClient) {
     return null;
   }
 
-  const extractOnlineUserIds = (presenceState: Record<string, PresenceMeta[]>) => {
-    const userIds = new Set<string>();
-
-    Object.entries(presenceState).forEach(([presenceKey, presences]) => {
-      let matchedTrackedUser = false;
-
-      presences.forEach((presence) => {
-        const trackedUserId =
-          typeof presence.userId === 'string' ? presence.userId.trim() : '';
-
-        if (!trackedUserId) {
-          return;
-        }
-
-        matchedTrackedUser = true;
-        userIds.add(trackedUserId);
-      });
-
-      if (!matchedTrackedUser && presenceKey.trim()) {
-        userIds.add(presenceKey.trim());
-      }
-    });
-
-    return [...userIds];
-  };
-
   const channel = adminSupabaseClient.channel(channelName);
 
   const emitPresence = () => {
     const presenceState = channel.presenceState<PresenceMeta>();
-    const onlineUserIds = extractOnlineUserIds(presenceState);
+    const presenceEntries = Object.entries(presenceState).filter(([presenceKey]) =>
+      presenceKey.trim(),
+    );
+    const onlineUserIds = presenceEntries.map(([presenceKey]) => presenceKey);
+    const sessionCountByUserId = Object.fromEntries(
+      presenceEntries.map(([presenceKey, presenceMetas]) => [
+        presenceKey,
+        presenceMetas.length,
+      ]),
+    );
 
     onPresenceChange({
       count: onlineUserIds.length,
       onlineUserIds,
+      sessionCountByUserId,
     });
   };
 

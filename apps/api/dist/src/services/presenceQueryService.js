@@ -18,15 +18,12 @@ class PresenceQueryService {
         this.presenceService = new presenceService_1.PresenceService(database);
     }
     async getPresenceOverview(snapshotDate = new Date()) {
-        const startOfToday = this.getStartOfToday(snapshotDate);
         await this.presenceService.cleanupStaleSessions();
         const [activeToday, presenceSummaryRows] = await Promise.all([
-            this.getActiveTodayCount(snapshotDate, startOfToday),
+            this.getActiveTodayCount(snapshotDate),
             this.getPresenceSummaryRows(snapshotDate),
         ]);
-        const onlineSummaryRows = presenceSummaryRows.filter((row) => row.isOnline &&
-            row.lastSeenAt &&
-            row.lastSeenAt.getTime() >= startOfToday.getTime());
+        const onlineSummaryRows = presenceSummaryRows.filter((row) => row.isOnline);
         const users = await this.database.user.findMany({
             where: {
                 id: {
@@ -125,13 +122,12 @@ class PresenceQueryService {
             };
         });
     }
-    async getActiveTodayCount(snapshotDate, startOfToday) {
+    async getActiveTodayCount(snapshotDate) {
         const rows = await this.database.$queryRaw(client_1.Prisma.sql `
       SELECT COUNT(DISTINCT ps.user_id)::int AS "activeToday"
       FROM presence_sessions ps
       WHERE ps.is_online = TRUE
         AND ps.expires_at > ${snapshotDate}
-        AND ps.last_seen_at >= ${startOfToday}
     `);
         return Number(rows[0]?.activeToday ?? 0);
     }
@@ -214,11 +210,6 @@ class PresenceQueryService {
             appState: summary.appState,
             connectionState: summary.connectionState,
         };
-    }
-    getStartOfToday(snapshotDate) {
-        const startOfToday = new Date(snapshotDate);
-        startOfToday.setHours(0, 0, 0, 0);
-        return startOfToday;
     }
 }
 exports.PresenceQueryService = PresenceQueryService;

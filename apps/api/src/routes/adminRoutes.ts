@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { AdminController } from "../controllers/adminController";
-import { authenticateRequest, requireModeratorAccess } from "../http/authentication";
+import {
+  authenticateRequest,
+  requireAdminAccess,
+  requireModeratorAccess,
+} from "../http/authentication";
 
 const adminRoutes = Router();
 
@@ -16,8 +20,12 @@ adminRoutes.delete("/lessons/:id", AdminController.deleteLesson);
 adminRoutes.patch("/lessons/:id/publish", AdminController.patchPublish);
 
 // User Management
-adminRoutes.get("/users", AdminController.getUsers);
-adminRoutes.post("/users/:userId/reset-knowledge", AdminController.resetKnowledge);
+adminRoutes.get("/users", requireAdminAccess, AdminController.getUsers);
+adminRoutes.post(
+  "/users/:userId/reset-knowledge",
+  requireAdminAccess,
+  AdminController.resetKnowledge,
+);
 
 // Challenges Management
 adminRoutes.get("/challenges", AdminController.getChallenges);
@@ -26,7 +34,7 @@ adminRoutes.put("/challenges/:id", AdminController.updateChallenge);
 adminRoutes.delete("/challenges/:id", AdminController.deleteChallenge);
 
 // Dashboard Stats
-adminRoutes.get("/stats", AdminController.getDashboardStats);
+adminRoutes.get("/stats", requireAdminAccess, AdminController.getDashboardStats);
 
 // Submissions
 adminRoutes.get("/submissions", AdminController.getSubmissions);
