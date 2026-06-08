@@ -6,7 +6,6 @@ import {
   Image,
   Animated,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Pressable,
   Easing,
@@ -16,6 +15,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { styles } from '../styles/appStyles';

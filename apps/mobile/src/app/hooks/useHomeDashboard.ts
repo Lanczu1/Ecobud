@@ -526,10 +526,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       try {
         const nextSession = await homeService.login(email.trim(), pass);
+        
+        if (nextSession.user.role === 'admin' || nextSession.user.role === 'moderator') {
+          throw new Error('Administrators and moderators cannot log in via the mobile app. Please use the web portal.');
+        }
+
         setSession(nextSession);
-      await persistSession(nextSession);
-      await hydrateApp(nextSession);
-    } catch (error) {
+        await persistSession(nextSession);
+        await hydrateApp(nextSession);
+      } catch (error) {
         setAuthError(error instanceof Error ? error.message : 'Login failed.');
       } finally {
         setAuthLoading(false);

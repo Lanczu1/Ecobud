@@ -3,10 +3,9 @@ import React from 'react';
 import {
   RefreshControl,
   ScrollView,
-  SafeAreaView,
   View,
 } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   type EcoBudMobileModel,
 } from './types/home';
@@ -42,7 +41,7 @@ export default function App() {
   const model = useHomeDashboard();
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ flex: 1 }}>
       <MobileShell model={model} />
     </SafeAreaProvider>
   );

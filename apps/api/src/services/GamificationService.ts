@@ -11,6 +11,7 @@ type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 interface AwardActionInput {
   actionType: string;
   knowledgePointsAwarded?: number;
+  ecoCoinsAwarded?: number;
   metadata?: Record<string, unknown>;
   pointsAwarded: number;
   userId: string;
@@ -146,7 +147,8 @@ export class GamificationService {
       return this.awardAction(tx, {
         userId,
         actionType: `Challenge completed: ${challenge.title}`,
-        pointsAwarded: challenge.pointsReward,
+        pointsAwarded: challenge.expReward,
+        ecoCoinsAwarded: challenge.ecoCoinReward,
         metadata: {
           challengeId: challenge.id,
           difficulty: challenge.difficulty,
@@ -313,6 +315,14 @@ export class GamificationService {
           lastActionDate: now,
         },
       });
+
+      if (action.ecoCoinsAwarded && action.ecoCoinsAwarded > 0) {
+        await tx.userStats.upsert({
+          where: { userId: user.id },
+          update: { ecoPoints: { increment: action.ecoCoinsAwarded } },
+          create: { userId: user.id, ecoPoints: action.ecoCoinsAwarded, currentStreak: nextStreak, knowledgePoints: 0 },
+        });
+      }
 
       const updatedStats = await this.userStatsService.syncEcoPointsAndStreak(
         tx,

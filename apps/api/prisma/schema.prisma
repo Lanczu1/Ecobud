@@ -91,6 +91,9 @@ model Lesson {
   content         String
   category        String
   imageUrl        String?
+  videoUrl        String?
+  transcript      String?
+  quizPassingScore Int                 @default(70) @map("quiz_passing_score")
   durationMinutes Int                  @default(8)
   rating          Float                @default(4.8)
   pointsReward    Int                  @default(10)
@@ -101,8 +104,25 @@ model Lesson {
   createdById     String?              @map("created_by_id")
   createdBy       User?                @relation("LessonAuthor", fields: [createdById], references: [id], onDelete: SetNull)
   progress        UserLessonProgress[]
+  quizQuestions   QuizQuestion[]
 
   @@map("lessons")
+}
+
+model QuizQuestion {
+  id            String   @id @default(cuid())
+  lessonId      String   @map("lesson_id")
+  question      String
+  optionA       String   @map("option_a")
+  optionB       String   @map("option_b")
+  optionC       String   @map("option_c")
+  optionD       String   @map("option_d")
+  correctAnswer String   @map("correct_answer") // 'A', 'B', 'C', or 'D'
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  lesson        Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
 }
 
 model UserLessonProgress {
@@ -150,11 +170,15 @@ model Challenge {
   difficulty     String
   category       String?
   durationDays   Int
-  pointsReward   Int
+  expReward      Int                   @default(0)
+  ecoCoinReward  Int                   @default(0)
   imageUrl       String?
   badgeLabel     String?
   active         Boolean               @default(true)
-  createdAt      DateTime              @default(now())
+  type                String                @default("GENERAL")
+  aiDetectionTargets  String[]
+  aiMinimumConfidence Int?                  @default(80)
+  createdAt           DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   userChallenges UserChallenge[]
   submissions    ChallengeSubmission[]

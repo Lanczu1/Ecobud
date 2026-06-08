@@ -11,6 +11,10 @@
     "favicon": "./assets/logo.png"
   },
   "plugins": [
-    "expo-font"
+    "expo-font",
+    "expo-sqlite",
+    "expo-status-bar",
+    "expo-image",
+    "expo-video"
   ]
 }

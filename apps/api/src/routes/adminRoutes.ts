@@ -5,6 +5,7 @@ import {
   requireAdminAccess,
   requireModeratorAccess,
 } from "../http/authentication";
+import { uploadMiddleware } from "../http/uploadMiddleware";
 
 const adminRoutes = Router();
 
@@ -14,10 +15,11 @@ adminRoutes.use(requireModeratorAccess);
 
 // Lessons Management
 adminRoutes.get("/lessons", AdminController.getLessons);
-adminRoutes.post("/lessons", AdminController.createLesson);
-adminRoutes.put("/lessons/:id", AdminController.updateLesson);
+adminRoutes.post("/lessons", uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.createLesson);
+adminRoutes.put("/lessons/:id", uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.updateLesson);
 adminRoutes.delete("/lessons/:id", AdminController.deleteLesson);
 adminRoutes.patch("/lessons/:id/publish", AdminController.patchPublish);
+adminRoutes.post("/transcribe", uploadMiddleware.single('video'), AdminController.transcribeVideo);
 
 // User Management
 adminRoutes.get("/users", requireAdminAccess, AdminController.getUsers);
@@ -42,5 +44,11 @@ adminRoutes.post("/submissions/:id/review", AdminController.reviewSubmission);
 
 // Audit Logs
 adminRoutes.get("/audit", AdminController.getAuditLogs);
+
+// Events Management
+adminRoutes.get("/events", AdminController.getEvents);
+adminRoutes.post("/events", AdminController.createEvent);
+adminRoutes.put("/events/:id", AdminController.updateEvent);
+adminRoutes.delete("/events/:id", AdminController.deleteEvent);
 
 export { adminRoutes };
