@@ -14,7 +14,8 @@ export class AdminService {
             name: true,
             email: true
           }
-        }
+        },
+        quizQuestions: true
       }
     });
   }
@@ -26,6 +27,12 @@ export class AdminService {
     isPublished: boolean;
     createdById: string;
     category: string;
+    videoUrl?: string | null;
+    imageUrl?: string | null;
+    transcript?: string | null;
+    durationMinutes?: number;
+    quizPassingScore?: number;
+    quizQuestions?: any[];
   }) {
     const lesson = await prisma.lesson.create({
       data: {
@@ -34,7 +41,22 @@ export class AdminService {
         content: data.content,
         isPublished: data.isPublished,
         createdById: data.createdById,
-        category: data.category || "General"
+        category: data.category || "General",
+        videoUrl: data.videoUrl,
+        imageUrl: data.imageUrl,
+        transcript: data.transcript,
+        durationMinutes: data.durationMinutes ?? 8,
+        quizPassingScore: data.quizPassingScore ?? 70,
+        quizQuestions: data.quizQuestions?.length ? {
+          create: data.quizQuestions.map((q: any) => ({
+            question: q.question,
+            optionA: q.optionA,
+            optionB: q.optionB,
+            optionC: q.optionC,
+            optionD: q.optionD,
+            correctAnswer: q.correctAnswer
+          }))
+        } : undefined
       }
     });
 
@@ -65,15 +87,40 @@ export class AdminService {
     return lesson;
   }
 
-  static async updateLesson(id: string, data: Partial<{
-    title: string;
-    description: string;
-    content: string;
-    isPublished: boolean;
-  }>) {
+  static async updateLesson(id: string, data: any) {
+    const { quizQuestions, ...otherData } = data;
+    
+    // If quiz questions are provided, we delete existing and recreate
+    let updatePayload: any = { ...otherData };
+
+    if ('pointsReward' in updatePayload && typeof updatePayload.pointsReward === 'string') {
+      updatePayload.pointsReward = parseInt(updatePayload.pointsReward, 10);
+    }
+    
+    if ('quizPassingScore' in updatePayload && typeof updatePayload.quizPassingScore === 'string') {
+      updatePayload.quizPassingScore = parseInt(updatePayload.quizPassingScore, 10);
+    }
+    
+    if ('durationMinutes' in updatePayload && typeof updatePayload.durationMinutes === 'string') {
+      updatePayload.durationMinutes = parseInt(updatePayload.durationMinutes, 10);
+    }
+    if (quizQuestions) {
+      updatePayload.quizQuestions = {
+        deleteMany: {},
+        create: quizQuestions.map((q: any) => ({
+          question: q.question,
+          optionA: q.optionA,
+          optionB: q.optionB,
+          optionC: q.optionC,
+          optionD: q.optionD,
+          correctAnswer: q.correctAnswer
+        }))
+      };
+    }
+
     const lesson = await prisma.lesson.update({
       where: { id },
-      data
+      data: updatePayload
     });
 
     await Promise.all([
@@ -158,11 +205,15 @@ export class AdminService {
     description: string;
     difficulty: string;
     durationDays: number;
-    pointsReward: number;
+    expReward: number;
+    ecoCoinReward?: number;
     category?: string;
     active?: boolean;
     imageUrl?: string;
     badgeLabel?: string;
+    type?: string;
+    aiDetectionTargets?: string[];
+    aiMinimumConfidence?: number;
   }) {
     const challenge = await prisma.challenge.create({
       data: {
@@ -170,11 +221,15 @@ export class AdminService {
         description: data.description,
         difficulty: data.difficulty,
         durationDays: data.durationDays,
-        pointsReward: data.pointsReward,
+        expReward: data.expReward,
+        ecoCoinReward: data.ecoCoinReward || 0,
         category: data.category || "General",
         active: data.active ?? true,
         imageUrl: data.imageUrl,
-        badgeLabel: data.badgeLabel
+        badgeLabel: data.badgeLabel,
+        type: data.type || "GENERAL",
+        aiDetectionTargets: data.aiDetectionTargets || [],
+        aiMinimumConfidence: data.aiMinimumConfidence || 80
       }
     });
 
@@ -252,6 +307,7 @@ export class AdminService {
       totalChallenges,
       userPoints,
       lessonCompletions,
+      pendingSubmissions,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({
@@ -271,6 +327,9 @@ export class AdminService {
       }),
       prisma.userLessonProgress.count({
         where: { status: 'completed' },
+      }),
+      prisma.challengeSubmission.count({
+        where: { status: 'pending' },
       }),
     ]);
 
@@ -373,9 +432,17 @@ export class AdminService {
       await prisma.user.update({
         where: { id: submission.userId },
         data: {
-          points: { increment: submission.challenge.pointsReward }
+          points: { increment: submission.challenge.expReward }
         }
       });
+
+      if (submission.challenge.ecoCoinReward > 0) {
+        await prisma.userStats.upsert({
+          where: { userId: submission.userId },
+          update: { ecoPoints: { increment: submission.challenge.ecoCoinReward } },
+          create: { userId: submission.userId, ecoPoints: submission.challenge.ecoCoinReward }
+        });
+      }
 
       // Recalculate streak or other gamification
     }
@@ -439,5 +506,79 @@ export class AdminService {
       },
       take: 50
     });
+  }
+
+  // Event Management
+  static async getAllEvents() {
+    return await prisma.event.findMany({
+      orderBy: { date: 'asc' },
+      include: {
+        registrations: {
+          select: { id: true }
+        },
+        managedBy: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+  }
+
+  static async createEvent(data: {
+    title: string;
+    description: string;
+    location: string;
+    date: string;
+    capacity: number;
+    pointsReward: number;
+    imageUrl?: string;
+    latitude?: number;
+    longitude?: number;
+    managedById: string;
+  }) {
+    return await prisma.event.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        location: data.location,
+        date: new Date(data.date),
+        capacity: data.capacity,
+        pointsReward: data.pointsReward,
+        imageUrl: data.imageUrl,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        managedById: data.managedById,
+      },
+      include: {
+        registrations: { select: { id: true } },
+        managedBy: { select: { id: true, name: true, email: true } }
+      }
+    });
+  }
+
+  static async updateEvent(id: string, data: Partial<{
+    title: string;
+    description: string;
+    location: string;
+    date: string;
+    capacity: number;
+    pointsReward: number;
+    imageUrl: string;
+    latitude: number;
+    longitude: number;
+  }>) {
+    const updateData: any = { ...data };
+    if (data.date) updateData.date = new Date(data.date);
+    return await prisma.event.update({
+      where: { id },
+      data: updateData,
+      include: {
+        registrations: { select: { id: true } },
+        managedBy: { select: { id: true, name: true, email: true } }
+      }
+    });
+  }
+
+  static async deleteEvent(id: string) {
+    return await prisma.event.delete({ where: { id } });
   }
 }

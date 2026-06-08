@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import {
   ActivityIndicator,
   Animated,
@@ -41,27 +42,27 @@ interface AuthViewProps {
 }
 
 const palette = {
-  canvas: '#F2FAF5',
-  title: ecoTheme.colors.text,
-  subtitle: '#60736B',
-  primary: ecoTheme.colors.primaryDark,
-  primaryBright: '#1E7D38',
-  primarySoft: '#E8F5EC',
-  border: '#D4E5DA',
-  borderStrong: '#2A8454',
+  canvas: '#F9FAF5',
+  title: '#163A24',
+  subtitle: '#4B5563',
+  primary: '#163A24',
+  primaryBright: '#0F2919',
+  primarySoft: '#F0F4EC',
+  border: '#E5E7EB',
+  borderStrong: '#D1D5DB',
   surface: '#FFFFFF',
-  inputFill: '#F8FCF9',
-  fieldIcon: '#6C8178',
-  fieldIconActive: '#126027',
-  danger: '#B93834',
-  dangerSoft: '#FDF1F0',
-  textStrong: ecoTheme.colors.text,
-  textMuted: ecoTheme.colors.textSoft,
-  separator: '#DCE7E0',
-  googleBorder: '#D9E7DE',
-  guestBorder: '#CFE4D5',
-  glowTop: 'rgba(74, 222, 128, 0.18)',
-  glowBottom: 'rgba(18, 96, 39, 0.10)',
+  inputFill: '#FFFFFF',
+  fieldIcon: '#9CA3AF',
+  fieldIconActive: '#163A24',
+  danger: '#DC2626',
+  dangerSoft: '#FEF2F2',
+  textStrong: '#163A24',
+  textMuted: '#6B7280',
+  separator: '#E5E7EB',
+  googleBorder: '#E5E7EB',
+  guestBorder: '#F0F4EC',
+  glowTop: 'transparent',
+  glowBottom: 'transparent',
 };
 
 const AUTH_COPY: Record<
@@ -155,6 +156,8 @@ function getRequiredFields(mode: AuthModeType): FieldName[] {
   return ['username', 'email', 'password', 'verificationCode'];
 }
 
+
+
 export function AuthView({
   authLoading,
   authError,
@@ -165,6 +168,11 @@ export function AuthView({
   onSendOTP,
   onCheckUsernameAvailability,
 }: AuthViewProps) {
+  const player = useVideoPlayer(require('../../../assets/mobile-bg.mp4'), p => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
   const [mode, setMode] = useState<AuthModeType>('signin');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -222,21 +230,21 @@ export function AuthView({
     () =>
       mode === 'signup'
         ? {
-            base: ['#D6F2DE', '#F8FCF8', '#E4F2E8'] as const,
-            topGlow: 'rgba(74, 222, 128, 0.22)',
-            bottomGlow: 'rgba(18, 96, 39, 0.12)',
-          }
+          base: ['#E6F5EC', '#FAFAF7', '#FEFCE8'] as const,
+          topGlow: 'rgba(52, 211, 153, 0.25)',
+          bottomGlow: 'rgba(250, 204, 21, 0.18)',
+        }
         : mode === 'verify'
           ? {
-              base: ['#DDF1E3', '#FBFDFC', '#EAF4EE'] as const,
-              topGlow: 'rgba(18, 96, 39, 0.16)',
-              bottomGlow: 'rgba(74, 222, 128, 0.14)',
-            }
+            base: ['#ECFDF5', '#FAFAF9', '#FEFCE8'] as const,
+            topGlow: 'rgba(16, 185, 129, 0.22)',
+            bottomGlow: 'rgba(250, 204, 21, 0.18)',
+          }
           : {
-              base: ['#E3F5E8', '#FCFEFC', '#EAF4EE'] as const,
-              topGlow: palette.glowTop,
-              bottomGlow: palette.glowBottom,
-            },
+            base: ['#E6F4EA', '#FAFAF7', '#FEFCE8'] as const,
+            topGlow: palette.glowTop,
+            bottomGlow: palette.glowBottom,
+          },
     [mode],
   );
 
@@ -244,18 +252,18 @@ export function AuthView({
     () =>
       mode === 'signin'
         ? {
-            label: 'Signing in',
-            message: 'Unlocking your dashboard and restoring your EcoBud progress.',
-          }
+          label: 'Signing in',
+          message: 'Unlocking your dashboard and restoring your EcoBud progress.',
+        }
         : mode === 'verify'
           ? {
-              label: 'Verifying account',
-              message: 'Finishing your account setup with a secure verification check.',
-            }
+            label: 'Verifying account',
+            message: 'Finishing your account setup with a secure verification check.',
+          }
           : {
-              label: 'Sending code',
-              message: 'Preparing your email verification so you can continue sign up.',
-            },
+            label: 'Sending code',
+            message: 'Preparing your email verification so you can continue sign up.',
+          },
     [mode],
   );
 
@@ -379,33 +387,17 @@ export function AuthView({
       : copy.subtitle;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <LinearGradient
-        colors={backgroundPalette.base}
-        start={{ x: 0.04, y: 0 }}
-        end={{ x: 0.96, y: 1 }}
-        pointerEvents="none"
-        style={styles.backgroundGradient}
-      />
-      {showEnhancedChrome ? (
-        <>
-          <View
-            pointerEvents="none"
-            style={[styles.backgroundBloomTop, { backgroundColor: backgroundPalette.topGlow }]}
-          />
-          <View
-            pointerEvents="none"
-            style={[styles.backgroundBloomBottom, { backgroundColor: backgroundPalette.bottomGlow }]}
-          />
-        </>
-      ) : null}
+    <View style={{ flex: 1 }}>
+      <VideoView style={StyleSheet.absoluteFill} player={player as any} contentFit="cover" />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(249, 250, 245, 0.4)' }]} />
       <StatusBar style="dark" />
 
-      <KeyboardAvoidingView
-        style={styles.safeArea}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.safeArea}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
           contentContainerStyle={[styles.authShell, isLegacyAndroid && styles.authShellLegacy]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -417,13 +409,15 @@ export function AuthView({
               fadeDuration={0}
             />
             <Text style={styles.topNavTitle}>ECOBUD</Text>
-            <View style={styles.topNavSpacer} />
           </View>
 
           <View style={styles.contentContainer}>
             {showEnhancedChrome ? <View pointerEvents="none" style={styles.titleAura} /> : null}
 
-            <Text style={styles.welcomeTitle}>{copy.title}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' }}>
+              <Text style={styles.welcomeTitle}>{copy.title}</Text>
+              <Ionicons name="leaf" size={18} color={palette.primary} style={{ marginTop: 2, marginLeft: 2 }} />
+            </View>
             <Text style={styles.welcomeSubtitle}>{verifySubtitle}</Text>
 
             <View
@@ -435,6 +429,7 @@ export function AuthView({
               {mode !== 'signin' ? (
                 <CustomInputField
                   label="Username"
+                  labelIcon="person-outline"
                   value={username}
                   onChangeText={setUsername}
                   onBlur={() => markTouched('username')}
@@ -461,6 +456,7 @@ export function AuthView({
 
               <CustomInputField
                 label="Email Address"
+                labelIcon="leaf-outline"
                 value={email}
                 onChangeText={setEmail}
                 onBlur={() => markTouched('email')}
@@ -471,10 +467,12 @@ export function AuthView({
                 textContentType="emailAddress"
                 error={visibleFieldErrors.email}
                 returnKeyType="next"
+                placeholder="nature@ecobud.com"
               />
 
               <CustomInputField
                 label="Password"
+                labelIcon="lock-closed-outline"
                 value={password}
                 onChangeText={setPassword}
                 onBlur={() => markTouched('password')}
@@ -487,11 +485,13 @@ export function AuthView({
                 returnKeyType={mode === 'verify' ? 'next' : 'done'}
                 trailingIconName={showPassword ? 'eye-off-outline' : 'eye-outline'}
                 onTrailingPress={() => setShowPassword((current) => !current)}
+                placeholder="Enter your password"
               />
 
               {mode === 'verify' ? (
                 <CustomInputField
                   label="Verification Code"
+                  labelIcon="key-outline"
                   value={verificationCode}
                   onChangeText={(value) => setVerificationCode(value.replace(/[^\d]/g, '').slice(0, 6))}
                   onBlur={() => markTouched('verificationCode')}
@@ -569,18 +569,24 @@ export function AuthView({
                 }}
                 style={({ pressed }) => [styles.footerSwitchLink, pressed && styles.footerSwitchLinkPressed]}
               >
-                <Text style={styles.footerSwitchLinkText}>
-                  {mode === 'signin'
-                    ? 'Create account'
-                    : mode === 'verify'
-                      ? 'Back to sign up'
-                      : 'Log in'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.footerSwitchLinkText}>
+                    {mode === 'signin'
+                      ? 'Create account'
+                      : mode === 'verify'
+                        ? 'Back to sign up'
+                        : 'Log in'}
+                  </Text>
+                  {mode === 'signin' && (
+                    <Ionicons name="leaf-outline" size={14} color={palette.primary} style={{ marginLeft: 4, marginTop: 4 }} />
+                  )}
+                </View>
               </Pressable>
             </View>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {renderLoadingOverlay ? (
         <Animated.View
@@ -596,7 +602,7 @@ export function AuthView({
           <LoadingScreenVisual label={loadingCopy.label} message={loadingCopy.message} />
         </Animated.View>
       ) : null}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -636,6 +642,7 @@ function InlineBanner({ message }: { message: string }) {
 
 interface CustomInputFieldProps {
   label: string;
+  labelIcon?: React.ComponentProps<typeof Ionicons>['name'];
   value: string;
   onChangeText: (value: string) => void;
   onBlur: () => void;
@@ -645,6 +652,7 @@ interface CustomInputFieldProps {
   helperTone?: 'neutral' | 'success' | 'danger';
   keyboardType?: React.ComponentProps<typeof TextInput>['keyboardType'];
   secureTextEntry?: boolean;
+  placeholder?: string;
   autoCapitalize?: React.ComponentProps<typeof TextInput>['autoCapitalize'];
   autoComplete?: React.ComponentProps<typeof TextInput>['autoComplete'];
   textContentType?: React.ComponentProps<typeof TextInput>['textContentType'];
@@ -659,6 +667,7 @@ interface CustomInputFieldProps {
 
 function CustomInputField({
   label,
+  labelIcon,
   value,
   onChangeText,
   onBlur,
@@ -668,6 +677,7 @@ function CustomInputField({
   helperTone = 'neutral',
   keyboardType = 'default',
   secureTextEntry,
+  placeholder,
   autoCapitalize = 'none',
   autoComplete,
   textContentType,
@@ -708,6 +718,7 @@ function CustomInputField({
   return (
     <View style={styles.inputGroup}>
       <View style={styles.inputLabelRow}>
+        {labelIcon ? <Ionicons name={labelIcon} size={14} color={palette.primary} style={{ marginRight: 6, marginTop: 1 }} /> : null}
         <Text style={[styles.inputLabel, isFocused && styles.inputLabelActive]}>{label}</Text>
         {actionLabel && onActionPress ? (
           <Pressable
@@ -757,7 +768,8 @@ function CustomInputField({
             spellCheck={false}
             autoComplete={autoComplete}
             textContentType={textContentType}
-            placeholderTextColor="#92A39C"
+            placeholder={placeholder}
+            placeholderTextColor="#9CA3AF"
             selectionColor={palette.primary}
             underlineColorAndroid="transparent"
             onFocus={() => setIsFocused(true)}
@@ -765,7 +777,10 @@ function CustomInputField({
               setIsFocused(false);
               onBlur();
             }}
-            style={styles.textInput}
+            style={[
+              styles.textInput,
+              secureTextEntry && Boolean(value) && styles.textInputSecure,
+            ]}
             returnKeyType={returnKeyType}
             accessibilityLabel={label}
           />
@@ -828,11 +843,8 @@ function PrimaryButton({ label, onPress, disabled, loading }: AuthButtonProps) {
         android_ripple={disabled ? undefined : { color: 'rgba(255,255,255,0.16)' }}
         style={[styles.primaryButton, disabled && styles.primaryButtonDisabled]}
       >
-        <LinearGradient
-          colors={[palette.primary, palette.primaryBright]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.primaryButtonGradient}
+        <View
+          style={[styles.primaryButtonGradient, { backgroundColor: palette.primary }]}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -842,7 +854,7 @@ function PrimaryButton({ label, onPress, disabled, loading }: AuthButtonProps) {
               <Ionicons name="arrow-forward-outline" size={18} color="#FFFFFF" />
             </>
           )}
-        </LinearGradient>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -913,10 +925,10 @@ function AuthSeparator({ label }: { label: string }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: palette.canvas,
+    backgroundColor: 'transparent',
   },
   backgroundGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   backgroundBloomTop: {
     position: 'absolute',
@@ -941,40 +953,42 @@ const styles = StyleSheet.create({
   authShellLegacy: {
     paddingBottom: 34,
   },
+
   topNavbar: {
-    marginTop: 22,
+    marginTop: 32,
     paddingHorizontal: 24,
-    paddingBottom: 12,
-    flexDirection: 'row',
+    paddingBottom: 24,
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 12,
   },
   topNavAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 1.5,
-    borderColor: 'rgba(18,96,39,0.14)',
+    width: 64,
+    height: 64,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   topNavAvatarLegacy: {
     borderWidth: 1,
   },
   topNavTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 21,
-    fontWeight: '700',
-    letterSpacing: 3.2,
-    color: palette.title,
-    marginHorizontal: 12,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: palette.primary,
   },
   topNavSpacer: {
     width: 46,
   },
   contentContainer: {
     paddingHorizontal: 24,
-    paddingTop: 18,
+    paddingTop: 14,
     position: 'relative',
   },
   titleAura: {
@@ -987,38 +1001,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.38)',
   },
   welcomeTitle: {
-    fontSize: 31,
-    lineHeight: 38,
-    fontWeight: '700',
+    fontFamily: 'serif',
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '600',
     color: palette.textStrong,
-    letterSpacing: -0.5,
-    marginBottom: 10,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   welcomeSubtitle: {
     fontSize: 15,
     lineHeight: 24,
     color: palette.subtitle,
-    marginBottom: 28,
-    maxWidth: 332,
+    marginBottom: 26,
+    textAlign: 'center',
   },
   authCard: {
-    borderRadius: 30,
+    borderRadius: 24,
     paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 20,
+    paddingTop: 24,
+    paddingBottom: 24,
   },
   authCardModern: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.88)',
-    shadowColor: '#126027',
-    shadowOpacity: 0.14,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 7,
+    backgroundColor: palette.surface,
+    shadowColor: '#000000',
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
   authCardLegacy: {
-    backgroundColor: palette.surface,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: palette.border,
     elevation: 2,
@@ -1028,7 +1041,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     backgroundColor: palette.dangerSoft,
-    borderColor: '#F2CECB',
+    borderColor: 'rgba(220, 38, 38, 0.15)',
     borderWidth: 1,
     borderRadius: 16,
     paddingHorizontal: 14,
@@ -1056,7 +1069,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '700',
-    color: palette.textMuted,
+    color: palette.textStrong,
     letterSpacing: 0.3,
     flex: 1,
   },
@@ -1087,13 +1100,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   inputOuter: {
-    borderWidth: 1.25,
-    borderRadius: 20,
-    backgroundColor: palette.inputFill,
-    shadowColor: palette.primary,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
   },
   inputOuterFallback: {
     shadowOpacity: 0,
@@ -1104,7 +1114,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   inputRow: {
-    minHeight: 60,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 16,
@@ -1121,16 +1131,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trailingIconButtonPressed: {
-    backgroundColor: 'rgba(18,96,39,0.06)',
+    backgroundColor: 'rgba(16, 91, 41, 0.06)',
   },
   textInput: {
     flex: 1,
-    minHeight: 58,
-    fontSize: 16,
+    minHeight: 54,
+    fontSize: 15,
     lineHeight: 20,
-    fontWeight: '500',
+    fontWeight: '600',
     color: palette.textStrong,
     paddingVertical: 0,
+    paddingLeft: 8,
+  },
+  textInputSecure: {
+    fontSize: 20,
+    letterSpacing: 3,
   },
   inlineErrorText: {
     fontSize: 12,
@@ -1149,7 +1164,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   helperTextSuccess: {
-    color: '#1C7A43',
+    color: '#16A34A',
   },
   helperTextDanger: {
     color: palette.danger,
@@ -1166,22 +1181,17 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     width: '100%',
-    minHeight: 58,
-    borderRadius: 18,
+    minHeight: 54,
+    borderRadius: 28,
     overflow: 'hidden',
     marginTop: 10,
-    shadowColor: '#126027',
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
   },
   primaryButtonDisabled: {
     opacity: 0.62,
   },
   primaryButtonGradient: {
     flex: 1,
-    minHeight: 58,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -1211,8 +1221,8 @@ const styles = StyleSheet.create({
     color: palette.textMuted,
   },
   secondaryButton: {
-    minHeight: 56,
-    borderRadius: 18,
+    minHeight: 54,
+    borderRadius: 28,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1223,11 +1233,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.googleBorder,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#126027',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
   },
   outlineButton: {
     borderWidth: 1,
@@ -1235,8 +1240,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   softButton: {
-    borderWidth: 1,
-    borderColor: '#D9EBDD',
+    borderWidth: 0,
     backgroundColor: palette.primarySoft,
     marginTop: 14,
   },
@@ -1246,7 +1250,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: palette.primary,
+    color: palette.textStrong,
   },
   guestViewerHint: {
     marginTop: 10,
@@ -1256,18 +1260,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   footerSwitchRow: {
-    marginTop: 26,
+    marginTop: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   footerSwitchText: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
-    color: palette.textMuted,
-    marginBottom: 6,
+    color: palette.textStrong,
+    marginBottom: 4,
   },
   footerSwitchLink: {
-    minHeight: 44,
+    minHeight: 32,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
@@ -1276,9 +1280,10 @@ const styles = StyleSheet.create({
     opacity: 0.68,
   },
   footerSwitchLinkText: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
     color: palette.primary,
-    fontWeight: '800',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

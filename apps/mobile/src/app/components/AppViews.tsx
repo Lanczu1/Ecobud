@@ -478,7 +478,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               <View style={styles.featuredProgramContent}>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                   <View style={styles.tagDark}><Text style={styles.tagDarkText}>{challenge.difficulty.toUpperCase()}</Text></View>
-                  <View style={styles.tagLight}><Text style={styles.tagLightText}>{challenge.pointsReward} XP</Text></View>
+                  <View style={styles.tagLight}><Text style={styles.tagLightText}>{challenge.expReward} XP</Text></View>
+                  {challenge.ecoCoinReward > 0 && <View style={[styles.tagLight, { backgroundColor: '#E8F5E9' }]}><Text style={[styles.tagLightText, { color: '#2E7D32' }]}>{challenge.ecoCoinReward} Coins</Text></View>}
                 </View>
                 <Text style={styles.featuredProgramTitle}>{challenge.title}</Text>
                 <Text style={styles.featuredProgramDesc}>{challenge.description}</Text>

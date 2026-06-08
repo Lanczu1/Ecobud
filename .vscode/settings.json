@@ -1,3 +1,7 @@
 {
-  "css.lint.unknownAtRules": "ignore"
+  "css.lint.unknownAtRules": "ignore",
+  "python.defaultInterpreterPath": "C:\\Users\\Lanczu\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+  "python.analysis.extraPaths": [
+    "C:\\Users\\Lanczu\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
+  ]
 }

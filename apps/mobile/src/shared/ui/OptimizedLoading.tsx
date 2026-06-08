@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { ActivityIndicator, Image, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
 
 const loadingGif = require('../../../assets/Loading.gif');
 
@@ -41,19 +42,13 @@ export function LoadingScreenVisual({ label, message, style }: LoadingScreenVisu
       renderToHardwareTextureAndroid={isAndroid}
       shouldRasterizeIOS
     >
-      <LinearGradient
-        colors={isLegacyAndroid ? ['#E8F5EA', '#DCEEE0'] : ['#EDF8EF', '#E2F2E6', '#D4EBCF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
 
       <View style={[styles.contentWrap, isLegacyAndroid && styles.contentWrapLegacy]}>
         <Image
           source={loadingGif}
-          style={{ width: gifSize, height: gifSize }}
-          resizeMode="contain"
-          fadeDuration={0}
+          style={{ width: '100%', height: gifSize, alignSelf: 'center' }}
+          contentFit="contain"
+          transition={0}
         />
         {label ? <Text style={styles.title}>{label}</Text> : null}
         {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -80,7 +75,8 @@ export function LoadingGlyph({ size = 'md', style }: LoadingGlyphProps) {
 
 const styles = StyleSheet.create({
   screenRoot: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
