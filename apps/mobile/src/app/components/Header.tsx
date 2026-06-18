@@ -42,6 +42,7 @@ export function Header({
   showBack,
   title,
   onBack,
+  onEventsPress,
 }: HeaderProps) {
   return (
     <View style={styles.topNavbar}>
@@ -67,10 +68,17 @@ export function Header({
         )}
       </View>
       <Text style={[styles.topNavTitle, title ? styles.topNavTitleDark : {}]}>{title || 'ECOBUD'}</Text>
-      <TouchableOpacity>
-        <Ionicons name="notifications" size={24} color="#126027" />
-        {notificationCount > 0 && <View style={styles.topNavBadge} />}
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {onEventsPress && (
+          <TouchableOpacity onPress={onEventsPress}>
+            <Ionicons name="calendar-outline" size={24} color="#126027" />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity>
+          <Ionicons name="notifications" size={24} color="#126027" />
+          {notificationCount > 0 && <View style={styles.topNavBadge} />}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

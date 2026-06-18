@@ -2,6 +2,77 @@ import { AppTab } from '../types/home';
 import { useCallback, useRef } from 'react';
 import { Animated } from 'react-native';
 
+// EcoBud is a Philippines (Asia/Manila, UTC+8) product. All habit/tracker
+// "day" keys must be computed in PHT, not UTC, so the calendar highlights the
+// correct date at local midnight (16:00 UTC the previous day).
+const PH_TIMEZONE = 'Asia/Manila';
+const PH_LOCALE = 'en-PH';
+
+/**
+ * Returns the Philippines (PHT) "YYYY-MM-DD" date key for a given instant.
+ * Defaults to now. Uses Intl formatting to stay correct regardless of the
+ * device's own timezone.
+ */
+export function getPhDateKey(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat(PH_LOCALE, {
+    timeZone: PH_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/**
+ * Returns the Philippines (PHT) "YYYY-MM" month key for a given instant.
+ * Defaults to now.
+ */
+export function getPhMonthKey(date: Date = new Date()): string {
+  return getPhDateKey(date).slice(0, 7);
+}
+
+// ─── Eco Level System ────────────────────────────────────────────────────────
+// A 5-tier gamified progression ladder driven by total Eco Points.
+export interface EcoLevelTier {
+  level: number;
+  name: string;
+  emoji: string;
+  floor: number;
+  ceiling: number; // exclusive upper bound; Infinity for the top tier
+}
+
+const ECO_LEVEL_TIERS: EcoLevelTier[] = [
+  { level: 1, name: 'Eco Seedling', emoji: '🌱', floor: 0, ceiling: 200 },
+  { level: 2, name: 'Eco Learner', emoji: '🌿', floor: 200, ceiling: 450 },
+  { level: 3, name: 'Eco Advocate', emoji: '🌳', floor: 450, ceiling: 800 },
+  { level: 4, name: 'Eco Warrior', emoji: '🛡️', floor: 800, ceiling: 1200 },
+  { level: 5, name: 'Eco Champion', emoji: '👑', floor: 1200, ceiling: Infinity },
+];
+
+export function getEcoLevel(totalPoints: number) {
+  const safe = Math.max(0, Math.round(totalPoints));
+  const tier = ECO_LEVEL_TIERS.find((entry) => safe < entry.ceiling) ?? ECO_LEVEL_TIERS[ECO_LEVEL_TIERS.length - 1];
+  const nextTier = ECO_LEVEL_TIERS.find((entry) => entry.level === tier.level + 1) ?? null;
+
+  const span = tier.ceiling - tier.floor;
+  const into = Math.min(span, Math.max(0, safe - tier.floor));
+  const progressPercentage = tier.ceiling === Infinity ? 100 : Math.round((into / span) * 100);
+
+  return {
+    level: tier.level,
+    name: tier.name,
+    emoji: tier.emoji,
+    currentPoints: into,
+    totalPoints: safe,
+    pointsToNext: tier.ceiling === Infinity ? 0 : tier.ceiling - safe,
+    nextName: nextTier?.name ?? null,
+    nextCeiling: tier.ceiling === Infinity ? null : tier.ceiling,
+    progressPercentage,
+  };
+}
+
 export function getLessonProgressPercent(status?: string | null) {
   if (status === 'completed') {
     return 100;
@@ -52,7 +123,7 @@ export function buildCalendarCells(month: string, completedDays: string[]) {
   const firstDate = new Date(year, monthIndex - 1, 1);
   const lastDate = new Date(year, monthIndex, 0);
   const startPadding = firstDate.getDay();
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = getPhDateKey();
   const cells: { dateKey: string | null; day: number | null; completed: boolean; isToday: boolean }[] = [];
 
   for (let index = 0; index < startPadding; index += 1) {

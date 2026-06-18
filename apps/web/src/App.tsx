@@ -6,10 +6,13 @@ import { Dashboard } from './components/admin/Dashboard';
 import { ManageUsers } from './components/admin/pages/ManageUsers';
 import { LearningContent } from './components/admin/pages/LearningContent';
 import { Challenges } from './components/admin/pages/Challenges';
+import { DailyQuests } from './components/admin/pages/DailyQuests';
 import { Events } from './components/admin/pages/Events';
 import { Vendors } from './components/admin/pages/Vendors';
 import { SwapGoods } from './components/admin/pages/SwapGoods';
 import { Reports } from './components/admin/pages/Reports';
+import { Submissions } from './components/admin/pages/Submissions';
+import { AuditLogs } from './components/admin/pages/AuditLogs';
 
 function renderSection(section: AdminSection) {
   switch (section) {
@@ -17,10 +20,13 @@ function renderSection(section: AdminSection) {
     case 'Users':            return <ManageUsers />;
     case 'Learning Content': return <LearningContent />;
     case 'Challenges':       return <Challenges />;
+    case 'Daily Quests':     return <DailyQuests />;
     case 'Events':           return <Events />;
     case 'Vendors':          return <Vendors />;
     case 'Swap Goods':       return <SwapGoods />;
     case 'Reports':          return <Reports />;
+    case 'Submissions':      return <Submissions />;
+    case 'Audit Logs':       return <AuditLogs />;
     default:                 return <Dashboard />;
   }
 }
@@ -30,7 +36,18 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return !!(localStorage.getItem('ecobud_admin_token') && localStorage.getItem('ecobud_admin_authenticated') === 'true');
   });
-  const [activeSection, setActiveSection] = useState<AdminSection>('Dashboard');
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => {
+    const userJson = localStorage.getItem('ecobud_admin_user');
+    if (userJson) {
+      try {
+        const user = JSON.parse(userJson);
+        if (user.role === 'moderator') {
+          return 'Submissions';
+        }
+      } catch (e) {}
+    }
+    return 'Dashboard';
+  });
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('ecobud_dark_mode') === 'true';
   });
@@ -79,7 +96,7 @@ export default function App() {
     localStorage.setItem('ecobud_admin_user', JSON.stringify(data.user));
     localStorage.setItem('ecobud_admin_authenticated', 'true');
     setIsAuthenticated(true);
-    setActiveSection('Dashboard');
+    setActiveSection(data.user.role === 'moderator' ? 'Submissions' : 'Dashboard');
   };
 
   const handleLogout = () => {

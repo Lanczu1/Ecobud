@@ -8,7 +8,48 @@ import {
 } from 'react-native';
 import { type ActiveChallengeCardProps } from '../types/home';
 
-export function ActiveChallengeCard({ dailyChallenge, onComplete }: ActiveChallengeCardProps) {
+export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim }: ActiveChallengeCardProps) {
+  const status = dailyChallenge.progress?.status?.toLowerCase() || 'not_started';
+
+  let btnContent = (
+    <>
+      <Ionicons name="checkmark-circle" size={18} color="#126027" />
+      <Text style={styles.challengeCompleteBtnText}>Mark as Complete</Text>
+    </>
+  );
+  let btnStyle: any = styles.challengeCompleteBtn;
+  let disabled = false;
+  let onPress = onComplete;
+
+  if (status === 'pending') {
+    btnContent = (
+      <>
+        <Ionicons name="time" size={18} color="#B45309" />
+        <Text style={[styles.challengeCompleteBtnText, { color: '#B45309' }]}>Pending Approval</Text>
+      </>
+    );
+    btnStyle = [styles.challengeCompleteBtn, { backgroundColor: '#FEF3C7' }];
+    disabled = true;
+  } else if (status === 'approved' || status === 'unclaimed') {
+    btnContent = (
+      <>
+        <Ionicons name="gift" size={18} color="#FFFFFF" />
+        <Text style={[styles.challengeCompleteBtnText, { color: '#FFFFFF' }]}>Claim Reward</Text>
+      </>
+    );
+    btnStyle = [styles.challengeCompleteBtn, { backgroundColor: '#F59E0B' }]; // Amber color for claim
+    onPress = onClaim || (() => {});
+  } else if (status === 'completed') {
+    btnContent = (
+      <>
+        <Ionicons name="checkmark-done-circle" size={18} color="#FFFFFF" />
+        <Text style={[styles.challengeCompleteBtnText, { color: '#FFFFFF' }]}>Completed</Text>
+      </>
+    );
+    btnStyle = [styles.challengeCompleteBtn, { backgroundColor: '#10B981' }]; // Green color for done
+    disabled = true;
+  }
+
   return (
     <View style={styles.todayChallengeCard}>
       <View style={styles.challengeBadge}>
@@ -16,9 +57,12 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete }: ActiveChalle
       </View>
       <Text style={styles.todayChallengeTitle}>{dailyChallenge.title}</Text>
       <Text style={styles.todayChallengeDesc}>{dailyChallenge.description}</Text>
-      <TouchableOpacity style={styles.challengeCompleteBtn} onPress={onComplete}>
-        <Ionicons name="checkmark-circle" size={18} color="#126027" />
-        <Text style={styles.challengeCompleteBtnText}>Mark as Complete</Text>
+      <TouchableOpacity 
+        style={btnStyle} 
+        onPress={onPress}
+        disabled={disabled}
+      >
+        {btnContent}
       </TouchableOpacity>
     </View>
   );

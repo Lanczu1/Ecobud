@@ -5,13 +5,17 @@ import {
   requireAdminAccess,
   requireModeratorAccess,
 } from "../http/authentication";
-import { uploadMiddleware } from "../http/uploadMiddleware";
+import { uploadMiddleware, challengeUploadMiddleware } from "../http/uploadMiddleware";
 
 const adminRoutes = Router();
 
 // Apply global admin/moderator check for all sub-routes
 adminRoutes.use(authenticateRequest);
 adminRoutes.use(requireModeratorAccess);
+
+// Uploads
+adminRoutes.post("/upload", challengeUploadMiddleware.single('image'), AdminController.uploadImage);
+adminRoutes.post("/upload/delete", AdminController.deleteImage);
 
 // Lessons Management
 adminRoutes.get("/lessons", AdminController.getLessons);
@@ -28,6 +32,8 @@ adminRoutes.post(
   requireAdminAccess,
   AdminController.resetKnowledge,
 );
+adminRoutes.post("/users/:userId/block", requireAdminAccess, AdminController.blockUser);
+adminRoutes.post("/users/:userId/unblock", requireAdminAccess, AdminController.unblockUser);
 
 // Challenges Management
 adminRoutes.get("/challenges", AdminController.getChallenges);
@@ -41,9 +47,11 @@ adminRoutes.get("/stats", requireAdminAccess, AdminController.getDashboardStats)
 // Submissions
 adminRoutes.get("/submissions", AdminController.getSubmissions);
 adminRoutes.post("/submissions/:id/review", AdminController.reviewSubmission);
+adminRoutes.delete("/submissions/:id", AdminController.deleteSubmission);
 
 // Audit Logs
 adminRoutes.get("/audit", AdminController.getAuditLogs);
+adminRoutes.delete("/audit", requireAdminAccess, AdminController.clearAuditLogs);
 
 // Events Management
 adminRoutes.get("/events", AdminController.getEvents);

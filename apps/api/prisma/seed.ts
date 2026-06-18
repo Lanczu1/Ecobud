@@ -87,7 +87,7 @@ async function main() {
 
   const moderator = await prisma.user.create({
     data: {
-      name: 'Mila Green',
+      name: 'EcoBud Moderator',
       email: 'moderator@ecobud.app',
       passwordHash: moderatorPassword,
       role: 'moderator',
@@ -97,7 +97,7 @@ async function main() {
       lastActionDate: new Date(),
       profile: {
         create: {
-          displayName: 'Mila Green',
+          displayName: 'EcoBud Moderator',
           headline: 'Community event moderator.',
           city: 'Quezon City',
         },

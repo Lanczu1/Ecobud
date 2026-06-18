@@ -7,6 +7,7 @@ type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 export interface HomeDashboardPayload {
   streak: number;
   ecoPoints: number;
+  ecoCoins: number;
   weeklyGoal: number;
 }
 
@@ -28,6 +29,7 @@ export class UserStatsService {
     return {
       streak: stats.currentStreak,
       ecoPoints: stats.ecoPoints,
+      ecoCoins: stats.ecoCoins,
       weeklyGoal: weeklyGoal.weeklyGoal,
     };
   }
@@ -79,6 +81,7 @@ export class UserStatsService {
       data: {
         userId: user.id,
         ecoPoints: user.points,
+        ecoCoins: 0,
         currentStreak: user.currentStreak,
         knowledgePoints: 0,
       },

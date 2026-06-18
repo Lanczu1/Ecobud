@@ -7,10 +7,14 @@ import {
   Store, 
   ArrowLeftRight, 
   FileText, 
-  LogOut 
+  LogOut,
+  Send,
+  ShieldCheck
 } from 'lucide-react';
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Events' | 'Vendors' | 'Swap Goods' | 'Reports';
+import { CheckSquare } from 'lucide-react';
+
+export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Vendors' | 'Swap Goods' | 'Audit Logs' | 'Reports' | 'Daily Quests';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -21,15 +25,29 @@ interface SidebarProps {
 const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Dashboard', icon: LayoutDashboard },
   { name: 'Users', icon: Users },
+  { name: 'Submissions', icon: Send },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },
+  { name: 'Daily Quests', icon: CheckSquare },
   { name: 'Events', icon: Calendar },
   { name: 'Vendors', icon: Store },
   { name: 'Swap Goods', icon: ArrowLeftRight },
+  { name: 'Audit Logs', icon: ShieldCheck },
   { name: 'Reports', icon: FileText },
 ];
 
 export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarProps) {
+  const userJson = localStorage.getItem('ecobud_admin_user');
+  const user = userJson ? JSON.parse(userJson) : null;
+  const isModerator = user?.role === 'moderator';
+
+  const visibleMenuItems = menuItems.filter((item) => {
+    if (isModerator && ['Dashboard', 'Users', 'Audit Logs', 'Reports'].includes(item.name)) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="w-64 bg-white border-r border-gray-100 flex flex-col h-full shadow-sm">
       <div className="p-6 flex items-center gap-3 select-none">
@@ -46,7 +64,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
 
       <div className="flex-1 px-4 py-2 overflow-y-auto">
         <ul className="space-y-1">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const isActive = item.name === activeSection;
             return (
               <li key={item.name}>

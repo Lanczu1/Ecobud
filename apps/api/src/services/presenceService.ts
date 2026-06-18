@@ -101,21 +101,29 @@ export class PresenceService {
         : 'online',
     } as const;
 
-    const session = existingSession
-      ? await this.database.presenceSession.update({
-          where: { sessionId: nextSessionId },
-          data: {
-            ...baseData,
-            connectedAt: existingSession.isOnline ? existingSession.connectedAt : now,
-          },
-        })
-      : await this.database.presenceSession.create({
-          data: {
-            sessionId: nextSessionId,
-            connectedAt: now,
-            ...baseData,
-          },
-        });
+    let session;
+    if (existingSession && existingSession.isOnline) {
+      session = await this.database.presenceSession.update({
+        where: { sessionId: nextSessionId },
+        data: {
+          ...baseData,
+          connectedAt: existingSession.connectedAt,
+        },
+      });
+    } else {
+      session = await this.database.presenceSession.upsert({
+        where: { sessionId: nextSessionId },
+        create: {
+          sessionId: nextSessionId,
+          connectedAt: now,
+          ...baseData,
+        },
+        update: {
+          ...baseData,
+          connectedAt: now,
+        },
+      });
+    }
 
     const shouldPublish =
       !existingSession ||

@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   eventFeaturedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(26, 33, 29, 0.4)',
   },
   featuredProgramContent: {

@@ -10,7 +10,7 @@ const safelyDeleteUpload = (url?: string | null) => {
   if (!url) return;
   const filename = url.split('/').pop();
   if (!filename) return;
-  const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'web', 'uploads', filename);
+  const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads', filename);
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
@@ -31,9 +31,9 @@ export class AdminController {
   }
 
   static async createLesson(req: AuthenticatedRequest, res: Response) {
-    const { title, description, content, isPublished, category, quizPassingScore, quizQuestions, durationMinutes } = req.body;
+    const { title, description, isPublished, category, difficulty, quizPassingScore, quizQuestions, durationMinutes, pages, pointsReward } = req.body;
 
-    if (!title || !description || !content) {
+    if (!title || !description) {
       return res.status(400).json({ message: "Missing required lesson fields." });
     }
 
@@ -68,21 +68,33 @@ export class AdminController {
         console.error('Failed to parse quiz questions');
       }
     }
+    
+    let parsedPages = [];
+    if (pages) {
+      try {
+        parsedPages = typeof pages === 'string' ? JSON.parse(pages) : pages;
+      } catch (e) {
+        console.error('Failed to parse pages');
+      }
+    }
 
     try {
       const lesson = await AdminService.createLesson({
         title,
         description,
-        content,
+        content: req.body.content || ' ',
         isPublished: String(isPublished) === 'true',
         createdById: req.auth!.userId,
         category: category || "General",
+        difficulty: difficulty || "Beginner",
         videoUrl,
         imageUrl,
         transcript,
         durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : undefined,
         quizPassingScore: quizPassingScore ? parseInt(quizPassingScore, 10) : 70,
-        quizQuestions: parsedQuestions
+        pointsReward: pointsReward ? parseInt(pointsReward, 10) : 10,
+        quizQuestions: parsedQuestions,
+        pages: parsedPages
       });
       return res.status(201).json(lesson);
     } catch (error: any) {
@@ -144,8 +156,18 @@ export class AdminController {
       } catch (e) {}
     }
     
+    if (updateData.pages) {
+      try {
+        updateData.pages = typeof updateData.pages === 'string' ? JSON.parse(updateData.pages) : updateData.pages;
+      } catch (e) {}
+    }
+    
     if (updateData.quizPassingScore) {
       updateData.quizPassingScore = parseInt(updateData.quizPassingScore, 10);
+    }
+    
+    if (updateData.pointsReward !== undefined) {
+      updateData.pointsReward = parseInt(updateData.pointsReward, 10);
     }
     
     if (updateData.isPublished !== undefined) {
@@ -228,6 +250,26 @@ export class AdminController {
     }
   }
 
+  static async blockUser(req: AuthenticatedRequest, res: Response) {
+    const { userId } = req.params;
+    try {
+      await AdminService.blockUser(userId, req.auth!.userId);
+      return res.status(200).json({ message: "User blocked successfully." });
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to block user.", error: error.message });
+    }
+  }
+
+  static async unblockUser(req: AuthenticatedRequest, res: Response) {
+    const { userId } = req.params;
+    try {
+      await AdminService.unblockUser(userId, req.auth!.userId);
+      return res.status(200).json({ message: "User unblocked successfully." });
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to unblock user.", error: error.message });
+    }
+  }
+
   // Challenges
   static async getChallenges(req: AuthenticatedRequest, res: Response) {
     try {
@@ -265,6 +307,46 @@ export class AdminController {
     }
   }
 
+  static async uploadImage(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded." });
+      }
+      const protocol = req.protocol || 'http';
+      const host = req.get('host') || 'localhost:3000';
+      const fileUrl = `${protocol}://${host}/uploads/Challenges/${req.file.filename}`;
+      return res.status(201).json({ url: fileUrl });
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to upload image.", error: error.message });
+    }
+  }
+
+  static async deleteImage(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ message: 'URL is required' });
+
+      // Parse the filename from the URL (e.g. http://localhost:3000/uploads/Challenges/filename.jpg)
+      const urlParts = url.split('/');
+      const filename = urlParts[urlParts.length - 1];
+      
+      if (!filename) return res.status(400).json({ message: 'Invalid URL' });
+
+      const fs = require('fs');
+      const path = require('path');
+      const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads', 'Challenges', filename);
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        return res.json({ message: 'Image deleted successfully' });
+      } else {
+        return res.status(404).json({ message: 'Image not found on server' });
+      }
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Failed to delete image', error: error.message });
+    }
+  }
+
   static async getDashboardStats(req: AuthenticatedRequest, res: Response) {
     try {
       const stats = await AdminService.getDashboardStats();
@@ -299,12 +381,49 @@ export class AdminController {
     }
   }
 
+  static async deleteSubmission(req: AuthenticatedRequest, res: Response) {
+    const { id } = req.params;
+
+    try {
+      const submission = await prisma.challengeSubmission.findUnique({ where: { id } });
+      if (submission?.proofUrl) {
+        const filename = submission.proofUrl.split('/').pop();
+        if (filename) {
+          const fs = require('fs');
+          const path = require('path');
+          const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads', 'Challenges', 'AnalyzingImg', filename);
+          if (fs.existsSync(filePath)) {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (e) {
+              console.error('Failed to delete submission image', filePath, e);
+            }
+          }
+        }
+      }
+
+      await AdminService.deleteSubmission(id);
+      return res.status(204).send();
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to delete submission.", error: error.message });
+    }
+  }
+
   static async getAuditLogs(req: AuthenticatedRequest, res: Response) {
     try {
       const items = await AdminService.getAuditLogs();
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch audit logs.", error: error.message });
+    }
+  }
+
+  static async clearAuditLogs(req: AuthenticatedRequest, res: Response) {
+    try {
+      await AdminService.clearAuditLogs();
+      return res.status(200).json({ message: "Audit logs cleared successfully." });
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to clear audit logs.", error: error.message });
     }
   }
 

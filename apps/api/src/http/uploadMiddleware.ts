@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 // Define the upload directory based on the user's requirement
-const uploadDirectory = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'web', 'uploads');
+const uploadDirectory = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads');
 
 // Ensure directory exists
 if (!fs.existsSync(uploadDirectory)) {
@@ -25,5 +25,49 @@ export const uploadMiddleware = multer({
   storage: storage,
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB limit for videos
+  }
+});
+
+const challengesUploadDirectory = path.join(uploadDirectory, 'Challenges');
+if (!fs.existsSync(challengesUploadDirectory)) {
+  fs.mkdirSync(challengesUploadDirectory, { recursive: true });
+}
+
+const challengeStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, challengesUploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const challengeUploadMiddleware = multer({
+  storage: challengeStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for images
+  }
+});
+
+const analyzingUploadDirectory = path.join(challengesUploadDirectory, 'AnalyzingImg');
+if (!fs.existsSync(analyzingUploadDirectory)) {
+  fs.mkdirSync(analyzingUploadDirectory, { recursive: true });
+}
+
+const analyzingStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, analyzingUploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, 'analyze-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const analyzeUploadMiddleware = multer({
+  storage: analyzingStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
   }
 });

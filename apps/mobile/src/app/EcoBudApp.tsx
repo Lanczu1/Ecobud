@@ -4,6 +4,7 @@ import {
   RefreshControl,
   ScrollView,
   View,
+  StyleSheet,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -69,8 +70,6 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         onCheckUsernameAvailability={(displayName) => model.handleCheckUsernameAvailability(displayName)}
       />
     );
-  } else if (model.activeOverlay) {
-    content = <OverlayRouter model={model} />;
   } else {
     content = (
       <SafeAreaView style={styles.safeArea}>
@@ -114,6 +113,11 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   return (
     <View style={styles.actionHost}>
       {content}
+      {model.activeOverlay && (
+        <View style={StyleSheet.absoluteFill}>
+          <OverlayRouter model={model} />
+        </View>
+      )}
       <ActionOverlayWrapper visible={model.actionOverlayVisible} label={model.actionOverlayLabel} />
     </View>
   );

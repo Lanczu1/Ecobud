@@ -5,8 +5,10 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
+  Animated,
 } from 'react-native';
-import { type LessonWithProgress } from '../../shared/api/ecobudApi';
+import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
@@ -31,46 +33,88 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
   }
 
   if (status === 'seen') {
-    return 'Seen';
+    return 'Viewed';
   }
 
   return 'Not Started';
 };
 
 export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
+  const animatedProgress = React.useRef(new Animated.Value(0)).current;
+  const [displayProgress, setDisplayProgress] = React.useState(0);
+
+  React.useEffect(() => {
+    animatedProgress.addListener(({ value }) => {
+      setDisplayProgress(Math.round(value));
+    });
+    
+    Animated.timing(animatedProgress, {
+      toValue: Math.max(lesson.progress, 0),
+      duration: 1500,
+      useNativeDriver: false,
+    }).start();
+    
+    return () => {
+      animatedProgress.removeAllListeners();
+    };
+  }, [lesson.progress]);
+
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="book-outline" size={18} color="#126027" />
-        </View>
-        <View style={styles.statusPill}>
-          <Text style={styles.statusText}>{getStatusLabel(lesson.status)}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.title}>{lesson.title}</Text>
-      <Text style={styles.description}>{lesson.description}</Text>
-
-      {lesson.author && (
-        <View style={styles.authorRow}>
-          <Ionicons name="person-circle-outline" size={16} color="#6B7A75" />
-          <Text style={styles.authorText}>Verified by {lesson.author.displayName}</Text>
+      {lesson.imageUrl && lesson.imageUrl !== 'null' && lesson.imageUrl !== 'undefined' ? (
+        <Image 
+          source={{ uri: `${ecobudApiOrigin}${lesson.imageUrl}` }}
+          style={{ width: '100%', height: 160, borderRadius: 16, marginBottom: 16 }}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={{ width: '100%', height: 160, borderRadius: 16, marginBottom: 16, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 64, opacity: 0.7 }}>📖</Text>
         </View>
       )}
 
-      <View style={styles.progressRow}>
-        <Text style={styles.progressLabel}>Progress</Text>
-        <Text style={styles.progressValue}>{lesson.progress}%</Text>
+      <Text style={styles.title}>{lesson.title}</Text>
+      
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <Text style={{ fontSize: 13, color: '#6B7A75', fontWeight: '700' }}>
+          🔖 {lesson.category || 'General'}  •  🟢 {lesson.difficulty || 'Beginner'}  •  ⏱ {lesson.durationMinutes || 8} min
+        </Text>
       </View>
 
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, lesson.progress))}%` }]} />
+      <Text style={[styles.description, { marginBottom: 16, lineHeight: 20 }]} numberOfLines={3}>
+        {lesson.description}
+      </Text>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+        <Text style={{ fontSize: 14, color: '#126027', fontWeight: '900', backgroundColor: '#E6F4EC', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, overflow: 'hidden' }}>
+          🍃 +{lesson.pointsReward || 10} Eco points
+        </Text>
       </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.actionText}>{getActionLabel(lesson.status)}</Text>
-        <Ionicons name="arrow-forward" size={18} color="#126027" />
+      <View style={{ 
+        marginTop: 4, 
+        paddingTop: 16, 
+        paddingBottom: 16,
+        borderTopWidth: 1, 
+        borderTopColor: '#F0F5F2', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <Text style={{ color: '#126027', fontSize: 16, fontWeight: '800' }}>
+          {getActionLabel(lesson.status)}
+        </Text>
+      </View>
+
+      {/* Sleek Progress Bar */}
+      <View style={{ height: 4, backgroundColor: '#F0F5F2', width: '100%', position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+        <Animated.View style={{
+          height: '100%',
+          backgroundColor: '#126027',
+          width: animatedProgress.interpolate({
+            inputRange: [0, 100],
+            outputRange: ['0%', '100%']
+          })
+        }} />
       </View>
     </TouchableOpacity>
   );
@@ -87,6 +131,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -125,6 +170,62 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#6B7A75',
     marginBottom: 18,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  metaBadgeTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  metaBadgePoints: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  metaBadgeDifficulty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  metaEmoji: {
+    fontSize: 14,
+  },
+  metaBadgeTextTime: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  metaBadgeTextPoints: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  metaBadgeTextDifficulty: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
   },
   progressRow: {
     flexDirection: 'row',

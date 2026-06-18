@@ -65,17 +65,23 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormData>(
     initial
       ? {
-          title: initial.title,
-          description: initial.description,
-          location: initial.location,
-          date: new Date(initial.date).toISOString().slice(0, 16),
-          capacity: initial.capacity,
-          pointsReward: initial.pointsReward,
-        }
+        title: initial.title,
+        description: initial.description,
+        location: initial.location,
+        date: new Date(initial.date).toISOString().slice(0, 16),
+        capacity: initial.capacity,
+        pointsReward: initial.pointsReward,
+      }
       : emptyForm
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 280);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,17 +90,18 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
       return;
     }
     setSaving(true); setErr('');
-    try { await onSave(form); onClose(); }
+    try { await onSave(form); handleClose(); }
     catch (e: any) { setErr(e.message || 'Failed to save.'); }
     finally { setSaving(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className={`absolute -inset-[300px] bg-black/60 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} />
+      <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}>
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Event' : 'Create Event'}</h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
@@ -125,7 +132,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
+            <button type="button" onClick={handleClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
             <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-60 flex items-center justify-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {saving ? 'Saving…' : (initial ? 'Update Event' : 'Create Event')}
@@ -243,70 +250,70 @@ export function Events() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-reveal delay-280">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
-                <div className="flex items-start justify-between">
-                  <Skeleton className="h-6 w-48" />
-                  <Skeleton className="h-6 w-20 rounded-full" />
-                </div>
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-2 w-full rounded-full" />
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+              <div className="flex items-start justify-between">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-6 w-20 rounded-full" />
               </div>
-            ))
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-2 w-full rounded-full" />
+            </div>
+          ))
           : filtered.map(event => {
-              const fillPct = Math.min(100, Math.round((event.registrations.length / event.capacity) * 100));
-              const status = getEventStatus(event);
-              return (
-                <div key={event.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 p-5 group">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center text-2xl">
-                        🌿
-                      </div>
-                      <div>
-                        <h3 className="font-serif font-bold text-gray-900">{event.title}</h3>
-                        <p className="text-xs text-gray-400">By {event.managedBy.name}</p>
-                      </div>
+            const fillPct = Math.min(100, Math.round((event.registrations.length / event.capacity) * 100));
+            const status = getEventStatus(event);
+            return (
+              <div key={event.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 p-5 group">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center text-2xl">
+                      🌿
                     </div>
-                    <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${statusColors[status]}`}>{status}</span>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />{event.location}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleDateString()}</span>
-                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
-                  </div>
-
-                  {/* Capacity bar */}
-                  <div className="mb-4">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                      <span className="flex items-center gap-1"><Users className="w-3 h-3" />{event.registrations.length} attending</span>
-                      <span>{fillPct}% full ({event.capacity} cap.)</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${fillPct >= 90 ? 'bg-red-400' : fillPct >= 70 ? 'bg-orange-400' : 'bg-green-400'}`}
-                        style={{ width: `${fillPct}%` }}
-                      />
+                    <div>
+                      <h3 className="font-serif font-bold text-gray-900">{event.title}</h3>
+                      <p className="text-xs text-gray-400">By {event.managedBy.name}</p>
                     </div>
                   </div>
+                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${statusColors[status]}`}>{status}</span>
+                </div>
 
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button onClick={() => { setEditing(event); setModal('edit'); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
-                      <Edit3 className="w-3 h-3" />Edit
-                    </button>
-                    <button onClick={() => handleDelete(event.id)} disabled={deleting === event.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
-                      {deleting === event.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    </button>
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <MapPin className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />{event.location}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
+                </div>
+
+                {/* Capacity bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                    <span className="flex items-center gap-1"><Users className="w-3 h-3" />{event.registrations.length} attending</span>
+                    <span>{fillPct}% full ({event.capacity} cap.)</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${fillPct >= 90 ? 'bg-red-400' : fillPct >= 70 ? 'bg-orange-400' : 'bg-green-400'}`}
+                      style={{ width: `${fillPct}%` }}
+                    />
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <button onClick={() => { setEditing(event); setModal('edit'); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
+                    <Edit3 className="w-3 h-3" />Edit
+                  </button>
+                  <button onClick={() => handleDelete(event.id)} disabled={deleting === event.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
+                    {deleting === event.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
       </div>
 
       {!loading && filtered.length === 0 && (
