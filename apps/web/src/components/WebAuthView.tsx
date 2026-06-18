@@ -48,7 +48,7 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
   };
 
   return (
-    <div className="auth-shell" style={{ position: 'relative', overflow: 'hidden' }}>
+    <div className="auth-shell animate-fade-in" style={{ position: 'relative', overflow: 'hidden' }}>
       <video
         autoPlay
         loop

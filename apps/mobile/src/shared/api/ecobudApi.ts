@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import { NativeModules, Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import type {
   PresenceAppState,
   PresenceConnectionState,
@@ -131,18 +132,46 @@ export interface PresenceSyncRequest {
 export interface DashboardData {
   streak: number;
   ecoPoints: number;
+  ecoCoins: number;
   weeklyGoal: number;
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  correctAnswer: string;
 }
 
 export interface LessonWithProgress {
   id: string;
   title: string;
   description: string;
+  category?: string;
+  difficulty?: string;
   content: string;
   is_published: boolean;
   created_at: string;
   progress: number;
+  videoTimestamp?: number;
   status: 'not_started' | 'seen' | 'completed';
+  imageUrl?: string | null;
+  videoUrl?: string | null;
+  transcript?: string | null;
+  pointsReward?: number;
+  durationMinutes?: number;
+  hasQuiz?: boolean;
+  quizQuestions?: QuizQuestion[];
+  pages?: {
+    id: string;
+    title: string;
+    description: string;
+    content: string;
+    order: number;
+  }[];
   author?: {
     id: string;
     name: string;
@@ -161,6 +190,9 @@ export interface ChallengeWithProgress {
   ecoCoinReward: number;
   imageUrl?: string | null;
   badgeLabel?: string | null;
+  type: string;
+  aiDetectionTargets?: string[];
+  aiMinimumConfidence?: number;
   progressPercentage?: number;
   deadlineLabel?: string;
   progress?: {
@@ -186,6 +218,7 @@ export interface HabitSummary {
 export interface TrackerData {
   month: string;
   currentStreak: number;
+  points: number;
   weeklyGoalProgress: number;
   completedDays: string[];
   todayHabits: HabitItem[];
@@ -334,6 +367,39 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   return data as T;
 };
 
+const uploadFileAsync = async <T>(path: string, token: string, uri: string) => {
+  try {
+    const uploadUrl = `${API_BASE}${path}`;
+    const uploadType = (FileSystem as any).FileSystemUploadType?.MULTIPART ?? (FileSystem as any).UploadType?.MULTIPART ?? 1;
+    
+    const response = await FileSystem.uploadAsync(uploadUrl, uri, {
+      httpMethod: 'POST',
+      uploadType: uploadType,
+      fieldName: 'image',
+      mimeType: 'image/jpeg',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    let data;
+    try {
+      data = JSON.parse(response.body);
+    } catch {}
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(typeof data?.message === 'string' ? data.message : 'Unexpected ECOBUD API error.');
+    }
+
+    return data as T;
+  } catch (err: any) {
+    if (err.message && (err.message.includes('Unexpected ECOBUD API error') || err.message.includes('Active AI challenge'))) {
+      throw err;
+    }
+    throw new Error(err.message || `Unable to reach the ECOBUD API at ${apiOrigin}.`);
+  }
+};
+
 export const ecobudApi = {
   login: (email: string, password: string) =>
     request<SessionPayload>('/auth/login', {
@@ -385,10 +451,16 @@ export const ecobudApi = {
       body: { lessonId },
     }),
   completeLesson: (token: string, lessonId: string) =>
-    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number }>('/learn/complete', {
+    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number }>('/learn/complete', {
       method: 'POST',
       token,
       body: { lessonId },
+    }),
+  updateLessonProgress: (token: string, lessonId: string, progress: number, videoTimestamp?: number) =>
+    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number }>('/learn/progress', {
+      method: 'POST',
+      token,
+      body: { lessonId, progress, videoTimestamp },
     }),
   resetKnowledgePoints: (token: string, userId?: string) =>
     request<{ userId: string; previousKnowledgePoints: number; knowledgePoints: number }>('/user/reset-knowledge', {
@@ -398,6 +470,24 @@ export const ecobudApi = {
     }),
   fetchChallenges: (token: string) =>
     request<{ items: ChallengeWithProgress[] }>('/challenges/active', { token }),
+  analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
+    uploadFileAsync<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>(
+      `/challenges/${challengeId}/analyze`,
+      token,
+      uri
+    ),
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string) =>
+    request(`/challenges/${challengeId}/submissions`, {
+      method: 'POST',
+      token,
+      body: { proofUrl },
+    }),
+  claimChallengeReward: (token: string, challengeId: string) =>
+    request(`/challenges/${challengeId}/claim`, {
+      method: 'POST',
+      token,
+      body: {},
+    }),
   updateChallengeProgress: (token: string, challengeId: string, progressPercentage: number) =>
     request(`/challenges/${challengeId}/progress`, {
       method: 'POST',

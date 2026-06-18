@@ -3,72 +3,39 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-enum UserRole {
-  user
-  moderator
-  admin
-}
-
-enum UserStatus {
-  active
-  pending
-  suspended
-}
-
-enum ChallengeSubmissionStatus {
-  pending
-  approved
-  rejected
-  flagged
-}
-
-enum PresenceAppState {
-  active
-  background
-  inactive
-}
-
-enum PresenceConnectionState {
-  online
-  offline
-  reconnecting
-  stale
-}
-
 model User {
-  id             String     @id @default(cuid())
-  name           String
-  email          String     @unique
-  passwordHash   String     @map("password")
-  role           UserRole   @default(user)
-  status         UserStatus @default(pending)
-  points         Int        @default(0)
-  currentStreak  Int        @default(0) @map("streak_count")
-  lastActionDate DateTime?  @map("last_action_date")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
-
+  id                           String                @id @default(cuid())
+  name                         String
+  email                        String                @unique
+  passwordHash                 String                @map("password")
+  role                         UserRole              @default(user)
+  status                       UserStatus            @default(pending)
+  points                       Int                   @default(0)
+  currentStreak                Int                   @default(0) @map("streak_count")
+  lastActionDate               DateTime?             @map("last_action_date")
+  createdAt                    DateTime              @default(now()) @map("created_at")
+  updatedAt                    DateTime              @updatedAt @map("updated_at")
+  reviewedChallengeSubmissions ChallengeSubmission[] @relation("ModeratedChallengeSubmissions")
+  challengeSubmissions         ChallengeSubmission[] @relation("SubmittedChallengeProofs")
+  managedEvents                Event[]               @relation("ManagedEvents")
+  eventRegistrations           EventRegistration[]
+  habitCheckIns                HabitCheckIn[]
   profile                      Profile?
+  updatedSettings              SystemSetting[]       @relation("SystemSettingUpdates")
+  transparencyLogs             TransparencyLog[]
+  badges                       UserBadge[]
+  challengeProgress            UserChallenge[]
+  auditLogs                    AuditLog[]
+  lessonProgress               UserLessonProgress[]
+  authoredLessons              Lesson[]              @relation("LessonAuthor")
+  presenceSessions             PresenceSession[]
   stats                        UserStats?
   weeklyGoal                   UserWeeklyGoal?
-  lessonProgress               UserLessonProgress[]
-  challengeProgress            UserChallenge[]
-  challengeSubmissions         ChallengeSubmission[] @relation("SubmittedChallengeProofs")
-  reviewedChallengeSubmissions ChallengeSubmission[] @relation("ModeratedChallengeSubmissions")
-  badges                       UserBadge[]
-  eventRegistrations           EventRegistration[]
-  transparencyLogs             TransparencyLog[]
-  habitCheckIns                HabitCheckIn[]
-  managedEvents                Event[]               @relation("ManagedEvents")
-  updatedSettings              SystemSetting[]       @relation("SystemSettingUpdates")
-  authoredLessons              Lesson[]              @relation("LessonAuthor")
-  auditLogs                    AuditLog[]
-  presenceSessions             PresenceSession[]
 
   @@map("users")
 }
@@ -85,28 +52,44 @@ model Profile {
 }
 
 model Lesson {
-  id              String               @id @default(cuid())
-  title           String
-  description     String
-  content         String
-  category        String
-  imageUrl        String?
-  videoUrl        String?
-  transcript      String?
-  quizPassingScore Int                 @default(70) @map("quiz_passing_score")
-  durationMinutes Int                  @default(8)
-  rating          Float                @default(4.8)
-  pointsReward    Int                  @default(10)
-  featured        Boolean              @default(false)
-  isPublished     Boolean              @default(false) @map("is_published")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
-  createdById     String?              @map("created_by_id")
-  createdBy       User?                @relation("LessonAuthor", fields: [createdById], references: [id], onDelete: SetNull)
-  progress        UserLessonProgress[]
-  quizQuestions   QuizQuestion[]
+  id               String               @id @default(cuid())
+  title            String
+  description      String
+  content          String
+  category         String
+  imageUrl         String?
+  durationMinutes  Int                  @default(8)
+  rating           Float                @default(4.8)
+  pointsReward     Int                  @default(10)
+  featured         Boolean              @default(false)
+  isPublished      Boolean              @default(false) @map("is_published")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  createdById      String?              @map("created_by_id")
+  quizPassingScore Int                  @default(70) @map("quiz_passing_score")
+  transcript       String?
+  videoUrl         String?
+  difficulty       String               @default("Beginner")
+  pages            LessonPage[]
+  progress         UserLessonProgress[]
+  createdBy        User?                @relation("LessonAuthor", fields: [createdById], references: [id])
+  quizQuestions    QuizQuestion[]
 
   @@map("lessons")
+}
+
+model LessonPage {
+  id          String   @id @default(cuid())
+  lessonId    String   @map("lesson_id")
+  title       String
+  description String
+  content     String
+  order       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lesson_pages")
 }
 
 model QuizQuestion {
@@ -117,7 +100,7 @@ model QuizQuestion {
   optionB       String   @map("option_b")
   optionC       String   @map("option_c")
   optionD       String   @map("option_d")
-  correctAnswer String   @map("correct_answer") // 'A', 'B', 'C', or 'D'
+  correctAnswer String   @map("correct_answer")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   lesson        Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -126,16 +109,17 @@ model QuizQuestion {
 }
 
 model UserLessonProgress {
-  id          String    @id @default(cuid())
-  userId      String    @map("user_id")
-  lessonId    String    @map("lesson_id")
-  status      String    @default("not_started")
-  progress    Int       @default(0)
-  completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  lessonId       String    @map("lesson_id")
+  status         String    @default("not_started")
+  progress       Int       @default(0)
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  videoTimestamp Float     @default(0) @map("video_timestamp")
+  lesson         Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
   @@map("lesson_progress")
@@ -145,6 +129,7 @@ model UserStats {
   userId          String   @id @map("user_id")
   currentStreak   Int      @default(0) @map("current_streak")
   ecoPoints       Int      @default(0) @map("eco_points")
+  ecoCoins        Int      @default(0) @map("eco_coins")
   knowledgePoints Int      @default(0) @map("knowledge_points")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -164,24 +149,24 @@ model UserWeeklyGoal {
 }
 
 model Challenge {
-  id             String                @id @default(cuid())
-  title          String
-  description    String
-  difficulty     String
-  category       String?
-  durationDays   Int
-  expReward      Int                   @default(0)
-  ecoCoinReward  Int                   @default(0)
-  imageUrl       String?
-  badgeLabel     String?
-  active         Boolean               @default(true)
-  type                String                @default("GENERAL")
+  id                  String                @id @default(cuid())
+  title               String
+  description         String
+  difficulty          String
+  category            String?
+  durationDays        Int
+  imageUrl            String?
+  badgeLabel          String?
+  active              Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  ecoCoinReward       Int                   @default(0)
+  expReward           Int                   @default(0)
   aiDetectionTargets  String[]
   aiMinimumConfidence Int?                  @default(80)
-  createdAt           DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  userChallenges UserChallenge[]
-  submissions    ChallengeSubmission[]
+  type                String                @default("GENERAL")
+  submissions         ChallengeSubmission[]
+  userChallenges      UserChallenge[]
 }
 
 model UserChallenge {
@@ -193,8 +178,8 @@ model UserChallenge {
   startedAt          DateTime  @default(now())
   completedAt        DateTime?
   expirationDate     DateTime?
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   challenge          Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, challengeId])
 }
@@ -212,9 +197,9 @@ model ChallengeSubmission {
   reviewedAt     DateTime?                 @map("reviewed_at")
   createdAt      DateTime                  @default(now()) @map("created_at")
   updatedAt      DateTime                  @updatedAt @map("updated_at")
-  user           User                      @relation("SubmittedChallengeProofs", fields: [userId], references: [id], onDelete: Cascade)
   challenge      Challenge                 @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  reviewer       User?                     @relation("ModeratedChallengeSubmissions", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewer       User?                     @relation("ModeratedChallengeSubmissions", fields: [reviewedById], references: [id])
+  user           User                      @relation("SubmittedChallengeProofs", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, challengeId])
 }
@@ -235,8 +220,8 @@ model HabitCheckIn {
   dateKey       String
   pointsAwarded Int
   createdAt     DateTime @default(now())
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   habit         Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, habitId, dateKey])
 }
@@ -256,8 +241,8 @@ model UserBadge {
   userId     String
   badgeId    String
   unlockedAt DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   badge      Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, badgeId])
 }
@@ -287,8 +272,8 @@ model EventRegistration {
   status       String    @default("REGISTERED")
   registeredAt DateTime  @default(now())
   attendedAt   DateTime?
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
 }
@@ -331,23 +316,23 @@ model SystemSetting {
   updatedById String?  @map("updated_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  updatedBy   User?    @relation("SystemSettingUpdates", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy   User?    @relation("SystemSettingUpdates", fields: [updatedById], references: [id])
 }
 
 model PresenceSession {
   sessionId       String                  @id @map("session_id")
   userId          String                  @map("user_id")
   isOnline        Boolean                 @default(true) @map("is_online")
-  connectedAt     DateTime                @default(now()) @db.Timestamptz(3) @map("connected_at")
-  lastSeenAt      DateTime                @default(now()) @db.Timestamptz(3) @map("last_seen_at")
-  updatedAt       DateTime                @updatedAt @db.Timestamptz(3) @map("updated_at")
-  disconnectedAt  DateTime?               @db.Timestamptz(3) @map("disconnected_at")
-  expiresAt       DateTime                @db.Timestamptz(3) @map("expires_at")
+  connectedAt     DateTime                @default(now()) @map("connected_at") @db.Timestamptz(3)
+  lastSeenAt      DateTime                @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  disconnectedAt  DateTime?               @map("disconnected_at") @db.Timestamptz(3)
+  expiresAt       DateTime                @map("expires_at") @db.Timestamptz(3)
   appState        PresenceAppState        @default(active) @map("app_state")
   connectionState PresenceConnectionState @default(online) @map("connection_state")
   user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId], map: "presence_sessions_user_id_idx")
+  @@index([userId])
   @@index([isOnline, expiresAt], map: "presence_sessions_online_expiry_idx")
   @@index([lastSeenAt], map: "presence_sessions_last_seen_idx")
   @@map("presence_sessions")
@@ -357,9 +342,41 @@ model AuditLog {
   id        String   @id @default(cuid())
   action    String
   userId    String?
-  details   String?  @db.Text
+  details   String?
   timestamp DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+enum UserRole {
+  user
+  moderator
+  admin
+}
+
+enum UserStatus {
+  active
+  pending
+  suspended
+}
+
+enum ChallengeSubmissionStatus {
+  pending
+  approved
+  rejected
+  flagged
+}
+
+enum PresenceAppState {
+  active
+  background
+  inactive
+}
+
+enum PresenceConnectionState {
+  online
+  offline
+  reconnecting
+  stale
 }

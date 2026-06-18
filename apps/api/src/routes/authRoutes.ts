@@ -159,6 +159,7 @@ authRoutes.post(
           create: {
             currentStreak: 0,
             ecoPoints: 0,
+            ecoCoins: 0,
             knowledgePoints: 0,
           },
         },

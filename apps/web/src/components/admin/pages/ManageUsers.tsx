@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, UserCheck, UserX, Mail, Shield, MoreVertical, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet } from '../../../utils/adminApi';
+import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
+import { adminGet, adminPost } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 
 interface AdminUser {
   id: string;
@@ -10,14 +11,14 @@ interface AdminUser {
   status: 'active' | 'pending' | 'suspended';
   points: number;
   createdAt: string;
-  isOnline: boolean;
+  lastSeenAt: string | null;
+  isOnlineNow: boolean;
   profile: { displayName: string; avatarUrl: string | null } | null;
 }
 
 const statusColors: Record<string, string> = {
-  active: 'bg-green-50 text-green-700 border-green-100',
-  suspended: 'bg-red-50 text-red-700 border-red-100',
-  pending: 'bg-gray-100 text-gray-500 border-gray-200',
+  online: 'bg-green-50 text-green-700 border-green-100',
+  offline: 'bg-red-50 text-red-700 border-red-100',
 };
 
 const roleColors: Record<string, string> = {
@@ -36,37 +37,112 @@ export function ManageUsers() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [viewTab, setViewTab] = useState<'Members' | 'Staff'>('Members');
+
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const loadUsers = async () => {
+    try {
+      const data = await adminGet<AdminUser[]>('/admin/users');
+      setUsers(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load users.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function load() {
-      try {
-        const data = await adminGet<AdminUser[]>('/admin/users');
-        setUsers(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load users.');
-      } finally {
-        setLoading(false);
+    loadUsers();
+
+    let unsubscribe: () => void;
+    adminRealtimeService.connect({
+      onUsersRefresh: () => {
+        loadUsers();
+      },
+      onPresenceChange: (presence) => {
+        const now = new Date().toISOString();
+        setUsers(prev => prev.map(u => {
+          const isOnlineNow = presence.onlineUserIds.includes(u.id);
+          return {
+            ...u,
+            isOnlineNow,
+            lastSeenAt: isOnlineNow || u.isOnlineNow ? now : u.lastSeenAt
+          };
+        }));
       }
-    }
-    load();
+    }).then(unsub => {
+      unsubscribe = unsub;
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
-  const filtered = useMemo(() =>
-    users.filter(u =>
-      (filterStatus === 'All' || u.status === filterStatus.toLowerCase()) &&
-      (u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
-    ), [users, search, filterStatus]);
+  const handleBlock = async (userId: string) => {
+    setProcessingId(userId);
+    try {
+      await adminPost(`/admin/users/${userId}/block`, {});
+      // The realtime subscription will trigger a refresh, but we can optimistically update
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'suspended' } : u));
+    } catch (err: any) {
+      alert(err.message || 'Failed to block user');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-  const totalActive = users.filter(u => u.status === 'active').length;
-  const totalSuspended = users.filter(u => u.status === 'suspended').length;
+  const handleUnblock = async (userId: string) => {
+    setProcessingId(userId);
+    try {
+      await adminPost(`/admin/users/${userId}/unblock`, {});
+      // Optimistic update
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active' } : u));
+    } catch (err: any) {
+      alert(err.message || 'Failed to unblock user');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const filtered = useMemo(() =>
+    users.filter(u => {
+      const matchTab = viewTab === 'Members' ? u.role === 'user' : (u.role === 'admin' || u.role === 'moderator');
+      const matchStatus = filterStatus === 'All' || (filterStatus === 'Online' ? u.isOnlineNow : !u.isOnlineNow);
+      const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
+      return matchTab && matchStatus && matchSearch;
+    }), [users, search, filterStatus, viewTab]);
+
+  const tabUsers = users.filter(u => viewTab === 'Members' ? u.role === 'user' : (u.role === 'admin' || u.role === 'moderator'));
+  const totalOnline = tabUsers.filter(u => u.isOnlineNow).length;
+  const totalOffline = tabUsers.filter(u => !u.isOnlineNow).length;
 
   return (
     <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-serif font-bold text-gray-900">Manage Users</h2>
-          <p className="text-gray-500 text-sm mt-1">View and manage all registered EcoBud members</p>
+      {/* Header and Tabs */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-serif font-bold text-gray-900">Manage {viewTab}</h2>
+            <p className="text-gray-500 text-sm mt-1">View and manage {viewTab === 'Members' ? 'registered EcoBud members' : 'system administrators and moderators'}</p>
+          </div>
+        </div>
+        
+        {/* Tabs */}
+        <div className="flex gap-6 border-b border-gray-200">
+          <button 
+            onClick={() => setViewTab('Members')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${viewTab === 'Members' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          >
+            Members
+          </button>
+          <button 
+            onClick={() => setViewTab('Staff')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${viewTab === 'Staff' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          >
+            Staff (Admins & Moderators)
+          </button>
         </div>
       </div>
 
@@ -80,9 +156,9 @@ export function ManageUsers() {
       {/* Stats Row */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total Users', value: loading ? '—' : users.length, color: 'text-gray-900', bg: 'bg-white' },
-          { label: 'Active', value: loading ? '—' : totalActive, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Suspended', value: loading ? '—' : totalSuspended, color: 'text-red-600', bg: 'bg-red-50' },
+          { label: `Total ${viewTab}`, value: loading ? '—' : tabUsers.length, color: 'text-gray-900', bg: 'bg-white' },
+          { label: 'Online', value: loading ? '—' : totalOnline, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Offline', value: loading ? '—' : totalOffline, color: 'text-gray-600', bg: 'bg-gray-50' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
@@ -108,7 +184,7 @@ export function ManageUsers() {
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
-          {['All', 'Active', 'Suspended', 'Pending'].map(f => (
+          {['All', 'Online', 'Offline'].map(f => (
             <button
               key={f}
               onClick={() => setFilterStatus(f)}
@@ -128,9 +204,10 @@ export function ManageUsers() {
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-4">User</th>
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Role</th>
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Status</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Points</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Joined</th>
-              <th className="px-4 py-4"></th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Last Active</th>
+              {viewTab === 'Members' && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Points</th>}
+              {viewTab === 'Members' && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Joined</th>}
+              {viewTab === 'Members' && <th className="px-4 py-4"></th>}
             </tr>
           </thead>
           <tbody className="">
@@ -148,9 +225,10 @@ export function ManageUsers() {
                     </td>
                     <td className="px-4 py-4"><Skeleton className="h-6 w-16 rounded-full" /></td>
                     <td className="px-4 py-4"><Skeleton className="h-6 w-16 rounded-full" /></td>
-                    <td className="px-4 py-4"><Skeleton className="h-4 w-12" /></td>
-                    <td className="px-4 py-4"><Skeleton className="h-4 w-20" /></td>
-                    <td className="px-4 py-4"></td>
+                    <td className="px-4 py-4"><Skeleton className="h-4 w-24" /></td>
+                    {viewTab === 'Members' && <td className="px-4 py-4"><Skeleton className="h-4 w-12" /></td>}
+                    {viewTab === 'Members' && <td className="px-4 py-4"><Skeleton className="h-4 w-20" /></td>}
+                    {viewTab === 'Members' && <td className="px-4 py-4"></td>}
                   </tr>
                 ))
               : filtered.map(user => (
@@ -165,8 +243,12 @@ export function ManageUsers() {
                               <span className="text-xs font-bold text-green-700">{user.name.charAt(0).toUpperCase()}</span>
                             </div>
                           )}
-                          {user.isOnline && (
+                          {user.isOnlineNow ? (
                             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
+                          ) : (
+                            (user.role === 'admin' || user.role === 'moderator') && (
+                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+                            )
                           )}
                         </div>
                         <div>
@@ -182,30 +264,64 @@ export function ManageUsers() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${statusColors[user.status]}`}>
-                        {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
+                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${user.isOnlineNow ? statusColors.online : statusColors.offline}`}>
+                        {user.isOnlineNow ? 'Active' : 'Offline'}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-sm font-bold text-green-600">{user.points.toLocaleString()}</span>
-                      <span className="text-xs text-gray-400 ml-1">pts</span>
+                      {user.isOnlineNow ? (
+                        <span className="text-xs font-medium text-green-600">Right now</span>
+                      ) : user.lastSeenAt ? (
+                        <span className="text-xs text-gray-500">
+                          {new Date(user.lastSeenAt).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">Never</span>
+                      )}
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-500">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Activate">
-                          <UserCheck className="w-4 h-4" />
-                        </button>
-                        <button className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Suspend">
-                          <UserX className="w-4 h-4" />
-                        </button>
-                        <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors">
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+                    {viewTab === 'Members' && (
+                      <td className="px-4 py-4">
+                        <span className="text-sm font-bold text-green-600">{user.points.toLocaleString()}</span>
+                        <span className="text-xs text-gray-400 ml-1">pts</span>
+                      </td>
+                    )}
+                    {viewTab === 'Members' && (
+                      <td className="px-4 py-4 text-sm text-gray-500">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </td>
+                    )}
+                    {viewTab === 'Members' && (
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {user.status !== 'suspended' && (
+                            <button 
+                              onClick={() => handleBlock(user.id)}
+                              disabled={processingId === user.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50 rounded-lg transition-colors"
+                            >
+                              {processingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+                              Block
+                            </button>
+                          )}
+                          {user.status === 'suspended' && (
+                            <button 
+                              onClick={() => handleUnblock(user.id)}
+                              disabled={processingId === user.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 disabled:opacity-50 rounded-lg transition-colors"
+                            >
+                              {processingId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                              Unblock
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
           </tbody>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BookOpen, Plus, Edit3, Trash2, Clock, Star, Eye, Search, AlertCircle, X, Loader2 } from 'lucide-react';
-import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch } from '../../../utils/adminApi';
+import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2 } from 'lucide-react';
+import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
 
 interface Lesson {
   id: string;
@@ -8,6 +8,7 @@ interface Lesson {
   description: string;
   content: string;
   category: string;
+  difficulty?: string;
   durationMinutes: number;
   rating: number;
   pointsReward: number;
@@ -34,20 +35,34 @@ function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-gray-200 rounded-lg ${className}`} />;
 }
 
+function OptimizedInput({ value, onChange, ...props }: any) {
+  const [localValue, setLocalValue] = useState(value);
+  useEffect(() => { setLocalValue(value); }, [value]);
+  return <input value={localValue} onChange={e => setLocalValue(e.target.value)} onBlur={() => onChange(localValue)} {...props} />;
+}
+
+function OptimizedTextArea({ value, onChange, ...props }: any) {
+  const [localValue, setLocalValue] = useState(value);
+  useEffect(() => { setLocalValue(value); }, [value]);
+  return <textarea value={localValue} onChange={e => setLocalValue(e.target.value)} onBlur={() => onChange(localValue)} {...props} />;
+}
+
 interface FormDataState {
   title: string;
   description: string;
   content: string;
   category: string;
+  difficulty: string;
   isPublished: boolean;
   quizPassingScore: number;
   pointsReward: number;
   transcript?: string | null;
   durationMinutes: number;
   quizQuestions: any[];
+  pages: any[];
 }
 
-const emptyForm: FormDataState = { title: '', description: '', content: '', category: 'General', isPublished: false, quizPassingScore: 70, pointsReward: 10, durationMinutes: 8, quizQuestions: [] };
+const emptyForm: FormDataState = { title: '', description: '', content: '', category: 'General', difficulty: 'Beginner', isPublished: false, quizPassingScore: 70, pointsReward: 10, durationMinutes: 8, quizQuestions: [], pages: [{ title: '', description: '', content: '' }] };
 
 interface ModalProps {
   onClose: () => void;
@@ -58,7 +73,7 @@ interface ModalProps {
 function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormDataState>(
     initial
-      ? { title: initial.title, description: initial.description, content: initial.content, category: initial.category, isPublished: initial.isPublished, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes || 8 }
+      ? { title: initial.title, description: initial.description, content: initial.content, category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes || 8, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }] }
       : emptyForm
   );
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -69,9 +84,16 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const [videoKey, setVideoKey] = useState(Date.now());
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [enableVideo, setEnableVideo] = useState(initial ? !!initial.videoUrl : false);
+  const [enableQuiz, setEnableQuiz] = useState(initial ? (initial.quizQuestions && initial.quizQuestions.length > 0) : false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -97,7 +119,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
     if (file) {
       const video = document.createElement('video');
       video.preload = 'metadata';
-      video.onloadedmetadata = function() {
+      video.onloadedmetadata = function () {
         window.URL.revokeObjectURL(video.src);
         const durationMinutes = Math.max(1, Math.ceil(video.duration / 60));
         setForm(f => ({ ...f, durationMinutes }));
@@ -116,7 +138,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
     try {
       const fd = new FormData();
       fd.append('video', videoFile);
-      const res = await adminPostForm<{transcript: string, videoUrl: string}>('/admin/transcribe', fd);
+      const res = await adminPostForm<{ transcript: string, videoUrl: string }>('/admin/transcribe', fd);
       setForm(f => ({ ...f, transcript: res.transcript }));
       setUploadedVideoUrl(res.videoUrl);
     } catch (error: any) {
@@ -149,9 +171,37 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
     });
   };
 
+  const handleAddPage = () => {
+    setForm(f => ({ ...f, pages: [...f.pages, { title: '', description: '', content: '' }] }));
+  };
+
+  const handleUpdatePage = (index: number, field: string, value: string) => {
+    setForm(f => {
+      const p = [...f.pages];
+      p[index] = { ...p[index], [field]: value };
+      return { ...f, pages: p };
+    });
+  };
+
+  const handleRemovePage = (index: number) => {
+    if (!confirm('Are you sure you want to remove this page?')) return;
+    setForm(f => {
+      const p = [...f.pages];
+      p.splice(index, 1);
+      return { ...f, pages: p };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title || !form.description || !form.content) { setErr('Title, description and content are required.'); return; }
+    if (!form.title.trim() || !form.description.trim()) { 
+      setErr('Title and description are required.'); 
+      return; 
+    }
+    if (form.pages.length === 0) {
+      setErr('At least one lesson page is required.');
+      return;
+    }
     setSaving(true);
     setErr('');
     try {
@@ -160,23 +210,27 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
       formData.append('description', form.description);
       formData.append('content', form.content);
       formData.append('category', form.category);
+      formData.append('difficulty', form.difficulty);
       formData.append('isPublished', String(form.isPublished));
-      formData.append('quizPassingScore', String(form.quizPassingScore));
+      formData.append('quizPassingScore', enableQuiz ? String(form.quizPassingScore) : '0');
       formData.append('pointsReward', String(form.pointsReward));
-      
-      const hasVideo = !!(videoFile || uploadedVideoUrl || (initial?.videoUrl && !removeVideo));
-      formData.append('durationMinutes', hasVideo ? String(form.durationMinutes) : '0');
-      
-      formData.append('quizQuestions', JSON.stringify(form.quizQuestions));
-      if (form.transcript) formData.append('transcript', form.transcript);
-      if (uploadedVideoUrl) {
-        formData.append('uploadedVideoUrl', uploadedVideoUrl);
-      } else if (videoFile) {
-        formData.append('video', videoFile);
+
+      const hasVideoSubmit = enableVideo && !!(videoFile || uploadedVideoUrl || (initial?.videoUrl && !removeVideo));
+      formData.append('durationMinutes', hasVideoSubmit ? String(form.durationMinutes) : '0');
+
+      formData.append('quizQuestions', JSON.stringify(enableQuiz ? form.quizQuestions : []));
+      formData.append('pages', JSON.stringify(form.pages));
+      if (enableVideo && form.transcript) formData.append('transcript', form.transcript);
+      if (enableVideo) {
+        if (uploadedVideoUrl) {
+          formData.append('uploadedVideoUrl', uploadedVideoUrl);
+        } else if (videoFile) {
+          formData.append('video', videoFile);
+        }
       }
       if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
       if (removeThumbnail) formData.append('removeThumbnail', 'true');
-      if (removeVideo) formData.append('removeVideo', 'true');
+      if (!enableVideo || removeVideo) formData.append('removeVideo', 'true');
 
       await onSave(formData);
       handleClose();
@@ -188,40 +242,69 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
   };
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}>
-      <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className={`absolute -inset-[100px] bg-black/60 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} />
+      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-[960px] max-h-[600px] flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}>
         <div className="flex flex-shrink-0 items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Lesson' : 'Add Learning Content'}</h2>
           <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 flex flex-col md:flex-row gap-8">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto lesson-modal-scroll p-6 flex flex-col md:flex-row gap-8" style={{ scrollbarGutter: 'stable' }}>
           <div className="flex-1 space-y-4">
-          {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" placeholder="Lesson title" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all resize-none" placeholder="Short description" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
-            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} rows={5} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all resize-none font-mono text-xs" placeholder="Full lesson content..." />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
+            {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all">
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+              <OptimizedInput value={form.title} onChange={(val: string) => setForm(f => ({ ...f, title: val }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" placeholder="Lesson title" />
             </div>
-            { (videoFile || uploadedVideoUrl || (initial?.videoUrl && !removeVideo)) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
-                <input type="number" min="1" value={form.durationMinutes} onChange={e => setForm(f => ({ ...f, durationMinutes: parseInt(e.target.value) || 1 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+              <OptimizedTextArea value={form.description} onChange={(val: string) => setForm(f => ({ ...f, description: val }))} rows={2} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all resize-none" placeholder="Short description" />
+            </div>
+            <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-5 shadow-sm mb-4 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-800">Lesson Pages</h3>
+                  <p className="text-xs text-gray-500 mt-1">Split the lesson into multiple swipeable pages.</p>
+                </div>
+                <button type="button" onClick={handleAddPage} className="text-xs text-green-600 font-semibold hover:text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">+ Add Page</button>
               </div>
-            )}
+              <div className="space-y-4">
+                {form.pages.map((p, i) => (
+                  <div key={i} className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Page {i + 1}</span>
+                      <button type="button" onClick={() => handleRemovePage(i)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                      <textarea value={p.content} onChange={(e) => handleUpdatePage(i, 'content', e.target.value)} rows={5} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all resize-none font-mono text-xs" placeholder="Full lesson content..." />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all">
+                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
+                <select value={form.difficulty} onChange={e => setForm(f => ({ ...f, difficulty: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all">
+                  <option>Beginner</option>
+                  <option>Intermediate</option>
+                  <option>Advanced</option>
+                </select>
+              </div>
+              {enableVideo && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
+                  <OptimizedInput type="number" min="1" value={form.durationMinutes} onChange={(val: string) => setForm(f => ({ ...f, durationMinutes: parseInt(val) || 1 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+                </div>
+              )}
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Thumbnail Image</label>
               <div className="flex items-center gap-2">
@@ -234,103 +317,133 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
               </div>
               {initial?.imageUrl && !thumbnailFile && !removeThumbnail && (
                 <p className="mt-2 text-xs text-green-600 font-medium">
-                  ✓ Current image: <a href={initial.imageUrl} target="_blank" rel="noreferrer" className="underline hover:text-green-700" title={initial.imageUrl}>{initial.imageUrl.split('/').pop()}</a>
+                  ✓ Current image: <a href={`${API_HOST}${initial.imageUrl}`} target="_blank" rel="noreferrer" className="underline hover:text-green-700" title={initial.imageUrl}>{initial.imageUrl.split('/').pop()}</a>
                 </p>
               )}
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Video</label>
-            <div className="flex items-center gap-2">
-              <input key={videoKey} type="file" accept="video/*" onChange={(e) => { handleVideoSelect(e); setRemoveVideo(false); }} className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
-              {(videoFile || (initial?.videoUrl && !removeVideo)) && (
-                <button type="button" onClick={clearVideo} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors flex-shrink-0" title="Remove file">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            {initial?.videoUrl && !videoFile && !isTranscribing && !removeVideo && (
-              <p className="mt-2 text-xs text-green-600 font-medium">
-                ✓ Current video: <a href={initial.videoUrl} target="_blank" rel="noreferrer" className="underline hover:text-green-700" title={initial.videoUrl}>{initial.videoUrl.split('/').pop()}</a>
-              </p>
-            )}
-          </div>
-          {isTranscribing ? (
-            <div className="flex items-center gap-2 text-sm text-green-600 font-medium bg-green-50 p-3 rounded-xl">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Generating transcript from video...
-            </div>
-          ) : (
-            <div className="p-4 border border-gray-200 rounded-xl shadow-sm bg-white space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-bold text-gray-800">Transcript</label>
-                {videoFile && (
-                  <button type="button" onClick={handleGenerateTranscript} className="text-xs px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 hover:text-green-700 hover:border-green-200 transition-colors shadow-sm flex items-center gap-2">
-                    {form.transcript ? 'Regenerate Transcript' : 'Generate Transcript'}
-                  </button>
-                )}
-              </div>
-              {form.transcript ? (
-                <textarea value={form.transcript} onChange={e => setForm(f => ({ ...f, transcript: e.target.value }))} rows={4} className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl font-mono text-gray-600 resize-none focus:outline-none focus:ring-2 focus:ring-green-200" placeholder="Transcript text..." />
-              ) : (
-                <div className="w-full px-4 py-6 text-sm text-center border border-dashed border-gray-200 rounded-xl text-gray-500 bg-gray-50/50 flex flex-col items-center justify-center gap-2">
-                  <p>{videoFile ? 'Click the button above to extract text from the selected video.' : 'Select a video to generate a transcript or paste one manually.'}</p>
+            <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-4 shadow-sm space-y-4 mb-4 mt-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableVideo ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setEnableVideo(!enableVideo)}>
+                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enableVideo ? 'translate-x-4' : ''}`} />
+                </div>
+                <span className="text-sm font-semibold text-gray-700">Include Video in Lesson</span>
+              </label>
+
+              {enableVideo && (
+                <div className="space-y-4 pt-3 border-t border-gray-200/60">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Video File</label>
+                    <div className="flex items-center gap-2">
+                      <input key={videoKey} type="file" accept="video/*" onChange={(e) => { handleVideoSelect(e); setRemoveVideo(false); }} className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
+                      {(videoFile || (initial?.videoUrl && !removeVideo)) && (
+                        <button type="button" onClick={clearVideo} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors flex-shrink-0" title="Remove file">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    {initial?.videoUrl && !videoFile && !isTranscribing && !removeVideo && (
+                      <p className="mt-2 text-xs text-green-600 font-medium">
+                        ✓ Current video: <a href={`${API_HOST}${initial.videoUrl}`} target="_blank" rel="noreferrer" className="underline hover:text-green-700" title={initial.videoUrl}>{initial.videoUrl.split('/').pop()}</a>
+                      </p>
+                    )}
+                  </div>
+                  {isTranscribing ? (
+                    <div className="flex items-center gap-2 text-sm text-green-600 font-medium bg-green-50 p-3 rounded-xl">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating transcript from video...
+                    </div>
+                  ) : (
+                    <div className="p-4 border border-gray-200 rounded-xl shadow-sm bg-white space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-sm font-bold text-gray-800">Transcript</label>
+                        {videoFile && (
+                          <button type="button" onClick={handleGenerateTranscript} className="text-xs px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 hover:text-green-700 hover:border-green-200 transition-colors shadow-sm flex items-center gap-2">
+                            {form.transcript ? 'Regenerate Transcript' : 'Generate Transcript'}
+                          </button>
+                        )}
+                      </div>
+                      {form.transcript ? (
+                        <OptimizedTextArea value={form.transcript} onChange={(val: string) => setForm(f => ({ ...f, transcript: val }))} rows={5} className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl font-mono text-gray-600 resize-none focus:outline-none focus:ring-2 focus:ring-green-200" placeholder="Transcript text..." />
+                      ) : (
+                        <div className="w-full px-4 py-6 text-sm text-center border border-dashed border-gray-200 rounded-xl text-gray-500 bg-gray-50/50 flex flex-col items-center justify-center gap-2">
+                          <p>{videoFile ? 'Click the button above to extract text from the selected video.' : 'Select a video to generate a transcript or paste one manually.'}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-
+            <div className="h-2 w-full flex-shrink-0" />
           </div>
 
           <div className="w-full md:w-[400px] flex flex-col gap-6">
             <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-800">Quiz Configuration</h3>
-              <button type="button" onClick={handleAddQuestion} className="text-xs text-green-600 font-semibold hover:text-green-700">+ Add Question</button>
-            </div>
-            <div className="flex gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label>
-                <input type="number" min="0" max="100" value={form.quizPassingScore} onChange={e => setForm(f => ({ ...f, quizPassingScore: parseInt(e.target.value) || 0 }))} className="w-32 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">EXP Points</label>
-                <input type="number" min="0" value={form.pointsReward} onChange={e => setForm(f => ({ ...f, pointsReward: parseInt(e.target.value) || 0 }))} className="w-32 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              {form.quizQuestions.map((q, i) => (
-                <div key={i} className="p-4 border border-gray-200 rounded-xl bg-gray-50/50">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">Question {i + 1}</span>
-                    <button type="button" onClick={() => handleRemoveQuestion(i)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableQuiz ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => {
+                  if (enableQuiz && form.quizQuestions.length > 0) {
+                    if (!confirm('Disable quiz and remove all questions?')) return;
+                    setForm(f => ({ ...f, quizQuestions: [] }));
+                  }
+                  setEnableQuiz(!enableQuiz);
+                }}>
+                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enableQuiz ? 'translate-x-4' : ''}`} />
+                </div>
+                <span className="text-sm font-semibold text-gray-800">Include Quiz Configuration</span>
+              </label>
+
+              {enableQuiz && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-gray-800">Quiz Configuration</h3>
+                    <button type="button" onClick={handleAddQuestion} className="text-xs text-green-600 font-semibold hover:text-green-700">+ Add Question</button>
                   </div>
-                  <input value={q.question} onChange={e => handleUpdateQuestion(i, 'question', e.target.value)} placeholder="Question text" className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <input value={q.optionA} onChange={e => handleUpdateQuestion(i, 'optionA', e.target.value)} placeholder="Option A" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                    <input value={q.optionB} onChange={e => handleUpdateQuestion(i, 'optionB', e.target.value)} placeholder="Option B" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                    <input value={q.optionC} onChange={e => handleUpdateQuestion(i, 'optionC', e.target.value)} placeholder="Option C" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                    <input value={q.optionD} onChange={e => handleUpdateQuestion(i, 'optionD', e.target.value)} placeholder="Option D" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label>
+                    <OptimizedInput type="number" min="0" max="100" value={form.quizPassingScore} onChange={(val: string) => setForm(f => ({ ...f, quizPassingScore: parseInt(val) || 0 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-700">Correct Answer:</label>
-                    <select value={q.correctAnswer} onChange={e => handleUpdateQuestion(i, 'correctAnswer', e.target.value)} className="px-2 py-1 text-sm border border-gray-200 rounded-lg">
-                      {['A', 'B', 'C', 'D'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
+
+                  <div className="space-y-4">
+                    {form.quizQuestions.map((q, i) => (
+                      <div key={i} className="p-4 border border-gray-200 rounded-xl bg-gray-50/50">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-gray-500 uppercase">Question {i + 1}</span>
+                          <button type="button" onClick={() => handleRemoveQuestion(i)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                        <OptimizedInput value={q.question} onChange={(val: string) => handleUpdateQuestion(i, 'question', val)} placeholder="Question text" className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <OptimizedInput value={q.optionA} onChange={(val: string) => handleUpdateQuestion(i, 'optionA', val)} placeholder="Option A" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                          <OptimizedInput value={q.optionB} onChange={(val: string) => handleUpdateQuestion(i, 'optionB', val)} placeholder="Option B" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                          <OptimizedInput value={q.optionC} onChange={(val: string) => handleUpdateQuestion(i, 'optionC', val)} placeholder="Option C" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                          <OptimizedInput value={q.optionD} onChange={(val: string) => handleUpdateQuestion(i, 'optionD', val)} placeholder="Option D" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-medium text-gray-700">Correct Answer:</label>
+                          <select value={q.correctAnswer} onChange={e => handleUpdateQuestion(i, 'correctAnswer', e.target.value)} className="px-2 py-1 text-sm border border-gray-200 rounded-lg">
+                            {['A', 'B', 'C', 'D'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.isPublished ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, isPublished: !f.isPublished }))}>
-                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isPublished ? 'translate-x-4' : ''}`} />
-                </div>
-                <span className="text-sm font-medium text-gray-700">Publish immediately</span>
-              </label>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Eco Points Reward</label>
+                <OptimizedInput type="number" min="0" value={form.pointsReward} onChange={(val: string) => setForm(f => ({ ...f, pointsReward: parseInt(val) || 0 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+              </div>
+              
+              <div className="pt-2 border-t border-gray-100">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.isPublished ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, isPublished: !f.isPublished }))}>
+                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isPublished ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">Publish immediately</span>
+                </label>
+              </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={handleClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
                 <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
@@ -470,58 +583,62 @@ export function LearningContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-reveal delay-280">
         {loading
           ? Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <Skeleton className="h-28 rounded-none" />
-                <div className="p-5 space-y-3">
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
-                  <Skeleton className="h-4 w-full" />
-                </div>
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <Skeleton className="h-28 rounded-none" />
+              <div className="p-5 space-y-3">
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-full" />
               </div>
-            ))
+            </div>
+          ))
           : filtered.map(item => (
-              <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group">
-                <div className="bg-gradient-to-br from-green-50 to-emerald-100 h-32 flex items-center justify-center text-4xl relative overflow-hidden">
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
-                  ) : (
-                    "📚"
-                  )}
-                </div>
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[item.isPublished ? 'Published' : 'Draft']}`}>
-                      {item.isPublished ? 'Published' : 'Draft'}
-                    </span>
+            <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-100 h-32 flex items-center justify-center text-4xl relative overflow-hidden">
+                {item.imageUrl && item.imageUrl !== 'null' && item.imageUrl !== 'undefined' ? (
+                  <img src={item.imageUrl.startsWith('http') ? item.imageUrl : `${API_HOST}${item.imageUrl}`} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <BookOpen className="w-12 h-12 text-green-600 opacity-50" />
+                )}
+              </div>
+              <div className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[item.isPublished ? 'Published' : 'Draft']}`}>
+                    {item.isPublished ? 'Published' : 'Draft'}
+                  </span>
+                  <div className="flex gap-2">
                     <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full border bg-blue-50 text-blue-700 border-blue-100">
                       {item.category}
                     </span>
-                  </div>
-                  <h3 className="font-serif font-bold text-gray-900 mb-1 leading-snug">{item.title}</h3>
-                  <p className="text-xs text-gray-500 mb-3 line-clamp-2">{item.description}</p>
-                  <div className="flex items-center gap-3 text-xs text-gray-500 mb-4">
-                    {item.durationMinutes > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{item.durationMinutes}m</span>}
-                    <span className="flex items-center gap-1"><Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />{item.rating.toFixed(1)}</span>
-                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{item.pointsReward} pts</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleTogglePublish(item)}
-                      disabled={toggling === item.id}
-                      className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all ${item.isPublished ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'bg-green-50 text-green-700 hover:bg-green-100'} disabled:opacity-60`}
-                    >
-                      {toggling === item.id ? '…' : item.isPublished ? 'Unpublish' : 'Publish'}
-                    </button>
-                    <button onClick={() => { setEditing(item); setModal('edit'); }} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
-                      <Edit3 className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
-                      {deleting === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    </button>
+                    <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full border bg-amber-50 text-amber-700 border-amber-100">
+                      {item.difficulty || 'Beginner'}
+                    </span>
                   </div>
                 </div>
+                <h3 className="font-serif font-bold text-gray-900 mb-1 leading-snug">{item.title}</h3>
+                <p className="text-xs text-gray-500 mb-3 line-clamp-2">{item.description}</p>
+                <div className="flex items-center gap-3 text-xs text-gray-500 mb-4">
+                  {item.durationMinutes > 0 && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{item.durationMinutes}m</span>}
+                  <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{item.pointsReward} pts</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleTogglePublish(item)}
+                    disabled={toggling === item.id}
+                    className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all ${item.isPublished ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'bg-green-50 text-green-700 hover:bg-green-100'} disabled:opacity-60`}
+                  >
+                    {toggling === item.id ? '…' : item.isPublished ? 'Unpublish' : 'Publish'}
+                  </button>
+                  <button onClick={() => { setEditing(item); setModal('edit'); }} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
+                    {deleting === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  </button>
+                </div>
               </div>
-            ))}
+            </div>
+          ))}
       </div>
 
       {!loading && filtered.length === 0 && (

@@ -72,6 +72,7 @@ export class GamificationService {
         actionType: `Lesson completed: ${lesson.title}`,
         knowledgePointsAwarded: lesson.pointsReward,
         pointsAwarded: lesson.pointsReward,
+        ecoCoinsAwarded: lesson.pointsReward,
         metadata: {
           lessonId: lesson.id,
           category: lesson.category,
@@ -121,28 +122,76 @@ export class GamificationService {
         },
         update: {
           progressPercentage,
-          status: progressPercentage >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
-          completedAt: progressPercentage >= 100 ? new Date() : null,
+          status: progressPercentage >= 100 ? 'UNCLAIMED' : 'IN_PROGRESS',
         },
         create: {
           userId,
           challengeId,
           progressPercentage,
-          status: progressPercentage >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
-          completedAt: progressPercentage >= 100 ? new Date() : null,
+          status: progressPercentage >= 100 ? 'UNCLAIMED' : 'IN_PROGRESS',
           expirationDate,
         },
       });
 
-      if (currentProgress.status !== 'COMPLETED' || progressPercentage < 100) {
-        return {
-          alreadyCompleted: false,
-          awardedBadges: [],
-          pointsAwarded: 0,
-          progressPercentage: currentProgress.progressPercentage,
-          streak: null,
-        };
+      return {
+        alreadyCompleted: false,
+        awardedBadges: [],
+        pointsAwarded: 0,
+        progressPercentage: currentProgress.progressPercentage,
+        streak: null,
+      };
+    });
+
+    await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
+      actorRole: 'user',
+      actorUserId: userId,
+      entityId: challengeId,
+      reason: progressPercentage >= 100 ? 'challenge-unclaimed' : 'challenge-progress-updated',
+    });
+
+    return result;
+  }
+
+  async claimChallenge(userId: string, challengeId: string) {
+    const result = await this.database.$transaction(async (tx) => {
+      const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
+      if (!challenge) {
+        throw new HttpError(404, 'Challenge not found.');
       }
+
+      const userChallenge = await tx.userChallenge.findUnique({
+        where: { userId_challengeId: { userId, challengeId } }
+      });
+
+      const submission = await tx.challengeSubmission.findUnique({
+        where: { userId_challengeId: { userId, challengeId } }
+      });
+
+      if (submission) {
+        if (submission.status !== 'approved') {
+          throw new HttpError(400, 'Submission is not approved yet.');
+        }
+      } else {
+        if (!userChallenge || userChallenge.status !== 'UNCLAIMED') {
+          throw new HttpError(400, 'Challenge is not ready to be claimed.');
+        }
+      }
+
+      if (userChallenge && userChallenge.status === 'COMPLETED') {
+        throw new HttpError(400, 'Reward already claimed.');
+      }
+
+      await tx.userChallenge.upsert({
+        where: { userId_challengeId: { userId, challengeId } },
+        update: { status: 'COMPLETED', completedAt: new Date(), progressPercentage: 100 },
+        create: {
+          userId,
+          challengeId,
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          progressPercentage: 100,
+        },
+      });
 
       return this.awardAction(tx, {
         userId,
@@ -160,7 +209,7 @@ export class GamificationService {
       actorRole: 'user',
       actorUserId: userId,
       entityId: challengeId,
-      reason: progressPercentage >= 100 ? 'challenge-completed' : 'challenge-progress-updated',
+      reason: 'challenge-completed',
     });
 
     return result;
@@ -319,8 +368,8 @@ export class GamificationService {
       if (action.ecoCoinsAwarded && action.ecoCoinsAwarded > 0) {
         await tx.userStats.upsert({
           where: { userId: user.id },
-          update: { ecoPoints: { increment: action.ecoCoinsAwarded } },
-          create: { userId: user.id, ecoPoints: action.ecoCoinsAwarded, currentStreak: nextStreak, knowledgePoints: 0 },
+          update: { ecoCoins: { increment: action.ecoCoinsAwarded } },
+          create: { userId: user.id, ecoCoins: action.ecoCoinsAwarded, currentStreak: nextStreak, knowledgePoints: 0, ecoPoints: 0 },
         });
       }
 

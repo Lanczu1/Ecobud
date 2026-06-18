@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 import { homeService } from '../services/homeService';
 import {
   type AppTab,
@@ -11,8 +11,10 @@ import {
   type DashboardData,
   type EcoEvent,
   type LeaderboardData,
+  type LearnFilterType,
   type LessonWithProgress,
   type ProfileData,
+  type QuizQuestion,
   type RewardsData,
   type SessionPayload,
   type TrackerData,
@@ -32,12 +34,12 @@ import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMut
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 
-
-
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
 const SESSION_STORAGE_KEY = 'ecobud.mobile.session';
 const ONBOARDING_STORAGE_KEY = 'ecobud.mobile.onboarding';
+const VIEWED_MISSIONS_KEY = 'ecobud.mobile.viewedMissions';
+const RECENT_VIEWED_KEY = 'ecobud.mobile.recentViewedMission';
 
 // ─── Internal Utilities ─────────────────────────────────────────────────────────
 
@@ -53,6 +55,24 @@ function shiftMonth(month: string, offset: number) {
   return `${nextYear}-${nextMonth}`;
 }
 
+// EcoBud uses Philippines (Asia/Manila, UTC+8) calendar days. Intl keeps the
+// key correct regardless of the device's own timezone.
+const formatPhParts = (date: Date, options: Intl.DateTimeFormatOptions) => {
+  const parts = new Intl.DateTimeFormat('en-PH', {
+    timeZone: 'Asia/Manila',
+    ...options,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return get;
+};
+
+const getPhDateKey = (date: Date = new Date()): string => {
+  const get = formatPhParts(date, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return `${get('year')}-${get('month')}-${get('day')}`;
+};
+
+const getPhMonthKey = (date: Date = new Date()): string => getPhDateKey(date).slice(0, 7);
+
 // ─── Hook ───────────────────────────────────────────────────────────────────────
 
 export function useHomeDashboard(): EcoBudMobileModel {
@@ -64,8 +84,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [activeTab, setActiveTabState] = useState<AppTab>('home');
   const [activeOverlay, setActiveOverlayState] = useState<OverlayScreen>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeWithProgress | null>(null);
+  const [recentViewedMission, setRecentViewedMission] = useState<ChallengeWithProgress | null>(null);
+  const [viewedMissionIds, setViewedMissionIds] = useState<string[]>([]);
   const [learnSearch, setLearnSearch] = useState('');
+  const [learnFilter, setLearnFilter] = useState<LearnFilterType>('all');
+  const [learnCategory, setLearnCategory] = useState<string>('All Categories');
   const [assistantInput, setAssistantInput] = useState('');
+  const [claimRewardData, setClaimRewardData] = useState<{ points: number; coins: number } | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [authEmail, setAuthEmail] = useState('lanczu@ecobud.app');
   const [authPassword, setAuthPassword] = useState('eco12345');
@@ -89,7 +115,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [rewards, setRewards] = useState<RewardsData | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
   const [events, setEvents] = useState<EcoEvent[]>([]);
+
+
   const [transparency, setTransparency] = useState<TransparencyFeed | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [quizCompleted, setQuizCompleted] = useState(false);
+  const [quizScore, setQuizScore] = useState(0);
+  const [earnedPoints, setEarnedPoints] = useState(0);
+  const [earnedCoins, setEarnedCoins] = useState(0);
+  const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
   const isReadOnlyExperience = useMemo(() => isReadOnlySession(session), [session]);
   const presence = usePresence(session, isReadOnlyExperience);
 
@@ -99,15 +136,24 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   const filteredLessons = useMemo(() => {
-    const query = learnSearch.trim().toLowerCase();
-    if (!query) {
-      return lessons;
+    let result = lessons;
+    
+    if (learnCategory !== 'All Categories') {
+      result = result.filter((lesson) => lesson.category === learnCategory || (!lesson.category && learnCategory === 'General'));
     }
 
-    return lessons.filter((lesson) =>
+    if (learnFilter !== 'all') {
+      result = result.filter((lesson) => lesson.status === learnFilter);
+    }
+    const query = learnSearch.trim().toLowerCase();
+    if (!query) {
+      return result;
+    }
+
+    return result.filter((lesson) =>
       `${lesson.title} ${lesson.description} ${lesson.content}`.toLowerCase().includes(query),
     );
-  }, [learnSearch, lessons]);
+  }, [learnSearch, learnFilter, learnCategory, lessons]);
 
   const todaysCompletedHabits = useMemo(
     () => habitsToday?.items.filter((item) => item.completedToday).length ?? 0,
@@ -136,6 +182,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setTransparency(null);
     setAssistantMessages([]);
     setSelectedLessonId(null);
+    setSelectedChallenge(null);
+    // Intentionally keep viewed missions across logouts
   }, []);
 
   const isRetryableOfflineActionError = useCallback((error: unknown) => {
@@ -432,6 +480,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
   useEffect(() => {
     const bootstrap = async () => {
       try {
+        const savedViewedIds = await mobileStorage.getItem(VIEWED_MISSIONS_KEY);
+        if (savedViewedIds) {
+          try { setViewedMissionIds(JSON.parse(savedViewedIds)); } catch (e) {}
+        }
+        
+        const savedRecent = await mobileStorage.getItem(RECENT_VIEWED_KEY);
+        if (savedRecent) {
+          try { setRecentViewedMission(JSON.parse(savedRecent)); } catch (e) {}
+        }
+
         const savedSession = await mobileStorage.getItem(SESSION_STORAGE_KEY);
         if (savedSession) {
           try {
@@ -466,6 +524,19 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
     void syncQueuedOfflineActions(session);
   }, [presence.hasUsableInternet, session, syncQueuedOfflineActions]);
+
+  useEffect(() => {
+    if (recentViewedMission && challenges.length > 0) {
+      const updated = challenges.find((c) => c.id === recentViewedMission.id);
+      if (!updated) {
+        setRecentViewedMission(null);
+        void mobileStorage.removeItem(RECENT_VIEWED_KEY);
+      } else if (updated.progress?.status !== recentViewedMission.progress?.status) {
+        setRecentViewedMission(updated);
+        void mobileStorage.setItem(RECENT_VIEWED_KEY, JSON.stringify(updated));
+      }
+    }
+  }, [challenges, recentViewedMission]);
 
   const ensureSession = useCallback(() => {
     if (!session) {
@@ -632,7 +703,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       return;
     }
 
-    let cleanup = () => undefined;
+    let cleanup: () => void = () => undefined;
     let isMounted = true;
 
     void realtimeService
@@ -696,7 +767,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         });
 
         if (mutationMode === 'online') {
-          await hydrateApp(activeSession, true);
+          // Intentionally omitting hydrateApp here to avoid race conditions with updateLessonProgress
         }
       } catch (error) {
         Alert.alert('Unable to open lesson', error instanceof Error ? error.message : 'Please try again.');
@@ -713,6 +784,21 @@ export function useHomeDashboard(): EcoBudMobileModel {
     runMutationWithOfflineFallback,
     runWithActionLoader,
   ]);
+
+  const openChallengeMission = useCallback((challenge: ChallengeWithProgress) => {
+    setSelectedChallenge(challenge);
+    
+    setRecentViewedMission(challenge);
+    void mobileStorage.setItem(RECENT_VIEWED_KEY, JSON.stringify(challenge));
+    
+    setViewedMissionIds((prev) => {
+      const next = prev.includes(challenge.id) ? prev : [...prev, challenge.id];
+      void mobileStorage.setItem(VIEWED_MISSIONS_KEY, JSON.stringify(next));
+      return next;
+    });
+    
+    setActiveOverlayState('ai_mission');
+  }, []);
 
   const handleCompleteLesson = useCallback(async () => {
     await runWithActionLoader('Verifying lesson completion...', async () => {
@@ -742,7 +828,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         if (mutationMode === 'online') {
           await hydrateApp(activeSession, true);
-          Alert.alert('Lesson completed', 'You earned new ECO points and your progress has been verified.');
+          const points = selectedLesson?.pointsReward ?? 10;
+          setEarnedPoints(points);
+          setCompletionCelebrationType('lesson');
+          setActiveOverlayState('lessonCompleted');
         }
       } catch (error) {
         Alert.alert('Unable to complete lesson', error instanceof Error ? error.message : 'Please try again.');
@@ -758,6 +847,122 @@ export function useHomeDashboard(): EcoBudMobileModel {
     runWithActionLoader,
     selectedLessonId,
   ]);
+
+  const handleUpdateLessonProgress = useCallback(async (lessonId: string, progress: number, videoTimestamp?: number) => {
+    try {
+      const activeSession = ensureSession();
+      // Optimistically update locally without a loading overlay
+      const clampedProgress = Math.min(100, Math.max(0, Math.round(progress)));
+      
+      // Fire and forget server update
+      homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress, videoTimestamp).catch((err) => {
+        console.error('[handleUpdateLessonProgress] API error:', err);
+      });
+      
+      // Update local state so it's snappy
+      setLessons((current) => 
+        current.map((lesson) => {
+          if (lesson.id === lessonId) {
+            return { 
+              ...lesson, 
+              progress: Math.max(lesson.progress, clampedProgress),
+              videoTimestamp: videoTimestamp ?? lesson.videoTimestamp,
+            };
+          }
+          return lesson;
+        })
+      );
+    } catch (error) {
+      console.warn('[handleUpdateLessonProgress] error:', error);
+    }
+  }, [ensureSession]);
+
+  const startQuiz = useCallback(() => {
+    const questions = selectedLesson?.quizQuestions ?? [];
+    setQuizQuestions(questions);
+    setCurrentQuestionIndex(0);
+    setSelectedAnswer(null);
+    setQuizAnswers({});
+    setQuizCompleted(false);
+    setQuizScore(0);
+    setActiveOverlayState('quiz');
+  }, [selectedLesson, setActiveOverlayState]);
+
+  const selectAnswer = useCallback((questionId: string, answer: string) => {
+    setSelectedAnswer(answer);
+    setQuizAnswers((prev) => ({ ...prev, [questionId]: answer }));
+  }, []);
+
+  const nextQuestion = useCallback(() => {
+    if (currentQuestionIndex < quizQuestions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setSelectedAnswer(null);
+    }
+  }, [currentQuestionIndex, quizQuestions.length]);
+
+  const submitQuiz = useCallback(async () => {
+    await runWithActionLoader('Submitting quiz...', async () => {
+      try {
+        const activeSession = ensureSession();
+        if (!selectedLessonId) return;
+
+        let correctCount = 0;
+        quizQuestions.forEach((q) => {
+          if (quizAnswers[q.id] === q.correctAnswer) {
+            correctCount++;
+          }
+        });
+
+        const score = quizQuestions.length > 0 
+          ? Math.round((correctCount / quizQuestions.length) * 100) 
+          : 0;
+
+        setQuizScore(score);
+        setQuizCompleted(true);
+
+        if (score >= (selectedLesson?.hasQuiz ? 70 : 0)) {
+          await homeService.completeLesson(activeSession.token, selectedLessonId);
+          await hydrateApp(activeSession, true);
+          const points = selectedLesson?.pointsReward ?? 10;
+          setEarnedPoints(points);
+          setCompletionCelebrationType('quiz');
+          setActiveOverlayState('lessonCompleted');
+        } else {
+          Alert.alert('Quiz Failed', `You scored ${score}%. You need at least 70% to pass. Please try again.`);
+          setQuizCompleted(false);
+          setCurrentQuestionIndex(0);
+          setSelectedAnswer(null);
+          setQuizAnswers({});
+        }
+      } catch (error) {
+        Alert.alert('Unable to submit quiz', error instanceof Error ? error.message : 'Please try again.');
+      }
+    });
+  }, [
+    quizQuestions,
+    quizAnswers,
+    selectedLessonId,
+    selectedLesson?.hasQuiz,
+    ensureSession,
+    hydrateApp,
+    runWithActionLoader,
+  ]);
+
+  const resetQuiz = useCallback(() => {
+    setQuizQuestions([]);
+    setCurrentQuestionIndex(0);
+    setSelectedAnswer(null);
+    setQuizAnswers({});
+    setQuizCompleted(false);
+    setQuizScore(0);
+  }, []);
+
+  const showLessonComplete = useCallback((type: 'quiz' | 'lesson') => {
+    const points = selectedLesson?.pointsReward ?? 10;
+    setEarnedPoints(points);
+    setCompletionCelebrationType(type);
+    setActiveOverlayState('lessonCompleted');
+  }, [selectedLesson, setActiveOverlayState]);
 
   const handleChallengeProgress = useCallback(
     async (challenge: ChallengeWithProgress, nextProgress: number) => {
@@ -819,9 +1024,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
               type: 'habit-check-in',
               payload: {
                 habitId,
-                dateKey: habitsToday?.dateKey ?? new Date().toISOString().slice(0, 10),
+                dateKey: habitsToday?.dateKey ?? getPhDateKey(),
               },
-              dedupeKey: `habit-check-in:${habitsToday?.dateKey ?? new Date().toISOString().slice(0, 10)}:${habitId}`,
+              dedupeKey: `habit-check-in:${habitsToday?.dateKey ?? getPhDateKey()}:${habitId}`,
             },
             onlineAction: async () => {
               await homeService.checkInHabit(activeSession.token, habitId);
@@ -935,7 +1140,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       await runWithActionLoader(offset < 0 ? 'Loading previous month...' : 'Loading next month...', async () => {
         try {
           const activeSession = ensureSession();
-          const baseMonth = tracker?.month ?? new Date().toISOString().slice(0, 7);
+          const baseMonth = tracker?.month ?? getPhMonthKey();
           const targetMonth = shiftMonth(baseMonth, offset);
           setRefreshing(true);
           const nextTracker = await homeService.getTracker(activeSession.token, targetMonth);
@@ -951,9 +1156,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   const setActiveTab = useCallback(
-    (tab: AppTab) => {
+    (tab: AppTab, silent: boolean = false) => {
       if (isReadOnlyExperience && isReadOnlyRestrictedTab(tab)) {
         showReadOnlyAccessAlert();
+        return;
+      }
+
+      if (silent) {
+        setActiveTabState(tab);
         return;
       }
 
@@ -984,21 +1194,120 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      const labels: Record<Exclude<OverlayScreen, null>, string> = {
+      if (screen === 'claimParticles') {
+        setActiveOverlayState('claimParticles');
+        return;
+      }
+
+      const labels: Record<Exclude<OverlayScreen, 'claimParticles' | null>, string> = {
         assistant: 'Opening EcoBud Assistant',
         events: 'Opening Eco Events',
         lesson: 'Opening lesson details',
+        quiz: 'Opening quiz',
+        lessonCompleted: 'Lesson completed',
         leaderboard: 'Opening leaderboard',
         rewards: 'Opening rewards',
         transparency: 'Opening transparency feed',
+        ai_mission: 'Opening mission',
       };
 
-      flashActionLoader(`${labels[screen]}...`, () => {
+      // We explicitly excluded claimParticles above, so we must cast screen to the narrowed type
+      flashActionLoader(`${labels[screen as Exclude<OverlayScreen, 'claimParticles' | null>]}...`, () => {
         setActiveOverlayState(screen);
       });
     },
     [flashActionLoader, isReadOnlyExperience],
   );
+
+  const analyzeChallengeImage = useCallback(async (challengeId: string, uri: string) => {
+    try {
+      const activeSession = ensureSession();
+      const result = await homeService.analyzeChallengeImage(activeSession.token, challengeId, uri);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }, [ensureSession]);
+
+  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string) => {
+    await runWithActionLoader('Submitting to admin...', async () => {
+      try {
+        const activeSession = ensureSession();
+        setRefreshing(true);
+        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl);
+        // Optimistically update the challenge state to pending
+        setChallenges((currentChallenges) =>
+          currentChallenges.map((challenge) =>
+            challenge.id === challengeId
+              ? {
+                  ...challenge,
+                  progress: {
+                    progressPercentage: challenge.progress?.progressPercentage || 0,
+                    status: 'pending',
+                  },
+                }
+              : challenge
+          )
+        );
+      } catch (error) {
+        Alert.alert('Submission failed', error instanceof Error ? error.message : 'Please try again.');
+      } finally {
+        setRefreshing(false);
+      }
+    });
+  }, [ensureSession, runWithActionLoader]);
+
+  const handleClaimChallengeReward = useCallback(async (challengeId: string) => {
+    try {
+      const activeSession = ensureSession();
+      setRefreshing(true);
+
+      const challengeToClaim = challenges.find((c) => c.id === challengeId);
+      
+      if (challengeToClaim) {
+        setClaimRewardData({
+          points: challengeToClaim.expReward || 0,
+          coins: challengeToClaim.ecoCoinReward || 0,
+        });
+      }
+
+      setActiveOverlayState('claimParticles');
+
+      if (challengeToClaim) {
+        setDashboard((prev) => 
+          prev ? { 
+            ...prev, 
+            ecoCoins: prev.ecoCoins + (challengeToClaim.ecoCoinReward || 0),
+            ecoPoints: prev.ecoPoints + (challengeToClaim.expReward || 0)
+          } : null
+        );
+      }
+
+      setChallenges((currentChallenges) =>
+        currentChallenges.map((challenge) =>
+          challenge.id === challengeId
+            ? {
+                ...challenge,
+                progress: {
+                  progressPercentage: 100,
+                  status: 'completed',
+                },
+              }
+            : challenge
+        )
+      );
+
+      await homeService.claimChallengeReward(activeSession.token, challengeId);
+      
+      await hydrateApp(activeSession, true);
+    } catch (error) {
+      Alert.alert('Claim failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [challenges, ensureSession, hydrateApp]);
+
+
 
   const userDisplayName =
     profile?.profile?.displayName ??
@@ -1022,8 +1331,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
     activeTab,
     activeOverlay,
     selectedLesson,
+    selectedChallenge,
+    recentViewedMission,
+    viewedMissionIds,
+    quizQuestions,
+    currentQuestionIndex,
+    selectedAnswer,
+    quizAnswers,
+    quizCompleted,
+    quizScore,
+    earnedPoints,
+    earnedCoins,
+    completionCelebrationType,
     learnSearch,
+    learnFilter,
+    learnCategory,
     assistantInput,
+    claimRewardData,
     assistantMessages,
     authEmail,
     authPassword,
@@ -1051,6 +1375,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setActiveTab,
     setActiveOverlay,
     setLearnSearch,
+    setLearnFilter,
+    setLearnCategory,
     setAssistantInput,
     setAuthEmail,
     setAuthPassword,
@@ -1063,12 +1389,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleCheckUsernameAvailability,
     handleLogout,
     refreshEverything,
+    openChallengeMission,
     openLesson,
     handleCompleteLesson,
+    handleUpdateLessonProgress,
+    startQuiz,
+    selectAnswer,
+    nextQuestion,
+    submitQuiz,
+    resetQuiz,
+    showLessonComplete,
     handleChallengeProgress,
     handleHabitCheckIn,
     handleJoinEvent,
     handleAssistantSend,
     loadTrackerMonth,
+    analyzeChallengeImage,
+    handleSubmitChallengeProof,
+    handleClaimChallengeReward,
   };
 }

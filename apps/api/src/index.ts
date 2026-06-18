@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import path from 'path';
 import { authRoutes } from './routes/authRoutes';
 import { userRoutes } from './routes/userRoutes';
 import { lessonRoutes } from './routes/lessonRoutes';
@@ -30,6 +31,9 @@ app.use(
   }),
 );
 app.use(express.json());
+
+// Serve uploads directory statically
+app.use('/uploads', express.static(path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads')));
 
 app.get('/api/health', (_req, res) => {
   return res.json({

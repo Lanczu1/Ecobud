@@ -114,6 +114,7 @@ export function TopNavbar({ model, title, showBack }: { model: EcoBudMobileModel
       showBack={showBack}
       title={title}
       onBack={() => model.setActiveOverlay(null)}
+      onEventsPress={() => model.setActiveOverlay('events')}
     />
   );
 }
@@ -248,25 +249,57 @@ export function OverlayScaffold({
   title,
   subtitle,
   onBack,
+  headerImage,
+  topRightAccessory,
+  topProgressBar,
   children,
 }: {
   title: string;
   subtitle: string;
   onBack: () => void;
+  headerImage?: string;
+  topRightAccessory?: React.ReactNode;
+  topProgressBar?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <View style={styles.overlayShell}>
-      <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={styles.overlayHeader}>
-        <SafeAreaView>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Feather name="arrow-left" size={22} color="#FFF" />
-            <Text style={styles.backLabel}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.overlayTitle}>{title}</Text>
-          <Text style={styles.overlaySubtitle}>{subtitle}</Text>
-        </SafeAreaView>
-      </LinearGradient>
+      {headerImage ? (
+        <ImageBackground
+          source={{ uri: headerImage }}
+          style={[styles.overlayHeader, { backgroundColor: '#0C5E54' }]}
+          imageStyle={{ opacity: 0.4 }}
+        >
+          <LinearGradient colors={['rgba(7,28,25,0.6)', 'rgba(12,94,84,0.7)', 'rgba(23,160,126,0.9)']} style={StyleSheet.absoluteFill} />
+          {topProgressBar && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>{topProgressBar}</View>}
+          <SafeAreaView>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                <Feather name="arrow-left" size={22} color="#FFF" />
+                <Text style={styles.backLabel}>Back</Text>
+              </TouchableOpacity>
+              {topRightAccessory}
+            </View>
+            <Text style={styles.overlayTitle}>{title}</Text>
+            <Text style={styles.overlaySubtitle}>{subtitle}</Text>
+          </SafeAreaView>
+        </ImageBackground>
+      ) : (
+        <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={styles.overlayHeader}>
+          {topProgressBar && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>{topProgressBar}</View>}
+          <SafeAreaView>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <TouchableOpacity onPress={onBack} style={styles.backButton}>
+                <Feather name="arrow-left" size={22} color="#FFF" />
+                <Text style={styles.backLabel}>Back</Text>
+              </TouchableOpacity>
+              {topRightAccessory}
+            </View>
+            <Text style={styles.overlayTitle}>{title}</Text>
+            <Text style={styles.overlaySubtitle}>{subtitle}</Text>
+          </SafeAreaView>
+        </LinearGradient>
+      )}
       <View style={styles.overlayBody}>{children}</View>
     </View>
   );
@@ -325,9 +358,25 @@ export function SurfaceCard({ children, style }: { children: React.ReactNode; st
 }
 
 export function ProgressBar({ progress }: { progress: number }) {
+  const widthAnim = React.useRef(new Animated.Value(progress)).current;
+
+  React.useEffect(() => {
+    Animated.timing(widthAnim, {
+      toValue: Math.max(0, Math.min(100, progress)),
+      duration: 1000,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progress, widthAnim]);
+
+  const width = widthAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%']
+  });
+
   return (
     <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, progress))}%` }]} />
+      <Animated.View style={[styles.progressFill, { width }]} />
     </View>
   );
 }
@@ -453,18 +502,96 @@ export function BottomTabBar({
     { key: 'profile', label: 'Profile', icon: 'person-outline' },
   ];
 
-  return (
-    <View style={styles.bottomBar}>
-      {items.map((item) => {
-        const isActive = item.key === activeTab;
+  const activeIndex = items.findIndex((item) => item.key === activeTab);
+  const [barWidth, setBarWidth] = React.useState(0);
+  const slideAnim = useRef(new Animated.Value(activeIndex)).current;
 
+  React.useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: activeIndex,
+      useNativeDriver: true,
+      tension: 120,
+      friction: 12,
+    }).start();
+  }, [activeIndex, slideAnim]);
+
+  const onLayout = (event: any) => {
+    const { width } = event.nativeEvent.layout;
+    setBarWidth(width);
+  };
+
+  const tabWidth = barWidth / 5;
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1, 2, 3, 4],
+    outputRange: [0, tabWidth, 2 * tabWidth, 3 * tabWidth, 4 * tabWidth],
+  });
+
+  return (
+    <View style={styles.bottomBar} onLayout={onLayout}>
+      {barWidth > 0 && (
+        <Animated.View
+          style={[
+            styles.tabActivePill,
+            {
+              width: tabWidth - 16,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      )}
+      {items.map((item) => {
         return (
-          <TouchableOpacity key={item.key} onPress={() => onChange(item.key)} style={styles.bottomBarItem}>
-            <Ionicons name={item.icon} size={24} color={isActive ? ecoTheme.colors.primaryDark : '#9BA2A7'} />
-            <Text style={[styles.bottomBarLabel, isActive && styles.bottomBarLabelActive]}>{item.label}</Text>
-          </TouchableOpacity>
+          <TabItem
+            key={item.key}
+            item={item}
+            isActive={item.key === activeTab}
+            onPress={() => onChange(item.key)}
+          />
         );
       })}
     </View>
+  );
+}
+
+function TabItem({
+  item,
+  isActive,
+  onPress,
+}: {
+  item: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap };
+  isActive: boolean;
+  onPress: () => void;
+}) {
+  const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
+  const activeIconName = isActive
+    ? (item.icon.replace('-outline', '') as any)
+    : item.icon;
+
+  React.useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: isActive ? 1.05 : 1.0,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 8,
+    }).start();
+  }, [isActive, scaleAnim]);
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+      style={styles.bottomBarItem}
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', gap: 2 }}>
+        <Ionicons
+          name={activeIconName}
+          size={22}
+          color={isActive ? ecoTheme.colors.primaryDark : '#9BA2A7'}
+        />
+        <Text style={[styles.bottomBarLabel, isActive && styles.bottomBarLabelActive]}>
+          {item.label}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
   );
 }

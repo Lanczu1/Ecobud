@@ -6,6 +6,7 @@ import {
   type LeaderboardData,
   type LessonWithProgress,
   type ProfileData,
+  type QuizQuestion,
   type RewardsData,
   type SessionPayload,
   type TrackerData,
@@ -21,6 +22,7 @@ export type {
   LeaderboardData,
   LessonWithProgress,
   ProfileData,
+  QuizQuestion,
   RewardsData,
   SessionPayload,
   TrackerData,
@@ -31,8 +33,9 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'leaderboard' | 'rewards' | 'transparency' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | null;
 export type AuthMode = 'member' | 'admin';
+export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
 // ─── Core Data Interfaces ──────────────────────────────────────────────────────
 
@@ -66,6 +69,7 @@ export interface HeaderProps {
   showBack?: boolean;
   title?: string;
   onBack?: () => void;
+  onEventsPress?: () => void;
 }
 
 export interface SummaryCardsProps {
@@ -76,6 +80,7 @@ export interface SummaryCardsProps {
 export interface ActiveChallengeCardProps {
   dailyChallenge: ChallengeWithProgress;
   onComplete: () => void;
+  onClaim?: () => void;
 }
 
 export interface UpcomingEventCardProps {
@@ -111,7 +116,21 @@ export interface EcoBudMobileModel {
   activeTab: AppTab;
   activeOverlay: OverlayScreen;
   selectedLesson: LessonWithProgress | null;
+  selectedChallenge: ChallengeWithProgress | null;
+  recentViewedMission: ChallengeWithProgress | null;
+  viewedMissionIds: string[];
+  quizQuestions: QuizQuestion[];
+  currentQuestionIndex: number;
+  selectedAnswer: string | null;
+  quizAnswers: Record<string, string>;
+  quizCompleted: boolean;
+  quizScore: number;
+  earnedPoints: number;
+  earnedCoins: number;
+  completionCelebrationType: 'quiz' | 'lesson' | 'claim';
   learnSearch: string;
+  learnFilter: LearnFilterType;
+  learnCategory: string;
   assistantInput: string;
   assistantMessages: AssistantMessage[];
   authEmail: string;
@@ -137,9 +156,12 @@ export interface EcoBudMobileModel {
   hasUsableInternet: boolean;
   isUserOnline: boolean;
   notificationCount: number;
-  setActiveTab: (tab: AppTab) => void;
+  claimRewardData: { points: number; coins: number } | null;
+  setActiveTab: (tab: AppTab, silent?: boolean) => void;
   setActiveOverlay: (screen: OverlayScreen) => void;
   setLearnSearch: (value: string) => void;
+  setLearnFilter: (value: LearnFilterType) => void;
+  setLearnCategory: (value: string) => void;
   setAssistantInput: (value: string) => void;
   setAuthEmail: (value: string) => void;
   setAuthPassword: (value: string) => void;
@@ -152,11 +174,22 @@ export interface EcoBudMobileModel {
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
   handleLogout: () => Promise<void>;
   refreshEverything: () => Promise<void>;
+  openChallengeMission: (challenge: ChallengeWithProgress) => void;
   openLesson: (lessonId: string) => Promise<void>;
   handleCompleteLesson: () => Promise<void>;
+  handleUpdateLessonProgress: (lessonId: string, progress: number, videoTimestamp?: number) => Promise<void>;
+  startQuiz: () => void;
+  selectAnswer: (questionId: string, answer: string) => void;
+  nextQuestion: () => void;
+  submitQuiz: () => Promise<void>;
+  resetQuiz: () => void;
+  showLessonComplete: (type: 'quiz' | 'lesson') => void;
   handleChallengeProgress: (challenge: ChallengeWithProgress, nextProgress: number) => Promise<void>;
   handleHabitCheckIn: (habitId: string) => Promise<void>;
   handleJoinEvent: (eventId: string) => Promise<void>;
   handleAssistantSend: (seedMessage?: string) => Promise<void>;
   loadTrackerMonth: (offset: number) => Promise<void>;
+  analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>;
+  handleSubmitChallengeProof: (challengeId: string, proofUrl: string) => Promise<void>;
+  handleClaimChallengeReward: (challengeId: string) => Promise<void>;
 }

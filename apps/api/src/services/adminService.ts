@@ -15,7 +15,10 @@ export class AdminService {
             email: true
           }
         },
-        quizQuestions: true
+        quizQuestions: true,
+        pages: {
+          orderBy: { order: 'asc' }
+        }
       }
     });
   }
@@ -27,12 +30,15 @@ export class AdminService {
     isPublished: boolean;
     createdById: string;
     category: string;
+    difficulty?: string;
     videoUrl?: string | null;
     imageUrl?: string | null;
     transcript?: string | null;
     durationMinutes?: number;
     quizPassingScore?: number;
+    pointsReward?: number;
     quizQuestions?: any[];
+    pages?: any[];
   }) {
     const lesson = await prisma.lesson.create({
       data: {
@@ -42,11 +48,13 @@ export class AdminService {
         isPublished: data.isPublished,
         createdById: data.createdById,
         category: data.category || "General",
+        difficulty: data.difficulty || "Beginner",
         videoUrl: data.videoUrl,
         imageUrl: data.imageUrl,
         transcript: data.transcript,
         durationMinutes: data.durationMinutes ?? 8,
         quizPassingScore: data.quizPassingScore ?? 70,
+        pointsReward: data.pointsReward ?? 10,
         quizQuestions: data.quizQuestions?.length ? {
           create: data.quizQuestions.map((q: any) => ({
             question: q.question,
@@ -56,7 +64,19 @@ export class AdminService {
             optionD: q.optionD,
             correctAnswer: q.correctAnswer
           }))
+        } : undefined,
+        pages: data.pages?.length ? {
+          create: data.pages.map((p: any, index: number) => ({
+            title: p.title || `Page ${index + 1}`,
+            description: p.description || '',
+            content: p.content || '',
+            order: index
+          }))
         } : undefined
+      },
+      include: {
+        pages: { orderBy: { order: 'asc' } },
+        quizQuestions: true
       }
     });
 
@@ -88,9 +108,9 @@ export class AdminService {
   }
 
   static async updateLesson(id: string, data: any) {
-    const { quizQuestions, ...otherData } = data;
+    const { quizQuestions, pages, ...otherData } = data;
     
-    // If quiz questions are provided, we delete existing and recreate
+    // If quiz questions or pages are provided, we delete existing and recreate
     let updatePayload: any = { ...otherData };
 
     if ('pointsReward' in updatePayload && typeof updatePayload.pointsReward === 'string') {
@@ -117,10 +137,26 @@ export class AdminService {
         }))
       };
     }
+    
+    if (pages) {
+      updatePayload.pages = {
+        deleteMany: {},
+        create: pages.map((p: any, index: number) => ({
+          title: p.title || `Page ${index + 1}`,
+          description: p.description || '',
+          content: p.content || '',
+          order: index
+        }))
+      };
+    }
 
     const lesson = await prisma.lesson.update({
       where: { id },
-      data: updatePayload
+      data: updatePayload,
+      include: {
+        pages: { orderBy: { order: 'asc' } },
+        quizQuestions: true
+      }
     });
 
     await Promise.all([
@@ -191,6 +227,56 @@ export class AdminService {
 
   static async getUsers() {
     return presenceQueryService.getAdminUsers();
+  }
+
+  static async blockUser(userId: string, adminId: string) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { status: 'suspended' }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'USER_BLOCKED',
+        userId,
+        details: JSON.stringify({ adminId }),
+        timestamp: new Date()
+      }
+    });
+
+    await supabaseRealtimeService.publishAdminSectionRefresh('users', {
+      actorRole: 'admin',
+      actorUserId: adminId,
+      entityId: userId,
+      reason: 'user-blocked',
+    });
+
+    return user;
+  }
+
+  static async unblockUser(userId: string, adminId: string) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { status: 'active' }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'USER_UNBLOCKED',
+        userId,
+        details: JSON.stringify({ adminId }),
+        timestamp: new Date()
+      }
+    });
+
+    await supabaseRealtimeService.publishAdminSectionRefresh('users', {
+      actorRole: 'admin',
+      actorUserId: adminId,
+      entityId: userId,
+      reason: 'user-unblocked',
+    });
+
+    return user;
   }
 
   // Challenge Management
@@ -428,23 +514,8 @@ export class AdminService {
     });
 
     if (status === 'approved') {
-      // Award points
-      await prisma.user.update({
-        where: { id: submission.userId },
-        data: {
-          points: { increment: submission.challenge.expReward }
-        }
-      });
-
-      if (submission.challenge.ecoCoinReward > 0) {
-        await prisma.userStats.upsert({
-          where: { userId: submission.userId },
-          update: { ecoPoints: { increment: submission.challenge.ecoCoinReward } },
-          create: { userId: submission.userId, ecoPoints: submission.challenge.ecoCoinReward }
-        });
-      }
-
-      // Recalculate streak or other gamification
+      // Points and Coins will now be awarded when the user claims the reward in the mobile app.
+      // We no longer award them here automatically.
     }
 
     // Create Audit Log
@@ -493,6 +564,12 @@ export class AdminService {
     return submission;
   }
 
+  static async deleteSubmission(id: string) {
+    return await prisma.challengeSubmission.delete({
+      where: { id },
+    });
+  }
+
   static async getAuditLogs() {
     return await prisma.auditLog.findMany({
       orderBy: { timestamp: 'desc' },
@@ -504,8 +581,12 @@ export class AdminService {
           }
         }
       },
-      take: 50
+      take: 30
     });
+  }
+
+  static async clearAuditLogs() {
+    return await prisma.auditLog.deleteMany({});
   }
 
   // Event Management

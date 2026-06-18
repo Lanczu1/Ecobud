@@ -67,11 +67,23 @@ export const homeService = {
   completeLesson: (token: string, lessonId: string) =>
     ecobudApi.completeLesson(token, lessonId),
 
+  updateLessonProgress: (token: string, lessonId: string, progress: number, videoTimestamp?: number) =>
+    ecobudApi.updateLessonProgress(token, lessonId, progress, videoTimestamp),
+
   markLessonSeen: (token: string, lessonId: string) =>
     ecobudApi.markLessonSeen(token, lessonId),
 
   updateChallengeProgress: (token: string, challengeId: string, progressPercentage: number) =>
     ecobudApi.updateChallengeProgress(token, challengeId, progressPercentage),
+
+  analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
+    ecobudApi.analyzeChallengeImage(token, challengeId, uri),
+
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string) =>
+    ecobudApi.submitChallengeProof(token, challengeId, proofUrl),
+
+  claimChallengeReward: (token: string, challengeId: string) =>
+    ecobudApi.claimChallengeReward(token, challengeId),
 
   checkInHabit: (token: string, habitId: string) =>
     ecobudApi.checkInHabit(token, habitId),

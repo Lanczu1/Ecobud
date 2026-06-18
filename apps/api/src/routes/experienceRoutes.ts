@@ -132,6 +132,7 @@ experienceRoutes.get(
         where: { id: userId },
         select: {
           currentStreak: true,
+          points: true,
         },
       }),
     ]);
@@ -145,6 +146,7 @@ experienceRoutes.get(
     return res.json({
       month,
       currentStreak: user?.currentStreak ?? 0,
+      points: user?.points ?? 0,
       weeklyGoalProgress: Math.min(100, Math.round((uniqueDays.size / 7) * 100)),
       completedDays: [...uniqueDays],
       todayHabits: habits.map((habit) => ({
@@ -164,6 +166,7 @@ experienceRoutes.get(
     const users = await prisma.user.findMany({
       where: {
         status: 'active',
+        role: 'user',
       },
       include: { profile: true, badges: { include: { badge: true } } },
       orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],

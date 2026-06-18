@@ -20,6 +20,13 @@ learnRoutes.post(
 );
 
 learnRoutes.post(
+  '/progress',
+  authenticateRequest,
+  requireUserAccess,
+  errorBoundary(learnController.updateProgress),
+);
+
+learnRoutes.post(
   '/complete',
   authenticateRequest,
   requireUserAccess,

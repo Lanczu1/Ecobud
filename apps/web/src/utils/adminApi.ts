@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:3000/api';
+export const API_HOST = 'http://localhost:3000';
+const API_BASE = `${API_HOST}/api`;
 
 function getToken(): string {
   return localStorage.getItem('ecobud_admin_token') || '';
