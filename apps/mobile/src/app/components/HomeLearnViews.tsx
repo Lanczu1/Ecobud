@@ -85,7 +85,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
             onComplete={() => {
               if (primaryChallenge.type === 'AI Image Recognition Challenge') {
-                model.setActiveOverlay('ai_mission');
+                model.openChallengeMission(primaryChallenge);
               } else {
                 void model.handleChallengeProgress(primaryChallenge, 100);
               }
