@@ -155,7 +155,7 @@ challengeRoutes.post(
           }
 
           const detected = result.detected || [];
-          const targets = (challenge.aiDetectionTargets || []).map(t => t.toLowerCase());
+          const targets = (challenge.aiDetectionTargets || []).map(t => t.toLowerCase().trim());
           const minConf = challenge.aiMinimumConfidence || 30;
 
           let passed = false;
@@ -164,7 +164,11 @@ challengeRoutes.post(
           let reason = 'No matching object detected';
 
           for (const det of detected) {
-            if (targets.includes(det.object.toLowerCase())) {
+            const detObj = det.object.toLowerCase().trim();
+            // Flexible match: e.g. target="plastic bottle" matches detection="bottle"
+            const isMatch = targets.some(t => t === detObj || t.includes(detObj) || detObj.includes(t));
+            
+            if (isMatch) {
               if (det.confidence >= minConf) {
                 passed = true;
                 matchedObject = det.object;

@@ -82,6 +82,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         {primaryChallenge ? (
           <ActiveChallengeCard
             dailyChallenge={primaryChallenge}
+            isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
             onComplete={() => {
               if (primaryChallenge.type === 'AI Image Recognition Challenge') {
                 model.setActiveOverlay('ai_mission');
