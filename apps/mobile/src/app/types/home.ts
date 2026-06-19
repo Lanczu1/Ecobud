@@ -81,6 +81,7 @@ export interface ActiveChallengeCardProps {
   dailyChallenge: ChallengeWithProgress;
   onComplete: () => void;
   onClaim?: () => void;
+  isViewed?: boolean;
 }
 
 export interface UpcomingEventCardProps {

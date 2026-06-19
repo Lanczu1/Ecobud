@@ -77,14 +77,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }, [processing, processFadeAnim]);
 
-  if (!challenge) {
-    return null;
-  }
-
   const fadeAnim = React.useRef(new Animated.Value(1)).current;
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = React.useRef<any>(null);
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
+
+  if (!challenge) {
+    return null;
+  }
 
   const handleStartRecognition = async () => {
     if (!permission?.granted) {
@@ -209,7 +209,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold', marginBottom: 4 }}>🌱 +{challenge.expReward} Eco Points</Text>
                 {challenge.ecoCoinReward > 0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Image source={require('../../../assets/coinbgremove.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
+                    <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
                     <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>+{challenge.ecoCoinReward} Eco Coins</Text>
                   </View>
                 )}
@@ -292,7 +292,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               <Text style={{ fontSize: 16, color: '#10B981', marginBottom: 4, fontWeight: '600' }}>🌱 {challenge.expReward} Eco Points</Text>
               {challenge.ecoCoinReward > 0 && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Image source={require('../../../assets/coinbgremove.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
+                  <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
                   <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.ecoCoinReward} Eco Coins</Text>
                 </View>
               )}
@@ -321,7 +321,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
           <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
           <View style={{ marginBottom: 32, marginHorizontal: -24 }}>
-            <Image source={require('../../../assets/candw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
+            <Image source={require('../../../assets/caw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
           </View>
 
           <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
@@ -469,7 +469,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
             }}>
               {type === 'coin' ? (
                 <Image 
-                  source={require('../../../assets/coinbgremove.png')} 
+                  source={require('../../../assets/coin.png')} 
                   style={{ width: 34, height: 34, resizeMode: 'contain' }} 
                 />
               ) : (

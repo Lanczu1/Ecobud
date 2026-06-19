@@ -7,7 +7,7 @@ export { LearnLessonCard } from './LearnLessonCard';
 export { ActiveChallengeCard } from './ActiveChallengeCard';
 export { UpcomingEventCard } from './UpcomingEventCard';
 export { CommunityImpactCard } from './CommunityImpactCard';
-
+export { LevelCard } from './LevelCard';
 // Re-export common components
 export * from './CommonComponents';
 // Re-export views and overlays
