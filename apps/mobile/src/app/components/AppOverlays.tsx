@@ -405,7 +405,9 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
         Animated.delay(120),
         Animated.parallel([
           Animated.timing(particle.pos, {
-            toValue: { x: type === 'leaf' ? -100 : width + 100, y: 150 },
+            toValue: type === 'leaf' 
+              ? { x: width / 2 - 15 + (Math.random() * 40 - 20), y: 130 + (Math.random() * 30 - 15) }
+              : { x: width + 100, y: 150 },
             duration: 650,
             easing: Easing.bezier(0.25, 1, 0.5, 1),
             useNativeDriver: true,
