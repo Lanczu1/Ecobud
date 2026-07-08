@@ -2,28 +2,14 @@ import { Router } from 'express';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
+import { getEcoGuideReply, type ChatHistoryMessage } from '../services/ecoGuideService';
 
 const experienceRoutes = Router();
 
 const getDateKey = (date = new Date()) => date.toISOString().slice(0, 10);
 
-const buildAssistantReply = (message: string) => {
-  const normalized = message.toLowerCase();
 
-  if (normalized.includes('compost')) {
-    return 'Start composting with fruit scraps, vegetable peels, dry leaves, and a breathable bin. Keep the mix balanced between green and brown materials.';
-  }
 
-  if (normalized.includes('event')) {
-    return 'You can join upcoming ECOBUD community events from the Events section. Tree planting and clean-up drives are both available this month.';
-  }
-
-  if (normalized.includes('points')) {
-    return 'You earn ECO Points by finishing lessons, completing challenges, checking in daily habits, and attending verified events.';
-  }
-
-  return 'I can help with composting, local eco events, challenges, eco points, and sustainable living tips. Ask me anything green.';
-};
 
 experienceRoutes.get(
   '/dashboard',
@@ -254,10 +240,21 @@ experienceRoutes.post(
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const message = typeof req.body?.message === 'string' ? req.body.message : '';
 
-    return res.json({
-      reply: buildAssistantReply(message),
-      quickReplies: ['How to compost?', 'Where is the next event?', 'My Eco Points', 'Find a challenge'],
-    });
+    // Accept conversation history from the client (capped to last 10 messages)
+    const rawHistory: unknown[] = Array.isArray(req.body?.history) ? req.body.history : [];
+    const history: ChatHistoryMessage[] = rawHistory
+      .slice(-10)
+      .filter(
+        (item): item is ChatHistoryMessage =>
+          typeof item === 'object' &&
+          item !== null &&
+          (((item as any).role === 'user') || ((item as any).role === 'assistant')) &&
+          typeof (item as any).content === 'string',
+      );
+
+    const result = await getEcoGuideReply(message, history);
+
+    return res.json(result);
   }),
 );
 

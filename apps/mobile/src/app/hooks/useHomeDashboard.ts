@@ -93,6 +93,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [assistantInput, setAssistantInput] = useState('');
   const [claimRewardData, setClaimRewardData] = useState<{ points: number; coins: number } | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
+  const [assistantQuickReplies, setAssistantQuickReplies] = useState<string[]>([
+    'How to compost?', 'What goes in recycling?', 'Tips for reducing waste', 'Tell me about eco-points',
+  ]);
   const [authEmail, setAuthEmail] = useState('lanczu@ecobud.app');
   const [authPassword, setAuthPassword] = useState('eco12345');
   const [authMode, setAuthMode] = useState<AuthMode>('member');
@@ -1114,7 +1117,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
           setAssistantInput('');
           setSendingMessage(true);
 
-          const reply = await homeService.sendAssistantMessage(activeSession.token, outgoingText);
+          // Build conversation history for the AI (last 10 messages, converted to {role, content})
+          const currentMessages = [...assistantMessages, userMessage];
+          const history = currentMessages.slice(-10).map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.text,
+          }));
+
+          const reply = await homeService.sendAssistantMessage(activeSession.token, outgoingText, history);
 
           setAssistantMessages((current) => [
             ...current,
@@ -1125,6 +1135,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
               time: formatChatTime(new Date().toISOString()),
             },
           ]);
+
+          // Update quick replies with contextual suggestions from the AI
+          if (reply.quickReplies?.length) {
+            setAssistantQuickReplies(reply.quickReplies);
+          }
         } catch (error) {
           Alert.alert('Assistant unavailable', error instanceof Error ? error.message : 'Please try again.');
         } finally {
@@ -1349,6 +1364,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     assistantInput,
     claimRewardData,
     assistantMessages,
+    assistantQuickReplies,
     authEmail,
     authPassword,
     authMode,

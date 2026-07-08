@@ -134,6 +134,7 @@ export interface EcoBudMobileModel {
   learnCategory: string;
   assistantInput: string;
   assistantMessages: AssistantMessage[];
+  assistantQuickReplies: string[];
   authEmail: string;
   authPassword: string;
   authMode: AuthMode;
