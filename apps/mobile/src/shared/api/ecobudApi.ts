@@ -528,11 +528,11 @@ export const ecobudApi = {
 
     return { metrics, logs: logs.items };
   },
-  sendAssistantMessage: (token: string, message: string) =>
+  sendAssistantMessage: (token: string, message: string, history: { role: 'user' | 'assistant'; content: string }[] = []) =>
     request<{ reply: string; quickReplies: string[] }>('/experience/assistant/chat', {
       method: 'POST',
       token,
-      body: { message },
+      body: { message, history },
     }),
 };
 

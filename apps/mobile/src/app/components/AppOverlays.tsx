@@ -20,8 +20,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEventListener } from 'expo';
+import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { styles } from '../styles/appStyles';
@@ -544,7 +543,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
 
         <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {['How to compost?', 'Where is the next event?', 'My Eco Points', 'Find a challenge'].map((reply) => (
+            {model.assistantQuickReplies.map((reply) => (
               <TouchableOpacity key={reply} onPress={() => void model.handleAssistantSend(reply)} style={styles.categoryOutlineBtn}>
                 <Text style={[styles.categoryOutlineBtnText, { paddingHorizontal: 12 }]}>{reply}</Text>
               </TouchableOpacity>
@@ -556,7 +555,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
           <TextInput
             value={model.assistantInput}
             onChangeText={model.setAssistantInput}
-            placeholder="Mesaage ECOBUD..."
+            placeholder="Message ECOBUD..."
             placeholderTextColor="#6B7A75"
             style={styles.chatInput}
           />

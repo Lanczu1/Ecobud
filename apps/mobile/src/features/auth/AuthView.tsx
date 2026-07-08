@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
 import {
   ActivityIndicator,
   Animated,

@@ -91,8 +91,8 @@ export const homeService = {
   joinEvent: (token: string, eventId: string) =>
     ecobudApi.joinEvent(token, eventId),
 
-  sendAssistantMessage: (token: string, message: string) =>
-    ecobudApi.sendAssistantMessage(token, message),
+  sendAssistantMessage: (token: string, message: string, history: { role: 'user' | 'assistant'; content: string }[] = []) =>
+    ecobudApi.sendAssistantMessage(token, message, history),
 
   // ─── Composite Loaders ────────────────────────────────────────────────────────
   
