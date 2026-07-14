@@ -5,6 +5,7 @@ import { prisma } from '../prismaClient';
 import { PasswordService } from '../security/passwordService';
 import { AccessRole, getRoleRedirectPath, TokenService } from '../security/tokenService';
 import { HttpError, errorBoundary } from '../http/errorResponder';
+import { resolveLiveStreak } from '../utils/gamificationUtils';
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
@@ -56,6 +57,7 @@ const toAuthResponse = (user: {
   status: 'active' | 'pending' | 'suspended';
   points: number;
   currentStreak: number;
+  lastActionDate: Date | null;
   profile: { displayName: string; avatarUrl: string | null } | null;
 }) => {
   const token = TokenService.sign({
@@ -76,7 +78,7 @@ const toAuthResponse = (user: {
       role: user.role,
       status: user.status,
       points: user.points,
-      currentStreak: user.currentStreak,
+      currentStreak: resolveLiveStreak(user.currentStreak, user.lastActionDate),
       displayName: user.profile?.displayName ?? user.name,
       avatarUrl: user.profile?.avatarUrl ?? null,
     },

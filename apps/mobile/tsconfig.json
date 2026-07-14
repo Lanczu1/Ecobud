@@ -1,6 +1,12 @@
 {
   "compilerOptions": {
-    "moduleSuffixes": [".native", ".web", ""]
+    "moduleSuffixes": [".native", ".web", ""],
+    "jsx": "react-native",
+    "esModuleInterop": true
   },
-  "extends": "expo/tsconfig.base"
+  "extends": "expo/tsconfig.base",
+  "exclude": [
+    "node_modules",
+    "babel.config.js"
+  ]
 }

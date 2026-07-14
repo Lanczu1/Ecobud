@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
+import { resolveLiveStreak } from '../utils/gamificationUtils';
 
 const userRoutes = Router();
 
@@ -48,7 +49,7 @@ userRoutes.get(
       role: user?.role,
       status: user?.status,
       points: user?.points ?? 0,
-      currentStreak: user?.currentStreak ?? 0,
+      currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
       profile: user?.profile,
       badges: user?.badges.map((item) => item.badge) ?? [],
       eventHistory:

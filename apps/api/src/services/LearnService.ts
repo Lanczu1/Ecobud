@@ -33,6 +33,7 @@ export interface LearnLessonPayload {
   videoUrl?: string | null;
   transcript?: string | null;
   pointsReward?: number;
+  featured: boolean;
   author?: {
     id: string;
     name: string;
@@ -61,7 +62,10 @@ export class LearnService {
   async getPublishedLessons(userId: string): Promise<LearnLessonPayload[]> {
     const lessons = await this.database.lesson.findMany({
       where: {
-        isPublished: true,
+        OR: [
+          { isPublished: true },
+          { scheduledAt: { lte: new Date() } }
+        ]
       },
       orderBy: [{ createdAt: 'asc' }, { title: 'asc' }],
       include: {
@@ -97,7 +101,10 @@ export class LearnService {
     const lesson = await this.database.lesson.findFirst({
       where: {
         id: lessonId,
-        isPublished: true,
+        OR: [
+          { isPublished: true },
+          { scheduledAt: { lte: new Date() } }
+        ]
       },
     });
 
@@ -167,7 +174,10 @@ export class LearnService {
     const lesson = await this.database.lesson.findFirst({
       where: {
         id: lessonId,
-        isPublished: true,
+        OR: [
+          { isPublished: true },
+          { scheduledAt: { lte: new Date() } }
+        ]
       },
       select: { id: true },
     });
@@ -200,7 +210,10 @@ export class LearnService {
     const lesson = await this.database.lesson.findFirst({
       where: {
         id: lessonId,
-        isPublished: true,
+        OR: [
+          { isPublished: true },
+          { scheduledAt: { lte: new Date() } }
+        ]
       },
     });
 
@@ -267,6 +280,7 @@ export class LearnService {
     videoUrl: string | null;
     transcript: string | null;
     isPublished: boolean;
+    featured: boolean;
     createdAt: Date;
     pointsReward: number;
     progress: Array<{
@@ -295,6 +309,7 @@ export class LearnService {
       category: lesson.category,
       difficulty: lesson.difficulty || undefined,
       is_published: lesson.isPublished,
+      featured: lesson.featured,
       created_at: lesson.createdAt.toISOString(),
       progress: status === 'completed' ? 100 : (progressRecord?.progress ?? 0),
       videoTimestamp: progressRecord?.videoTimestamp ?? 0,

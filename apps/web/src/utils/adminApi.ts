@@ -21,6 +21,14 @@ async function handleResponse<T>(res: Response): Promise<T> {
     } catch {
       // ignore
     }
+
+    if (res.status === 401) {
+      localStorage.removeItem('ecobud_admin_token');
+      localStorage.removeItem('ecobud_admin_user');
+      localStorage.removeItem('ecobud_admin_authenticated');
+      window.location.href = '/';
+    }
+
     throw new Error(message);
   }
   if (res.status === 204) return undefined as T;

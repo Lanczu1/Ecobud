@@ -14,8 +14,8 @@ import {
 
 export const homeService = {
   // ─── Auth ───────────────────────────────────────────────────────────────────────
-  
-  login: (email: string, pass: string) => 
+
+  login: (email: string, pass: string) =>
     ecobudApi.login(email.trim(), pass),
 
   register: (email: string, pass: string, username: string, otpCode: string) =>
@@ -95,7 +95,7 @@ export const homeService = {
     ecobudApi.sendAssistantMessage(token, message, history),
 
   // ─── Composite Loaders ────────────────────────────────────────────────────────
-  
+
   /**
    * Fetches all required data for a full member session.
    */

@@ -4,6 +4,7 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary, HttpError } from '../http/errorResponder';
 import { GamificationService } from '../services/GamificationService';
+import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { challengeUploadMiddleware, analyzeUploadMiddleware } from '../http/uploadMiddleware';
 import { spawn } from 'child_process';
 import path from 'path';
@@ -313,7 +314,7 @@ challengeRoutes.get(
     });
 
     return res.json({
-      currentStreak: user?.currentStreak ?? 0,
+      currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
       lastActionDate: user?.lastActionDate ?? null,
     });
   }),

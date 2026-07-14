@@ -6,9 +6,9 @@ import { Dashboard } from './components/admin/Dashboard';
 import { ManageUsers } from './components/admin/pages/ManageUsers';
 import { LearningContent } from './components/admin/pages/LearningContent';
 import { Challenges } from './components/admin/pages/Challenges';
-import { DailyQuests } from './components/admin/pages/DailyQuests';
+
 import { Events } from './components/admin/pages/Events';
-import { Vendors } from './components/admin/pages/Vendors';
+
 import { SwapGoods } from './components/admin/pages/SwapGoods';
 import { Reports } from './components/admin/pages/Reports';
 import { Submissions } from './components/admin/pages/Submissions';
@@ -20,9 +20,9 @@ function renderSection(section: AdminSection) {
     case 'Users':            return <ManageUsers />;
     case 'Learning Content': return <LearningContent />;
     case 'Challenges':       return <Challenges />;
-    case 'Daily Quests':     return <DailyQuests />;
+
     case 'Events':           return <Events />;
-    case 'Vendors':          return <Vendors />;
+
     case 'Swap Goods':       return <SwapGoods />;
     case 'Reports':          return <Reports />;
     case 'Submissions':      return <Submissions />;

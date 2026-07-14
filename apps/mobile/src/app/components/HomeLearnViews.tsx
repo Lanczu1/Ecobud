@@ -23,6 +23,9 @@ const getCategoryDetails = (category: string, isActive: boolean) => {
   if (normalized === 'all') {
     iconName = 'apps';
     iconColor = isActive ? '#126027' : '#6B7A75';
+  } else if (normalized === 'featured') {
+    iconName = 'star';
+    iconColor = isActive ? '#126027' : '#F59E0B';
   } else if (normalized === 'environment' || normalized === 'general') {
     iconSet = 'MaterialCommunityIcons';
     iconName = 'sprout';
@@ -67,10 +70,39 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         <Text style={styles.welcomeTitle}>Hello, {model.userDisplayName.split(' ')[0]}! 👋</Text>
         <Text style={[styles.welcomeSubtitle, { marginBottom: 16 }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
 
+        <TouchableOpacity
+          onPress={() => model.setActiveOverlay('assistant')}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#FFFFFF',
+            borderRadius: 20,
+            paddingHorizontal: 16,
+            marginBottom: 24,
+            height: 50,
+            shadowColor: '#126027',
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 3,
+            borderWidth: 1,
+            borderColor: '#E6F4EC',
+          }}
+        >
+          <Ionicons name="sparkles" size={20} color="#126027" />
+          <Text style={{ flex: 1, marginLeft: 10, fontSize: 15, color: '#6B7A75', fontWeight: '500' }}>
+            Ask EcoBud a question...
+          </Text>
+          <View style={{ backgroundColor: '#EDF6F1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+            <Text style={{ color: '#126027', fontSize: 12, fontWeight: '700' }}>AI</Text>
+          </View>
+        </TouchableOpacity>
+
         <LevelCard ecoPoints={ecoPoints} />
 
         <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
-        <QuickActions weeklyGoal={weeklyGoal} />
+
+
 
         {!model.dashboard ? (
           <SurfaceCard style={{ padding: 20, borderRadius: 24 }}>
@@ -128,6 +160,8 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
           <Text style={[styles.pageSubtitle, { color: '#6B7A75', fontSize: 14, marginTop: 4, lineHeight: 20 }]}>
             Master eco-friendly living with bite-sized lessons, complete quizzes, and build sustainable habits.
           </Text>
+          
+
         </View>
 
         {/* Premium Learning Progress Card */}
@@ -285,7 +319,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
           style={{ marginTop: 12, maxHeight: 48 }}
           contentContainerStyle={{ paddingBottom: 4, alignItems: 'center' }}
         >
-          {['All Categories', ...Array.from(new Set(model.lessons.map(l => l.category || 'General')))].map((category) => {
+          {['All Categories', 'Featured', ...Array.from(new Set(model.lessons.map(l => l.category || 'General')))].map((category) => {
             const isActive = model.learnCategory === category;
             const { name, iconName, iconColor, iconSet } = getCategoryDetails(category, isActive);
             const IconComponent = iconSet === 'MaterialCommunityIcons' ? MaterialCommunityIcons : Ionicons;

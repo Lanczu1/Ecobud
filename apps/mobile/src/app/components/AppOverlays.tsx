@@ -31,6 +31,8 @@ import { EcoBadge, EcoBudMobileModel } from '../types/home';
 import {
   formatLongDate,
   formatEventDateTag,
+  getEcoLevel,
+  getVisibleStreak,
   shortHash,
 } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -46,6 +48,7 @@ import {
   BadgeCard,
   SecondaryButton,
 } from './CommonComponents';
+import { FireStreak } from './FireStreak';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const challenge = model.selectedChallenge;
@@ -175,54 +178,54 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
         <OverlayScaffold title="Result Page" subtitle="Detection Result" onBack={handleClose}>
-        <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
-          <Animated.View style={{ opacity: fadeAnim, width: '100%', alignItems: 'center' }}>
-            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>Detection Result</Text>
+          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
+            <Animated.View style={{ opacity: fadeAnim, width: '100%', alignItems: 'center' }}>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>Detection Result</Text>
 
-            <View style={{ width: '100%', backgroundColor: '#F8FAF9', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#E8F0EA' }}>
-              <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Object:</Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.object}</Text>
+              <View style={{ width: '100%', backgroundColor: '#F8FAF9', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#E8F0EA' }}>
+                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Object:</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.object}</Text>
 
-              <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Confidence:</Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.confidence}%</Text>
+                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Confidence:</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.confidence}%</Text>
 
-              <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Status:</Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: mockResult.passed ? '#4ADE80' : '#F87171', marginBottom: mockResult.passed ? 0 : 16 }}>
-                {mockResult.passed ? 'Passed ✅' : 'Failed ❌'}
-              </Text>
-
-              {!mockResult.passed && (
-                <>
-                  <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Reason:</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#F87171' }}>{mockResult.reason}</Text>
-                </>
-              )}
-            </View>
-
-            {mockResult.passed && (
-              <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Pending Admin Approval</Text>
-                <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
-                  Your submission has been sent to the admin for review. Once approved, you will receive:
+                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Status:</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: mockResult.passed ? '#4ADE80' : '#F87171', marginBottom: mockResult.passed ? 0 : 16 }}>
+                  {mockResult.passed ? 'Passed ✅' : 'Failed ❌'}
                 </Text>
-                <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold', marginBottom: 4 }}>🌱 +{challenge.expReward} Eco Points</Text>
-                {challenge.ecoCoinReward > 0 && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
-                    <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>+{challenge.ecoCoinReward} Eco Coins</Text>
-                  </View>
+
+                {!mockResult.passed && (
+                  <>
+                    <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Reason:</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#F87171' }}>{mockResult.reason}</Text>
+                  </>
                 )}
               </View>
-            )}
 
-            {mockResult.passed ? (
-              <PrimaryButton label="Back to Challenges" onPress={handleBackToChallenge} />
-            ) : (
-              <PrimaryButton label="Try Again" onPress={handleTryAgain} />
-            )}
-          </Animated.View>
-        </ScrollView>
-      </OverlayScaffold>
+              {mockResult.passed && (
+                <View style={{ alignItems: 'center', marginBottom: 32 }}>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Pending Admin Approval</Text>
+                  <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
+                    Your submission has been sent to the admin for review. Once approved, you will receive:
+                  </Text>
+                  <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold', marginBottom: 4 }}>🌱 +{challenge.expReward} Eco Points</Text>
+                  {challenge.ecoCoinReward > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
+                      <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>+{challenge.ecoCoinReward} Eco Coins</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {mockResult.passed ? (
+                <PrimaryButton label="Back to Challenges" onPress={handleBackToChallenge} />
+              ) : (
+                <PrimaryButton label="Try Again" onPress={handleTryAgain} />
+              )}
+            </Animated.View>
+          </ScrollView>
+        </OverlayScaffold>
       </Animated.View>
     );
   }
@@ -231,44 +234,44 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
         <OverlayScaffold title="AI Recognition Submission Page" subtitle="AI Recognition" onBack={() => setStep('details')}>
-        <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
-          <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-            <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
-              {capturedImage ? (
-                <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
-              ) : permission?.granted ? (
-                <CameraView style={{ width: '100%', height: '100%' }} facing="back" ref={cameraRef} />
-              ) : (
-                <>
-                  <Ionicons name="camera" size={64} color="#C8D8CE" />
-                  <Text style={{ marginTop: 16, color: '#6B7A75', fontSize: 16 }}>No camera access</Text>
-                </>
-              )}
+          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
+            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+              <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
+                {capturedImage ? (
+                  <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                ) : permission?.granted ? (
+                  <CameraView style={{ width: '100%', height: '100%' }} facing="back" ref={cameraRef} />
+                ) : (
+                  <>
+                    <Ionicons name="camera" size={64} color="#C8D8CE" />
+                    <Text style={{ marginTop: 16, color: '#6B7A75', fontSize: 16 }}>No camera access</Text>
+                  </>
+                )}
 
-              {processing && (
-                <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.8)', justifyContent: 'center', alignItems: 'center', opacity: processFadeAnim }]}>
-                  <ActivityIndicator size="large" color="#10B981" />
-                  <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>Analyzing Image...</Text>
-                </Animated.View>
-              )}
-            </View>
-
-            {!processing && (
-              <View style={{ width: '100%', gap: 16 }}>
-                <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleCapture}>
-                  <Ionicons name="camera" size={20} color="#FFF" />
-                  <Text style={styles.primaryButtonText}>Capture</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#4ADE80', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleGallery}>
-                  <Ionicons name="image" size={20} color="#FFF" />
-                  <Text style={styles.primaryButtonText}>Choose from Gallery</Text>
-                </TouchableOpacity>
+                {processing && (
+                  <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.8)', justifyContent: 'center', alignItems: 'center', opacity: processFadeAnim }]}>
+                    <ActivityIndicator size="large" color="#10B981" />
+                    <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>Analyzing Image...</Text>
+                  </Animated.View>
+                )}
               </View>
-            )}
-          </Animated.View>
-        </ScrollView>
-      </OverlayScaffold>
+
+              {!processing && (
+                <View style={{ width: '100%', gap: 16 }}>
+                  <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleCapture}>
+                    <Ionicons name="camera" size={20} color="#FFF" />
+                    <Text style={styles.primaryButtonText}>Capture</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#4ADE80', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleGallery}>
+                    <Ionicons name="image" size={20} color="#FFF" />
+                    <Text style={styles.primaryButtonText}>Choose from Gallery</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Animated.View>
+          </ScrollView>
+        </OverlayScaffold>
       </Animated.View>
     );
   }
@@ -277,70 +280,70 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
       <OverlayScaffold title="📷 AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
-      <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>{challenge.title}</Text>
+        <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
+          <Animated.View style={{ opacity: fadeAnim }}>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>{challenge.title}</Text>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
-            <View>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Difficulty:</Text>
-              <Text style={{ fontSize: 16, color: '#6B7A75' }}>{challenge.difficulty}</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Rewards:</Text>
-              <Text style={{ fontSize: 16, color: '#10B981', marginBottom: 4, fontWeight: '600' }}>🌱 {challenge.expReward} Eco Points</Text>
-              {challenge.ecoCoinReward > 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
-                  <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.ecoCoinReward} Eco Coins</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
-            <View>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Targets:</Text>
-              {challenge.aiDetectionTargets?.map(target => (
-                <Text key={target} style={{ fontSize: 16, color: '#6B7A75', marginBottom: 4 }}>✓ {target}</Text>
-              ))}
-              {(!challenge.aiDetectionTargets || challenge.aiDetectionTargets.length === 0) && (
-                <Text style={{ fontSize: 16, color: '#6B7A75', marginBottom: 4 }}>✓ Plastic Bottle</Text>
-              )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Difficulty:</Text>
+                <Text style={{ fontSize: 16, color: '#6B7A75' }}>{challenge.difficulty}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Rewards:</Text>
+                <Text style={{ fontSize: 16, color: '#10B981', marginBottom: 4, fontWeight: '600' }}>🌱 {challenge.expReward} Eco Points</Text>
+                {challenge.ecoCoinReward > 0 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
+                    <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.ecoCoinReward} Eco Coins</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Minimum Confidence:</Text>
-              <Text style={{ fontSize: 16, color: '#6B7A75' }}>80%</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Targets:</Text>
+                {challenge.aiDetectionTargets?.map(target => (
+                  <Text key={target} style={{ fontSize: 16, color: '#6B7A75', marginBottom: 4 }}>✓ {target}</Text>
+                ))}
+                {(!challenge.aiDetectionTargets || challenge.aiDetectionTargets.length === 0) && (
+                  <Text style={{ fontSize: 16, color: '#6B7A75', marginBottom: 4 }}>✓ Plastic Bottle</Text>
+                )}
+              </View>
+
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Minimum Confidence:</Text>
+                <Text style={{ fontSize: 16, color: '#6B7A75' }}>80%</Text>
+              </View>
             </View>
-          </View>
 
-          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Instructions:</Text>
-          <Text style={{ fontSize: 16, color: '#6B7A75', marginBottom: 24, lineHeight: 24 }}>Take a clear photo of any target item.{'\n'}Blurred images may be rejected.</Text>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Instructions:</Text>
+            <Text style={{ fontSize: 16, color: '#6B7A75', marginBottom: 24, lineHeight: 24 }}>Take a clear photo of any target item.{'\n'}Blurred images may be rejected.</Text>
 
-          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
-          <View style={{ marginBottom: 32, marginHorizontal: -24 }}>
-            <Image source={require('../../../assets/caw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
-          </View>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
+            <View style={{ marginBottom: 32, marginHorizontal: -24 }}>
+              <Image source={require('../../../assets/caw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
+            </View>
 
-          <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
-        </Animated.View>
-      </ScrollView>
-    </OverlayScaffold>
+            <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
+          </Animated.View>
+        </ScrollView>
+      </OverlayScaffold>
     </Animated.View>
   );
 }
 
 export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const { width, height } = Dimensions.get('window');
-  
+
   // Calculate how many of each particle type to spawn
   const hasCoins = model.claimRewardData ? model.claimRewardData.coins > 0 : true;
   const hasPoints = model.claimRewardData ? model.claimRewardData.points > 0 : true;
-  
+
   // Total particles to spawn
   const numParticles = hasCoins && hasPoints ? 24 : 16;
-  
+
   // Determine particle type array
   const particleTypes: ('coin' | 'leaf')[] = [];
   for (let i = 0; i < numParticles; i++) {
@@ -404,7 +407,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
         Animated.delay(120),
         Animated.parallel([
           Animated.timing(particle.pos, {
-            toValue: type === 'leaf' 
+            toValue: type === 'leaf'
               ? { x: width / 2 - 15 + (Math.random() * 40 - 20), y: 130 + (Math.random() * 30 - 15) }
               : { x: width + 100, y: 150 },
             duration: 650,
@@ -469,9 +472,9 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
               borderColor: '#FFF',
             }}>
               {type === 'coin' ? (
-                <Image 
-                  source={require('../../../assets/coin.png')} 
-                  style={{ width: 34, height: 34, resizeMode: 'contain' }} 
+                <Image
+                  source={require('../../../assets/coin.png')}
+                  style={{ width: 34, height: 34, resizeMode: 'contain' }}
                 />
               ) : (
                 <Ionicons name="leaf" size={16} color="#FFF" />
@@ -506,6 +509,10 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <AiMissionOverlay model={model} />;
     case 'claimParticles':
       return <ClaimParticlesOverlay model={model} />;
+    case 'streakUnlocked':
+      return <StreakUnlockedOverlay model={model} />;
+    case 'streakRewards':
+      return <StreakRewardsOverlay model={model} />;
     default:
       return null;
   }
@@ -801,7 +808,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     };
   }, [doSave]);
 
-  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+  useEventListener(player, 'playingChange', ({ isPlaying }: { isPlaying: boolean }) => {
     if (!isPlaying) {
       doSave();
     }
@@ -810,7 +817,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const hasSeeked = React.useRef(false);
   const lastSaveTime = React.useRef(Date.now());
 
-  useEventListener(player, 'statusChange', ({ status }) => {
+  useEventListener(player, 'statusChange', ({ status }: { status: string }) => {
     if (status === 'readyToPlay' && !hasSeeked.current && player.duration > 0 && model.selectedLesson) {
       const targetTime = model.selectedLesson.videoTimestamp && model.selectedLesson.videoTimestamp > 0
         ? model.selectedLesson.videoTimestamp
@@ -857,7 +864,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }, [displayProgress, maxAllowedProgress, initialProgress, showConfetti]);
 
-  const confettiPieces = React.useMemo(() => generateConfettiPieces(65), []);
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(20), []);
 
   return (
     <OverlayScaffold
@@ -1673,92 +1680,90 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   ).current;
 
   const startPointsAnimation = () => {
-    setIsAnimatingPoints(true);
-    // Switch to Home tab immediately underneath the transparent overlay silently
+    // 1. Immediately switch tab so the home page renders in background
     model.setActiveTab('home', true);
 
-    Animated.parallel([
-      Animated.timing(contentOpacity, {
-        toValue: 0,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-      Animated.timing(btnOpacity, {
-        toValue: 0,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-      Animated.timing(bgOpacity, {
-        toValue: 0,
-        duration: 350,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // 2. Wait 100ms for the home tab to fully render natively
+    setTimeout(() => {
+      setIsAnimatingPoints(true);
 
-    const animations = particleAnims.map((particle, index) => {
-      const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
-      const radius = 70 + Math.random() * 50;
-      const burstX = width / 2 - 15 + Math.cos(angle) * radius;
-      const burstY = height / 2 - 80 + Math.sin(angle) * radius;
+      Animated.parallel([
+        Animated.timing(contentOpacity, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.timing(btnOpacity, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bgOpacity, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]).start();
 
-      particle.pos.setValue({ x: width / 2 - 15, y: height / 2 - 80 });
-      particle.scale.setValue(0);
-      particle.opacity.setValue(0);
+      const animations = particleAnims.map((particle, index) => {
+        const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
+        const radius = 70 + Math.random() * 50;
+        const burstX = width / 2 - 15 + Math.cos(angle) * radius;
+        const burstY = height / 2 - 80 + Math.sin(angle) * radius;
 
-      const delay = index * 60;
+        const delay = index * 60;
 
-      return Animated.sequence([
-        Animated.delay(delay),
-        Animated.parallel([
-          Animated.spring(particle.pos, {
-            toValue: { x: burstX, y: burstY },
-            tension: 80,
-            friction: 6,
-            useNativeDriver: true,
-          }),
-          Animated.timing(particle.scale, {
-            toValue: 1.5,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-          Animated.timing(particle.opacity, {
-            toValue: 1,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.delay(120),
-        Animated.parallel([
-          Animated.timing(particle.pos, {
-            toValue: model.completionCelebrationType === 'claim'
-              ? { x: index % 2 === 0 ? -100 : width + 100, y: 150 } // eco points (even) go left, coins (odd) go right
-              : { x: width * 0.5, y: 240 },
-            duration: 650,
-            easing: Easing.bezier(0.25, 1, 0.5, 1),
-            useNativeDriver: true,
-          }),
-          Animated.timing(particle.scale, {
-            toValue: 0.4,
-            duration: 650,
-            useNativeDriver: true,
-          }),
-          Animated.sequence([
-            Animated.delay(450),
+        return Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.spring(particle.pos, {
+              toValue: { x: burstX, y: burstY },
+              tension: 80,
+              friction: 6,
+              useNativeDriver: true,
+            }),
+            Animated.timing(particle.scale, {
+              toValue: 1.5,
+              duration: 250,
+              useNativeDriver: true,
+            }),
             Animated.timing(particle.opacity, {
-              toValue: 0,
-              duration: 200,
+              toValue: 1,
+              duration: 150,
               useNativeDriver: true,
             }),
           ]),
-        ]),
-      ]);
-    });
+          Animated.delay(120),
+          Animated.parallel([
+            Animated.timing(particle.pos, {
+              toValue: { x: (width / 2) - 15, y: 434 }, // Target exactly the center of the LevelCard progress bar (pushed further down by AI search)
+              duration: 650,
+              easing: Easing.bezier(0.25, 1, 0.5, 1),
+              useNativeDriver: true,
+            }),
+            Animated.timing(particle.scale, {
+              toValue: 0.4,
+              duration: 650,
+              useNativeDriver: true,
+            }),
+            Animated.sequence([
+              Animated.delay(450),
+              Animated.timing(particle.opacity, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: true,
+              }),
+            ]),
+          ]),
+        ]);
+      });
 
-    Animated.parallel(animations).start(() => {
-      model.resetQuiz();
-      model.setActiveOverlay(null);
-      DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
-    });
+      Animated.parallel(animations).start(() => {
+        model.resetQuiz();
+        model.setActiveOverlay(null);
+        DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
+      });
+    }, 100);
   };
 
   React.useEffect(() => {
@@ -1820,8 +1825,8 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
   }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse]);
 
-  const confettiPieces = React.useMemo(() => generateConfettiPieces(75), []);
-  const embers = React.useMemo(() => generateEmbers(15), []);
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(25), []);
+  const embers = React.useMemo(() => generateEmbers(8), []);
 
   return (
     <View style={[styles.fullscreenOverlay, isAnimatingPoints && { backgroundColor: 'transparent' }]}>
@@ -2007,26 +2012,26 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
               {model.completionCelebrationType === 'quiz'
                 ? 'Excellent work! You have successfully verified your knowledge.'
                 : model.completionCelebrationType === 'lesson'
-                ? 'Superb! You have finished reading the lesson materials.'
-                : 'Awesome! You have completed a challenge and earned your rewards!'}
+                  ? 'Superb! You have finished reading the lesson materials.'
+                  : 'Awesome! You have completed a challenge and earned your rewards!'}
             </Text>
 
             {model.completionCelebrationType === 'claim' && model.earnedCoins > 0 ? (
-               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
-                 <ExpCounter targetPoints={model.earnedPoints} />
-                 <View style={{ alignItems: 'center' }}>
-                   <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
-                     <View style={{ position: 'absolute', top: 5, left: 5, width: 100, height: 100, borderRadius: 50, backgroundColor: '#FBBF24' }}>
-                        <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: 50 }} />
-                     </View>
-                     <Ionicons name="cash" size={44} color="#FFF" />
-                   </View>
-                   <Text style={{ fontSize: 52, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: 4 }}>+{model.earnedCoins}</Text>
-                   <Text style={{ fontSize: 13, fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
-                 </View>
-               </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+                <ExpCounter targetPoints={model.earnedPoints} />
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+                    <View style={{ position: 'absolute', top: 5, left: 5, width: 100, height: 100, borderRadius: 50, backgroundColor: '#FBBF24' }}>
+                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: 50 }} />
+                    </View>
+                    <Ionicons name="cash" size={44} color="#FFF" />
+                  </View>
+                  <Text style={{ fontSize: 52, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: 4 }}>+{model.earnedCoins}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
+                </View>
+              </View>
             ) : (
-               <ExpCounter targetPoints={model.earnedPoints} />
+              <ExpCounter targetPoints={model.earnedPoints} />
             )}
           </View>
         </Animated.View>
@@ -2070,45 +2075,43 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
         </View>
       </Animated.View>
 
-      {isAnimatingPoints && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {particleAnims.map((particle, index) => (
-            <Animated.View
-              key={index}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                transform: [
-                  { translateX: particle.pos.x },
-                  { translateY: particle.pos.y },
-                  { scale: particle.scale },
-                ],
-                opacity: particle.opacity,
-                zIndex: 9999,
-                shadowColor: '#10b981',
-                shadowRadius: 10,
-                shadowOpacity: 0.8,
-                shadowOffset: { width: 0, height: 0 },
-                elevation: 10,
-              }}
-            >
-              <View style={{
-                width: 30,
-                height: 30,
-                borderRadius: 15,
-                backgroundColor: model.completionCelebrationType === 'claim' && index % 2 !== 0 ? '#F59E0B' : '#10b981',
-                justifyContent: 'center',
-                alignItems: 'center',
-                borderWidth: 2,
-                borderColor: '#FFF',
-              }}>
-                <Ionicons name={model.completionCelebrationType === 'claim' && index % 2 !== 0 ? 'cash' : 'leaf'} size={16} color="#FFF" />
-              </View>
-            </Animated.View>
-          ))}
-        </View>
-      )}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {particleAnims.map((particle, index) => (
+          <Animated.View
+            key={index}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              transform: [
+                { translateX: particle.pos.x },
+                { translateY: particle.pos.y },
+                { scale: particle.scale },
+              ],
+              opacity: particle.opacity,
+              zIndex: 9999,
+              shadowColor: '#10b981',
+              shadowRadius: 10,
+              shadowOpacity: 0.8,
+              shadowOffset: { width: 0, height: 0 },
+              elevation: 10,
+            }}
+          >
+            <View style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              backgroundColor: model.completionCelebrationType === 'claim' && index % 2 !== 0 ? '#F59E0B' : '#10b981',
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderWidth: 2,
+              borderColor: '#FFF',
+            }}>
+              <Ionicons name={model.completionCelebrationType === 'claim' && index % 2 !== 0 ? 'cash' : 'leaf'} size={16} color="#FFF" />
+            </View>
+          </Animated.View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -2322,5 +2325,433 @@ export function TransparencyOverlay({ model }: { model: EcoBudMobileModel }) {
         ))}
       </ScrollView>
     </OverlayScaffold>
+  );
+}
+
+interface FireRainParticleProps {
+  id: number;
+  startX: number;
+  startY: number;
+  delay: number;
+  duration: number;
+  size: number;
+  drift: number;
+  color: string;
+}
+
+function generateFireRainParticles(count: number) {
+  const { width, height } = Dimensions.get('window');
+  const colors = ['#FF3D00', '#FF9100', '#FFD600', '#FFEA00', '#FF5722', '#FFC107'];
+  
+  return Array.from({ length: count }, (_, i) => {
+    return {
+      id: i,
+      startX: Math.random() * width,
+      startY: -50,
+      delay: Math.random() * 2000,
+      duration: 2000 + Math.random() * 1500,
+      size: 3 + Math.random() * 4,
+      drift: (Math.random() - 0.5) * 80,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    };
+  });
+}
+
+function FireRainParticle({ particle }: { particle: FireRainParticleProps }) {
+  const fallAnim = React.useRef(new Animated.Value(0)).current;
+  const { height } = Dimensions.get('window');
+
+  React.useEffect(() => {
+    const totalDuration = particle.duration + particle.delay;
+    fallAnim.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(fallAnim, {
+        toValue: 1,
+        duration: totalDuration,
+        useNativeDriver: true,
+        easing: Easing.linear,
+      })
+    );
+    loop.start();
+
+    return () => {
+      loop.stop();
+    };
+  }, [fallAnim, particle.duration, particle.delay]);
+
+  const totalDuration = particle.duration + particle.delay;
+  const startRatio = particle.delay / totalDuration;
+
+  const translateY = fallAnim.interpolate({
+    inputRange: [0, startRatio, 1],
+    outputRange: [particle.startY, particle.startY, height + 50],
+  });
+
+  const translateX = fallAnim.interpolate({
+    inputRange: [0, startRatio, (1 + startRatio) / 2, 1],
+    outputRange: [
+      particle.startX,
+      particle.startX,
+      particle.startX + particle.drift,
+      particle.startX + particle.drift * 1.5,
+    ],
+  });
+
+  const opacity = fallAnim.interpolate({
+    inputRange: [0, startRatio, startRatio + 0.1 * (1 - startRatio), 0.8 + 0.2 * startRatio, 1],
+    outputRange: [0, 0, 0.8, 0.8, 0],
+  });
+
+  const rotate = fallAnim.interpolate({
+    inputRange: [0, startRatio, 1],
+    outputRange: ['0deg', '0deg', '360deg'],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        width: particle.size,
+        height: particle.size * 1.8,
+        borderRadius: particle.size / 2,
+        backgroundColor: particle.color,
+        opacity,
+        transform: [
+          { translateX },
+          { translateY },
+          { rotate },
+        ],
+        shadowColor: particle.color,
+        shadowOpacity: 1,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 4,
+      }}
+    />
+  );
+}
+
+export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
+  const scale = React.useRef(new Animated.Value(0.5)).current;
+  const opacity = React.useRef(new Animated.Value(0)).current;
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const buttonPulseAnim = React.useRef(new Animated.Value(1)).current;
+  const particles = React.useMemo(() => generateFireRainParticles(20), []);
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        friction: 6,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    // Pulse animation for the glowing container background
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.95, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Pulse animation for the button
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(buttonPulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
+        Animated.timing(buttonPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      ])
+    ).start();
+
+    return () => {
+      pulseAnim.stopAnimation();
+      buttonPulseAnim.stopAnimation();
+    };
+  }, [scale, opacity, pulseAnim, buttonPulseAnim]);
+
+  const closeOverlay = () => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 0.5,
+        friction: 6,
+        tension: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      model.setActiveOverlay(null);
+    });
+  };
+
+  const streakVal = model.dashboard?.streak ?? 3;
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Animated.View style={{ flex: 1, opacity: opacity as any, justifyContent: 'center', alignItems: 'center' }}>
+        
+        {/* Deep, premium dark gradient background */}
+        <LinearGradient
+          colors={['rgba(7, 28, 25, 0.96)', 'rgba(12, 18, 17, 0.99)']}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Fire Sparks Rain/Shower Effect */}
+        <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+          {particles.map((particle) => (
+            <FireRainParticle key={particle.id} particle={particle} />
+          ))}
+        </View>
+
+        <Animated.View 
+          style={{ 
+            transform: [{ scale: scale as any }], 
+            alignItems: 'center', 
+            width: '90%', 
+            zIndex: 10 
+          }}
+        >
+          {/* Ambient fire glow aura behind the flame */}
+          <Animated.View style={{
+            position: 'absolute',
+            top: 10,
+            width: 180,
+            height: 180,
+            borderRadius: 90,
+            backgroundColor: 'rgba(244, 144, 0, 0.15)',
+            transform: [{ scale: pulseAnim as any }],
+            filter: 'blur(20px)',
+            zIndex: -1,
+          }} />
+
+          {/* Large Animated Duolingo Flame */}
+          <View style={{ width: 150, height: 150, alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+            <FireStreak streakCount={streakVal} isActive={true} size={140} mode="hero" />
+          </View>
+
+          {/* Active Streak Label Badge */}
+          <View style={{
+            backgroundColor: '#FF6D00',
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+            borderRadius: 100,
+            marginBottom: 24,
+            shadowColor: '#FF6D00',
+            shadowOpacity: 0.4,
+            shadowRadius: 10,
+            elevation: 4,
+          }}>
+            <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 13, letterSpacing: 1.5 }}>
+              {streakVal}-DAY STREAK
+            </Text>
+          </View>
+
+          {/* Achievement Titles */}
+          <Text style={{ 
+            fontSize: 36, 
+            fontWeight: '900', 
+            color: '#FFF', 
+            textAlign: 'center', 
+            marginBottom: 12,
+            textShadowColor: 'rgba(244, 144, 0, 0.3)',
+            textShadowOffset: { width: 0, height: 3 },
+            textShadowRadius: 10 
+          }}>
+            Streak Unlocked!
+          </Text>
+          
+          <Text style={{ 
+            fontSize: 16, 
+            color: '#A7F3D0', 
+            textAlign: 'center', 
+            lineHeight: 24, 
+            marginBottom: 32, 
+            paddingHorizontal: 16,
+            opacity: 0.9 
+          }}>
+            Outstanding job! You've successfully completed habit actions {streakVal} days in a row. Keep completing daily actions to watch your streak grow and earn bigger rewards.
+          </Text>
+
+          {/* Clean, boxless rewards row */}
+          <View style={{ 
+            flexDirection: 'row', 
+            justifyContent: 'center', 
+            gap: 24, 
+            width: '100%', 
+            marginBottom: 36 
+          }}>
+            {/* Reward 1 */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <Text style={{ fontSize: 24 }}>🌱</Text>
+              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '800' }}>+50 XP</Text>
+            </View>
+
+            {/* Reward 2 */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <Text style={{ fontSize: 24 }}>🪙</Text>
+              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '800' }}>+10 Coins</Text>
+            </View>
+          </View>
+
+          <Animated.View style={{ transform: [{ scale: buttonPulseAnim as any }], width: '100%' }}>
+            <PrimaryButton 
+              label="Keep it up!" 
+              onPress={closeOverlay} 
+            />
+          </Animated.View>
+        </Animated.View>
+      </Animated.View>
+    </View>
+  );
+}
+
+export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const currentStreak = getVisibleStreak(model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0);
+
+  const scaleAnim = React.useRef(new Animated.Value(0.5)).current;
+  const opacityAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, [scaleAnim, opacityAnim]);
+
+  const closeOverlay = () => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 0.5,
+        friction: 6,
+        tension: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      model.setActiveOverlay(null);
+    });
+  };
+
+  const rewards = [
+    { day: 7, text: '5 Coins + 25 EXP' },
+    { day: 14, text: '10 Coins + 40 EXP' },
+    { day: 21, text: '15 Coins + 50 EXP' },
+    { day: 30, text: '25 Coins + 100 EXP' },
+    { day: 40, text: '30 Coins + 120 EXP' },
+    { day: 50, text: '50 Coins + 200 EXP' },
+    { day: 60, text: '60 Coins + 250 EXP' },
+    { day: 70, text: '70 Coins + 300 EXP' },
+    { day: 80, text: '80 Coins + 350 EXP' },
+    { day: 90, text: '90 Coins + 400 EXP' },
+    { day: 100, text: '150 Coins + 1,000 EXP + 100-Day Badge' },
+  ];
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { zIndex: 9999, justifyContent: 'center', alignItems: 'center', opacity: opacityAnim }]}>
+      <TouchableOpacity 
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} 
+        activeOpacity={1} 
+        onPress={closeOverlay} 
+      />
+      <Animated.View style={{
+        width: '90%',
+        maxHeight: '85%',
+        backgroundColor: '#0C5E54',
+        borderRadius: 24,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 10 },
+        elevation: 10,
+        transform: [{ scale: scaleAnim }],
+      }}>
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ fontSize: 24, fontWeight: '900', color: '#FFF', textAlign: 'center' }}>Streak Rewards</Text>
+          <Text style={{ fontSize: 14, color: '#A7F3D0', textAlign: 'center', marginTop: 8 }}>Keep your streak going to unlock more rewards!</Text>
+        </View>
+
+        <View style={{ alignItems: 'center', marginBottom: 20 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFF' }}>Your Streak: {currentStreak} Days</Text>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+          <View style={{ gap: 12 }}>
+            {rewards.map((reward, index) => {
+              const isUnlocked = currentStreak >= reward.day;
+              const isMilestone = reward.day === 100;
+              return (
+                <View
+                  key={index}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: isUnlocked ? 'rgba(74, 222, 128, 0.15)' : 'rgba(255,255,255,0.05)',
+                    padding: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: isUnlocked ? '#4ADE80' : 'rgba(255,255,255,0.1)',
+                  }}
+                >
+                  <View style={{ width: 32, alignItems: 'center', justifyContent: 'center' }}>
+                    {isUnlocked ? (
+                      <Text style={{ fontSize: 18 }}>✓</Text>
+                    ) : isMilestone ? (
+                      <Text style={{ fontSize: 18 }}>👑</Text>
+                    ) : (
+                      <Text style={{ fontSize: 18 }}>🔒</Text>
+                    )}
+                  </View>
+                  <View style={{ width: 70 }}>
+                    <Text style={{ color: isUnlocked ? '#4ADE80' : '#A7F3D0', fontWeight: '800', fontSize: 14 }}>
+                      Day {reward.day}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: isUnlocked ? '#FFF' : 'rgba(255,255,255,0.7)', fontWeight: '600', fontSize: 14, flexWrap: 'wrap' }}>
+                      {reward.text}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+
+        <View style={{ marginTop: 24 }}>
+          <PrimaryButton label="Got it" onPress={closeOverlay} />
+        </View>
+      </Animated.View>
+    </Animated.View>
   );
 }

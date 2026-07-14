@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -75,6 +75,9 @@ export interface HeaderProps {
 export interface SummaryCardsProps {
   currentStreak: number;
   ecoPoints: number;
+  onPressRewards?: () => void;
+  lastSevenDays?: Date[];
+  completedDays?: string[];
 }
 
 export interface ActiveChallengeCardProps {
@@ -158,7 +161,8 @@ export interface EcoBudMobileModel {
   hasUsableInternet: boolean;
   isUserOnline: boolean;
   notificationCount: number;
-  claimRewardData: { points: number; coins: number } | null;
+  claimRewardData: { points: number; coins: number; origin?: { x: number; y: number } } | null;
+  triggerTestReward: (origin?: { x: number; y: number }) => void;
   setActiveTab: (tab: AppTab, silent?: boolean) => void;
   setActiveOverlay: (screen: OverlayScreen) => void;
   setLearnSearch: (value: string) => void;
@@ -185,7 +189,7 @@ export interface EcoBudMobileModel {
   nextQuestion: () => void;
   submitQuiz: () => Promise<void>;
   resetQuiz: () => void;
-  showLessonComplete: (type: 'quiz' | 'lesson') => void;
+  showLessonComplete: (type: 'quiz' | 'lesson' | 'claim') => void;
   handleChallengeProgress: (challenge: ChallengeWithProgress, nextProgress: number) => Promise<void>;
   handleHabitCheckIn: (habitId: string) => Promise<void>;
   handleJoinEvent: (eventId: string) => Promise<void>;

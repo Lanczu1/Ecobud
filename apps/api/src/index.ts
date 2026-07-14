@@ -22,6 +22,10 @@ import {
   startPresenceCleanupScheduler,
   stopPresenceCleanupScheduler,
 } from './services/presenceCleanupScheduler';
+import {
+  startLessonPublishScheduler,
+  stopLessonPublishScheduler,
+} from './services/lessonPublishScheduler';
 
 const app = express();
 
@@ -68,10 +72,12 @@ app.listen(port, () => {
 });
 
 startPresenceCleanupScheduler();
+startLessonPublishScheduler();
 
-const shutdownPresenceCleanupScheduler = () => {
+const shutdownSchedulers = () => {
   stopPresenceCleanupScheduler();
+  stopLessonPublishScheduler();
 };
 
-process.on('SIGINT', shutdownPresenceCleanupScheduler);
-process.on('SIGTERM', shutdownPresenceCleanupScheduler);
+process.on('SIGINT', shutdownSchedulers);
+process.on('SIGTERM', shutdownSchedulers);

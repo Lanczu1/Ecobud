@@ -63,6 +63,7 @@ model Lesson {
   pointsReward     Int                  @default(10)
   featured         Boolean              @default(false)
   isPublished      Boolean              @default(false) @map("is_published")
+  scheduledAt      DateTime?            @map("scheduled_at")
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @updatedAt @map("updated_at")
   createdById      String?              @map("created_by_id")
@@ -165,6 +166,7 @@ model Challenge {
   aiDetectionTargets  String[]
   aiMinimumConfidence Int?                  @default(80)
   type                String                @default("GENERAL")
+  isFeatured          Boolean               @default(false)
   submissions         ChallengeSubmission[]
   userChallenges      UserChallenge[]
 }

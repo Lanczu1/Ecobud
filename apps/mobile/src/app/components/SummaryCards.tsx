@@ -1,34 +1,29 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useRef, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  Animated,
-  Easing,
-} from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type SummaryCardsProps } from '../types/home';
+import { FireStreak } from './FireStreak';
+import { getVisibleStreak } from '../utils/appUtils';
 
-export function SummaryCards({ currentStreak, ecoPoints }: SummaryCardsProps) {
-  const flameScale = useRef(new Animated.Value(1)).current;
+export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSevenDays, completedDays }: SummaryCardsProps) {
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(flameScale, { toValue: 1.12, duration: 700, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(flameScale, { toValue: 1, duration: 700, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [flameScale, currentStreak]);
+  // Visual placeholder for streak progress if real data is not provided
+  const visibleStreak = getVisibleStreak(currentStreak);
+  const maxVisualStreak = Math.min(currentStreak, 7);
+  const todayIndex = currentStreak === 0 ? 0 : Math.min(currentStreak - 1, 6);
 
-  // Generate an array of 7 items just for visual placeholder if we don't have completedDays
-  const fakeDots = Array.from({ length: 7 }).map((_, i) => ({
-    isToday: i === 6,
-    done: currentStreak > 0 && i >= 6 - Math.min(currentStreak, 7) + 1,
-  }));
+  const dots = lastSevenDays && completedDays
+    ? lastSevenDays.map((date, index) => {
+        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        return {
+          done: completedDays.includes(dateKey),
+          isToday: index === lastSevenDays.length - 1,
+        };
+      })
+    : Array.from({ length: 7 }).map((_, i) => ({
+        isToday: i === todayIndex,
+        done: i < maxVisualStreak,
+      }));
 
   return (
     <View style={{ marginBottom: 24, paddingHorizontal: 0 }}>
@@ -40,30 +35,40 @@ export function SummaryCards({ currentStreak, ecoPoints }: SummaryCardsProps) {
       >
         <View style={styles.streakGlow} />
         <View style={styles.streakHeader}>
-          <Animated.View
-            style={[
-              styles.flameCircle,
-              currentStreak > 0 ? { transform: [{ scale: flameScale }] } : undefined,
-            ]}
-          >
-            <MaterialCommunityIcons name="fire" size={30} color="#FBBF24" />
-            {currentStreak > 0 && <View style={styles.flameGlow} />}
-          </Animated.View>
+          <View style={styles.flameCircle}>
+            <FireStreak
+              streakCount={visibleStreak}
+              isActive={currentStreak >= 3}
+              size={28}
+              mode="badge"
+            />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.streakLabel}>CURRENT STREAK</Text>
             <Text style={styles.streakTagline}>
-              {currentStreak === 0 ? 'Log a habit to start your streak!' : 'Keep your eco habits growing!'}
+              {currentStreak < 3 ? (currentStreak === 0 ? 'Log a habit to start your streak!' : `${3 - currentStreak} more days to unlock your streak!`) : 'Keep your eco habits growing!'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.streakNumberRow}>
-          <Text style={styles.streakNumber}>{currentStreak}</Text>
-          <Text style={styles.streakUnit}>Days</Text>
+        <View style={[styles.streakNumberRow, { justifyContent: 'space-between', alignItems: 'flex-end' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <Text style={styles.streakNumber}>{visibleStreak}</Text>
+            <Text style={styles.streakUnit}>Days</Text>
+          </View>
+          {onPressRewards && (
+            <TouchableOpacity 
+              onPress={onPressRewards} 
+              style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            >
+              <Text style={{ fontSize: 14 }}>🎁</Text>
+              <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>Rewards</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.streakDotsRow}>
-          {fakeDots.map((dot, index) => (
+          {dots.map((dot, index) => (
             <View
               key={index}
               style={[

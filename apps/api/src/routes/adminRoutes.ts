@@ -23,6 +23,7 @@ adminRoutes.post("/lessons", uploadMiddleware.fields([{ name: 'video', maxCount:
 adminRoutes.put("/lessons/:id", uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.updateLesson);
 adminRoutes.delete("/lessons/:id", AdminController.deleteLesson);
 adminRoutes.patch("/lessons/:id/publish", AdminController.patchPublish);
+adminRoutes.patch("/lessons/:id/feature", AdminController.patchFeature);
 adminRoutes.post("/transcribe", uploadMiddleware.single('video'), AdminController.transcribeVideo);
 
 // User Management

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2 } from 'lucide-react';
+import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
 import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
 
 interface Lesson {
@@ -21,12 +21,20 @@ interface Lesson {
   quizQuestions?: any[];
   createdAt: string;
   updatedAt: string;
+  scheduledAt?: string | null;
   createdBy: { id: string; name: string; email: string } | null;
 }
 
 const statusColors: Record<string, string> = {
   Published: 'bg-green-50 text-green-700 border-green-100',
   Draft: 'bg-yellow-50 text-yellow-700 border-yellow-100',
+  'Auto Publish': 'bg-blue-50 text-blue-700 border-blue-100',
+};
+
+const getLessonStatus = (lesson: Lesson) => {
+  if (lesson.isPublished) return 'Published';
+  if (lesson.scheduledAt) return 'Auto Publish';
+  return 'Draft';
 };
 
 const CATEGORIES = ['General', 'Recycling', 'Climate', 'Waste', 'Lifestyle', 'Energy', 'Water', 'Nature', 'Food'];
@@ -54,15 +62,17 @@ interface FormDataState {
   category: string;
   difficulty: string;
   isPublished: boolean;
+  featured: boolean;
   quizPassingScore: number;
   pointsReward: number;
   transcript?: string | null;
   durationMinutes: number;
   quizQuestions: any[];
   pages: any[];
+  scheduledAt: string;
 }
 
-const emptyForm: FormDataState = { title: '', description: '', content: '', category: 'General', difficulty: 'Beginner', isPublished: false, quizPassingScore: 70, pointsReward: 10, durationMinutes: 8, quizQuestions: [], pages: [{ title: '', description: '', content: '' }] };
+const emptyForm: FormDataState = { title: '', description: '', content: '', category: 'General', difficulty: 'Beginner', isPublished: false, featured: false, quizPassingScore: 70, pointsReward: 10, durationMinutes: 8, quizQuestions: [], pages: [{ title: '', description: '', content: '' }], scheduledAt: '' };
 
 interface ModalProps {
   onClose: () => void;
@@ -70,10 +80,18 @@ interface ModalProps {
   initial?: Lesson | null;
 }
 
+const formatLocalDatetime = (dateString?: string | null) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormDataState>(
     initial
-      ? { title: initial.title, description: initial.description, content: initial.content, category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes || 8, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }] }
+      ? { title: initial.title, description: initial.description, content: initial.content, category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, featured: initial.featured || false, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes || 8, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }], scheduledAt: formatLocalDatetime(initial.scheduledAt) }
       : emptyForm
   );
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -212,6 +230,12 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
       formData.append('category', form.category);
       formData.append('difficulty', form.difficulty);
       formData.append('isPublished', String(form.isPublished));
+      if (form.scheduledAt) {
+        formData.append('scheduledAt', new Date(form.scheduledAt).toISOString());
+      } else {
+        formData.append('scheduledAt', ''); // Send empty to clear if needed
+      }
+      formData.append('featured', String(form.featured));
       formData.append('quizPassingScore', enableQuiz ? String(form.quizPassingScore) : '0');
       formData.append('pointsReward', String(form.pointsReward));
 
@@ -437,12 +461,23 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
               </div>
               
               <div className="pt-2 border-t border-gray-100">
+                <label className="flex items-center gap-3 cursor-pointer mb-2">
+                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.featured ? 'bg-indigo-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, featured: !f.featured }))}>
+                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.featured ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">Feature this lesson</span>
+                </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.isPublished ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, isPublished: !f.isPublished }))}>
                     <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isPublished ? 'translate-x-4' : ''}`} />
                   </div>
                   <span className="text-sm font-medium text-gray-700">Publish immediately</span>
                 </label>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Schedule Publish Date</label>
+                <OptimizedInput type="datetime-local" value={form.scheduledAt} onChange={(val: string) => setForm(f => ({ ...f, scheduledAt: val }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+                <p className="text-xs text-gray-500 mt-1">If set, the lesson will be automatically published at this time.</p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={handleClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
@@ -484,10 +519,11 @@ export function LearningContent() {
   useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() =>
-    lessons.filter(c =>
-      (filterStatus === 'All' || (filterStatus === 'Published' ? c.isPublished : !c.isPublished)) &&
-      c.title.toLowerCase().includes(search.toLowerCase())
-    ), [lessons, search, filterStatus]);
+    lessons.filter(c => {
+      const status = getLessonStatus(c);
+      const matchesStatus = filterStatus === 'All' || status === filterStatus;
+      return matchesStatus && c.title.toLowerCase().includes(search.toLowerCase());
+    }), [lessons, search, filterStatus]);
 
   const handleAdd = async (form: FormData) => {
     const newLesson = await adminPostForm<Lesson>('/admin/lessons', form);
@@ -525,6 +561,18 @@ export function LearningContent() {
     }
   };
 
+  const handleToggleFeatured = async (lesson: Lesson) => {
+    setToggling(lesson.id + 'featured');
+    try {
+      const updated = await adminPatch<Lesson>(`/admin/lessons/${lesson.id}/feature`, { featured: !lesson.featured });
+      setLessons(prev => prev.map(l => l.id === updated.id ? updated : l));
+    } catch (err: any) {
+      alert(err.message || 'Failed to toggle featured status.');
+    } finally {
+      setToggling(null);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">
       {/* Modals */}
@@ -551,11 +599,12 @@ export function LearningContent() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Content', value: loading ? '—' : lessons.length, extra: 'modules', color: 'text-gray-900' },
-          { label: 'Published', value: loading ? '—' : lessons.filter(c => c.isPublished).length, extra: 'live', color: 'text-green-600' },
-          { label: 'Drafts', value: loading ? '—' : lessons.filter(c => !c.isPublished).length, extra: 'unpublished', color: 'text-yellow-600' },
+          { label: 'Published', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Published').length, extra: 'live', color: 'text-green-600' },
+          { label: 'Auto Publish', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Auto Publish').length, extra: 'scheduled', color: 'text-blue-600' },
+          { label: 'Drafts', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Draft').length, extra: 'unpublished', color: 'text-yellow-600' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
@@ -574,7 +623,7 @@ export function LearningContent() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input type="text" placeholder="Search content..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
         </div>
-        {['All', 'Published', 'Draft'].map(f => (
+        {['All', 'Published', 'Auto Publish', 'Draft'].map(f => (
           <button key={f} onClick={() => setFilterStatus(f)} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
         ))}
       </div>
@@ -603,8 +652,8 @@ export function LearningContent() {
               </div>
               <div className="p-5">
                 <div className="flex items-start justify-between mb-3">
-                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[item.isPublished ? 'Published' : 'Draft']}`}>
-                    {item.isPublished ? 'Published' : 'Draft'}
+                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[getLessonStatus(item)]}`}>
+                    {getLessonStatus(item)}
                   </span>
                   <div className="flex gap-2">
                     <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full border bg-blue-50 text-blue-700 border-blue-100">
@@ -628,6 +677,14 @@ export function LearningContent() {
                     className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all ${item.isPublished ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'bg-green-50 text-green-700 hover:bg-green-100'} disabled:opacity-60`}
                   >
                     {toggling === item.id ? '…' : item.isPublished ? 'Unpublish' : 'Publish'}
+                  </button>
+                  <button
+                    onClick={() => handleToggleFeatured(item)}
+                    disabled={toggling === item.id + 'featured'}
+                    title={item.featured ? 'Unfeature' : 'Feature'}
+                    className={`flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 ${item.featured ? 'bg-yellow-50 text-yellow-500 hover:bg-yellow-100' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
+                  >
+                    {toggling === item.id + 'featured' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className={`w-3 h-3 ${item.featured ? 'fill-current' : ''}`} />}
                   </button>
                   <button onClick={() => { setEditing(item); setModal('edit'); }} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
                     <Edit3 className="w-3 h-3" />

@@ -21,11 +21,44 @@ const LEVELS = [
 ];
 
 export function LevelCard({ ecoPoints }: LevelCardProps) {
+  const [displayPoints, setDisplayPoints] = React.useState(ecoPoints);
+
+  React.useEffect(() => {
+    let animationFrameId: number;
+    let startTime: number | null = null;
+    const duration = 1000; // 1 second count animation
+    const startValue = displayPoints;
+    const targetValue = ecoPoints;
+
+    if (startValue === targetValue) return;
+
+    const step = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      
+      // Easing function (easeOutQuad) for smoother finish
+      const easeProgress = 1 - (1 - progress) * (1 - progress);
+      
+      const currentVal = Math.floor(startValue + (targetValue - startValue) * easeProgress);
+      setDisplayPoints(currentVal);
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(step);
+      } else {
+        setDisplayPoints(targetValue);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(step);
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [ecoPoints]);
+
   let currentLevelObj = LEVELS[0];
   let nextLevelObj = LEVELS[1];
 
   for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (ecoPoints >= LEVELS[i].points) {
+    if (displayPoints >= LEVELS[i].points) {
       currentLevelObj = LEVELS[i];
       nextLevelObj = LEVELS[i + 1] || LEVELS[i];
       break;
@@ -37,10 +70,10 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
   let pointsToNext = 0;
 
   if (!isMaxLevel) {
-    const pointsInCurrentLevel = ecoPoints - currentLevelObj.points;
+    const pointsInCurrentLevel = displayPoints - currentLevelObj.points;
     const pointsNeededForNextLevel = nextLevelObj.points - currentLevelObj.points;
     progressPercent = (pointsInCurrentLevel / pointsNeededForNextLevel) * 100;
-    pointsToNext = nextLevelObj.points - ecoPoints;
+    pointsToNext = nextLevelObj.points - displayPoints;
   }
 
   return (
@@ -68,7 +101,7 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
         </View>
 
         <View style={styles.pointsRow}>
-          <Text style={styles.pointsNumber}>{ecoPoints}</Text>
+          <Text style={styles.pointsNumber}>{displayPoints}</Text>
           <Text style={styles.pointsUnit}>Eco Points</Text>
         </View>
 
@@ -79,7 +112,7 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
             ) : (
               <>
                 <Text style={styles.progressText}>Progress to {nextLevelObj.name}</Text>
-                <Text style={styles.progressText}>{ecoPoints} / {nextLevelObj.points}</Text>
+                <Text style={styles.progressText}>{displayPoints} / {nextLevelObj.points}</Text>
               </>
             )}
           </View>
