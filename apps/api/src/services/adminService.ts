@@ -39,6 +39,8 @@ export class AdminService {
     pointsReward?: number;
     quizQuestions?: any[];
     pages?: any[];
+    featured?: boolean;
+    scheduledAt?: Date | null;
   }) {
     const lesson = await prisma.lesson.create({
       data: {
@@ -55,6 +57,8 @@ export class AdminService {
         durationMinutes: data.durationMinutes ?? 8,
         quizPassingScore: data.quizPassingScore ?? 70,
         pointsReward: data.pointsReward ?? 10,
+        featured: data.featured ?? false,
+        scheduledAt: data.scheduledAt,
         quizQuestions: data.quizQuestions?.length ? {
           create: data.quizQuestions.map((q: any) => ({
             question: q.question,
@@ -123,6 +127,10 @@ export class AdminService {
     
     if ('durationMinutes' in updatePayload && typeof updatePayload.durationMinutes === 'string') {
       updatePayload.durationMinutes = parseInt(updatePayload.durationMinutes, 10);
+    }
+    
+    if ('featured' in updatePayload && typeof updatePayload.featured === 'string') {
+      updatePayload.featured = updatePayload.featured === 'true';
     }
     if (quizQuestions) {
       updatePayload.quizQuestions = {
@@ -218,6 +226,28 @@ export class AdminService {
     return lesson;
   }
 
+  static async toggleFeature(id: string, featured: boolean) {
+    const lesson = await prisma.lesson.update({
+      where: { id },
+      data: { featured }
+    });
+
+    await Promise.all([
+      supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
+        actorRole: 'admin',
+        entityId: id,
+        reason: featured ? 'lesson-featured' : 'lesson-unfeatured',
+      }),
+      supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+        actorRole: 'admin',
+        entityId: id,
+        reason: featured ? 'lesson-featured' : 'lesson-unfeatured',
+      }),
+    ]);
+
+    return lesson;
+  }
+
   static async resetUserKnowledge(userId: string) {
     return await prisma.userStats.update({
       where: { userId },
@@ -300,6 +330,7 @@ export class AdminService {
     type?: string;
     aiDetectionTargets?: string[];
     aiMinimumConfidence?: number;
+    isFeatured?: boolean;
   }) {
     const challenge = await prisma.challenge.create({
       data: {
@@ -315,7 +346,8 @@ export class AdminService {
         badgeLabel: data.badgeLabel,
         type: data.type || "GENERAL",
         aiDetectionTargets: data.aiDetectionTargets || [],
-        aiMinimumConfidence: data.aiMinimumConfidence || 80
+        aiMinimumConfidence: data.aiMinimumConfidence || 80,
+        isFeatured: data.isFeatured ?? false
       }
     });
 

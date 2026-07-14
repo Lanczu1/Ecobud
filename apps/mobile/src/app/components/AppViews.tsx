@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   StyleSheet,
   Alert,
+  TextInput,
   type StyleProp,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +31,7 @@ import {
   getEcoLevel,
   getPhMonthKey,
   usePressScale,
+  getVisibleStreak,
 } from '../utils/appUtils';
 import {
   TopNavbar,
@@ -38,6 +40,7 @@ import {
   SurfaceCard,
   SecondaryButton,
 } from './CommonComponents';
+import { FireStreak } from './FireStreak';
 import { LevelCard } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
@@ -45,7 +48,7 @@ import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
-import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { ecobudApiOrigin, type ChallengeWithProgress } from '../../shared/api/ecobudApi';
 
 const getValidImageUrl = (url: string | null | undefined) => {
   if (!url) return undefined;
@@ -289,6 +292,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         <SummaryCards
           currentStreak={model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
+          onPressRewards={() => model.setActiveOverlay('streakRewards')}
         />
 
         <QuickActions weeklyGoal={model.dashboard?.weeklyGoal ?? 0} />
@@ -586,6 +590,13 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
 
 export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [viewMode, setViewMode] = useState<'Discover' | 'My Tasks' | 'History'>('Discover');
+  const [sortOption, setSortOption] = useState<'Default' | 'Highest Reward' | 'Easiest'>('Default');
+
+  const categories = ['All', 'General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -595,6 +606,37 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     ).start();
   }, []);
 
+  const isFiltering = searchQuery.trim() !== '' || selectedCategory !== 'All';
+
+  const filterChallenge = (c: ChallengeWithProgress) => {
+    const searchLower = searchQuery.toLowerCase();
+    const catLower = selectedCategory.toLowerCase();
+    const matchesSearch = searchQuery === '' || c.title.toLowerCase().includes(searchLower) || c.description.toLowerCase().includes(searchLower);
+    const challengeCat = ((c as any).category || 'General').toLowerCase();
+    const matchesCategory = selectedCategory === 'All' || challengeCat === catLower || c.title.toLowerCase().includes(catLower) || c.description.toLowerCase().includes(catLower) || (c.type && c.type.toLowerCase().includes(catLower));
+    return matchesSearch && matchesCategory;
+  };
+
+  const sortChallenges = (list: ChallengeWithProgress[]) => {
+    if (sortOption === 'Highest Reward') return [...list].sort((a, b) => b.expReward - a.expReward);
+    if (sortOption === 'Easiest') {
+      const diffRank: Record<string, number> = { 'easy': 1, 'medium': 2, 'hard': 3, 'expert': 4 };
+      return [...list].sort((a, b) => (diffRank[a.difficulty.toLowerCase()] || 99) - (diffRank[b.difficulty.toLowerCase()] || 99));
+    }
+    return list;
+  };
+
+  const filteredFeaturedRaw = model.challenges.filter(c => c.isFeatured).filter(filterChallenge);
+  const filteredActiveRaw = model.challenges.filter(c => !c.isFeatured).filter(filterChallenge);
+  
+  const filteredActiveSorted = sortChallenges(filteredActiveRaw);
+  const discoverChallenges = filteredActiveSorted.filter(c => (c.progress?.progressPercentage || 0) === 0 && !model.viewedMissionIds.includes(c.id) && c.progress?.status?.toLowerCase() !== 'completed' && c.progress?.status?.toLowerCase() !== 'approved');
+  const inProgressChallenges = filteredActiveSorted.filter(c => ((c.progress?.progressPercentage || 0) > 0 || model.viewedMissionIds.includes(c.id)) && c.progress?.status?.toLowerCase() !== 'completed' && c.progress?.status?.toLowerCase() !== 'approved');
+  const completedChallenges = filteredActiveSorted.filter(c => c.progress?.status?.toLowerCase() === 'completed' || c.progress?.status?.toLowerCase() === 'approved');
+
+  const filteredFeatured = viewMode === 'Discover' ? filteredFeaturedRaw : [];
+  const currentActiveList = viewMode === 'Discover' ? discoverChallenges : viewMode === 'My Tasks' ? inProgressChallenges : completedChallenges;
+
   return (
     <>
       <TopNavbar model={model} />
@@ -602,40 +644,71 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         <Text style={localStyles.headerTitle}>Challenge Eco Missions</Text>
         <Text style={localStyles.headerSubtitle}>Level up your impact. Complete tasks to earn rewards and heal the planet.</Text>
 
-        <View style={[styles.rowBetween, { marginTop: 32, marginBottom: 16 }]}>
-          <Text style={styles.welcomeLabel}>TODAY'S HABITS</Text>
+        {/* View Mode Tabs */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#F0F5F2', borderRadius: 12, padding: 4, marginTop: 20, marginBottom: 10 }}>
+          {['Discover', 'My Tasks', 'History'].map(tab => (
+            <TouchableOpacity 
+              key={tab} 
+              style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: viewMode === tab ? '#FFFFFF' : 'transparent', shadowColor: viewMode === tab ? '#000' : 'transparent', shadowOpacity: 0.05, shadowRadius: 3, elevation: viewMode === tab ? 2 : 0 }}
+              onPress={() => setViewMode(tab as any)}
+            >
+              <Text style={{ fontWeight: '700', color: viewMode === tab ? '#126027' : '#6B7A75', fontSize: 13 }}>{tab}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-        <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Consistency is Key</Text>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 24, gap: 16, paddingBottom: 16 }}>
-          {model.habitsToday?.items.map((habit) => (
-            <View key={habit.id} style={styles.habitSquareCard}>
-              <View style={{ alignItems: 'center', width: '100%' }}>
-                <View style={styles.habitIconWrap}>
-                  <Ionicons name="leaf" size={18} color="#126027" />
-                </View>
-                <Text style={styles.habitTopText} numberOfLines={2}>{habit.title}</Text>
-                <Text style={styles.habitMetaText}>Daily • {habit.pointsReward} XP</Text>
-              </View>
-              <TouchableOpacity
-                disabled={habit.completedToday}
-                onPress={() => void model.handleHabitCheckIn(habit.id)}
-                style={[styles.habitSquareBtn, habit.completedToday && { backgroundColor: 'transparent' }]}
-              >
-                {habit.completedToday ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={styles.activeDot} />
-                    <Text style={styles.habitActiveText}>ACTIVE</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.habitSquareBtnText}>LOG TASK</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+        {/* Discovery & Filtering Section */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 15, marginTop: 20, marginBottom: 15, height: 48, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#F0F5F2' }}>
+          <Ionicons name="search-outline" size={20} color="#6B7A75" style={{ marginRight: 10 }} />
+          <TextInput
+            style={{ flex: 1, fontSize: 16, color: '#1A211D' }}
+            placeholder="Search challenges..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, maxHeight: 40, minHeight: 40 }} contentContainerStyle={{ paddingRight: 20 }}>
+          {categories.map((cat, index) => (
+            <TouchableOpacity 
+              key={index} 
+              style={{
+                backgroundColor: selectedCategory === cat ? '#126027' : '#FFFFFF',
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 20,
+                marginRight: 10,
+                borderWidth: 1,
+                borderColor: selectedCategory === cat ? '#126027' : '#E5E7EB',
+                alignSelf: 'center',
+              }}
+              onPress={() => setSelectedCategory(cat)}
+            >
+              <Text style={{
+                color: selectedCategory === cat ? '#FFFFFF' : '#4B5563',
+                fontWeight: '600',
+              }}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {model.recentViewedMission && (
+        {viewMode !== 'History' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7A75' }}>Sort by:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {['Default', 'Highest Reward', 'Easiest'].map(sort => (
+                <TouchableOpacity key={sort} onPress={() => setSortOption(sort as any)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: sortOption === sort ? '#E8F5E9' : '#F3F4F6', borderWidth: 1, borderColor: sortOption === sort ? '#A5D6A7' : 'transparent' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: sortOption === sort ? '#126027' : '#4B5563' }}>{sort}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {!isFiltering && model.recentViewedMission && viewMode === 'Discover' && (
           <View style={{ marginTop: 24, marginBottom: 8 }}>
             <Text style={[styles.welcomeLabel, { marginBottom: 8 }]}>RECENT ACTIVITY</Text>
             <Text style={[styles.sectionHeadline, { marginTop: 0, color: '#4ADE80' }]}>Recently Viewed</Text>
@@ -667,7 +740,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               </View>
               <View style={localStyles.premiumTaskBody}>
                 <View style={[styles.rowBetween, { marginBottom: 6 }]}>
-                  <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{model.recentViewedMission.difficulty.toUpperCase()}</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                    <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{model.recentViewedMission.difficulty.toUpperCase()}</Text>
+                    <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((model.recentViewedMission as any).category || 'GENERAL').toUpperCase()}</Text>
+                  </View>
                   <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                     <Text style={styles.taskMetaValue}>🌿 {model.recentViewedMission.expReward} Eco Points</Text>
                     <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
@@ -676,6 +752,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   </View>
                 </View>
                 <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{model.recentViewedMission.title}</Text>
+                <Text style={{ fontSize: 13, color: '#6B7A75', marginTop: 4, lineHeight: 18 }} numberOfLines={2}>{model.recentViewedMission.description}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 12 }}>
                   {model.recentViewedMission.progress?.status?.toLowerCase() === 'approved' || model.recentViewedMission.progress?.status?.toLowerCase() === 'unclaimed' ? (
                     <TouchableOpacity 
@@ -706,85 +783,109 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           </View>
         )}
 
-        <Text style={[styles.welcomeLabel, { marginTop: model.recentViewedMission ? 16 : 24, marginBottom: 8 }]}>ACTIVE CHALLENGES</Text>
-        <Text style={styles.sectionHeadline}>Featured Programs</Text>
-
-        {model.challenges.map((challenge, index) => (
-          index === 0 ? (
-            <Animated.View key={challenge.id} style={localStyles.featuredCard}>
-              <View style={[localStyles.featuredImage, { backgroundColor: '#1A3B2A' }]}>
-                {challenge.imageUrl ? (
-                  <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={StyleSheet.absoluteFill} blurRadius={10} />
-                ) : (
-                  <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', paddingBottom: 60 }]}>
-                    <Ionicons name="trophy" size={80} color="#4ADE80" style={{ opacity: 0.5 }} />
-                  </View>
-                )}
-                <View style={localStyles.featuredOverlay} />
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.9)']} style={localStyles.featuredGradient} />
-                
-                <View style={localStyles.featuredContent}>
-                  <View style={[styles.rowBetween, { marginBottom: 16, alignItems: 'flex-start' }]}>
-                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', flex: 1 }}>
-                      <View style={localStyles.glassTag}>
-                        <Text style={localStyles.glassTagText}>
-                          {challenge.difficulty.toLowerCase() === 'easy' ? '🟢' : challenge.difficulty.toLowerCase() === 'medium' ? '🟡' : challenge.difficulty.toLowerCase() === 'hard' ? '🔴' : '🔥'} {challenge.difficulty.toUpperCase()}
-                        </Text>
+        {filteredFeatured.length > 0 && (
+          <>
+            <Text style={[styles.welcomeLabel, { marginTop: (!isFiltering && model.recentViewedMission) ? 16 : 24, marginBottom: 8 }]}>FEATURED PROGRAMS</Text>
+            {filteredFeatured.map((challenge) => (
+              <Animated.View key={challenge.id} style={localStyles.featuredCard}>
+                <View style={[localStyles.featuredImage, { backgroundColor: '#1A3B2A' }]}>
+                  {challenge.imageUrl ? (
+                    <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={StyleSheet.absoluteFill} blurRadius={10} />
+                  ) : (
+                    <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', paddingBottom: 60 }]}>
+                      <Ionicons name="trophy" size={80} color="#4ADE80" style={{ opacity: 0.5 }} />
+                    </View>
+                  )}
+                  <View style={localStyles.featuredOverlay} />
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.9)']} style={localStyles.featuredGradient} />
+                  
+                  <View style={localStyles.featuredContent}>
+                    <View style={[styles.rowBetween, { marginBottom: 16, alignItems: 'flex-start' }]}>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+                        <View style={localStyles.glassTag}>
+                          <Text style={localStyles.glassTagText}>
+                            {challenge.difficulty.toLowerCase() === 'easy' ? '🟢' : challenge.difficulty.toLowerCase() === 'medium' ? '🟡' : challenge.difficulty.toLowerCase() === 'hard' ? '🔴' : '🔥'} {challenge.difficulty.toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={[localStyles.glassTag, { backgroundColor: 'rgba(52, 211, 153, 0.2)', borderColor: 'rgba(52, 211, 153, 0.4)' }]}>
+                          <Text style={[localStyles.glassTagText, { color: '#D1FAE5' }]}>
+                            {((challenge as any).category || 'GENERAL').toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={localStyles.glassTag}>
+                          <Text style={localStyles.glassTagText}>🌿 {challenge.expReward} Eco Points</Text>
+                        </View>
+                        {challenge.ecoCoinReward > 0 && (
+                          <View style={[localStyles.glassTag, { backgroundColor: 'rgba(74,222,128,0.3)', borderColor: 'rgba(74,222,128,0.5)', flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                            <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
+                            <Text style={[localStyles.glassTagText, { color: '#ECFDF5' }]}>{challenge.ecoCoinReward} Coins</Text>
+                          </View>
+                        )}
                       </View>
-                      <View style={localStyles.glassTag}>
-                        <Text style={localStyles.glassTagText}>🌿 {challenge.expReward} Eco Points</Text>
-                      </View>
-                      {challenge.ecoCoinReward > 0 && (
-                        <View style={[localStyles.glassTag, { backgroundColor: 'rgba(74,222,128,0.3)', borderColor: 'rgba(74,222,128,0.5)', flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
-                          <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
-                          <Text style={[localStyles.glassTagText, { color: '#ECFDF5' }]}>{challenge.ecoCoinReward} Coins</Text>
+                      
+                      {model.viewedMissionIds.includes(challenge.id) ? (
+                        <View style={[localStyles.glassTag, { backgroundColor: 'rgba(59, 130, 246, 0.3)', borderColor: 'rgba(59, 130, 246, 0.5)', marginLeft: 8 }]}>
+                          <Text style={[localStyles.glassTagText, { color: '#EFF6FF' }]}>👁️ VIEWED</Text>
+                        </View>
+                      ) : (
+                        <View style={[localStyles.glassTag, { backgroundColor: 'rgba(239, 68, 68, 0.3)', borderColor: 'rgba(239, 68, 68, 0.5)', marginLeft: 8 }]}>
+                          <Text style={[localStyles.glassTagText, { color: '#FEF2F2' }]}>🆕 NEW</Text>
                         </View>
                       )}
                     </View>
                     
-                    {model.viewedMissionIds.includes(challenge.id) ? (
-                      <View style={[localStyles.glassTag, { backgroundColor: 'rgba(59, 130, 246, 0.3)', borderColor: 'rgba(59, 130, 246, 0.5)', marginLeft: 8 }]}>
-                        <Text style={[localStyles.glassTagText, { color: '#EFF6FF' }]}>👁️ VIEWED</Text>
-                      </View>
-                    ) : (
-                      <View style={[localStyles.glassTag, { backgroundColor: 'rgba(239, 68, 68, 0.3)', borderColor: 'rgba(239, 68, 68, 0.5)', marginLeft: 8 }]}>
-                        <Text style={[localStyles.glassTagText, { color: '#FEF2F2' }]}>🆕 NEW</Text>
+                    <Text style={{ fontSize: 34, fontWeight: '900', color: '#FFF', marginBottom: 10, letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }}>{challenge.title}</Text>
+                    <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.9)', marginBottom: 24, lineHeight: 24, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{challenge.description}</Text>
+
+                    {challenge.type === 'AI Image Recognition Challenge' && challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0 && (
+                      <LinearGradient colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']} style={localStyles.aiGradientBox}>
+                        <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '800', marginBottom: 6, letterSpacing: 1 }}>
+                          <Ionicons name="camera" size={14} color="#A7F3D0" /> AI RECOGNITION MISSION
+                        </Text>
+                        <Text style={{ color: '#FFF', fontSize: 14, lineHeight: 22 }}>
+                          Find & capture: <Text style={{ fontWeight: '800', color: '#4ADE80' }}>{challenge.aiDetectionTargets.join(', ')}</Text>
+                        </Text>
+                      </LinearGradient>
+                    )}
+
+                    {challenge.type !== 'AI Image Recognition Challenge' && (
+                      <View style={{ marginTop: 8 }}>
+                        <View style={styles.rowBetween}>
+                          <Text style={styles.progressLabelLight}>PROGRESS</Text>
+                          <Text style={styles.progressLabelLight}>{challenge.progress?.progressPercentage || 0}%</Text>
+                        </View>
+                        <View style={styles.progressTrackLight}>
+                          <View style={[styles.progressFillLight, { width: `${challenge.progress?.progressPercentage || 0}%`, backgroundColor: '#4ADE80' }]} />
+                        </View>
                       </View>
                     )}
+
+                    <AnimatedStartButton challenge={challenge} model={model} pulseAnim={pulseAnim} />
                   </View>
-                  
-                  <Text style={{ fontSize: 34, fontWeight: '900', color: '#FFF', marginBottom: 10, letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }}>{challenge.title}</Text>
-                  <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.9)', marginBottom: 24, lineHeight: 24, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{challenge.description}</Text>
-
-                  {challenge.type === 'AI Image Recognition Challenge' && challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0 && (
-                    <LinearGradient colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']} style={localStyles.aiGradientBox}>
-                      <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '800', marginBottom: 6, letterSpacing: 1 }}>
-                        <Ionicons name="camera" size={14} color="#A7F3D0" /> AI RECOGNITION MISSION
-                      </Text>
-                      <Text style={{ color: '#FFF', fontSize: 14, lineHeight: 22 }}>
-                        Find & capture: <Text style={{ fontWeight: '800', color: '#4ADE80' }}>{challenge.aiDetectionTargets.join(', ')}</Text>
-                      </Text>
-                    </LinearGradient>
-                  )}
-
-                  {challenge.type !== 'AI Image Recognition Challenge' && (
-                    <View style={{ marginTop: 8 }}>
-                      <View style={styles.rowBetween}>
-                        <Text style={styles.progressLabelLight}>PROGRESS</Text>
-                        <Text style={styles.progressLabelLight}>{challenge.progress?.progressPercentage || 0}%</Text>
-                      </View>
-                      <View style={styles.progressTrackLight}>
-                        <View style={[styles.progressFillLight, { width: `${challenge.progress?.progressPercentage || 0}%`, backgroundColor: '#4ADE80' }]} />
-                      </View>
-                    </View>
-                  )}
-
-                  <AnimatedStartButton challenge={challenge} model={model} pulseAnim={pulseAnim} />
                 </View>
-              </View>
-            </Animated.View>
-          ) : (
-            <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]} onPress={() => {
+              </Animated.View>
+            ))}
+          </>
+        )}
+
+        {currentActiveList.length > 0 && (
+          <Text style={[styles.welcomeLabel, { marginTop: filteredFeatured.length > 0 && (!isFiltering && model.recentViewedMission) ? 16 : ((!isFiltering && model.recentViewedMission) ? 16 : 24), marginBottom: 8 }]}>
+            {isFiltering ? 'SEARCH RESULTS' : viewMode === 'Discover' ? 'DISCOVER CHALLENGES' : viewMode === 'My Tasks' ? 'IN PROGRESS' : 'COMPLETED CHALLENGES'}
+          </Text>
+        )}
+        {currentActiveList.length === 0 && filteredFeatured.length === 0 && (
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, marginTop: 20 }}>
+            <Ionicons name="leaf-outline" size={60} color="#A7F3D0" style={{ marginBottom: 16 }} />
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#126027', marginBottom: 8 }}>
+              {isFiltering ? 'No matches found' : viewMode === 'My Tasks' ? 'No active tasks' : viewMode === 'History' ? 'No completed tasks yet' : 'Check back later!'}
+            </Text>
+            <Text style={{ fontSize: 14, color: '#6B7A75', textAlign: 'center', paddingHorizontal: 40, lineHeight: 20 }}>
+              {isFiltering ? 'Try adjusting your search or category filters to find what you are looking for.' : viewMode === 'My Tasks' ? 'Start a mission from the Discover tab to see it here.' : viewMode === 'History' ? 'Complete eco missions to earn rewards and build your history.' : 'We are adding new challenges soon.'}
+            </Text>
+          </View>
+        )}
+        {currentActiveList.map((challenge, index) => (
+            <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }]} onPress={() => {
               const currentStatus = challenge.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
@@ -812,7 +913,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               </View>
               <View style={localStyles.premiumTaskBody}>
                 <View style={[styles.rowBetween, { marginBottom: 6 }]}>
-                  <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                    <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
+                    <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
+                  </View>
                   <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                     <Text style={styles.taskMetaValue}>🌿 {challenge.expReward} Eco Points</Text>
                     {challenge.ecoCoinReward > 0 && (
@@ -833,6 +937,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   </View>
                 </View>
                 <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{challenge.title}</Text>
+                <Text style={{ fontSize: 13, color: '#6B7A75', marginTop: 4, lineHeight: 18 }} numberOfLines={2}>{challenge.description}</Text>
                 
                 {challenge.type === 'AI Image Recognition Challenge' && challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0 && (
                   <LinearGradient colors={['#F0FDF4', '#DCFCE7']} style={{ padding: 10, borderRadius: 12, marginTop: 6, marginBottom: 8, borderWidth: 1, borderColor: '#BBF7D0' }}>
@@ -879,7 +984,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 </View>
               </View>
             </Pressable>
-          )
         ))}
 
         {model.challenges.length === 0 && (
@@ -890,16 +994,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           </View>
         )}
 
-        <View style={styles.nftPromoCard}>
-          <Text style={styles.welcomeLabelLight}>UNLOCKED SOON</Text>
-          <Text style={styles.nftPromoTitle}>Rare Digital Seed</Text>
-          <Text style={styles.nftPromoDesc}>Complete 2 more challenges this week to earn the exclusive 'Ancient Oak' NFT badge.</Text>
-          <View style={{ flexDirection: 'row', gap: -8, marginTop: 12 }}>
-            <View style={styles.nftAvatar}><Ionicons name="trophy" size={14} color="#FFF" /></View>
-            <View style={[styles.nftAvatar, { backgroundColor: '#7D9984' }]}><Ionicons name="star" size={14} color="#FFF" /></View>
-            <View style={[styles.nftAvatar, { backgroundColor: '#5C7A63' }]}><Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>+3</Text></View>
-          </View>
-        </View>
+
 
         <View style={{ height: 100 }} />
       </View>
@@ -930,7 +1025,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
   // ── Derived gamification state ─────────────────────────────────────────────
   const totalPoints = model.tracker?.points ?? model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
   const ecoLevel = getEcoLevel(totalPoints);
-  const streak = model.tracker?.currentStreak ?? 0;
+  const streak = getVisibleStreak(model.tracker?.currentStreak ?? 0);
 
   // Last 7 days progress dots (oldest → newest). A day counts if it's in the
   // completed set; today is always the rightmost dot.
@@ -980,16 +1075,6 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     return () => loop.stop();
   }, [flameScale, streak]);
 
-  // Hardcoded Daily Quests State (Demo)
-  const [demoQuests, setDemoQuests] = useState([
-    { id: '1', title: 'Bring a Reusable Bag', points: 15, done: false },
-    { id: '2', title: 'Walk 5,000 Steps', points: 20, done: false },
-    { id: '3', title: 'Unplug Devices', points: 10, done: true },
-  ]);
-
-  const toggleQuest = (id: string) => {
-    setDemoQuests(prev => prev.map(q => q.id === id ? { ...q, done: !q.done } : q));
-  };
 
   // ── Day detail popup ───────────────────────────────────────────────────────
   const [selectedDay, setSelectedDay] = useState<{ dateKey: string; label: string } | null>(null);
@@ -1045,102 +1130,12 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
       <ScrollView contentContainerStyle={styles.homeContent} showsVerticalScrollIndicator={false}>
         {/* ── 🔥 Current Streak Card ─────────────────────────────────────────── */}
-        <LinearGradient
-          colors={['#0B5F58', '#169070', '#22A77B']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={trackerStyles.streakCard}
-        >
-          <View style={trackerStyles.streakGlow} />
-          <View style={trackerStyles.streakHeader}>
-            <Animated.View
-              style={[
-                trackerStyles.flameCircle,
-                streak > 0 ? { transform: [{ scale: flameScale }] } : undefined,
-              ]}
-            >
-              <MaterialCommunityIcons name="fire" size={30} color="#FBBF24" />
-              {streak > 0 && <View style={trackerStyles.flameGlow} />}
-            </Animated.View>
-            <View style={{ flex: 1 }}>
-              <Text style={trackerStyles.streakLabel}>CURRENT STREAK</Text>
-              <Text style={trackerStyles.streakTagline}>
-                {streak === 0 ? 'Log a habit to start your streak!' : 'Keep your eco habits growing!'}
-              </Text>
-            </View>
-          </View>
+        <SummaryCards
+          currentStreak={model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0}
+          ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
+          onPressRewards={() => model.setActiveOverlay('streakRewards')}
+        />
 
-          <View style={trackerStyles.streakNumberRow}>
-            <Text style={trackerStyles.streakNumber}>{streak}</Text>
-            <Text style={trackerStyles.streakUnit}>Days</Text>
-          </View>
-
-          <View style={trackerStyles.streakDotsRow}>
-            {lastSevenDays.map((date, index) => {
-              const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-              const done = completedDays.includes(dateKey);
-              const isToday = index === lastSevenDays.length - 1;
-              return (
-                <View
-                  key={index}
-                  style={[
-                    trackerStyles.streakDot,
-                    done && trackerStyles.streakDotDone,
-                    isToday && trackerStyles.streakDotToday,
-                  ]}
-                />
-              );
-            })}
-          </View>
-        </LinearGradient>
-
-        {/* ── 🎯 Today's Quests (Demo) ────────────────────────────────────── */}
-        <View style={{ marginTop: 24 }}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionHeadline}>Today's Quests</Text>
-            <Text style={styles.metaTextSmallDark}>{demoQuests.filter(q => q.done).length}/{demoQuests.length} Done</Text>
-          </View>
-          
-          <View style={{ gap: 12, marginTop: 12 }}>
-            {demoQuests.map((quest) => (
-              <TouchableOpacity
-                key={quest.id}
-                onPress={() => toggleQuest(quest.id)}
-                activeOpacity={0.8}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: '#FFF',
-                  padding: 16,
-                  borderRadius: 20,
-                  shadowColor: '#126027',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 10,
-                  elevation: 2,
-                }}
-              >
-                <View style={{
-                  width: 24, height: 24, borderRadius: 12, 
-                  borderWidth: 2, borderColor: quest.done ? '#4ADE80' : '#C8D8CE',
-                  backgroundColor: quest.done ? '#4ADE80' : 'transparent',
-                  alignItems: 'center', justifyContent: 'center',
-                  marginRight: 16
-                }}>
-                  {quest.done && <Ionicons name="checkmark" size={16} color="#FFF" />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: quest.done ? '#6B7A75' : '#1A211D', textDecorationLine: quest.done ? 'line-through' : 'none' }}>
-                    {quest.title}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#10B981', fontWeight: '600', marginTop: 2 }}>
-                    +{quest.points} XP
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
 
         {/* ── 🌱 Level Progress Card ────────────────────────────────────────── */}
         <View style={{ marginTop: 24 }}>
@@ -1203,11 +1198,20 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               >
                 <Feather name="chevron-left" size={20} color="#1A211D" />
               </TouchableOpacity>
-              <View style={trackerStyles.calLegendRow}>
-                <View style={[trackerStyles.legendChip, trackerStyles.cellEmpty]} />
-                <Text style={trackerStyles.legendText}>None</Text>
-                <View style={[trackerStyles.legendChip, trackerStyles.cellActive]} />
-                <Text style={trackerStyles.legendText}>Active</Text>
+              <View style={{ alignItems: 'center' }}>
+                {model.tracker?.currentStreak ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: '#169070', letterSpacing: 0.5 }}>
+                      BUILDING STREAK: {model.tracker.currentStreak} 🔥
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={trackerStyles.calLegendRow}>
+                  <View style={[trackerStyles.legendChip, trackerStyles.cellEmpty]} />
+                  <Text style={trackerStyles.legendText}>None</Text>
+                  <View style={[trackerStyles.legendChip, trackerStyles.cellActive]} />
+                  <Text style={trackerStyles.legendText}>Active</Text>
+                </View>
               </View>
               <TouchableOpacity
                 onPress={() => void model.loadTrackerMonth(1)}
@@ -1379,24 +1383,37 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
               {completedDays.includes(selectedDay.dateKey) ? (
                 <>
-                  <View style={trackerStyles.popupRow}>
-                    <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
-                    <Text style={trackerStyles.popupRowText}>Completed daily habits</Text>
-                  </View>
-                  <View style={trackerStyles.popupRow}>
-                    <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
-                    <Text style={trackerStyles.popupRowText}>Eco actions logged</Text>
-                  </View>
-                  <View style={trackerStyles.popupReward}>
-                    <MaterialCommunityIcons name="leaf" size={16} color="#FFF" />
-                    <Text style={trackerStyles.popupRewardText}>+Eco Points earned</Text>
-                  </View>
+                  {model.tracker?.logsByDate?.[selectedDay.dateKey] && model.tracker.logsByDate[selectedDay.dateKey].length > 0 ? (
+                    <ScrollView style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
+                      {model.tracker.logsByDate[selectedDay.dateKey].map((log, index) => (
+                        <View key={index} style={[trackerStyles.popupRow, { marginBottom: 8 }]}>
+                          <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
+                          <Text style={[trackerStyles.popupRowText, { flex: 1 }]} numberOfLines={2}>{log.title}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6F4EC', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                            <MaterialCommunityIcons name="leaf" size={12} color="#126027" />
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: '#126027', marginLeft: 2 }}>+{log.points}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <>
+                      <View style={trackerStyles.popupRow}>
+                        <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
+                        <Text style={trackerStyles.popupRowText}>Eco activity completed</Text>
+                      </View>
+                      <View style={trackerStyles.popupReward}>
+                        <MaterialCommunityIcons name="leaf" size={16} color="#FFF" />
+                        <Text style={trackerStyles.popupRewardText}>+Eco Points earned</Text>
+                      </View>
+                    </>
+                  )}
                 </>
               ) : (
                 <View style={trackerStyles.popupEmpty}>
                   <MaterialCommunityIcons name="leaf-off" size={28} color="#B0C4B8" />
                   <Text style={trackerStyles.popupEmptyText}>No activity logged this day.</Text>
-                  <Text style={trackerStyles.popupEmptySub}>Check in a habit to fill the calendar!</Text>
+                  <Text style={trackerStyles.popupEmptySub}>Complete any eco action to fill the calendar!</Text>
                 </View>
               )}
             </Animated.View>
@@ -1642,10 +1659,22 @@ const trackerStyles = StyleSheet.create({
   streakNumberRow: { alignItems: 'baseline', flexDirection: 'row', marginTop: 20, gap: 6 },
   streakNumber: { color: '#FFF', fontSize: 48, fontWeight: '900', letterSpacing: -1 },
   streakUnit: { color: 'rgba(255,255,255,0.8)', fontSize: 18, fontWeight: '700' },
-  streakDotsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingHorizontal: 8 },
-  streakDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.15)' },
-  streakDotDone: { backgroundColor: '#4ADE80' },
-  streakDotToday: { borderWidth: 2, borderColor: '#FBBF24' },
+  streakDotsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingHorizontal: 4, alignItems: 'center' },
+  streakDot: { width: 36, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
+  streakDotDone: { 
+    backgroundColor: '#34D399',
+    shadowColor: '#34D399',
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 3,
+  },
+  streakDotToday: { 
+    borderWidth: 2, 
+    borderColor: '#FFFFFF', 
+    height: 10, 
+    backgroundColor: 'rgba(255, 255, 255, 0.4)' 
+  },
 
   // ── 🌱 Level Card ─────────────────────────────────────────────────────────
   levelCard: {

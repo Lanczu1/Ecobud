@@ -91,7 +91,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [learnFilter, setLearnFilter] = useState<LearnFilterType>('all');
   const [learnCategory, setLearnCategory] = useState<string>('All Categories');
   const [assistantInput, setAssistantInput] = useState('');
-  const [claimRewardData, setClaimRewardData] = useState<{ points: number; coins: number } | null>(null);
+  const [claimRewardData, setClaimRewardData] = useState<{ points: number; coins: number; origin?: { x: number; y: number } } | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantQuickReplies, setAssistantQuickReplies] = useState<string[]>([
     'How to compost?', 'What goes in recycling?', 'Tips for reducing waste', 'Tell me about eco-points',
@@ -140,8 +140,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const filteredLessons = useMemo(() => {
     let result = lessons;
-    
-    if (learnCategory !== 'All Categories') {
+
+    if (learnCategory === 'Featured') {
+      result = result.filter((lesson) => lesson.featured);
+    } else if (learnCategory !== 'All Categories') {
       result = result.filter((lesson) => lesson.category === learnCategory || (!lesson.category && learnCategory === 'General'));
     }
 
@@ -149,13 +151,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
       result = result.filter((lesson) => lesson.status === learnFilter);
     }
     const query = learnSearch.trim().toLowerCase();
-    if (!query) {
-      return result;
+    if (query) {
+      result = result.filter((lesson) =>
+        `${lesson.title} ${lesson.description} ${lesson.content}`.toLowerCase().includes(query),
+      );
     }
 
-    return result.filter((lesson) =>
-      `${lesson.title} ${lesson.description} ${lesson.content}`.toLowerCase().includes(query),
-    );
+    // Always sort so that featured lessons are at the top
+    return [...result].sort((a: any, b: any) => {
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+      return 0;
+    });
   }, [learnSearch, learnFilter, learnCategory, lessons]);
 
   const todaysCompletedHabits = useMemo(
@@ -413,6 +420,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         const data = await homeService.getFullHydrationData(existingSession.token);
 
+        if (data.lessons) {
+          data.lessons.sort((a: any, b: any) => {
+            if (a.featured && !b.featured) return -1;
+            if (!a.featured && b.featured) return 1;
+            return 0;
+          });
+        }
+
         setDashboard(data.dashboard);
         setLessons(data.lessons);
         setChallenges(data.challenges);
@@ -437,6 +452,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
             ],
         );
       } catch (error) {
+        if (error instanceof Error && (error as any).status === 401) {
+          setSession(null);
+          clearAppData();
+          setActiveOverlayState(null);
+          setActiveTabState('home');
+          void persistSession(null);
+          Alert.alert('Session Expired', 'Your session is no longer valid. Please sign in again.');
+          return;
+        }
+
         const message = error instanceof Error ? error.message : 'Unable to reach ECOBUD right now.';
         if (!silent) {
           Alert.alert('Sync failed', message);
@@ -485,12 +510,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
       try {
         const savedViewedIds = await mobileStorage.getItem(VIEWED_MISSIONS_KEY);
         if (savedViewedIds) {
-          try { setViewedMissionIds(JSON.parse(savedViewedIds)); } catch (e) {}
+          try { setViewedMissionIds(JSON.parse(savedViewedIds)); } catch (e) { }
         }
-        
+
         const savedRecent = await mobileStorage.getItem(RECENT_VIEWED_KEY);
         if (savedRecent) {
-          try { setRecentViewedMission(JSON.parse(savedRecent)); } catch (e) {}
+          try { setRecentViewedMission(JSON.parse(savedRecent)); } catch (e) { }
         }
 
         const savedSession = await mobileStorage.getItem(SESSION_STORAGE_KEY);
@@ -513,6 +538,19 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
     void bootstrap();
   }, [hydrateApp]);
+
+  // Monitor streak unlock
+  const previousStreakRef = React.useRef<number | null>(null);
+  useEffect(() => {
+    if (dashboard) {
+      if (previousStreakRef.current !== null) {
+        if (previousStreakRef.current < 3 && dashboard.streak >= 3) {
+          setActiveOverlayState('streakUnlocked');
+        }
+      }
+      previousStreakRef.current = dashboard.streak;
+    }
+  }, [dashboard?.streak]);
 
   useEffect(() => () => {
     if (realtimeRefreshTimer.current) {
@@ -600,7 +638,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       try {
         const nextSession = await homeService.login(email.trim(), pass);
-        
+
         if (nextSession.user.role === 'admin' || nextSession.user.role === 'moderator') {
           throw new Error('Administrators and moderators cannot log in via the mobile app. Please use the web portal.');
         }
@@ -718,6 +756,19 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
           setRealtimeConnected(connected);
         },
+        // @ts-expect-error onSessionExpired is loosely typed in RealtimeConnectionHandlers
+        onSessionExpired: () => {
+          if (!isMounted) {
+            return;
+          }
+
+          setSession(null);
+          clearAppData();
+          setActiveOverlayState(null);
+          setActiveTabState('home');
+          void persistSession(null);
+          Alert.alert('Session Expired', 'Your session is no longer valid. Please sign in again.');
+        },
         onNotice: (notice) => {
           if (!isMounted) {
             return;
@@ -790,16 +841,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const openChallengeMission = useCallback((challenge: ChallengeWithProgress) => {
     setSelectedChallenge(challenge);
-    
+
     setRecentViewedMission(challenge);
     void mobileStorage.setItem(RECENT_VIEWED_KEY, JSON.stringify(challenge));
-    
+
     setViewedMissionIds((prev) => {
       const next = prev.includes(challenge.id) ? prev : [...prev, challenge.id];
       void mobileStorage.setItem(VIEWED_MISSIONS_KEY, JSON.stringify(next));
       return next;
     });
-    
+
     setActiveOverlayState('ai_mission');
   }, []);
 
@@ -856,18 +907,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
       const activeSession = ensureSession();
       // Optimistically update locally without a loading overlay
       const clampedProgress = Math.min(100, Math.max(0, Math.round(progress)));
-      
+
       // Fire and forget server update
       homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress, videoTimestamp).catch((err) => {
         console.error('[handleUpdateLessonProgress] API error:', err);
       });
-      
+
       // Update local state so it's snappy
-      setLessons((current) => 
+      setLessons((current) =>
         current.map((lesson) => {
           if (lesson.id === lessonId) {
-            return { 
-              ...lesson, 
+            return {
+              ...lesson,
               progress: Math.max(lesson.progress, clampedProgress),
               videoTimestamp: videoTimestamp ?? lesson.videoTimestamp,
             };
@@ -916,8 +967,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
           }
         });
 
-        const score = quizQuestions.length > 0 
-          ? Math.round((correctCount / quizQuestions.length) * 100) 
+        const score = quizQuestions.length > 0
+          ? Math.round((correctCount / quizQuestions.length) * 100)
           : 0;
 
         setQuizScore(score);
@@ -960,7 +1011,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setQuizScore(0);
   }, []);
 
-  const showLessonComplete = useCallback((type: 'quiz' | 'lesson') => {
+  const showLessonComplete = useCallback((type: 'quiz' | 'lesson' | 'claim') => {
     const points = selectedLesson?.pointsReward ?? 10;
     setEarnedPoints(points);
     setCompletionCelebrationType(type);
@@ -1209,12 +1260,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      if (screen === 'claimParticles') {
-        setActiveOverlayState('claimParticles');
+      if (screen === 'claimParticles' || screen === 'streakRewards' || screen === 'streakUnlocked') {
+        setActiveOverlayState(screen);
         return;
       }
 
-      const labels: Record<Exclude<OverlayScreen, 'claimParticles' | null>, string> = {
+      const labels: Record<Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | null>, string> = {
         assistant: 'Opening EcoBud Assistant',
         events: 'Opening Eco Events',
         lesson: 'Opening lesson details',
@@ -1226,8 +1277,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
         ai_mission: 'Opening mission',
       };
 
-      // We explicitly excluded claimParticles above, so we must cast screen to the narrowed type
-      flashActionLoader(`${labels[screen as Exclude<OverlayScreen, 'claimParticles' | null>]}...`, () => {
+      // We explicitly excluded claimParticles, streakRewards, and streakUnlocked above, so we must cast screen to the narrowed type
+      flashActionLoader(`${labels[screen as Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | null>]}...`, () => {
         setActiveOverlayState(screen);
       });
     },
@@ -1255,12 +1306,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
           currentChallenges.map((challenge) =>
             challenge.id === challengeId
               ? {
-                  ...challenge,
-                  progress: {
-                    progressPercentage: challenge.progress?.progressPercentage || 0,
-                    status: 'pending',
-                  },
-                }
+                ...challenge,
+                progress: {
+                  progressPercentage: challenge.progress?.progressPercentage || 0,
+                  status: 'pending',
+                },
+              }
               : challenge
           )
         );
@@ -1272,26 +1323,32 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
   }, [ensureSession, runWithActionLoader]);
 
-  const handleClaimChallengeReward = useCallback(async (challengeId: string) => {
+  const triggerTestReward = useCallback((origin?: { x: number; y: number }) => {
+    setClaimRewardData({ points: 10, coins: 10, origin });
+    setActiveOverlayState('claimParticles');
+  }, []);
+
+  const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }) => {
     try {
       const activeSession = ensureSession();
       setRefreshing(true);
 
       const challengeToClaim = challenges.find((c) => c.id === challengeId);
-      
+
       if (challengeToClaim) {
         setClaimRewardData({
           points: challengeToClaim.expReward || 0,
           coins: challengeToClaim.ecoCoinReward || 0,
+          origin,
         });
       }
 
       setActiveOverlayState('claimParticles');
 
       if (challengeToClaim) {
-        setDashboard((prev) => 
-          prev ? { 
-            ...prev, 
+        setDashboard((prev) =>
+          prev ? {
+            ...prev,
             ecoCoins: prev.ecoCoins + (challengeToClaim.ecoCoinReward || 0),
             ecoPoints: prev.ecoPoints + (challengeToClaim.expReward || 0)
           } : null
@@ -1302,18 +1359,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
         currentChallenges.map((challenge) =>
           challenge.id === challengeId
             ? {
-                ...challenge,
-                progress: {
-                  progressPercentage: 100,
-                  status: 'completed',
-                },
-              }
+              ...challenge,
+              progress: {
+                progressPercentage: 100,
+                status: 'completed',
+              },
+            }
             : challenge
         )
       );
 
       await homeService.claimChallengeReward(activeSession.token, challengeId);
-      
+
       await hydrateApp(activeSession, true);
     } catch (error) {
       Alert.alert('Claim failed', error instanceof Error ? error.message : 'Please try again.');
@@ -1405,8 +1462,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleCheckUsernameAvailability,
     handleLogout,
     refreshEverything,
-    openChallengeMission,
+
     openLesson,
+    triggerTestReward,
     handleCompleteLesson,
     handleUpdateLessonProgress,
     startQuiz,
@@ -1415,11 +1473,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
     submitQuiz,
     resetQuiz,
     showLessonComplete,
-    handleChallengeProgress,
+
     handleHabitCheckIn,
     handleJoinEvent,
     handleAssistantSend,
     loadTrackerMonth,
+    openChallengeMission,
+    handleChallengeProgress,
     analyzeChallengeImage,
     handleSubmitChallengeProof,
     handleClaimChallengeReward,

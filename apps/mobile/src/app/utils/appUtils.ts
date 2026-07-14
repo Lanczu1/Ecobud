@@ -33,6 +33,14 @@ export function getPhMonthKey(date: Date = new Date()): string {
   return getPhDateKey(date).slice(0, 7);
 }
 
+/**
+ * The visible streak only ignites when it reaches a threshold of 3 days.
+ * If the actual streak is less than 3, it returns 0.
+ */
+export function getVisibleStreak(actualStreak: number): number {
+  return actualStreak >= 3 ? actualStreak : 0;
+}
+
 // ─── Eco Level System ────────────────────────────────────────────────────────
 // A 5-tier gamified progression ladder driven by total Eco Points.
 export interface EcoLevelTier {

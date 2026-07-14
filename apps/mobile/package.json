@@ -14,7 +14,7 @@
     "@react-native-community/netinfo": "12.0.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
-    "expo": "~56.0.14",
+    "expo": "~56.0.15",
     "expo-blur": "~56.0.3",
     "expo-camera": "~56.0.8",
     "expo-constants": "~56.0.16",
@@ -29,6 +29,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {

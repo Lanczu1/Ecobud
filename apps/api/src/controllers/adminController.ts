@@ -31,7 +31,7 @@ export class AdminController {
   }
 
   static async createLesson(req: AuthenticatedRequest, res: Response) {
-    const { title, description, isPublished, category, difficulty, quizPassingScore, quizQuestions, durationMinutes, pages, pointsReward } = req.body;
+    const { title, description, isPublished, category, difficulty, quizPassingScore, quizQuestions, durationMinutes, pages, pointsReward, scheduledAt } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({ message: "Missing required lesson fields." });
@@ -93,8 +93,10 @@ export class AdminController {
         durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : undefined,
         quizPassingScore: quizPassingScore ? parseInt(quizPassingScore, 10) : 70,
         pointsReward: pointsReward ? parseInt(pointsReward, 10) : 10,
+        featured: String(req.body.featured) === 'true',
         quizQuestions: parsedQuestions,
-        pages: parsedPages
+        pages: parsedPages,
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined
       });
       return res.status(201).json(lesson);
     } catch (error: any) {
@@ -174,6 +176,12 @@ export class AdminController {
       updateData.isPublished = String(updateData.isPublished) === 'true';
     }
 
+    if (updateData.scheduledAt) {
+      updateData.scheduledAt = new Date(updateData.scheduledAt);
+    } else if (updateData.scheduledAt === '') {
+      updateData.scheduledAt = null;
+    }
+
     // Clean up non-model fields
     delete updateData.uploadedVideoUrl;
     delete updateData.removeThumbnail;
@@ -227,6 +235,22 @@ export class AdminController {
       return res.status(200).json(lesson);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to toggle publish status.", error: error.message });
+    }
+  }
+
+  static async patchFeature(req: AuthenticatedRequest, res: Response) {
+    const { id } = req.params;
+    const { featured } = req.body;
+
+    if (typeof featured !== 'boolean') {
+      return res.status(400).json({ message: "featured must be a boolean." });
+    }
+
+    try {
+      const lesson = await AdminService.toggleFeature(id, featured);
+      return res.status(200).json(lesson);
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to toggle featured status.", error: error.message });
     }
   }
 

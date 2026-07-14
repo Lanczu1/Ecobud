@@ -1,7 +1,19 @@
 {
-  "css.lint.unknownAtRules": "ignore",
-  "python.defaultInterpreterPath": "C:\\Users\\Lanczu\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-  "python.analysis.extraPaths": [
-    "C:\\Users\\Lanczu\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
-  ]
+    "java.project.resourceFilters": [
+        "node_modules",
+        "apps/mobile/node_modules",
+        ".git",
+        "dist"
+    ],
+    "java.import.exclusions": [
+        "**/node_modules/**",
+        "**/.expo/**"
+    ],
+    "files.exclude": {
+        "**/node_modules": true
+    },
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.import.gradle.enabled": false,
+    "java.gradle.buildServer.enabled": "off"
 }

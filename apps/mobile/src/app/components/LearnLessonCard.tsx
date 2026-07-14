@@ -61,6 +61,12 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={styles.card}>
+      {lesson.featured && (
+        <View style={{ position: 'absolute', top: 32, left: 32, backgroundColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, zIndex: 10, shadowColor: '#F59E0B', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
+          <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>⭐ Featured</Text>
+        </View>
+      )}
+
       {lesson.imageUrl && lesson.imageUrl !== 'null' && lesson.imageUrl !== 'undefined' ? (
         <Image 
           source={{ uri: `${ecobudApiOrigin}${lesson.imageUrl}` }}
@@ -77,7 +83,7 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
       
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
         <Text style={{ fontSize: 13, color: '#6B7A75', fontWeight: '700' }}>
-          🔖 {lesson.category || 'General'}  •  🟢 {lesson.difficulty || 'Beginner'}  •  ⏱ {lesson.durationMinutes || 8} min
+          🔖 {lesson.category || 'General'}  •  {lesson.difficulty?.toLowerCase() === 'advanced' ? '🔴' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '🟠' : '🟢'} {lesson.difficulty || 'Beginner'}  •  ⏱ {lesson.durationMinutes || 8} min
         </Text>
       </View>
 

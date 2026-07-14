@@ -4,7 +4,6 @@ import {
   BookOpen, 
   Trophy, 
   Calendar, 
-  Store, 
   ArrowLeftRight, 
   FileText, 
   LogOut,
@@ -12,9 +11,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-import { CheckSquare } from 'lucide-react';
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Vendors' | 'Swap Goods' | 'Audit Logs' | 'Reports' | 'Daily Quests';
+export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Swap Goods' | 'Audit Logs' | 'Reports';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -28,9 +26,9 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Submissions', icon: Send },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },
-  { name: 'Daily Quests', icon: CheckSquare },
+
   { name: 'Events', icon: Calendar },
-  { name: 'Vendors', icon: Store },
+
   { name: 'Swap Goods', icon: ArrowLeftRight },
   { name: 'Audit Logs', icon: ShieldCheck },
   { name: 'Reports', icon: FileText },

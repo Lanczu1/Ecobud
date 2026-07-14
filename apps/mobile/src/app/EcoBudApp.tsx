@@ -5,7 +5,14 @@ import {
   ScrollView,
   View,
   StyleSheet,
+  LogBox,
 } from 'react-native';
+
+// Suppress the Expo/React Native DevTools client connection warnings
+LogBox.ignoreLogs([
+  'devtools client',
+  'Failed to initialize devtools client',
+]);
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   type EcoBudMobileModel,
@@ -49,6 +56,14 @@ export default function App() {
 }
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
+  const scrollRef = React.useRef<ScrollView>(null);
+
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ y: 0, animated: false });
+    }
+  }, [model.activeTab]);
+
   let content: React.ReactNode;
 
   if (model.booting) {
@@ -75,6 +90,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
         <ScrollView
+          ref={scrollRef}
           refreshControl={
             <RefreshControl
               refreshing={model.refreshing}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trophy, Plus, Edit3, Trash2, Users, Clock, Coins, Search, Target, AlertCircle, X, Loader2, UploadCloud, Power } from 'lucide-react';
+import { Trophy, Plus, Edit3, Trash2, Users, Clock, Coins, Search, Target, AlertCircle, X, Loader2, UploadCloud, Power, Star } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm } from '../../../utils/adminApi';
 
 interface Challenge {
@@ -17,6 +17,7 @@ interface Challenge {
   type: string;
   aiDetectionTargets: string[];
   aiMinimumConfidence: number;
+  isFeatured: boolean;
   createdAt: string;
   updatedAt: string;
   userChallenges?: { id: string }[];
@@ -56,8 +57,9 @@ interface FormData {
   imageUrl: string;
   aiDetectionTargets: string[];
   aiMinimumConfidence: number;
+  isFeatured: boolean;
 }
-const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', durationDays: 7, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80 };
+const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', durationDays: 7, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80, isFeatured: false };
 
 interface ModalProps {
   onClose: () => void;
@@ -68,7 +70,7 @@ interface ModalProps {
 function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormData>(
     initial
-      ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', durationDays: initial.durationDays, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80 }
+      ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', durationDays: initial.durationDays, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false }
       : emptyForm
   );
   const [saving, setSaving] = useState(false);
@@ -163,12 +165,20 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
                 </div>
               </div>
 
-              <label className="flex items-center gap-3 cursor-pointer pt-2">
-                <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.active ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, active: !f.active }))}>
-                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.active ? 'translate-x-4' : ''}`} />
-                </div>
-                <span className="text-sm font-medium text-gray-700">Active (visible to users)</span>
-              </label>
+              <div className="flex flex-row gap-6 pt-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.active ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, active: !f.active }))}>
+                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.active ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">Active</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.isFeatured ? 'bg-yellow-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, isFeatured: !f.isFeatured }))}>
+                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isFeatured ? 'translate-x-4' : ''}`} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">Featured</span>
+                </label>
+              </div>
             </div>
 
             {/* Column 2: Details & Rewards */}
@@ -290,6 +300,7 @@ export function Challenges() {
   const [editing, setEditing] = useState<Challenge | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -342,6 +353,21 @@ export function Challenges() {
       alert(err.message || 'Failed to toggle status.');
     } finally {
       setToggling(null);
+    }
+  };
+
+  const handleToggleFeatured = async (challenge: Challenge) => {
+    setTogglingFeatured(challenge.id);
+    const nextFeatured = !challenge.isFeatured;
+    setChallenges(prev => prev.map(c => c.id === challenge.id ? { ...c, isFeatured: nextFeatured } : c));
+    try {
+      const updated = await adminPut<Challenge>(`/admin/challenges/${challenge.id}`, { isFeatured: nextFeatured });
+      setChallenges(prev => prev.map(c => c.id === updated.id ? updated : c));
+    } catch (err: any) {
+      setChallenges(prev => prev.map(c => c.id === challenge.id ? { ...c, isFeatured: challenge.isFeatured } : c));
+      alert(err.message || 'Failed to toggle featured status.');
+    } finally {
+      setTogglingFeatured(null);
     }
   };
 
@@ -469,6 +495,9 @@ export function Challenges() {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleToggleFeatured(c)} disabled={togglingFeatured === c.id} title={c.isFeatured ? 'Unfeature' : 'Feature'} className={`p-1.5 rounded-lg transition-colors disabled:opacity-60 ${c.isFeatured ? 'text-yellow-500 hover:bg-yellow-50' : 'text-gray-400 hover:bg-gray-100'}`}>
+                        {togglingFeatured === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className={`w-4 h-4 ${c.isFeatured ? 'fill-current' : ''}`} />}
+                      </button>
                       <button onClick={() => handleToggleActive(c)} disabled={toggling === c.id} title={c.active ? 'Deactivate' : 'Activate'} className={`p-1.5 rounded-lg transition-colors disabled:opacity-60 ${c.active ? 'text-gray-500 hover:bg-gray-100' : 'text-green-600 hover:bg-green-50'}`}>
                         {toggling === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
                       </button>

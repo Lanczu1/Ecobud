@@ -3,6 +3,7 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
 import { getEcoGuideReply, type ChatHistoryMessage } from '../services/ecoGuideService';
+import { resolveLiveStreak } from '../utils/gamificationUtils';
 
 const experienceRoutes = Router();
 
@@ -79,7 +80,7 @@ experienceRoutes.get(
       user: {
         displayName: user?.profile?.displayName ?? user?.name ?? 'Eco Explorer',
         points: user?.points ?? 0,
-        currentStreak: user?.currentStreak ?? 0,
+        currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
       },
       notificationsCount: Math.min(5, Math.max(1, upcomingEvents.length + 2)),
       weeklyProgress,
@@ -104,7 +105,7 @@ experienceRoutes.get(
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
     const month = typeof req.query.month === 'string' ? req.query.month : getDateKey().slice(0, 7);
-    const [habits, checkIns, user] = await Promise.all([
+    const [habits, checkIns, logs, user] = await Promise.all([
       prisma.habit.findMany({ where: { active: true }, orderBy: { title: 'asc' } }),
       prisma.habitCheckIn.findMany({
         where: {
@@ -113,12 +114,23 @@ experienceRoutes.get(
             startsWith: month,
           },
         },
+        include: { habit: { select: { title: true } } },
       }),
+      prisma.transparencyLog.findMany({
+        where: {
+          userId,
+        timestamp: {
+          gte: new Date(month + '-01T00:00:00.000Z'),
+        }
+      },
+      select: { timestamp: true, publicLabel: true, pointsAwarded: true },
+    }),
       prisma.user.findUnique({
         where: { id: userId },
         select: {
           currentStreak: true,
           points: true,
+          lastActionDate: true,
         },
       }),
     ]);
@@ -127,14 +139,33 @@ experienceRoutes.get(
     const todaysHabitIds = new Set(
       checkIns.filter((item) => item.dateKey === today).map((item) => item.habitId),
     );
-    const uniqueDays = new Set(checkIns.map((item) => item.dateKey));
+    const logDateKeys = logs.map(l => getDateKey(l.timestamp));
+    const uniqueDays = new Set([
+      ...checkIns.map((item) => item.dateKey),
+      ...logDateKeys.filter(dk => dk.startsWith(month))
+    ]);
+
+    const logsByDate: Record<string, { title: string; points: number }[]> = {};
+    
+    logs.forEach(log => {
+      const dk = getDateKey(log.timestamp);
+      if (!logsByDate[dk]) logsByDate[dk] = [];
+      logsByDate[dk].push({ title: log.publicLabel, points: log.pointsAwarded });
+    });
+    
+    checkIns.forEach(ci => {
+      const dk = ci.dateKey;
+      if (!logsByDate[dk]) logsByDate[dk] = [];
+      logsByDate[dk].push({ title: `Logged Habit: ${ci.habit.title}`, points: ci.pointsAwarded });
+    });
 
     return res.json({
       month,
-      currentStreak: user?.currentStreak ?? 0,
+      currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
       points: user?.points ?? 0,
       weeklyGoalProgress: Math.min(100, Math.round((uniqueDays.size / 7) * 100)),
       completedDays: [...uniqueDays],
+      logsByDate,
       todayHabits: habits.map((habit) => ({
         ...habit,
         completedToday: todaysHabitIds.has(habit.id),

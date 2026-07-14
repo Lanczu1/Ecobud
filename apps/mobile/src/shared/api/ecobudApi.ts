@@ -164,6 +164,7 @@ export interface LessonWithProgress {
   pointsReward?: number;
   durationMinutes?: number;
   hasQuiz?: boolean;
+  featured?: boolean;
   quizQuestions?: QuizQuestion[];
   pages?: {
     id: string;
@@ -184,16 +185,19 @@ export interface ChallengeWithProgress {
   title: string;
   description: string;
   difficulty: string;
-  category?: string | null;
+  category: string | null;
   durationDays: number;
   expReward: number;
   ecoCoinReward: number;
-  imageUrl?: string | null;
-  badgeLabel?: string | null;
+  active: boolean;
+  imageUrl: string | null;
+  badgeLabel: string | null;
   type: string;
-  aiDetectionTargets?: string[];
-  aiMinimumConfidence?: number;
-  progressPercentage?: number;
+  aiDetectionTargets: string[];
+  aiMinimumConfidence: number;
+  isFeatured?: boolean;
+  createdAt: string;
+  updatedAt: string;
   deadlineLabel?: string;
   progress?: {
     progressPercentage: number;
@@ -221,6 +225,7 @@ export interface TrackerData {
   points: number;
   weeklyGoalProgress: number;
   completedDays: string[];
+  logsByDate?: Record<string, { title: string; points: number }[]>;
   todayHabits: HabitItem[];
 }
 
