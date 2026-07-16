@@ -54,6 +54,54 @@ const getCategoryDetails = (category: string, isActive: boolean) => {
   return { name, iconName, iconColor, iconSet };
 };
 
+const getGreetingPHT = (): string => {
+  try {
+    const timeString = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour12: false, hour: 'numeric' });
+    const hour = parseInt(timeString, 10);
+    
+    if (!isNaN(hour)) {
+      if (hour >= 5 && hour < 12) return '☀️ Good morning';
+      if (hour >= 12 && hour < 18) return '🌤️ Good afternoon';
+      return '🌙 Good evening';
+    }
+  } catch (e) {
+    // Fallback if Intl is not fully supported
+  }
+  return '☀️ Hello';
+};
+
+
+const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
+  const leaderboard = model.leaderboard;
+  if (!leaderboard || leaderboard.items.length === 0) return null;
+
+  const currentUser = leaderboard.items.find((item) => item.isCurrentUser) || leaderboard.items[0];
+
+  return (
+    <View style={{ backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E6F4EC' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <Text style={{ color: '#1A211D', fontSize: 14, fontWeight: '800' }}>Weekly Leaderboard</Text>
+        <TouchableOpacity onPress={() => model.setActiveOverlay('leaderboard')}>
+          <Text style={{ color: '#126027', fontSize: 12, fontWeight: '700' }}>View All</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAF9', borderRadius: 12, padding: 12 }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#6B7A75', width: 24 }}>#{currentUser.rank}</Text>
+        <View style={{ width: 32, height: 32, backgroundColor: '#126027', borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>{currentUser.displayName.slice(0, 1).toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: '#1A211D', fontSize: 14, fontWeight: '700' }}>{currentUser.isCurrentUser ? 'You' : currentUser.displayName}</Text>
+          <Text style={{ color: '#6B7A75', fontSize: 11 }}>
+            {leaderboard.items[0]?.rank === currentUser.rank ? "You are #1!" : `Keep going to reach #1!`}
+          </Text>
+        </View>
+        <Text style={{ color: '#1A211D', fontSize: 14, fontWeight: 'bold' }}>{currentUser.points} pts</Text>
+      </View>
+    </View>
+  );
+};
+
 export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;
   const baseEcoPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
@@ -62,12 +110,13 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
     : baseEcoPoints;
   const weeklyGoal = model.dashboard?.weeklyGoal ?? 0;
   const primaryChallenge = model.challenges[0] ?? null;
+  const featuredLesson = model.lessons?.find((l: any) => l.featured) || (model.lessons && model.lessons.length > 0 ? model.lessons[0] : null);
 
   return (
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
-        <Text style={styles.welcomeTitle}>Hello, {model.userDisplayName.split(' ')[0]}! 👋</Text>
+        <Text style={styles.welcomeTitle}>{getGreetingPHT()}, {model.userDisplayName.split(' ')[0]}! 👋</Text>
         <Text style={[styles.welcomeSubtitle, { marginBottom: 16 }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
 
         <TouchableOpacity
@@ -102,6 +151,23 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 
         <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
 
+        <LeaderboardSnippet model={model} />
+
+        {featuredLesson && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: '#1A211D', fontSize: 14, fontWeight: '800', textTransform: 'uppercase' }}>Lesson</Text>
+              <TouchableOpacity onPress={() => model.setActiveTab('learn')}>
+                <Text style={{ color: '#126027', fontSize: 12, fontWeight: '700' }}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <LearnLessonCard
+              lesson={featuredLesson}
+              onPress={() => void model.openLesson(featuredLesson.id)}
+            />
+          </View>
+        )}
+
 
 
         {!model.dashboard ? (
@@ -112,31 +178,47 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         ) : null}
 
         {primaryChallenge ? (
-          <ActiveChallengeCard
-            dailyChallenge={primaryChallenge}
-            isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
-            onComplete={() => {
-              if (primaryChallenge.type === 'AI Image Recognition Challenge') {
-                model.openChallengeMission(primaryChallenge);
-              } else {
-                void model.handleChallengeProgress(primaryChallenge, 100);
-              }
-            }}
-            onClaim={() => {
-              if (primaryChallenge.id) {
-                void model.handleClaimChallengeReward(primaryChallenge.id);
-              }
-            }}
-          />
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: '#1A211D', fontSize: 14, fontWeight: '800', textTransform: 'uppercase' }}>Challenges</Text>
+              <TouchableOpacity onPress={() => model.setActiveTab('challenges')}>
+                <Text style={{ color: '#126027', fontSize: 12, fontWeight: '700' }}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <ActiveChallengeCard
+              dailyChallenge={primaryChallenge}
+              isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
+              onComplete={() => {
+                if (primaryChallenge.type === 'AI Image Recognition Challenge') {
+                  model.openChallengeMission(primaryChallenge);
+                } else {
+                  void model.handleChallengeProgress(primaryChallenge, 100);
+                }
+              }}
+              onClaim={() => {
+                if (primaryChallenge.id) {
+                  void model.handleClaimChallengeReward(primaryChallenge.id);
+                }
+              }}
+            />
+          </View>
         ) : null}
 
         {model.events[0] ? (
-          <UpcomingEventCard
-            event={model.events[0]}
-            isReadOnly={model.isReadOnlyExperience}
-            onJoin={() => model.setActiveOverlay('events')}
-            onSignIn={() => model.leaveReadOnlyAccess()}
-          />
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: '#1A211D', fontSize: 14, fontWeight: '800', textTransform: 'uppercase' }}>Event</Text>
+              <TouchableOpacity onPress={() => model.setActiveOverlay('events')}>
+                <Text style={{ color: '#126027', fontSize: 12, fontWeight: '700' }}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <UpcomingEventCard
+              event={model.events[0]}
+              isReadOnly={model.isReadOnlyExperience}
+              onJoin={() => model.setActiveOverlay('events')}
+              onSignIn={() => model.leaveReadOnlyAccess()}
+            />
+          </View>
         ) : null}
 
         <View style={{ height: 100 }} />

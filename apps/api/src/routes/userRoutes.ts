@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
-import { errorBoundary } from '../http/errorResponder';
+import { errorBoundary, HttpError } from '../http/errorResponder';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
+import { avatarUploadMiddleware } from '../http/uploadMiddleware';
+import { PasswordService } from '../security/passwordService';
 
 const userRoutes = Router();
 
@@ -12,6 +14,12 @@ const preferenceSchema = z.object({
   headline: z.string().max(120).optional(),
   city: z.string().max(80).optional(),
   preferences: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
+});
+
+const securitySchema = z.object({
+  currentPassword: z.string(),
+  newEmail: z.string().email().optional(),
+  newPassword: z.string().min(8).optional(),
 });
 
 userRoutes.get(
@@ -116,6 +124,77 @@ userRoutes.patch(
     });
 
     return res.json(result);
+  }),
+);
+
+userRoutes.post(
+  '/me/avatar',
+  authenticateRequest,
+  requireUserAccess,
+  avatarUploadMiddleware.single('image'),
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    if (!req.file) {
+      throw new HttpError(400, 'Image file is required');
+    }
+
+    const avatarUrl = `/uploads/Avatars/${req.file.filename}`;
+
+    const profile = await prisma.profile.upsert({
+      where: { userId: req.auth!.userId },
+      update: { avatarUrl },
+      create: {
+        userId: req.auth!.userId,
+        displayName: req.auth!.name,
+        avatarUrl,
+      },
+    });
+
+    return res.json({
+      success: true,
+      avatarUrl,
+    });
+  }),
+);
+
+userRoutes.patch(
+  '/me/security',
+  authenticateRequest,
+  requireUserAccess,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const payload = securitySchema.parse(req.body);
+    
+    const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+    if (!user) {
+      throw new HttpError(404, 'User not found');
+    }
+
+    const passwordMatches = await PasswordService.compare(payload.currentPassword, user.passwordHash);
+    if (!passwordMatches) {
+      throw new HttpError(401, 'Incorrect current password.');
+    }
+
+    const updateData: any = {};
+
+    if (payload.newEmail && payload.newEmail !== user.email) {
+      const existingUser = await prisma.user.findUnique({ where: { email: payload.newEmail } });
+      if (existingUser) {
+        throw new HttpError(409, 'This email is already taken.');
+      }
+      updateData.email = payload.newEmail;
+    }
+
+    if (payload.newPassword) {
+      updateData.passwordHash = await PasswordService.hash(payload.newPassword);
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.user.update({
+        where: { id: req.auth!.userId },
+        data: updateData,
+      });
+    }
+
+    return res.json({ success: true, message: 'Security settings updated.' });
   }),
 );
 

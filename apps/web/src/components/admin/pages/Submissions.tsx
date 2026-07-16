@@ -8,6 +8,7 @@ interface Submission {
   challengeId: string;
   proofText: string | null;
   proofUrl: string | null;
+  afterProofUrl: string | null;
   status: 'pending' | 'approved' | 'rejected';
   moderatorNotes: string | null;
   createdAt: string;
@@ -232,23 +233,39 @@ export function Submissions() {
                         <p className="text-xs text-gray-500">{sub.challenge?.type || 'Standard'}</p>
                       </td>
                       <td className="px-4 py-4">
-                        {fullProofUrl ? (
-                          <button 
-                            onClick={() => setSelectedImage(fullProofUrl)} 
-                            className="block relative w-16 h-12 rounded-lg overflow-hidden border border-gray-200 group/img cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400"
-                          >
-                            <img src={fullProofUrl} alt="Proof" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                              <ExternalLink className="w-4 h-4 text-white" />
+                        <div className="flex gap-2">
+                          {fullProofUrl ? (
+                            <button 
+                              onClick={() => setSelectedImage(fullProofUrl)} 
+                              className="block relative w-16 h-12 rounded-lg overflow-hidden border border-gray-200 group/img cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400"
+                            >
+                              <img src={fullProofUrl} alt="Before Proof" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="text-white text-[10px] font-bold absolute bottom-1 left-1">BEFORE</span>
+                                <ExternalLink className="w-4 h-4 text-white" />
+                              </div>
+                            </button>
+                          ) : sub.proofText ? (
+                            <div className="text-sm text-gray-600 max-w-[150px] truncate" title={sub.proofText}>
+                              {sub.proofText}
                             </div>
-                          </button>
-                        ) : sub.proofText ? (
-                          <div className="text-sm text-gray-600 max-w-[150px] truncate" title={sub.proofText}>
-                            {sub.proofText}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">No proof</span>
-                        )}
+                          ) : (
+                            <span className="text-xs text-gray-400">No proof</span>
+                          )}
+
+                          {sub.afterProofUrl && (
+                            <button 
+                              onClick={() => setSelectedImage(sub.afterProofUrl!.startsWith('/') ? `${API_HOST}${sub.afterProofUrl}` : sub.afterProofUrl!)} 
+                              className="block relative w-16 h-12 rounded-lg overflow-hidden border border-gray-200 group/img cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400"
+                            >
+                              <img src={sub.afterProofUrl.startsWith('/') ? `${API_HOST}${sub.afterProofUrl}` : sub.afterProofUrl} alt="After Proof" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="text-white text-[10px] font-bold absolute bottom-1 left-1">AFTER</span>
+                                <ExternalLink className="w-4 h-4 text-white" />
+                              </div>
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-col gap-1">

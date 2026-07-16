@@ -599,19 +599,19 @@ export function LearningContent() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="flex w-full gap-4 overflow-x-auto pb-2">
         {[
-          { label: 'Total Content', value: loading ? '—' : lessons.length, extra: 'modules', color: 'text-gray-900' },
+          { label: 'Total Content', value: loading ? '—' : lessons.length, extra: 'modules', color: 'text-gray-900 dark:text-white' },
           { label: 'Published', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Published').length, extra: 'live', color: 'text-green-600' },
           { label: 'Auto Publish', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Auto Publish').length, extra: 'scheduled', color: 'text-blue-600' },
           { label: 'Drafts', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Draft').length, extra: 'unpublished', color: 'text-yellow-600' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
-            <div key={s.label} className={`bg-white rounded-2xl border border-gray-100 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
-              <p className="text-sm text-gray-500 font-medium">{s.label}</p>
+            <div key={s.label} className={`flex-1 min-w-[200px] bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
               <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{s.extra}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{s.extra}</p>
             </div>
           );
         })}
