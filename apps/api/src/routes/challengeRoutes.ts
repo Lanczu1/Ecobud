@@ -21,6 +21,7 @@ const submissionSchema = z
   .object({
     proofText: z.string().min(10).max(1000).optional(),
     proofUrl: z.string().optional(),
+    afterProofUrl: z.string().optional(),
   })
   .refine((payload) => Boolean(payload.proofText ?? payload.proofUrl), {
     message: 'Provide proof text or a proof URL.',
@@ -218,6 +219,22 @@ challengeRoutes.post(
   }),
 );
 
+challengeRoutes.post(
+  '/:challengeId/upload-proof',
+  authenticateRequest,
+  requireUserAccess,
+  challengeUploadMiddleware.single('image'),
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    if (!req.file) {
+      throw new HttpError(400, 'Image file is required');
+    }
+
+    res.json({
+      proofUrl: `/uploads/Challenges/${req.file.filename}`,
+    });
+  }),
+);
+
 challengeRoutes.get(
   '/submissions/mine',
   authenticateRequest,
@@ -268,6 +285,7 @@ challengeRoutes.post(
       update: {
         proofText: payload.proofText,
         proofUrl: payload.proofUrl,
+        afterProofUrl: payload.afterProofUrl,
         status: 'pending',
         moderatorNotes: null,
         flaggedReason: null,
@@ -279,6 +297,7 @@ challengeRoutes.post(
         challengeId: challenge.id,
         proofText: payload.proofText,
         proofUrl: payload.proofUrl,
+        afterProofUrl: payload.afterProofUrl,
       },
     });
 

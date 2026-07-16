@@ -7,7 +7,14 @@ import { resolveLiveStreak } from '../utils/gamificationUtils';
 
 const experienceRoutes = Router();
 
-const getDateKey = (date = new Date()) => date.toISOString().slice(0, 10);
+const getDateKey = (date = new Date()) => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
 
 
 
@@ -120,10 +127,10 @@ experienceRoutes.get(
         where: {
           userId,
         timestamp: {
-          gte: new Date(month + '-01T00:00:00.000Z'),
+          gte: new Date(month + '-01T00:00:00+08:00'),
         }
       },
-      select: { timestamp: true, publicLabel: true, pointsAwarded: true },
+      select: { timestamp: true, actionType: true, pointsAwarded: true },
     }),
       prisma.user.findUnique({
         where: { id: userId },
@@ -150,7 +157,7 @@ experienceRoutes.get(
     logs.forEach(log => {
       const dk = getDateKey(log.timestamp);
       if (!logsByDate[dk]) logsByDate[dk] = [];
-      logsByDate[dk].push({ title: log.publicLabel, points: log.pointsAwarded });
+      logsByDate[dk].push({ title: log.actionType, points: log.pointsAwarded });
     });
     
     checkIns.forEach(ci => {
@@ -187,7 +194,7 @@ experienceRoutes.get(
       },
       include: { profile: true, badges: { include: { badge: true } } },
       orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],
-      take: 50,
+      take: 10,
     });
 
     const currentUserIndex = users.findIndex((user) => user.id === currentUserId);

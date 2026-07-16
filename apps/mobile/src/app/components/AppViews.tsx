@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { styles } from '../styles/appStyles';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
@@ -1093,8 +1094,30 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     }
   }, [selectedDay, popupFade, popupScale]);
 
-  const leaderboard = model.leaderboard?.items ?? [];
+  const leaderboardItems = model.leaderboard?.items ?? [];
   const currentRank = model.leaderboard?.currentUserRank ?? null;
+
+  const [leaderboardPage, setLeaderboardPage] = useState(1);
+  const lbTotalPages = Math.max(1, Math.ceil(leaderboardItems.length / 10));
+  const lbStartIndex = (leaderboardPage - 1) * 10;
+  const lbEndIndex = lbStartIndex + 10;
+  const lbCurrentItems = leaderboardItems.slice(lbStartIndex, lbEndIndex);
+  
+  const isLbPageOne = leaderboardPage === 1;
+  const podiumTop3 = isLbPageOne ? lbCurrentItems.slice(0, 3) : [];
+  const rankListItems = isLbPageOne ? lbCurrentItems.slice(3) : lbCurrentItems;
+
+  const lbFadeAnim = useRef(new Animated.Value(0)).current;
+  const lbSlideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    lbFadeAnim.setValue(0);
+    lbSlideAnim.setValue(20);
+    Animated.parallel([
+      Animated.timing(lbFadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.spring(lbSlideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true })
+    ]).start();
+  }, [leaderboardPage, lbFadeAnim, lbSlideAnim, segment]);
 
   const rankMedal = (rank: number) => {
     if (rank === 1) return '🥇';
@@ -1205,7 +1228,11 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                       BUILDING STREAK: {model.tracker.currentStreak} 🔥
                     </Text>
                   </View>
-                ) : null}
+                ) : (
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7A75', marginBottom: 6 }}>
+                    Count 1 to show the streak
+                  </Text>
+                )}
                 <View style={trackerStyles.calLegendRow}>
                   <View style={[trackerStyles.legendChip, trackerStyles.cellEmpty]} />
                   <Text style={trackerStyles.legendText}>None</Text>
@@ -1271,48 +1298,50 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               <Text style={trackerStyles.surfaceSubtitle}>By Eco Points</Text>
             </View>
 
-            {leaderboard.length === 0 ? (
+            {leaderboardItems.length === 0 ? (
               <View style={trackerStyles.leaderboardEmpty}>
                 <MaterialCommunityIcons name="trophy-outline" size={40} color="#B0C4B8" />
                 <Text style={trackerStyles.leaderboardEmptyText}>No rankings yet. Be the first!</Text>
               </View>
             ) : (
-              <>
+              <Animated.View style={{ opacity: lbFadeAnim, transform: [{ translateY: lbSlideAnim }] }}>
                 {/* Podium / top 3 */}
-                <View style={trackerStyles.podiumRow}>
-                  {leaderboard.slice(0, 3).map((entry) => {
-                    const medal = rankMedal(entry.rank);
-                    const isUser = entry.isCurrentUser;
-                    const podiumHeight = entry.rank === 1 ? 78 : entry.rank === 2 ? 62 : 52;
-                    return (
-                      <View key={entry.id} style={trackerStyles.podiumColumn}>
-                        <Text style={trackerStyles.podiumMedal}>{medal ?? '⭐'}</Text>
-                        <View style={[trackerStyles.podiumAvatar, isUser && trackerStyles.podiumAvatarUser]}>
-                          <Text style={trackerStyles.podiumAvatarText}>
-                            {entry.displayName.slice(0, 1).toUpperCase()}
+                {isLbPageOne && podiumTop3.length > 0 && (
+                  <View style={trackerStyles.podiumRow}>
+                    {podiumTop3.map((entry) => {
+                      const medal = rankMedal(entry.rank);
+                      const isUser = entry.isCurrentUser;
+                      const podiumHeight = entry.rank === 1 ? 78 : entry.rank === 2 ? 62 : 52;
+                      return (
+                        <View key={entry.id} style={trackerStyles.podiumColumn}>
+                          <Text style={trackerStyles.podiumMedal}>{medal ?? '⭐'}</Text>
+                          <View style={[trackerStyles.podiumAvatar, isUser && trackerStyles.podiumAvatarUser]}>
+                            <Text style={trackerStyles.podiumAvatarText}>
+                              {entry.displayName.slice(0, 1).toUpperCase()}
+                            </Text>
+                          </View>
+                          <Text style={trackerStyles.podiumName} numberOfLines={1}>
+                            {isUser ? 'You' : entry.displayName}
                           </Text>
+                          <Text style={trackerStyles.podiumPoints}>{entry.points} Eco Points</Text>
+                          <View
+                            style={[
+                              trackerStyles.podiumBlock,
+                              { height: podiumHeight },
+                              entry.rank === 1 && trackerStyles.podiumBlockGold,
+                              entry.rank === 2 && trackerStyles.podiumBlockSilver,
+                              entry.rank === 3 && trackerStyles.podiumBlockBronze,
+                            ]}
+                          />
                         </View>
-                        <Text style={trackerStyles.podiumName} numberOfLines={1}>
-                          {isUser ? 'You' : entry.displayName}
-                        </Text>
-                        <Text style={trackerStyles.podiumPoints}>{entry.points} EP</Text>
-                        <View
-                          style={[
-                            trackerStyles.podiumBlock,
-                            { height: podiumHeight },
-                            entry.rank === 1 && trackerStyles.podiumBlockGold,
-                            entry.rank === 2 && trackerStyles.podiumBlockSilver,
-                            entry.rank === 3 && trackerStyles.podiumBlockBronze,
-                          ]}
-                        />
-                      </View>
-                    );
-                  })}
-                </View>
+                      );
+                    })}
+                  </View>
+                )}
 
                 {/* Remaining ranks */}
                 <View style={trackerStyles.rankList}>
-                  {leaderboard.slice(3).map((entry) => (
+                  {rankListItems.map((entry) => (
                     <View
                       key={entry.id}
                       style={[
@@ -1329,23 +1358,44 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                       <Text style={trackerStyles.rankName} numberOfLines={1}>
                         {entry.isCurrentUser ? 'You' : entry.displayName}
                       </Text>
-                      <Text style={trackerStyles.rankPoints}>{entry.points} EP</Text>
+                      <Text style={trackerStyles.rankPoints}>{entry.points} Eco Points</Text>
                     </View>
                   ))}
                 </View>
 
+                {/* Pagination Controls */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, borderTopWidth: 1, borderColor: '#EDF6F1', alignItems: 'center' }}>
+                  <TouchableOpacity 
+                    disabled={leaderboardPage === 1} 
+                    onPress={() => setLeaderboardPage(leaderboardPage - 1)}
+                    style={{ padding: 8, opacity: leaderboardPage === 1 ? 0.3 : 1 }}
+                  >
+                    <Ionicons name="chevron-back" size={24} color="#126027" />
+                  </TouchableOpacity>
+                  <Text style={{ fontWeight: '800', color: '#126027', fontSize: 14 }}>
+                    Page {leaderboardPage} of {lbTotalPages}
+                  </Text>
+                  <TouchableOpacity 
+                    disabled={leaderboardPage >= lbTotalPages} 
+                    onPress={() => setLeaderboardPage(leaderboardPage + 1)}
+                    style={{ padding: 8, opacity: leaderboardPage >= lbTotalPages ? 0.3 : 1 }}
+                  >
+                    <Ionicons name="chevron-forward" size={24} color="#126027" />
+                  </TouchableOpacity>
+                </View>
+
                 {/* Current user anchor */}
-                {currentRank != null && !leaderboard.some((entry) => entry.isCurrentUser) && (
+                {currentRank != null && !lbCurrentItems.some((entry) => entry.isCurrentUser) && (
                   <View style={trackerStyles.currentUserAnchor}>
                     <Text style={trackerStyles.rankNumber}>#{currentRank}</Text>
                     <View style={[trackerStyles.rankAvatar, trackerStyles.rankAvatarUser]}>
                       <Text style={[trackerStyles.rankAvatarText, { color: '#FFF' }]}>Y</Text>
                     </View>
                     <Text style={trackerStyles.rankName}>You</Text>
-                    <Text style={trackerStyles.rankPoints}>{totalPoints} EP</Text>
+                    <Text style={trackerStyles.rankPoints}>{totalPoints} Eco Points</Text>
                   </View>
                 )}
-              </>
+              </Animated.View>
             )}
           </View>
         )}
@@ -1425,10 +1475,52 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ProfileView({ model }: { model: EcoBudMobileModel }) {
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      model.handleUpdateProfileImage(result.assets[0].uri);
+    }
+  };
+
+  const avatarUrl = model.session?.user.avatarUrl ? `${ecobudApiOrigin}${model.session.user.avatarUrl}` : null;
+
   return (
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
+        
+        {/* Profile Header */}
+        <View style={{ alignItems: 'center', marginBottom: 24 }}>
+          <TouchableOpacity onPress={() => void pickImage()}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 12, backgroundColor: '#E6F4EC' }} />
+            ) : (
+              <View style={[styles.badgeCircleMedium, { width: 100, height: 100, borderRadius: 50, marginBottom: 12 }]}>
+                <Ionicons name="person" size={48} color="#FFF" />
+              </View>
+            )}
+            <View style={{ position: 'absolute', bottom: 12, right: 0, backgroundColor: '#126027', borderRadius: 16, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFF' }}>
+              <Ionicons name="camera" size={16} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.cardTitle}>{model.userDisplayName}</Text>
+          <Text style={styles.metaTextSmallDark}>{model.session?.user.email}</Text>
+          
+          <TouchableOpacity 
+            style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#EDF6F1', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
+            onPress={() => model.setActiveOverlay('settings')}
+          >
+            <Ionicons name="settings-outline" size={16} color="#126027" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#126027', fontWeight: '700', fontSize: 13 }}>Settings & Security</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.availablePointsCard}>
           <Text style={styles.pointsLabel}>AVAILABLE POINTS</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>

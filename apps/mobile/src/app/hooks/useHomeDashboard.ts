@@ -1275,6 +1275,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         rewards: 'Opening rewards',
         transparency: 'Opening transparency feed',
         ai_mission: 'Opening mission',
+        settings: 'Opening settings',
       };
 
       // We explicitly excluded claimParticles, streakRewards, and streakUnlocked above, so we must cast screen to the narrowed type
@@ -1295,12 +1296,22 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [ensureSession]);
 
-  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string) => {
+  const uploadChallengeProofImage = useCallback(async (challengeId: string, uri: string) => {
+    try {
+      const activeSession = ensureSession();
+      const result = await homeService.uploadChallengeProofImage(activeSession.token, challengeId, uri);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }, [ensureSession]);
+
+  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string, afterProofUrl?: string) => {
     await runWithActionLoader('Submitting to admin...', async () => {
       try {
         const activeSession = ensureSession();
         setRefreshing(true);
-        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl);
+        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl, afterProofUrl);
         // Optimistically update the challenge state to pending
         setChallenges((currentChallenges) =>
           currentChallenges.map((challenge) =>
@@ -1379,7 +1390,44 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [challenges, ensureSession, hydrateApp]);
 
+  const handleUpdateProfileImage = useCallback(async (uri: string) => {
+    await runWithActionLoader('Uploading image...', async () => {
+      try {
+        const activeSession = ensureSession();
+        const res = await homeService.uploadAvatar(activeSession.token, uri);
+        await hydrateApp(activeSession, true);
+        return res;
+      } catch (error) {
+        Alert.alert('Upload Failed', error instanceof Error ? error.message : 'Please try again.');
+        throw error;
+      }
+    });
+  }, [ensureSession, runWithActionLoader, hydrateApp]);
 
+  const handleUpdateSecuritySettings = useCallback(async (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => {
+    await runWithActionLoader('Updating security settings...', async () => {
+      try {
+        const activeSession = ensureSession();
+        await homeService.updateSecuritySettings(activeSession.token, payload);
+        if (payload.newEmail) {
+          // Update local session
+          const updatedSession = {
+            ...activeSession,
+            user: {
+              ...activeSession.user,
+              email: payload.newEmail,
+            }
+          };
+          await persistSession(updatedSession);
+          setSession(updatedSession);
+        }
+        Alert.alert('Success', 'Security settings updated successfully.');
+      } catch (error) {
+        Alert.alert('Update Failed', error instanceof Error ? error.message : 'Please try again.');
+        throw error;
+      }
+    });
+  }, [ensureSession, runWithActionLoader, persistSession]);
 
   const userDisplayName =
     profile?.profile?.displayName ??
@@ -1481,7 +1529,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
     openChallengeMission,
     handleChallengeProgress,
     analyzeChallengeImage,
+    uploadChallengeProofImage,
     handleSubmitChallengeProof,
     handleClaimChallengeReward,
+    handleUpdateProfileImage,
+    handleUpdateSecuritySettings,
   };
 }

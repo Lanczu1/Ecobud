@@ -71,3 +71,25 @@ export const analyzeUploadMiddleware = multer({
     fileSize: 10 * 1024 * 1024, // 10MB limit
   }
 });
+
+const avatarsUploadDirectory = path.join(uploadDirectory, 'Avatars');
+if (!fs.existsSync(avatarsUploadDirectory)) {
+  fs.mkdirSync(avatarsUploadDirectory, { recursive: true });
+}
+
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, avatarsUploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, 'avatar-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const avatarUploadMiddleware = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit for avatars
+  }
+});

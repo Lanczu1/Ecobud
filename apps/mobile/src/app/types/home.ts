@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -196,6 +196,9 @@ export interface EcoBudMobileModel {
   handleAssistantSend: (seedMessage?: string) => Promise<void>;
   loadTrackerMonth: (offset: number) => Promise<void>;
   analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>;
-  handleSubmitChallengeProof: (challengeId: string, proofUrl: string) => Promise<void>;
+  uploadChallengeProofImage: (challengeId: string, uri: string) => Promise<{ proofUrl: string }>;
+  handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string) => Promise<void>;
   handleClaimChallengeReward: (challengeId: string) => Promise<void>;
+  handleUpdateProfileImage: (uri: string) => Promise<any>;
+  handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => Promise<void>;
 }

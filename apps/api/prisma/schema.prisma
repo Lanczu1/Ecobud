@@ -192,6 +192,7 @@ model ChallengeSubmission {
   challengeId    String
   proofText      String?
   proofUrl       String?
+  afterProofUrl  String?
   status         ChallengeSubmissionStatus @default(pending)
   moderatorNotes String?
   flaggedReason  String?

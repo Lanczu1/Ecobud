@@ -62,6 +62,12 @@ export const homeService = {
   getPublicTransparency: () =>
     ecobudApi.fetchPublicTransparency(),
 
+  uploadAvatar: (token: string, uri: string) =>
+    ecobudApi.uploadAvatar(token, uri),
+
+  updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; newPassword?: string }) =>
+    ecobudApi.updateSecuritySettings(token, payload),
+
   // ─── Actions ───────────────────────────────────────────────────────────────────
 
   completeLesson: (token: string, lessonId: string) =>
@@ -79,8 +85,11 @@ export const homeService = {
   analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
     ecobudApi.analyzeChallengeImage(token, challengeId, uri),
 
-  submitChallengeProof: (token: string, challengeId: string, proofUrl: string) =>
-    ecobudApi.submitChallengeProof(token, challengeId, proofUrl),
+  uploadChallengeProofImage: (token: string, challengeId: string, uri: string) =>
+    ecobudApi.uploadChallengeProofImage(token, challengeId, uri),
+
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string) =>
+    ecobudApi.submitChallengeProof(token, challengeId, proofUrl, afterProofUrl),
 
   claimChallengeReward: (token: string, challengeId: string) =>
     ecobudApi.claimChallengeReward(token, challengeId),

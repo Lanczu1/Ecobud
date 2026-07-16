@@ -52,9 +52,10 @@ import { FireStreak } from './FireStreak';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const challenge = model.selectedChallenge;
-  const [step, setStep] = React.useState<'details' | 'capture' | 'result'>('details');
+  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'capture_after'>('details');
   const [processing, setProcessing] = React.useState(false);
-  const [mockResult, setMockResult] = React.useState<{ passed: boolean; object: string; confidence: number; reason?: string } | null>(null);
+  const [mockResult, setMockResult] = React.useState<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string } | null>(null);
+  const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(null);
 
   const entryFadeAnim = React.useRef(new Animated.Value(0)).current;
   const processFadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -117,9 +118,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     try {
       const result = await model.analyzeChallengeImage(challenge.id, uri);
       if (result.passed && result.proofUrl) {
-        await model.handleSubmitChallengeProof(challenge.id, result.proofUrl);
+        setBeforeProofUrl(result.proofUrl);
+        setMockResult(result);
+      } else {
+        setMockResult(result);
       }
-      setMockResult(result);
     } catch (err: any) {
       setMockResult({ passed: false, object: 'Error', confidence: 0, reason: err.message || 'Failed to analyze image' });
     } finally {
@@ -128,11 +131,31 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   };
 
+  const processAfterImage = async (uri: string) => {
+    setCapturedImage(uri);
+    setProcessing(true);
+    try {
+      if (beforeProofUrl) {
+        const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
+        await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, uploadResult.proofUrl);
+      }
+      setStep('result'); // We can reuse result screen for final success
+    } catch (err: any) {
+      console.error('Failed to submit proof', err);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleCapture = async () => {
     if (cameraRef.current) {
       try {
         const photo = await cameraRef.current.takePictureAsync();
-        processImage(photo.uri);
+        if (step === 'capture_after') {
+          processAfterImage(photo.uri);
+        } else {
+          processImage(photo.uri);
+        }
       } catch (err) {
         console.error('Camera error', err);
       }
@@ -147,7 +170,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         quality: 0.8,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        processImage(result.assets[0].uri);
+        if (step === 'capture_after') {
+          processAfterImage(result.assets[0].uri);
+        } else {
+          processImage(result.assets[0].uri);
+        }
       }
     } catch (err) {
       console.error('Gallery error', err);
@@ -166,6 +193,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const handleBackToChallenge = () => {
     handleClose();
+  };
+
+  const handleProceedToAfter = () => {
+    setCapturedImage(null);
+    setStep('capture_after');
   };
 
   const handleTryAgain = () => {
@@ -202,9 +234,16 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 )}
               </View>
 
-              {mockResult.passed && (
+              {mockResult.passed && step === 'result' && beforeProofUrl && !capturedImage ? (
                 <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Pending Admin Approval</Text>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Step 1 Complete!</Text>
+                  <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
+                    We have verified the trash. Now, please take an "AFTER" picture showing you throwing it in the proper bin.
+                  </Text>
+                </View>
+              ) : mockResult.passed && step === 'result' && capturedImage ? (
+                <View style={{ alignItems: 'center', marginBottom: 32 }}>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Submission Complete!</Text>
                   <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
                     Your submission has been sent to the admin for review. Once approved, you will receive:
                   </Text>
@@ -216,10 +255,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     </View>
                   )}
                 </View>
-              )}
+              ) : null}
 
               {mockResult.passed ? (
-                <PrimaryButton label="Back to Challenges" onPress={handleBackToChallenge} />
+                capturedImage ? (
+                  <PrimaryButton label="Back to Challenges" onPress={handleBackToChallenge} />
+                ) : (
+                  <PrimaryButton label="Proceed to After Picture" onPress={handleProceedToAfter} />
+                )
               ) : (
                 <PrimaryButton label="Try Again" onPress={handleTryAgain} />
               )}
@@ -230,10 +273,10 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     );
   }
 
-  if (step === 'capture') {
+  if (step === 'capture' || step === 'capture_after') {
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold title="AI Recognition Submission Page" subtitle="AI Recognition" onBack={() => setStep('details')}>
+        <OverlayScaffold title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"} subtitle={step === 'capture_after' ? "Final Step" : "AI Recognition"} onBack={() => setStep(step === 'capture_after' ? 'result' : 'details')}>
           <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
             <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
               <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
@@ -251,7 +294,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 {processing && (
                   <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.8)', justifyContent: 'center', alignItems: 'center', opacity: processFadeAnim }]}>
                     <ActivityIndicator size="large" color="#10B981" />
-                    <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>Analyzing Image...</Text>
+                    <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>
+                      {step === 'capture_after' ? 'Submitting...' : 'Analyzing Image...'}
+                    </Text>
                   </Animated.View>
                 )}
               </View>
@@ -513,6 +558,8 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <StreakUnlockedOverlay model={model} />;
     case 'streakRewards':
       return <StreakRewardsOverlay model={model} />;
+    case 'settings':
+      return <SettingsOverlay model={model} />;
     default:
       return null;
   }
@@ -2117,123 +2164,160 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
-  const featuredLeaders: Array<{
-    rank: number;
-    name: string;
-    points: string;
-    badgeColor: string;
-    avatarSize: number;
-    cardStyle?: StyleProp<ViewStyle>;
-  }> = [
-      {
-        rank: 2,
-        name: 'Sarah M.',
-        points: '12.4k pts',
-        badgeColor: '#B0BEC5',
-        avatarSize: 64,
-        cardStyle: { marginTop: 40 },
-      },
-      {
-        rank: 1,
-        name: 'Alex Eco',
-        points: '15.2k pts',
-        badgeColor: '#FFD700',
-        avatarSize: 80,
-      },
-      {
-        rank: 3,
-        name: 'John D.',
-        points: '11.1k pts',
-        badgeColor: '#CD7F32',
-        avatarSize: 64,
-        cardStyle: { marginTop: 40 },
-      },
-    ];
+  const [page, setPage] = React.useState(1);
+  const itemsPerPage = 10;
+  const actualItems = model.leaderboard?.items ?? [];
+  const totalPages = Math.max(1, Math.ceil(actualItems.length / itemsPerPage));
+
+  const startIndex = (page - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPageItems = actualItems.slice(startIndex, endIndex);
+
+  // Animations
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(20);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [page, fadeAnim, slideAnim]);
+
+  const isPageOne = page === 1;
+  
+  const top3 = isPageOne ? currentPageItems.slice(0, 3) : [];
+  const remainingList = isPageOne ? currentPageItems.slice(3) : currentPageItems;
+  
+  const podiumLeaders = [];
+  if (top3[1]) podiumLeaders.push({ ...top3[1], badgeColor: '#B0BEC5', avatarSize: 64, cardStyle: { marginTop: 40 } });
+  if (top3[0]) podiumLeaders.push({ ...top3[0], badgeColor: '#FFD700', avatarSize: 80, cardStyle: {} });
+  if (top3[2]) podiumLeaders.push({ ...top3[2], badgeColor: '#CD7F32', avatarSize: 64, cardStyle: { marginTop: 40 } });
+
+  const currentUser = actualItems.find(item => item.isCurrentUser);
 
   return (
     <View style={styles.fullscreenOverlay}>
       <TopNavbar model={model} showBack={true} title="Leaderboard" />
-      <View style={[styles.homeContent, { flex: 1 }]}>
+      <View style={[styles.homeContent, { flex: 1, paddingBottom: 0 }]}>
         <View style={styles.leaderboardFilterRow}>
           <TouchableOpacity style={[styles.filterPillActive, { flex: 1, justifyContent: 'center' }]}><Text style={styles.filterPillActiveText}>Global</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.filterPillInactive, { flex: 1, justifyContent: 'center' }]}><Text style={styles.filterPillInactiveText}>Friends</Text></TouchableOpacity>
         </View>
 
-        <View style={styles.leaderboardTop3}>
-          {featuredLeaders.map((leader) => (
-            <View key={leader.rank} style={[styles.lbTopCard, leader.cardStyle]}>
-              <View style={styles.lbAvatarWrap}>
-                <AvatarBubble
-                  label={leader.name}
-                  size={leader.avatarSize}
-                  style={styles.lbAvatarImg}
-                  textStyle={leader.avatarSize > 64 ? styles.lbAvatarTextLarge : styles.lbAvatarText}
-                />
-                <View
-                  style={[
-                    styles.lbRankBadge,
-                    {
-                      backgroundColor: leader.badgeColor,
-                      width: leader.rank === 1 ? 28 : 24,
-                      height: leader.rank === 1 ? 28 : 24,
-                      borderRadius: leader.rank === 1 ? 14 : 12,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.lbRankText, leader.rank === 1 ? { fontSize: 14 } : null]}>{leader.rank}</Text>
+        <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {isPageOne && top3.length > 0 && (
+            <View style={styles.leaderboardTop3}>
+              {podiumLeaders.map((leader) => (
+                <View key={leader.rank} style={[styles.lbTopCard, leader.cardStyle]}>
+                  <View style={styles.lbAvatarWrap}>
+                    <AvatarBubble
+                      label={leader.displayName}
+                      size={leader.avatarSize}
+                      style={styles.lbAvatarImg}
+                      textStyle={leader.avatarSize > 64 ? styles.lbAvatarTextLarge : styles.lbAvatarText}
+                    />
+                    <View
+                      style={[
+                        styles.lbRankBadge,
+                        {
+                          backgroundColor: leader.badgeColor,
+                          width: leader.rank === 1 ? 28 : 24,
+                          height: leader.rank === 1 ? 28 : 24,
+                          borderRadius: leader.rank === 1 ? 14 : 12,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.lbRankText, leader.rank === 1 ? { fontSize: 14 } : null]}>{leader.rank}</Text>
+                    </View>
+                  </View>
+                  <Text
+                    style={[
+                      styles.lbTopName,
+                      leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
+                    ]}
+                  >
+                    {leader.isCurrentUser ? 'You' : leader.displayName}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.lbTopPoints,
+                      leader.rank === 1 ? { color: '#126027', fontWeight: 'bold' } : null,
+                    ]}
+                  >
+                    {leader.points} pts
+                  </Text>
                 </View>
-              </View>
-              <Text
-                style={[
-                  styles.lbTopName,
-                  leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
-                ]}
-              >
-                {leader.name}
-              </Text>
-              <Text
-                style={[
-                  styles.lbTopPoints,
-                  leader.rank === 1 ? { color: '#126027', fontWeight: 'bold' } : null,
-                ]}
-              >
-                {leader.points}
-              </Text>
+              ))}
             </View>
-          ))}
+          )}
+
+          <ScrollView style={{ flex: 1, marginTop: isPageOne ? 24 : 8, paddingHorizontal: 4 }}>
+            {remainingList.map(user => (
+              <View key={user.rank} style={styles.lbListRow}>
+                <Text style={styles.lbListRank}>{user.rank}</Text>
+                <AvatarBubble
+                  label={user.displayName}
+                  size={40}
+                  style={styles.lbListAvatar}
+                  textStyle={styles.lbListAvatarText}
+                />
+                <View style={{ flex: 1, marginLeft: 16 }}>
+                  <Text style={styles.cardTitle}>{user.isCurrentUser ? 'You' : user.displayName}</Text>
+                </View>
+                <Text style={styles.lbListPoints}>{user.points} pts</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Pagination Controls */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderColor: '#EDF6F1', alignItems: 'center' }}>
+          <TouchableOpacity 
+            disabled={page === 1} 
+            onPress={() => setPage(page - 1)}
+            style={{ padding: 8, opacity: page === 1 ? 0.3 : 1 }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#126027" />
+          </TouchableOpacity>
+          <Text style={{ fontWeight: '800', color: '#126027', fontSize: 14 }}>
+            Page {page} of {totalPages}
+          </Text>
+          <TouchableOpacity 
+            disabled={page >= totalPages} 
+            onPress={() => setPage(page + 1)}
+            style={{ padding: 8, opacity: page >= totalPages ? 0.3 : 1 }}
+          >
+            <Ionicons name="chevron-forward" size={24} color="#126027" />
+          </TouchableOpacity>
         </View>
 
-        <ScrollView style={{ flex: 1, marginTop: 24, paddingHorizontal: 4 }}>
-          {[4, 5, 6, 7, 8, 9, 10].map(rank => (
-            <View key={rank} style={styles.lbListRow}>
-              <Text style={styles.lbListRank}>{rank}</Text>
-              <AvatarBubble
-                label={`User ${rank}`}
-                size={40}
-                style={styles.lbListAvatar}
-                textStyle={styles.lbListAvatarText}
-              />
-              <View style={{ flex: 1, marginLeft: 16 }}>
-                <Text style={styles.cardTitle}>User {rank}</Text>
-              </View>
-              <Text style={styles.lbListPoints}>{11000 - rank * 500} pts</Text>
+        {currentUser && (
+          <View style={[styles.lbCurrentUserCard, { marginTop: 0, marginBottom: 24, borderRadius: 16, marginHorizontal: 16 }]}>
+            <Text style={styles.lbListRank}>{currentUser.rank}</Text>
+            <AvatarBubble
+              label={currentUser.displayName}
+              size={40}
+              style={[styles.lbListAvatar, styles.lbCurrentUserAvatar]}
+              textStyle={styles.lbCurrentUserAvatarText}
+            />
+            <View style={{ flex: 1, marginLeft: 16 }}>
+              <Text style={[styles.cardTitle, { color: '#FFF' }]}>You</Text>
             </View>
-          ))}
-        </ScrollView>
-
-        <View style={styles.lbCurrentUserCard}>
-          <Text style={styles.lbListRank}>42</Text>
-          <AvatarBubble
-            label={model.userDisplayName}
-            size={40}
-            style={[styles.lbListAvatar, styles.lbCurrentUserAvatar]}
-            textStyle={styles.lbCurrentUserAvatarText}
-          />
-          <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={[styles.cardTitle, { color: '#FFF' }]}>{model.userDisplayName}</Text>
+            <Text style={[styles.lbListPoints, { color: '#FFF' }]}>{currentUser.points} pts</Text>
           </View>
-          <Text style={[styles.lbListPoints, { color: '#FFF' }]}>{model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0} pts</Text>
-        </View>
+        )}
 
       </View>
     </View>
@@ -2755,3 +2839,110 @@ export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
     </Animated.View>
   );
 }
+
+export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const [currentPassword, setCurrentPassword] = React.useState('');
+  const [newEmail, setNewEmail] = React.useState(model.session?.user.email ?? '');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+
+  const handleSave = async () => {
+    if (!currentPassword) {
+      Alert.alert('Error', 'Current password is required to save changes.');
+      return;
+    }
+    if (newPassword && newPassword !== confirmPassword) {
+      Alert.alert('Error', 'New passwords do not match.');
+      return;
+    }
+
+    try {
+      await model.handleUpdateSecuritySettings({
+        currentPassword,
+        newEmail: newEmail !== model.session?.user.email ? newEmail : undefined,
+        newPassword: newPassword ? newPassword : undefined,
+      });
+      // clear fields on success
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert('Success', 'Security settings saved.');
+      model.setActiveOverlay(null);
+    } catch (e) {
+      // error handled in hook
+    }
+  };
+
+  return (
+    <OverlayScaffold
+      title="Settings & Security"
+      subtitle="Update your account details and password"
+      onBack={() => model.setActiveOverlay(null)}
+    >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.overlayScroll}>
+          <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Email Address</Text>
+          <SurfaceCard style={{ padding: 16 }}>
+            <TextInput
+              style={localStyles.formInput}
+              value={newEmail}
+              onChangeText={setNewEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="Enter new email"
+            />
+          </SurfaceCard>
+
+          <Text style={styles.sectionHeadline}>Change Password</Text>
+          <SurfaceCard style={{ padding: 16 }}>
+            <TextInput
+              style={[localStyles.formInput, { marginBottom: 16 }]}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              placeholder="New Password (optional)"
+            />
+            <TextInput
+              style={localStyles.formInput}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              placeholder="Confirm New Password"
+            />
+          </SurfaceCard>
+
+          <Text style={styles.sectionHeadline}>Confirm Changes</Text>
+          <SurfaceCard style={{ padding: 16 }}>
+            <Text style={{ marginBottom: 12, fontSize: 13, color: '#6B7A75' }}>
+              Please enter your current password to save any security changes.
+            </Text>
+            <TextInput
+              style={localStyles.formInput}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              secureTextEntry
+              placeholder="Current Password"
+            />
+          </SurfaceCard>
+
+          <View style={{ marginTop: 24 }}>
+            <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </OverlayScaffold>
+  );
+}
+
+const localStyles = StyleSheet.create({
+  formInput: {
+    backgroundColor: '#F7FBF9',
+    borderWidth: 1,
+    borderColor: '#E6F4EC',
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    color: '#1A3326',
+    fontWeight: '500',
+  },
+});

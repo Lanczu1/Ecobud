@@ -481,11 +481,17 @@ export const ecobudApi = {
       token,
       uri
     ),
-  submitChallengeProof: (token: string, challengeId: string, proofUrl: string) =>
+  uploadChallengeProofImage: (token: string, challengeId: string, uri: string) =>
+    uploadFileAsync<{ proofUrl: string }>(
+      `/challenges/${challengeId}/upload-proof`,
+      token,
+      uri
+    ),
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string) =>
     request(`/challenges/${challengeId}/submissions`, {
       method: 'POST',
       token,
-      body: { proofUrl },
+      body: { proofUrl, afterProofUrl },
     }),
   claimChallengeReward: (token: string, challengeId: string) =>
     request(`/challenges/${challengeId}/claim`, {
@@ -507,6 +513,18 @@ export const ecobudApi = {
     request<TrackerData>(`/experience/tracker${month ? `?month=${month}` : ''}`, { token }),
   fetchProfile: (token: string) =>
     request<ProfileData>('/users/me', { token }),
+  uploadAvatar: (token: string, uri: string) =>
+    uploadFileAsync<{ avatarUrl: string }>(
+      '/users/me/avatar',
+      token,
+      uri
+    ),
+  updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; newPassword?: string }) =>
+    request<{ success: boolean; message: string }>('/users/me/security', {
+      method: 'PATCH',
+      token,
+      body: payload,
+    }),
   fetchRewards: (token: string) =>
     request<RewardsData>('/experience/rewards', { token }),
   fetchLeaderboard: (token: string) =>
