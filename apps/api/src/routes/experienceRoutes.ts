@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
+import { chatRateLimiter } from '../http/chatRateLimiter';
 import { getEcoGuideReply, type ChatHistoryMessage } from '../services/ecoGuideService';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 
@@ -275,6 +276,7 @@ experienceRoutes.post(
   '/assistant/chat',
   authenticateRequest,
   requireUserAccess,
+  chatRateLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const message = typeof req.body?.message === 'string' ? req.body.message : '';
 
@@ -290,7 +292,7 @@ experienceRoutes.post(
           typeof (item as any).content === 'string',
       );
 
-    const result = await getEcoGuideReply(message, history);
+    const result = await getEcoGuideReply(message, history, req.auth!.userId);
 
     return res.json(result);
   }),

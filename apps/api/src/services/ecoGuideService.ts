@@ -32,8 +32,20 @@ interface MistralChoice {
   message: { role: string; content: string };
 }
 
+interface MistralUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
 interface MistralChatResponse {
   choices?: MistralChoice[];
+  usage?: MistralUsage;
+}
+
+interface MistralCallResult {
+  content: string;
+  usage: MistralUsage | null;
 }
 
 interface EcoGuideReply {
@@ -158,14 +170,68 @@ function generateQuickReplies(replyText: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Context-window management
+// ---------------------------------------------------------------------------
+
+/**
+ * mistral-small-latest supports a 32 768-token context window.
+ * We use a conservative char→token ratio of 1 token ≈ 4 characters.
+ */
+const MISTRAL_CONTEXT_LIMIT = 32_000;
+const CHARS_PER_TOKEN_ESTIMATE = 4;
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / CHARS_PER_TOKEN_ESTIMATE);
+}
+
+/**
+ * Trims the oldest history messages until system prompt + history + current
+ * user message fit within the context window.  Logs a warning when
+ * truncation occurs so operators can tune the history cap if needed.
+ */
+function trimConversationHistory(
+  systemPrompt: string,
+  history: ChatHistoryMessage[],
+  userMessage: string,
+): ChatHistoryMessage[] {
+  const reserved = estimateTokens(systemPrompt) + estimateTokens(userMessage);
+  let budget = MISTRAL_CONTEXT_LIMIT - reserved;
+
+  if (budget <= 0) {
+    // System prompt + user message alone exceed the window — send with no history
+    console.warn('[EcoGuide] WARNING: System prompt + user message alone approach the context limit; sending with no history.');
+    return [];
+  }
+
+  // Walk from newest → oldest, keeping messages that fit
+  const kept: ChatHistoryMessage[] = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const cost = estimateTokens(history[i].content);
+    if (cost > budget) break;
+    budget -= cost;
+    kept.unshift(history[i]);
+  }
+
+  if (kept.length < history.length) {
+    console.warn(
+      `[EcoGuide] WARNING: Truncated conversation history from ${history.length} to ${kept.length} messages to fit context window.`,
+    );
+  }
+
+  return kept;
+}
+
+// ---------------------------------------------------------------------------
 // Mistral API call
 // ---------------------------------------------------------------------------
 
 const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MISTRAL_MODEL = 'mistral-small-latest';
-const MISTRAL_TIMEOUT_MS = 15_000;
 
-async function callMistral(messages: MistralChatMessage[]): Promise<string> {
+/** 10-second timeout — prevents a hung upstream call from holding the connection open. */
+const MISTRAL_TIMEOUT_MS = 10_000;
+
+async function callMistral(messages: MistralChatMessage[]): Promise<MistralCallResult> {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) {
     throw new Error('MISTRAL_API_KEY is not configured');
@@ -184,7 +250,12 @@ async function callMistral(messages: MistralChatMessage[]): Promise<string> {
       body: JSON.stringify({
         model: MISTRAL_MODEL,
         messages,
-        max_tokens: 400,
+        /**
+         * 500 token cap.  The system prompt asks EcoGuide to keep replies
+         * under ~150 words (≈ 200 tokens).  500 gives comfortable headroom
+         * for bullet-point / list-heavy answers without runaway cost.
+         */
+        max_tokens: 500,
         temperature: 0.7,
       }),
       signal: controller.signal,
@@ -202,7 +273,7 @@ async function callMistral(messages: MistralChatMessage[]): Promise<string> {
       throw new Error('Empty response from Mistral');
     }
 
-    return content.trim();
+    return { content: content.trim(), usage: data.usage ?? null };
   } finally {
     clearTimeout(timeout);
   }
@@ -223,14 +294,26 @@ async function callMistral(messages: MistralChatMessage[]): Promise<string> {
 export async function getEcoGuideReply(
   userMessage: string,
   history: ChatHistoryMessage[] = [],
+  userId?: string,
 ): Promise<EcoGuideReply> {
+  const startTime = Date.now();
+  let source: 'mistral' | 'fallback' = 'mistral';
+  let tokenCount: number | null = null;
+
+  // Trim history to fit context window before building the messages array
+  const trimmedHistory = trimConversationHistory(
+    ECOGUIDE_SYSTEM_PROMPT,
+    history,
+    userMessage,
+  );
+
   // Build the messages array — system prompt is ALWAYS first
   const messages: MistralChatMessage[] = [
     { role: 'system', content: ECOGUIDE_SYSTEM_PROMPT },
   ];
 
-  // Append conversation history (already capped to last 10 on the client)
-  for (const msg of history) {
+  // Append conversation history (trimmed to fit context window)
+  for (const msg of trimmedHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }
 
@@ -240,12 +323,26 @@ export async function getEcoGuideReply(
   let replyText: string;
 
   try {
-    replyText = await callMistral(messages);
+    const result = await callMistral(messages);
+    replyText = result.content;
+    tokenCount = result.usage?.total_tokens ?? null;
   } catch (error) {
     // Log for server-side observability, but NEVER expose to the user
     console.error('[EcoGuide] Mistral call failed, using fallback:', error);
     replyText = buildFallbackReply(userMessage);
+    source = 'fallback';
   }
+
+  // ── Structured observability log (metadata only — no message content) ──
+  console.log(JSON.stringify({
+    event: 'ecoguide_chat',
+    timestamp: new Date().toISOString(),
+    userId: userId ?? null,
+    messageLength: userMessage.length,
+    responseTimeMs: Date.now() - startTime,
+    source,
+    tokenCount,
+  }));
 
   return {
     reply: replyText,

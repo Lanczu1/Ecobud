@@ -24,6 +24,7 @@ import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platfo
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { styles } from '../styles/appStyles';
+import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
@@ -586,7 +587,11 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                 message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleBot,
               ]}
             >
-              <Text style={message.role === 'user' ? styles.chatBubbleTextUser : styles.chatBubbleTextBot}>{message.text}</Text>
+              {message.role === 'user' ? (
+                <Text style={styles.chatBubbleTextUser}>{message.text}</Text>
+              ) : (
+                <SimpleMarkdown>{message.text}</SimpleMarkdown>
+              )}
               <Text style={message.role === 'user' ? styles.chatTimeUser : styles.chatTimeBot}>{message.time}</Text>
             </View>
           ))}
