@@ -45,7 +45,7 @@ export function AdminLayout({ children, onLogout, activeSection, onNavigate, isD
       <div className="flex-1 flex flex-col min-w-0">
         <AdminHeader activeSection={activeSection} isDark={isDark} onToggleDark={onToggleDark} />
         <main className="flex-1 overflow-hidden relative">
-          <div key={activeSection} className="animate-reveal absolute inset-0 overflow-y-auto overflow-x-hidden">
+          <div id="admin-scroll-container" key={activeSection} className="animate-reveal absolute inset-0 overflow-y-auto overflow-x-hidden">
             <div className="min-h-full">
               {children}
             </div>

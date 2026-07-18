@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 
-export function DailyTipCard() {
+export function DailyTipCard({ title, description }: { title?: string, description?: string }) {
   return (
     <View style={styles.dailyTipCard}>
       <View style={{ flex: 1, paddingRight: 16 }}>
@@ -15,8 +15,8 @@ export function DailyTipCard() {
           <MaterialCommunityIcons name="lightbulb-on" size={12} color="#126027" />
           <Text style={[styles.welcomeLabel, { marginLeft: 4 }]}>DAILY TIP</Text>
         </View>
-        <Text style={styles.tipTitle}>Cold Wash Advantage</Text>
-        <Text style={styles.tipDesc}>Washing clothes at 30°C instead of 40°C can save up to 40% of energy usage over a year.</Text>
+        <Text style={styles.tipTitle}>{title || "Cold Wash Advantage"}</Text>
+        <Text style={styles.tipDesc}>{description || "Washing clothes at 30°C instead of 40°C can save up to 40% of energy usage over a year."}</Text>
       </View>
       <Image source={{ uri: 'https://images.unsplash.com/photo-1582735689369-dbcf0e2c8a7b?q=80&w=400&auto=format&fit=crop' }} style={styles.tipImage} />
     </View>

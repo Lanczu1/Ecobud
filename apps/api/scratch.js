@@ -32,7 +32,7 @@ For starting seeds and containers, I'm Stan DeFreitas, Mr. Green Thumb.`;
   await prisma.lesson.update({
     where: { id: lessonId },
     data: {
-      content: updatedContent,
+      content: "",
       transcript: updatedTranscript
     }
   });

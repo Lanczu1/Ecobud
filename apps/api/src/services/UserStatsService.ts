@@ -9,6 +9,17 @@ export interface HomeDashboardPayload {
   ecoPoints: number;
   ecoCoins: number;
   weeklyGoal: number;
+  knowledgePoints: number;
+  learningProgress: number;
+  dailyTip: {
+    title: string;
+    description: string;
+  };
+  communityStats: {
+    co2Saved: string;
+    treesPlanted: number;
+    communityMembers: number;
+  };
 }
 
 interface ResetKnowledgeInput {
@@ -21,16 +32,33 @@ export class UserStatsService {
   constructor(private readonly database: PrismaClient = prisma) {}
 
   async getHomeDashboard(userId: string): Promise<HomeDashboardPayload> {
-    const [stats, weeklyGoal] = await Promise.all([
+    const [stats, weeklyGoal, totalLessons, completedLessons] = await Promise.all([
       this.ensureStats(this.database, userId),
       this.ensureWeeklyGoal(this.database, userId),
+      this.database.lesson.count(),
+      this.database.userLessonProgress.count({
+        where: { userId, status: 'completed' }
+      })
     ]);
+
+    const learningProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
     return {
       streak: stats.currentStreak,
       ecoPoints: stats.ecoPoints,
       ecoCoins: stats.ecoCoins,
       weeklyGoal: weeklyGoal.weeklyGoal,
+      knowledgePoints: stats.knowledgePoints,
+      learningProgress,
+      dailyTip: {
+        title: "Reduce Single-Use Plastics",
+        description: "Bring a reusable bag when shopping to significantly cut down on plastic waste."
+      },
+      communityStats: {
+        co2Saved: "12.5k kg",
+        treesPlanted: 3420,
+        communityMembers: 12500
+      }
     };
   }
 

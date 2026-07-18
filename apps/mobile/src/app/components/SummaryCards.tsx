@@ -9,8 +9,9 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
 
   // Visual placeholder for streak progress if real data is not provided
   const visibleStreak = getVisibleStreak(currentStreak);
-  const maxVisualStreak = Math.min(currentStreak, 7);
-  const todayIndex = currentStreak === 0 ? 0 : Math.min(currentStreak - 1, 6);
+  const cycleDay = currentStreak > 0 ? (currentStreak - 1) % 7 + 1 : 0;
+  const maxVisualStreak = cycleDay;
+  const todayIndex = cycleDay === 0 ? 0 : cycleDay - 1;
 
   const dots = lastSevenDays && completedDays
     ? lastSevenDays.map((date, index) => {
@@ -44,7 +45,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.streakLabel}>CURRENT STREAK</Text>
+            <Text style={styles.streakLabel}>YOUR ECO STREAK</Text>
             <Text style={styles.streakTagline}>
               {currentStreak < 3 ? (currentStreak === 0 ? 'Log a habit to start your streak!' : `${3 - currentStreak} more days to unlock your streak!`) : 'Keep your eco habits growing!'}
             </Text>
