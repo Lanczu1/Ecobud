@@ -134,6 +134,17 @@ export interface DashboardData {
   ecoPoints: number;
   ecoCoins: number;
   weeklyGoal: number;
+  knowledgePoints: number;
+  learningProgress: number;
+  dailyTip: {
+    title: string;
+    description: string;
+  };
+  communityStats: {
+    co2Saved: string;
+    treesPlanted: number;
+    communityMembers: number;
+  };
 }
 
 export interface QuizQuestion {
@@ -364,9 +375,11 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    throw new Error(
+    const error = new Error(
       typeof data?.message === 'string' ? data.message : 'Unexpected ECOBUD API error.',
     );
+    (error as any).status = response.status;
+    throw error;
   }
 
   return data as T;
@@ -393,7 +406,9 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string) => {
     } catch {}
 
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(typeof data?.message === 'string' ? data.message : 'Unexpected ECOBUD API error.');
+      const error = new Error(typeof data?.message === 'string' ? data.message : 'Unexpected ECOBUD API error.');
+      (error as any).status = response.status;
+      throw error;
     }
 
     return data as T;

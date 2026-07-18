@@ -380,14 +380,14 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
           );
         })()}
 
-        <DailyTipCard />
+        <DailyTipCard title={model.dashboard?.dailyTip?.title} description={model.dashboard?.dailyTip?.description} />
 
         <ContinueLessonCard />
 
         <CommunityImpactCard
-          co2Saved="4.2kg"
-          treesPlanted={1240}
-          communityMembers={8500}
+          co2Saved={model.dashboard?.communityStats?.co2Saved ?? "4.2kg"}
+          treesPlanted={model.dashboard?.communityStats?.treesPlanted ?? 1240}
+          communityMembers={model.dashboard?.communityStats?.communityMembers ?? 8500}
         />
 
         <View style={{ height: 100 }} />
@@ -445,9 +445,9 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
         <View style={{ marginTop: 24 }}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>Your Learning Path</Text>
-            <Text style={styles.taskMetaValueDark}>65% Complete</Text>
+            <Text style={styles.taskMetaValueDark}>{model.dashboard?.learningProgress ?? 0}% Complete</Text>
           </View>
-          <ProgressBar progress={65} />
+          <ProgressBar progress={model.dashboard?.learningProgress ?? 0} />
           <Text style={styles.metaTextSmall}>Next: Micro-plastic Awareness (15 min)</Text>
         </View>
 
@@ -457,7 +457,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
           </View>
           <View>
             <Text style={styles.knowledgePointsLabel}>KNOWLEDGE POINTS</Text>
-            <Text style={styles.knowledgePointsValue}>2,450</Text>
+            <Text style={styles.knowledgePointsValue}>{model.dashboard?.knowledgePoints ?? 0}</Text>
           </View>
         </View>
 
@@ -590,6 +590,8 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
 };
 
 export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -740,16 +742,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 <View style={{ ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(0,0,0,0.1)' }} />
               </View>
               <View style={localStyles.premiumTaskBody}>
-                <View style={[styles.rowBetween, { marginBottom: 6 }]}>
-                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                    <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{model.recentViewedMission.difficulty.toUpperCase()}</Text>
-                    <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((model.recentViewedMission as any).category || 'GENERAL').toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                    <Text style={styles.taskMetaValue}>🌿 {model.recentViewedMission.expReward} Eco Points</Text>
-                    <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#1D4ED8' }}>👁️ VIEWED</Text>
-                    </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                  <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{model.recentViewedMission.difficulty.toUpperCase()}</Text>
+                  <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((model.recentViewedMission as any).category || 'GENERAL').toUpperCase()}</Text>
+                  <Text style={styles.taskMetaValue}>🌿 {model.recentViewedMission.expReward} Eco Points</Text>
+                  <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ fontSize: 9, fontWeight: '800', color: '#1D4ED8' }}>👁️ VIEWED</Text>
                   </View>
                 </View>
                 <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{model.recentViewedMission.title}</Text>
@@ -885,8 +883,9 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             </Text>
           </View>
         )}
-        {currentActiveList.map((challenge, index) => (
-            <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }]} onPress={() => {
+        <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
+          {currentActiveList.map((challenge, index) => (
+              <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, isTablet && { width: '48%' }]} onPress={() => {
               const currentStatus = challenge.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
@@ -913,29 +912,25 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 <View style={{ ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(0,0,0,0.1)' }} />
               </View>
               <View style={localStyles.premiumTaskBody}>
-                <View style={[styles.rowBetween, { marginBottom: 6 }]}>
-                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                    <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
-                    <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                    <Text style={styles.taskMetaValue}>🌿 {challenge.expReward} Eco Points</Text>
-                    {challenge.ecoCoinReward > 0 && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
-                        <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
-                        <Text style={{ fontSize: 9, fontWeight: '800', color: '#B45309' }}>{challenge.ecoCoinReward} COINS</Text>
-                      </View>
-                    )}
-                    {model.viewedMissionIds.includes(challenge.id) ? (
-                      <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 9, fontWeight: '800', color: '#1D4ED8' }}>👁️ VIEWED</Text>
-                      </View>
-                    ) : (
-                      <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 9, fontWeight: '800', color: '#B91C1C' }}>🆕 NEW</Text>
-                      </View>
-                    )}
-                  </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                  <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
+                  <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
+                  <Text style={styles.taskMetaValue}>🌿 {challenge.expReward} Eco Points</Text>
+                  {challenge.ecoCoinReward > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
+                      <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#B45309' }}>{challenge.ecoCoinReward} COINS</Text>
+                    </View>
+                  )}
+                  {model.viewedMissionIds.includes(challenge.id) ? (
+                    <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#1D4ED8' }}>👁️ VIEWED</Text>
+                    </View>
+                  ) : (
+                    <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#B91C1C' }}>🆕 NEW</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{challenge.title}</Text>
                 <Text style={{ fontSize: 13, color: '#6B7A75', marginTop: 4, lineHeight: 18 }} numberOfLines={2}>{challenge.description}</Text>
@@ -985,7 +980,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 </View>
               </View>
             </Pressable>
-        ))}
+          ))}
+        </View>
 
         {model.challenges.length === 0 && (
           <View style={{ padding: 40, alignItems: 'center', opacity: 0.5 }}>
@@ -1151,7 +1147,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     <>
       <TopNavbar model={model} showBack={true} title="Tracker" />
 
-      <ScrollView contentContainerStyle={styles.homeContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.homeContent}>
         {/* ── 🔥 Current Streak Card ─────────────────────────────────────────── */}
         <SummaryCards
           currentStreak={model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0}
@@ -1222,7 +1218,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 <Feather name="chevron-left" size={20} color="#1A211D" />
               </TouchableOpacity>
               <View style={{ alignItems: 'center' }}>
-                {model.tracker?.currentStreak ? (
+                {model.tracker?.currentStreak && model.tracker.currentStreak >= 3 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
                     <Text style={{ fontSize: 12, fontWeight: '800', color: '#169070', letterSpacing: 0.5 }}>
                       BUILDING STREAK: {model.tracker.currentStreak} 🔥
@@ -1230,7 +1226,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   </View>
                 ) : (
                   <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7A75', marginBottom: 6 }}>
-                    Count 1 to show the streak
+                    Count {model.tracker?.currentStreak || 0}/3 to show the streak
                   </Text>
                 )}
                 <View style={trackerStyles.calLegendRow}>
@@ -1401,7 +1397,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
         )}
 
         <View style={{ height: 110 }} />
-      </ScrollView>
+      </View>
 
       {/* ── Day Detail Popup ──────────────────────────────────────────────── */}
       {selectedDay && (
@@ -1493,134 +1489,249 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
   return (
     <>
       <TopNavbar model={model} />
+      
+      {/* Background Decor Orbs */}
+      <View style={profileStyles.backgroundOrbOne} />
+      <View style={profileStyles.backgroundOrbTwo} />
+
       <View style={styles.homeContent}>
         
-        {/* Profile Header */}
-        <View style={{ alignItems: 'center', marginBottom: 24 }}>
-          <TouchableOpacity onPress={() => void pickImage()}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 12, backgroundColor: '#E6F4EC' }} />
-            ) : (
-              <View style={[styles.badgeCircleMedium, { width: 100, height: 100, borderRadius: 50, marginBottom: 12 }]}>
-                <Ionicons name="person" size={48} color="#FFF" />
-              </View>
-            )}
-            <View style={{ position: 'absolute', bottom: 12, right: 0, backgroundColor: '#126027', borderRadius: 16, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFF' }}>
-              <Ionicons name="camera" size={16} color="#FFF" />
+        {/* Profile Card Banner */}
+        <LinearGradient
+          colors={['#126027', '#0F4D20', '#0A3B18']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={profileStyles.headerCard}
+        >
+          <View style={profileStyles.headerTopRow}>
+            <View style={profileStyles.headerBadge}>
+              <Text style={profileStyles.headerBadgeText}>LEVEL 12</Text>
             </View>
-          </TouchableOpacity>
-          <Text style={styles.cardTitle}>{model.userDisplayName}</Text>
-          <Text style={styles.metaTextSmallDark}>{model.session?.user.email}</Text>
-          
-          <TouchableOpacity 
-            style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#EDF6F1', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
-            onPress={() => model.setActiveOverlay('settings')}
-          >
-            <Ionicons name="settings-outline" size={16} color="#126027" style={{ marginRight: 6 }} />
-            <Text style={{ color: '#126027', fontWeight: '700', fontSize: 13 }}>Settings & Security</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.availablePointsCard}>
-          <Text style={styles.pointsLabel}>AVAILABLE POINTS</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
-            <Text style={styles.pointsBigValue}>{model.dashboard?.ecoCoins ?? 0}</Text>
-            <Image source={require('../../../assets/coin.png')} style={{ width: 24, height: 24, marginLeft: 8, marginRight: 4 }} resizeMode="contain" />
-            <Text style={[styles.pointsUnit, { marginLeft: 0 }]}>Eco Coins</Text>
-          </View>
-          <View style={styles.rowBetween}>
-            <TouchableOpacity style={styles.pointsBtnPrimary}><Text style={styles.pointsBtnPrimaryText}>Exchange Points</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.pointsBtnSecondary}><Text style={styles.pointsBtnSecondaryText}>History</Text></TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={[styles.sectionHeadline, { marginTop: 24 }]}>My Events</Text>
-        <SurfaceCard style={{ padding: 20, borderRadius: 24, marginBottom: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View>
-              <Text style={styles.cardTitle}>Eco Events</Text>
-              <Text style={styles.metaTextSmallDark}>Join community clean-ups and workshops.</Text>
-            </View>
-            <TouchableOpacity onPress={() => model.setActiveOverlay('events')} style={{ backgroundColor: '#126027', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16 }}>
-              <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>Discover</Text>
+            <TouchableOpacity 
+              style={profileStyles.headerSettingsBtn}
+              onPress={() => model.setActiveOverlay('settings')}
+            >
+              <Ionicons name="settings-sharp" size={20} color="#FFF" />
             </TouchableOpacity>
           </View>
-        </SurfaceCard>
 
-        <Text style={[styles.sectionHeadline, { marginTop: 24 }]}>Lifetime Journey</Text>
-        <View style={styles.rowBetween}>
-          <Text style={styles.metaText}>Level 12 • Forest Guardian</Text>
-          <Text style={styles.taskMetaValueDark}>850 XP TO LEVEL 13</Text>
-        </View>
-
-        <View style={styles.carbonOffsetCard}>
-          <View style={styles.carbonIconWrap}>
-            <Ionicons name="leaf" size={24} color="#126027" />
+          <View style={profileStyles.profileMainInfo}>
+            <TouchableOpacity onPress={() => void pickImage()} style={profileStyles.avatarContainer}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={profileStyles.avatarImg} />
+              ) : (
+                <View style={profileStyles.avatarPlaceholder}>
+                  <Ionicons name="person" size={40} color="#126027" />
+                </View>
+              )}
+              <View style={profileStyles.avatarEditBadge}>
+                <Ionicons name="camera" size={12} color="#FFF" />
+              </View>
+            </TouchableOpacity>
+            
+            <View style={profileStyles.profileMeta}>
+              <Text style={profileStyles.profileName} numberOfLines={1}>
+                {model.userDisplayName}
+              </Text>
+              <Text style={profileStyles.profileEmail} numberOfLines={1}>
+                {model.session?.user.email}
+              </Text>
+              <View style={profileStyles.titleBadge}>
+                <MaterialCommunityIcons name="shield-crown" size={14} color="#F59E0B" />
+                <Text style={profileStyles.titleBadgeText}>Forest Guardian</Text>
+              </View>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>Carbon Offset</Text>
-              <Text style={styles.carbonValueDark}>1.2 Tons</Text>
-            </View>
-            <ProgressBar progress={70} />
-          </View>
-        </View>
+        </LinearGradient>
 
-        <Text style={[styles.sectionHeadline, { marginTop: 24 }]}>Collectible Badges</Text>
-        <View style={styles.badgeGrid}>
-          <View style={styles.badgeCard}>
-            <View style={styles.badgeCircleDark}>
-              <Ionicons name="trash" size={32} color="#FFF" />
-              <View style={styles.badgeTagGold}><Text style={styles.badgeTagGoldText}>GOLD</Text></View>
+        {/* Quick Stats Grid */}
+        <View style={profileStyles.statsRow}>
+          <View style={profileStyles.statCard}>
+            <View style={[profileStyles.statIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <Image source={require('../../../assets/coin.png')} style={profileStyles.coinIcon} resizeMode="contain" />
             </View>
-            <Text style={styles.badgeTitle}>Waste Warrior</Text>
-            <Text style={styles.badgeDesc}>Recycled for 30 consecutive days</Text>
-          </View>
-
-          <View style={styles.badgeCard}>
-            <View style={styles.badgeCircleMedium}>
-              <Ionicons name="flash" size={32} color="#FFF" />
-            </View>
-            <Text style={styles.badgeTitle}>Energy Saver</Text>
-            <Text style={styles.badgeDesc}>Reduced home energy by 15%</Text>
-          </View>
-
-          <View style={styles.badgeCard}>
-            <View style={styles.badgeCircleLight}>
-              <Ionicons name="bicycle" size={32} color="#B0C4B8" />
-            </View>
-            <Text style={styles.badgeTitleLight}>Pedal Power</Text>
-            <View style={styles.lockedRow}>
-              <Ionicons name="lock-closed" size={12} color="#126027" />
-              <Text style={styles.lockedText}>LOCKED</Text>
-            </View>
-            <View style={{ width: 60, alignSelf: 'center', marginTop: 8 }}><ProgressBar progress={30} /></View>
+            <Text style={profileStyles.statValue}>{model.dashboard?.ecoCoins ?? 0}</Text>
+            <Text style={profileStyles.statLabel}>Eco Coins</Text>
           </View>
 
-          <View style={styles.badgeCard}>
-            <View style={styles.badgeCircleLight}>
-              <Ionicons name="water" size={32} color="#B0C4B8" />
+          <View style={profileStyles.statCard}>
+            <View style={[profileStyles.statIconBox, { backgroundColor: '#E0F2FE' }]}>
+              <Ionicons name="trophy" size={18} color="#0284C7" />
             </View>
-            <Text style={styles.badgeTitleLight}>Water Wise</Text>
-            <View style={styles.lockedRow}>
-              <Ionicons name="lock-closed" size={12} color="#126027" />
-              <Text style={styles.lockedText}>LOCKED</Text>
+            <Text style={profileStyles.statValue}>Lv. 12</Text>
+            <Text style={profileStyles.statLabel}>Forest Guardian</Text>
+          </View>
+
+          <View style={profileStyles.statCard}>
+            <View style={[profileStyles.statIconBox, { backgroundColor: '#DCFCE7' }]}>
+              <Ionicons name="leaf" size={18} color="#15803D" />
             </View>
-            <View style={{ width: 60, alignSelf: 'center', marginTop: 8 }}><ProgressBar progress={10} /></View>
+            <Text style={profileStyles.statValue}>1.2T</Text>
+            <Text style={profileStyles.statLabel}>CO2 Offset</Text>
           </View>
         </View>
 
-        <View style={styles.nftPromoCardLight}>
-          <Image source={{ uri: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=200&auto=format&fit=crop' }} style={styles.nftPromoLightImg} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.welcomeLabel}>NEW CHALLENGE</Text>
-            <Text style={styles.nftPromoTitleDark}>Plant 10 Seeds this week</Text>
-            <Text style={styles.nftPromoDescDark}>Earn the "Garden Guardian" badge and +500 Eco Coins.</Text>
+        {/* Progress Bar Info */}
+        <View style={profileStyles.progressSection}>
+          <View style={profileStyles.progressInfoRow}>
+            <Text style={profileStyles.progressInfoText}>Journey Progress</Text>
+            <Text style={profileStyles.progressInfoValue}>850 XP to Lv. 13</Text>
+          </View>
+          <ProgressBar progress={70} />
+        </View>
+
+        {/* Events Quick Card */}
+        <View style={profileStyles.sectionContainer}>
+          <Text style={profileStyles.sectionHeadline}>My Eco Events</Text>
+          <View style={profileStyles.eventBanner}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.95)', 'rgba(240, 253, 244, 0.95)']}
+              style={profileStyles.eventBannerGrad}
+            >
+              <View style={profileStyles.eventBannerTextCol}>
+                <Text style={profileStyles.eventBannerTitle}>Local Workshops</Text>
+                <Text style={profileStyles.eventBannerDesc}>Join clean-ups, eco events, and tree plant activities.</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => model.setActiveOverlay('events')}
+                style={profileStyles.eventBannerBtn}
+              >
+                <Text style={profileStyles.eventBannerBtnText}>Discover</Text>
+                <Ionicons name="arrow-forward" size={14} color="#FFF" />
+              </TouchableOpacity>
+            </LinearGradient>
           </View>
         </View>
 
-        <View style={{ marginTop: 20 }}>
-          <SecondaryButton label="Sign Out" onPress={() => void model.handleLogout()} />
+        {/* Unified Eco Actions List */}
+        <View style={profileStyles.sectionContainer}>
+          <Text style={profileStyles.sectionHeadline}>Eco Hub</Text>
+          <View style={profileStyles.actionListCard}>
+            <TouchableOpacity style={profileStyles.actionItem}>
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#EDF6F1' }]}>
+                <Ionicons name="gift-outline" size={20} color="#126027" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={profileStyles.actionLabel}>Redeem Rewards</Text>
+                <Text style={profileStyles.actionSub}>Trade Eco Coins for rewards & vouchers</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+            </TouchableOpacity>
+
+            <View style={profileStyles.divider} />
+
+            <TouchableOpacity style={profileStyles.actionItem}>
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#EDF6F1' }]}>
+                <Ionicons name="time-outline" size={20} color="#126027" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={profileStyles.actionLabel}>Coins History</Text>
+                <Text style={profileStyles.actionSub}>Check your points and task completion logs</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+            </TouchableOpacity>
+
+            <View style={profileStyles.divider} />
+
+            <TouchableOpacity 
+              style={profileStyles.actionItem}
+              onPress={() => model.setActiveOverlay('settings')}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#EDF6F1' }]}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#126027" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={profileStyles.actionLabel}>Settings & Security</Text>
+                <Text style={profileStyles.actionSub}>Manage account security & notifications</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+            </TouchableOpacity>
+
+            <View style={profileStyles.divider} />
+
+            <TouchableOpacity 
+              style={profileStyles.actionItem}
+              onPress={() => void model.handleLogout()}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: '#EF4444' }]}>Sign Out</Text>
+                <Text style={profileStyles.actionSub}>Logout of your current device session</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#FCA5A5" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Collectible Badges Grid */}
+        <View style={profileStyles.sectionContainer}>
+          <Text style={profileStyles.sectionHeadline}>Collectible Badges</Text>
+          <View style={profileStyles.badgesGrid}>
+            
+            <View style={profileStyles.badgeCard}>
+              <View style={[profileStyles.badgeIconRing, { borderColor: '#F59E0B' }]}>
+                <LinearGradient
+                  colors={['#126027', '#1D7537']}
+                  style={profileStyles.badgeIconBg}
+                >
+                  <Ionicons name="trash-outline" size={26} color="#FFF" />
+                </LinearGradient>
+                <View style={profileStyles.goldBadgeTag}>
+                  <Text style={profileStyles.goldBadgeTagText}>GOLD</Text>
+                </View>
+              </View>
+              <Text style={profileStyles.badgeTitle}>Waste Warrior</Text>
+              <Text style={profileStyles.badgeDescription}>Recycled for 30 consecutive days</Text>
+            </View>
+
+            <View style={profileStyles.badgeCard}>
+              <View style={[profileStyles.badgeIconRing, { borderColor: '#10B981' }]}>
+                <LinearGradient
+                  colors={['#10B981', '#059669']}
+                  style={profileStyles.badgeIconBg}
+                >
+                  <Ionicons name="flash-outline" size={26} color="#FFF" />
+                </LinearGradient>
+              </View>
+              <Text style={profileStyles.badgeTitle}>Energy Saver</Text>
+              <Text style={profileStyles.badgeDescription}>Reduced home energy by 15%</Text>
+            </View>
+
+            <View style={[profileStyles.badgeCard, { opacity: 0.75 }]}>
+              <View style={[profileStyles.badgeIconRing, { borderColor: '#B0C4B8' }]}>
+                <View style={[profileStyles.badgeIconBg, { backgroundColor: '#F3F4F6' }]}>
+                  <Ionicons name="bicycle-outline" size={26} color="#9CA3AF" />
+                </View>
+                <View style={profileStyles.lockBadgeTag}>
+                  <Ionicons name="lock-closed" size={10} color="#FFF" />
+                </View>
+              </View>
+              <Text style={profileStyles.badgeTitleLocked}>Pedal Power</Text>
+              <Text style={profileStyles.badgeDescription}>Cycle to work 10 times (3/10)</Text>
+              <View style={profileStyles.badgeProgressWrap}>
+                <ProgressBar progress={30} />
+              </View>
+            </View>
+
+            <View style={[profileStyles.badgeCard, { opacity: 0.75 }]}>
+              <View style={[profileStyles.badgeIconRing, { borderColor: '#B0C4B8' }]}>
+                <View style={[profileStyles.badgeIconBg, { backgroundColor: '#F3F4F6' }]}>
+                  <Ionicons name="water-outline" size={26} color="#9CA3AF" />
+                </View>
+                <View style={profileStyles.lockBadgeTag}>
+                  <Ionicons name="lock-closed" size={10} color="#FFF" />
+                </View>
+              </View>
+              <Text style={profileStyles.badgeTitleLocked}>Water Wise</Text>
+              <Text style={profileStyles.badgeDescription}>Save 50 gallons of water (5/50)</Text>
+              <View style={profileStyles.badgeProgressWrap}>
+                <ProgressBar progress={10} />
+              </View>
+            </View>
+
+          </View>
         </View>
 
         <View style={{ height: 100 }} />
@@ -2118,3 +2229,392 @@ const trackerStyles = StyleSheet.create({
   popupEmptyText: { color: '#6B7A75', fontSize: 14, fontWeight: '600' },
   popupEmptySub: { color: '#9CA3AF', fontSize: 12, fontWeight: '500' },
 });
+
+const profileStyles = StyleSheet.create({
+  backgroundOrbOne: {
+    position: 'absolute',
+    top: 150,
+    left: -40,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(74, 222, 128, 0.05)',
+  },
+  backgroundOrbTwo: {
+    position: 'absolute',
+    top: 400,
+    right: -40,
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: 'rgba(52, 211, 153, 0.05)',
+  },
+  headerCard: {
+    borderRadius: 28,
+    padding: 20,
+    marginTop: 12,
+    marginBottom: 20,
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  headerBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  headerBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  headerSettingsBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileMainInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatarImg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#FFF',
+    backgroundColor: '#E6F4EC',
+  },
+  avatarPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: '#FFF',
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#F59E0B',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+  },
+  profileMeta: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFF',
+    marginBottom: 2,
+  },
+  profileEmail: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginBottom: 6,
+  },
+  titleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 4,
+  },
+  titleBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 12,
+    alignItems: 'center',
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F0F5F2',
+  },
+  statIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  coinIcon: {
+    width: 18,
+    height: 18,
+  },
+  statValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#1A211D',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#6B7A75',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  progressSection: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#F0F5F2',
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  progressInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressInfoText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A211D',
+  },
+  progressInfoValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#126027',
+  },
+  sectionContainer: {
+    marginBottom: 24,
+  },
+  sectionHeadline: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1A211D',
+    marginBottom: 12,
+    letterSpacing: 0.3,
+  },
+  eventBanner: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E8F5E9',
+  },
+  eventBannerGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    gap: 16,
+  },
+  eventBannerTextCol: {
+    flex: 1,
+  },
+  eventBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#126027',
+    marginBottom: 4,
+  },
+  eventBannerDesc: {
+    fontSize: 12,
+    color: '#6B7A75',
+    lineHeight: 16,
+  },
+  eventBannerBtn: {
+    backgroundColor: '#126027',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  eventBannerBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  actionListCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#F0F5F2',
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  actionIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTextCol: {
+    flex: 1,
+  },
+  actionLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1A211D',
+    marginBottom: 2,
+  },
+  actionSub: {
+    fontSize: 11,
+    color: '#6B7A75',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F0F5F2',
+    marginHorizontal: 12,
+  },
+  badgesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  badgeCard: {
+    width: '48%',
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F0F5F2',
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  badgeIconRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    position: 'relative',
+  },
+  badgeIconBg: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goldBadgeTag: {
+    position: 'absolute',
+    bottom: -6,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  goldBadgeTagText: {
+    color: '#FFF',
+    fontSize: 7,
+    fontWeight: '900',
+  },
+  lockBadgeTag: {
+    position: 'absolute',
+    bottom: -4,
+    backgroundColor: '#9CA3AF',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  badgeTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1A211D',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  badgeTitleLocked: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#6B7A75',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  badgeDescription: {
+    fontSize: 10,
+    color: '#6B7A75',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  badgeProgressWrap: {
+    width: '100%',
+    marginTop: 8,
+  },
+});
+

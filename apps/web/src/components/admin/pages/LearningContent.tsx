@@ -109,8 +109,11 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    const scrollContainer = document.getElementById('admin-scroll-container');
+    if (scrollContainer) scrollContainer.style.overflow = 'hidden';
+    return () => { 
+      if (scrollContainer) scrollContainer.style.overflow = ''; 
+    };
   }, []);
 
   const handleClose = () => {
@@ -273,8 +276,8 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Lesson' : 'Add Learning Content'}</h2>
           <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto lesson-modal-scroll p-6 flex flex-col md:flex-row gap-8" style={{ scrollbarGutter: 'stable' }}>
-          <div className="flex-1 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col md:flex-row">
+          <div className="flex-1 space-y-4 overflow-y-auto lesson-modal-scroll p-6">
             {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
@@ -401,7 +404,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
             <div className="h-2 w-full flex-shrink-0" />
           </div>
 
-          <div className="w-full md:w-[400px] flex flex-col gap-6">
+          <div className="w-full md:w-[400px] flex flex-col gap-6 overflow-y-auto lesson-modal-scroll p-6 border-l border-gray-100">
             <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-5 shadow-sm">
               <label className="flex items-center gap-3 cursor-pointer">
                 <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableQuiz ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => {
@@ -601,17 +604,17 @@ export function LearningContent() {
       {/* Stats */}
       <div className="flex w-full gap-4 overflow-x-auto pb-2">
         {[
-          { label: 'Total Content', value: loading ? '—' : lessons.length, extra: 'modules', color: 'text-gray-900 dark:text-white' },
+          { label: 'Total Content', value: loading ? '—' : lessons.length, extra: 'modules', color: 'text-gray-900' },
           { label: 'Published', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Published').length, extra: 'live', color: 'text-green-600' },
           { label: 'Auto Publish', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Auto Publish').length, extra: 'scheduled', color: 'text-blue-600' },
           { label: 'Drafts', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Draft').length, extra: 'unpublished', color: 'text-yellow-600' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
-            <div key={s.label} className={`flex-1 min-w-[200px] bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
+            <div key={s.label} className={`flex-1 min-w-[200px] bg-white rounded-2xl border border-gray-100 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
+              <p className="text-sm text-gray-500 font-medium">{s.label}</p>
               <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{s.extra}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{s.extra}</p>
             </div>
           );
         })}
