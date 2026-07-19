@@ -168,19 +168,23 @@ challengeRoutes.post(
           for (const det of detected) {
             const detObj = det.object.toLowerCase().trim();
             // Flexible match: e.g. target="plastic bottle" matches detection="bottle"
-            const isMatch = targets.some(t => t === detObj || t.includes(detObj) || detObj.includes(t));
+            const matchedTargetIndex = targets.findIndex(t => t === detObj || t.includes(detObj) || detObj.includes(t));
+            const isMatch = matchedTargetIndex !== -1;
             
             if (isMatch) {
+              // Use the exact targeted string (e.g. "Plastic Bottle") to be precise on display
+              const originalTarget = (challenge.aiDetectionTargets || [])[matchedTargetIndex] || det.object;
+
               if (det.confidence >= minConf) {
                 passed = true;
-                matchedObject = det.object;
+                matchedObject = originalTarget;
                 matchedConfidence = det.confidence;
                 reason = '';
                 break;
               } else if (!passed) {
                 // Keep the highest confidence match that didn't meet the threshold
                 if (det.confidence > matchedConfidence) {
-                  matchedObject = det.object;
+                  matchedObject = originalTarget;
                   matchedConfidence = det.confidence;
                   reason = `Confidence ${det.confidence.toFixed(1)}% is below minimum ${minConf}%`;
                 }

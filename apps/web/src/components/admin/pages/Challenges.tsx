@@ -37,7 +37,7 @@ const difficultyColors: Record<string, string> = {
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard', 'Expert'];
 const CATEGORIES = ['General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
-const AI_TARGET_OPTIONS = ['Plastic Bottle', 'Glass Bottle', 'Can', 'Paper', 'Cardboard'];
+const AI_TARGET_OPTIONS = ['Plastic Bottle', 'Glass Bottle'];
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
