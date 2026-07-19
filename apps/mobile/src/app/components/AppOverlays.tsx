@@ -121,6 +121,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       if (result.passed && result.proofUrl) {
         setBeforeProofUrl(result.proofUrl);
         setMockResult(result);
+        setCapturedImage(null);
       } else {
         setMockResult(result);
       }
@@ -143,6 +144,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       setStep('result'); // We can reuse result screen for final success
     } catch (err: any) {
       console.error('Failed to submit proof', err);
+      Alert.alert('Submission Error', err.message || 'Failed to submit proof. Please try again.');
+      setCapturedImage(null);
     } finally {
       setProcessing(false);
     }

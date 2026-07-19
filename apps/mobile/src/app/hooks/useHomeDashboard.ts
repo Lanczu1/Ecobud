@@ -1328,6 +1328,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         );
       } catch (error) {
         Alert.alert('Submission failed', error instanceof Error ? error.message : 'Please try again.');
+        throw error;
       } finally {
         setRefreshing(false);
       }

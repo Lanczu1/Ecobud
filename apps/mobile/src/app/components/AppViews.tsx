@@ -771,12 +771,27 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       <Ionicons name="checkmark-done-circle" size={14} color="#059669" />
                       <Text style={{ fontSize: 12, fontWeight: '800', color: '#059669' }}>COMPLETED</Text>
                     </View>
+                  ) : model.recentViewedMission.progress?.status?.toLowerCase() === 'rejected' ? (
+                    <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="close-circle" size={14} color="#DC2626" />
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#DC2626' }}>REJECTED - RESUBMIT</Text>
+                    </View>
                   ) : (
                     <Text style={{ fontSize: 13, fontWeight: '800', color: '#4ADE80' }}>
                       CONTINUE MISSION
                     </Text>
                   )}
                 </View>
+                {model.recentViewedMission.progress?.status?.toLowerCase() === 'rejected' && model.recentViewedMission.progress?.rejectionReason && (
+                  <View style={{ marginTop: 12, backgroundColor: '#FEF2F2', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FECACA' }}>
+                    <Text style={{ color: '#B91C1C', fontSize: 11, fontWeight: '800', marginBottom: 4, letterSpacing: 0.5 }}>
+                      <Ionicons name="warning" size={12} color="#DC2626" /> MODERATOR NOTE
+                    </Text>
+                    <Text style={{ color: '#991B1B', fontSize: 13, lineHeight: 18 }}>
+                      {model.recentViewedMission.progress.rejectionReason}
+                    </Text>
+                  </View>
+                )}
               </View>
             </Pressable>
           </View>
@@ -885,7 +900,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         )}
         <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
           {currentActiveList.map((challenge, index) => (
-              <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, isTablet && { width: '48%' }]} onPress={() => {
+              <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, challenge.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }, isTablet && { width: '48%' }]} onPress={() => {
               const currentStatus = challenge.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
@@ -970,6 +985,11 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       <Ionicons name="checkmark-done-circle" size={14} color="#059669" />
                       <Text style={{ fontSize: 12, fontWeight: '800', color: '#059669' }}>COMPLETED</Text>
                     </View>
+                  ) : challenge.progress?.status?.toLowerCase() === 'rejected' ? (
+                    <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="close-circle" size={14} color="#DC2626" />
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#DC2626' }}>REJECTED - RESUBMIT</Text>
+                    </View>
                   ) : (
                     <Text style={{ fontSize: 13, fontWeight: '800', color: '#4ADE80' }}>
                       {challenge.type === 'AI Image Recognition Challenge'
@@ -978,6 +998,16 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     </Text>
                   )}
                 </View>
+                {challenge.progress?.status?.toLowerCase() === 'rejected' && challenge.progress?.rejectionReason && (
+                  <View style={{ marginTop: 12, backgroundColor: '#FEF2F2', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FECACA' }}>
+                    <Text style={{ color: '#B91C1C', fontSize: 11, fontWeight: '800', marginBottom: 4, letterSpacing: 0.5 }}>
+                      <Ionicons name="warning" size={12} color="#DC2626" /> MODERATOR NOTE
+                    </Text>
+                    <Text style={{ color: '#991B1B', fontSize: 13, lineHeight: 18 }}>
+                      {challenge.progress.rejectionReason}
+                    </Text>
+                  </View>
+                )}
               </View>
             </Pressable>
           ))}

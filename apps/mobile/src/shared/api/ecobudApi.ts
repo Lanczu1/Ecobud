@@ -213,6 +213,7 @@ export interface ChallengeWithProgress {
   progress?: {
     progressPercentage: number;
     status: string;
+    rejectionReason?: string | null;
   } | null;
 }
 
@@ -388,6 +389,42 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
 const uploadFileAsync = async <T>(path: string, token: string, uri: string) => {
   try {
     const uploadUrl = `${API_BASE}${path}`;
+
+    if (Platform.OS === 'web') {
+      try {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const formData = new FormData();
+        formData.append('image', blob, 'upload.jpg');
+        
+        const res = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: formData
+        });
+        
+        let data;
+        try {
+          data = await res.json();
+        } catch {}
+
+        if (!res.ok) {
+          const error = new Error(typeof data?.message === 'string' ? data.message : 'Unexpected ECOBUD API error.');
+          (error as any).status = res.status;
+          throw error;
+        }
+
+        return data as T;
+      } catch (err: any) {
+        if (err.message && (err.message.includes('Unexpected ECOBUD API error') || err.message.includes('Active AI challenge'))) {
+          throw err;
+        }
+        throw new Error(err.message || `Unable to reach the ECOBUD API at ${apiOrigin}.`);
+      }
+    }
+
     const uploadType = (FileSystem as any).FileSystemUploadType?.MULTIPART ?? (FileSystem as any).UploadType?.MULTIPART ?? 1;
     
     const response = await FileSystem.uploadAsync(uploadUrl, uri, {
