@@ -37,7 +37,7 @@ app.use(
 app.use(express.json());
 
 // Serve uploads directory statically
-app.use('/uploads', express.static(path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/api/health', (_req, res) => {
   return res.json({

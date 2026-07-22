@@ -10,7 +10,7 @@ const safelyDeleteUpload = (url?: string | null) => {
   if (!url) return;
   const filename = url.split('/').pop();
   if (!filename) return;
-  const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads', filename);
+  const filePath = path.join(__dirname, '..', '..', 'uploads', filename);
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
@@ -90,7 +90,7 @@ export class AdminController {
         videoUrl,
         imageUrl,
         transcript,
-        durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : undefined,
+        durationMinutes: durationMinutes !== undefined && durationMinutes !== '' ? parseInt(durationMinutes, 10) : 0,
         quizPassingScore: quizPassingScore ? parseInt(quizPassingScore, 10) : 70,
         pointsReward: pointsReward ? parseInt(pointsReward, 10) : 10,
         featured: String(req.body.featured) === 'true',
@@ -174,6 +174,12 @@ export class AdminController {
     
     if (updateData.isPublished !== undefined) {
       updateData.isPublished = String(updateData.isPublished) === 'true';
+    }
+
+    if (updateData.durationMinutes !== undefined && updateData.durationMinutes !== '') {
+      updateData.durationMinutes = parseInt(updateData.durationMinutes, 10);
+    } else if (updateData.durationMinutes === '') {
+      updateData.durationMinutes = 0;
     }
 
     if (updateData.scheduledAt) {
@@ -336,9 +342,7 @@ export class AdminController {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded." });
       }
-      const protocol = req.protocol || 'http';
-      const host = req.get('host') || 'localhost:3000';
-      const fileUrl = `${protocol}://${host}/uploads/Challenges/${req.file.filename}`;
+      const fileUrl = `/uploads/Challenges/${req.file.filename}`;
       return res.status(201).json({ url: fileUrl });
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to upload image.", error: error.message });
@@ -358,7 +362,7 @@ export class AdminController {
 
       const fs = require('fs');
       const path = require('path');
-      const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads', 'Challenges', filename);
+      const filePath = path.join(__dirname, '..', '..', 'uploads', 'Challenges', filename);
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -415,7 +419,7 @@ export class AdminController {
         if (filename) {
           const fs = require('fs');
           const path = require('path');
-          const filePath = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads', 'Challenges', 'AnalyzingImg', filename);
+          const filePath = path.join(__dirname, '..', '..', 'uploads', 'Challenges', 'AnalyzingImg', filename);
           if (fs.existsSync(filePath)) {
             try {
               fs.unlinkSync(filePath);

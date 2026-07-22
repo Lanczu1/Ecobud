@@ -11,6 +11,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+import logoImg from '../../assets/logo.png';
+
 
 export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Swap Goods' | 'Audit Logs' | 'Reports';
 
@@ -50,13 +52,13 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
     <div className="w-64 bg-white border-r border-gray-100 flex flex-col h-full shadow-sm">
       <div className="p-6 flex items-center gap-3 select-none">
         <img 
-          src="/logo.png" 
+          src={logoImg} 
           alt="EcoBud Logo" 
-          className="w-10 h-10 object-contain rounded-xl transition-transform duration-500 hover:scale-110 hover:rotate-12 cursor-pointer filter drop-shadow-sm" 
+          className="w-12 h-12 object-contain rounded-xl transition-transform duration-500 hover:scale-110 hover:rotate-12 cursor-pointer filter drop-shadow-sm" 
         />
-        <div>
-          <h1 className="font-bold text-gray-800 tracking-wider font-serif text-lg leading-tight">ECOBUD</h1>
-          <p className="text-[10px] text-green-600 font-semibold uppercase tracking-widest">Admin Panel</p>
+        <div className="flex flex-col items-start pt-1">
+          <span className="text-2xl font-black text-green-600 tracking-tight mb-0 leading-none">ECOBUD</span>
+          <p className="text-[10px] text-green-600 font-semibold uppercase tracking-widest leading-none text-left mt-1">Admin Panel</p>
         </div>
       </div>
 

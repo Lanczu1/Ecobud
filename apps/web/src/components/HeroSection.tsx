@@ -99,7 +99,7 @@ export const HeroSection = forwardRef<HTMLElement, HeroSectionProps>(
                 maxWidth: 560,
               }}
             >
-              Discover sustainable habits, join challenges, and track your environmental impact with ECOBUD.
+              Discover sustainable habits, join challenges, and track your environmental impact with <span style={{ color: '#84CC16', WebkitTextStroke: '1px #14532D', textShadow: '2px 2px 0 #14532D', fontWeight: 900, letterSpacing: '0.05em' }}>BAYANI JUAN</span>.
               Our blockchain-inspired ledger keeps every reward traceable and every action trustworthy.
             </p>
 

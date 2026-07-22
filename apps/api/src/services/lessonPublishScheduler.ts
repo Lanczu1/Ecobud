@@ -57,7 +57,6 @@ export const startLessonPublishScheduler = () => {
     void runPublishTick();
   }, PUBLISH_CHECK_INTERVAL_MS);
 
-  publishInterval.unref?.();
   void runPublishTick();
 
   return publishInterval;

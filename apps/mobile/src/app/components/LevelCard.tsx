@@ -20,6 +20,21 @@ const LEVELS = [
   { level: 10, name: 'Eco Legend', icon: '👑', points: 5500 },
 ];
 
+export function getLevelFromPoints(points: number) {
+  let currentLevelObj = LEVELS[0];
+  let nextLevelObj = LEVELS[1];
+
+  for (let i = LEVELS.length - 1; i >= 0; i--) {
+    if (points >= LEVELS[i].points) {
+      currentLevelObj = LEVELS[i];
+      nextLevelObj = LEVELS[i + 1] || LEVELS[i];
+      break;
+    }
+  }
+
+  return { currentLevelObj, nextLevelObj };
+}
+
 export function LevelCard({ ecoPoints }: LevelCardProps) {
   const [displayPoints, setDisplayPoints] = React.useState(ecoPoints);
 
@@ -54,16 +69,7 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
     return () => cancelAnimationFrame(animationFrameId);
   }, [ecoPoints]);
 
-  let currentLevelObj = LEVELS[0];
-  let nextLevelObj = LEVELS[1];
-
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (displayPoints >= LEVELS[i].points) {
-      currentLevelObj = LEVELS[i];
-      nextLevelObj = LEVELS[i + 1] || LEVELS[i];
-      break;
-    }
-  }
+  const { currentLevelObj, nextLevelObj } = getLevelFromPoints(displayPoints);
 
   const isMaxLevel = currentLevelObj.level === 10;
   let progressPercent = 100;

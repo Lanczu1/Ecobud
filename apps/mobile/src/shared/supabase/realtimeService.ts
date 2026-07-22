@@ -190,7 +190,6 @@ export const realtimeService = {
         });
       };
     } catch (error) {
-      console.warn('Supabase realtime connection was skipped.', error);
       handlers.onConnectionChange?.(false);
       return () => undefined;
     }

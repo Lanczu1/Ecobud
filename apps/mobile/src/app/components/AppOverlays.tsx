@@ -23,6 +23,8 @@ import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { styles } from '../styles/appStyles';
 import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
@@ -538,6 +540,8 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
 
 export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
   switch (model.activeOverlay) {
+    case 'coinsHistory':
+      return <CoinsHistoryOverlay model={model} />;
     case 'assistant':
       return <AssistantOverlay model={model} />;
     case 'events':
@@ -573,7 +577,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <View style={styles.fullscreenOverlay}>
       <TopNavbar model={model} showBack={true} title="AI Assistant" />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', height: '100%' }}>
         <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }}>
           <View style={{ alignItems: 'center', marginBottom: 24, opacity: 0.7 }}>
             <View style={[styles.badgeCircleMedium, { width: 48, height: 48, borderRadius: 24, marginBottom: 8 }]}>
@@ -630,7 +634,129 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+
+function AnimatedMapMarker({ event }: { event: any }) {
+  const pulseAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.timing(pulseAnim, {
+        toValue: 1,
+        duration: 2500,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: '#10B981',
+          opacity: pulseAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.6, 0],
+          }),
+          transform: [{
+            scale: pulseAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.5, 1.6],
+            })
+          }]
+        }}
+      />
+      <View
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: 7,
+          backgroundColor: '#059669',
+          borderWidth: 2,
+          borderColor: '#FFF',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.3,
+          shadowRadius: 2,
+          elevation: 4,
+        }}
+      />
+    </View>
+  );
+}
+
+function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: { latitude: number; longitude: number } | null }) {
+  const mapRef = React.useRef<MapView | null>(null);
+
+  React.useEffect(() => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }, 1500);
+    }
+  }, [userLocation]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#F1F5F9' }}>
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_DEFAULT}
+        style={{ flex: 1 }}
+        showsUserLocation={true}
+        showsMyLocationButton={true}
+        initialRegion={{
+          latitude: userLocation?.latitude ?? 14.6091,
+          longitude: userLocation?.longitude ?? 121.0223,
+          latitudeDelta: 1.5,
+          longitudeDelta: 1.5,
+        }}
+      >
+        {model.events.map((event: any) => {
+          if (!event.latitude || !event.longitude) return null;
+          return (
+            <Marker
+              key={event.id}
+              coordinate={{ latitude: event.latitude, longitude: event.longitude }}
+              title={event.title}
+              description={event.location}
+              onCalloutPress={() => {
+                if (!model.isReadOnlyExperience) {
+                  void model.handleJoinEvent(event.id);
+                }
+              }}
+            >
+              <AnimatedMapMarker event={event} />
+            </Marker>
+          );
+        })}
+      </MapView>
+    </View>
+  );
+}
+
 export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
+  const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
+
+  React.useEffect(() => {
+    if (viewMode === 'map') {
+      (async () => {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({});
+          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        }
+      })();
+    }
+  }, [viewMode]);
+
   const featuredEvent = model.events[0] ?? null;
   const otherEvents = featuredEvent ? model.events.slice(1) : model.events;
 
@@ -642,8 +768,14 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         <View style={styles.rowBetween}>
           <Text style={styles.pageTitle}>Eco Events</Text>
           <View style={styles.filterPillGroup}>
-            <View style={styles.filterPillActive}><MaterialCommunityIcons name="view-list" size={16} color="#126027" /><Text style={styles.filterPillActiveText}> List</Text></View>
-            <View style={styles.filterPillInactive}><MaterialCommunityIcons name="map" size={16} color="#6B7A75" /><Text style={styles.filterPillInactiveText}> Map</Text></View>
+            <TouchableOpacity onPress={() => setViewMode('list')} style={viewMode === 'list' ? styles.filterPillActive : styles.filterPillInactive}>
+              <MaterialCommunityIcons name="view-list" size={16} color={viewMode === 'list' ? "#126027" : "#6B7A75"} />
+              <Text style={viewMode === 'list' ? styles.filterPillActiveText : styles.filterPillInactiveText}> List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setViewMode('map')} style={viewMode === 'map' ? styles.filterPillActive : styles.filterPillInactive}>
+              <MaterialCommunityIcons name="map" size={16} color={viewMode === 'map' ? "#126027" : "#6B7A75"} />
+              <Text style={viewMode === 'map' ? styles.filterPillActiveText : styles.filterPillInactiveText}> Map</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -653,88 +785,96 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           <View style={styles.categoryPillInactive}><Text style={styles.categoryPillInactiveText}>Tree Planting</Text></View>
         </ScrollView>
 
-        {featuredEvent ? (
-          <ImageBackground
-            source={{ uri: featuredEvent.imageUrl ?? 'https://images.unsplash.com/photo-1618477461853-cf6ed80fabe5?q=80&w=800&auto=format&fit=crop' }}
-            style={styles.eventFeaturedCard}
-            imageStyle={{ borderRadius: 24 }}
-          >
-            <View style={styles.eventFeaturedOverlay} />
-            <View style={styles.featuredProgramContent}>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 'auto' }}>
-                <View style={styles.tagLight}><Text style={styles.tagLightText}>FEATURED</Text></View>
-                <View style={styles.tagDark}><Text style={styles.tagDarkText}>PUBLIC EVENT</Text></View>
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: 16, marginBottom: 8, marginTop: 40 }}>
-                <View style={styles.rowMeta}><Ionicons name="calendar" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> {formatLongDate(featuredEvent.date)}</Text></View>
-                <View style={styles.rowMeta}><Ionicons name="location" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> {featuredEvent.location}</Text></View>
-              </View>
-              <Text style={styles.featuredProgramTitle}>{featuredEvent.title}</Text>
-              <Text style={styles.featuredProgramDesc}>{featuredEvent.description}</Text>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={styles.metaTextWhite}>
-                  {featuredEvent.spotsLeft != null ? `${featuredEvent.spotsLeft} spots left` : `${featuredEvent.pointsReward} ECO points reward`}
-                </Text>
-                <TouchableOpacity
-                  style={styles.eventJoinBtnInfo}
-                  onPress={() => (
-                    model.isReadOnlyExperience
-                      ? void model.leaveReadOnlyAccess()
-                      : void model.handleJoinEvent(featuredEvent.id)
-                  )}
-                >
-                  <Text style={styles.eventJoinBtnInfoText}>
-                    {model.isReadOnlyExperience ? 'Sign In to Join' : 'Join Event'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ImageBackground>
-        ) : (
-          <SurfaceCard style={styles.publicInfoCard}>
-            <Text style={styles.sectionHeadline}>No public events yet</Text>
-            <Text style={styles.metaTextSmallDark}>Check back soon for new clean-ups, workshops, and community eco campaigns.</Text>
-          </SurfaceCard>
-        )}
-
-        {otherEvents.map((event) => (
-          <View key={event.id} style={styles.eventListCard}>
-            <ImageBackground
-              source={{ uri: event.imageUrl ?? 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
-              style={styles.eventListImg}
-              imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-            >
-              <View style={styles.dateTagRight}><Text style={styles.dateTagRightText}>{formatEventDateTag(event.date)}</Text></View>
-            </ImageBackground>
-            <View style={styles.eventListBody}>
-              <Text style={styles.welcomeLabel}>PUBLIC EVENT</Text>
-              <Text style={styles.cardTitle}>{event.title}</Text>
-              <Text style={styles.metaTextSmallDark}>{event.description}</Text>
-              <View style={[styles.rowMeta, { marginTop: 12 }]}>
-                <Ionicons name="location" size={14} color="#6B7A75" />
-                <Text style={styles.metaTextSmallDark}> {event.location}</Text>
-              </View>
-              <View style={[styles.rowMeta, { marginBottom: 16 }]}>
-                <Ionicons name="leaf" size={14} color="#6B7A75" />
-                <Text style={styles.metaTextSmallDark}> {event.pointsReward} ECO points reward</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.quickJoinBtn}
-                onPress={() => (
-                  model.isReadOnlyExperience
-                    ? void model.leaveReadOnlyAccess()
-                    : void model.handleJoinEvent(event.id)
-                )}
-              >
-                <Text style={styles.quickJoinBtnText}>
-                  {model.isReadOnlyExperience ? 'Sign In to Join' : 'Quick Join'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+        {viewMode === 'map' ? (
+          <View style={{ height: 500, width: '100%', marginTop: 8 }}>
+            <CustomAnimatedMap model={model} userLocation={userLocation} />
           </View>
-        ))}
+        ) : (
+          <>
+            {featuredEvent ? (
+              <ImageBackground
+                source={{ uri: featuredEvent.imageUrl ?? 'https://images.unsplash.com/photo-1618477461853-cf6ed80fabe5?q=80&w=800&auto=format&fit=crop' }}
+                style={styles.eventFeaturedCard}
+                imageStyle={{ borderRadius: 24 }}
+              >
+                <View style={styles.eventFeaturedOverlay} />
+                <View style={styles.featuredProgramContent}>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 'auto' }}>
+                    <View style={styles.tagLight}><Text style={styles.tagLightText}>FEATURED</Text></View>
+                    <View style={styles.tagDark}><Text style={styles.tagDarkText}>PUBLIC EVENT</Text></View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 16, marginBottom: 8, marginTop: 40 }}>
+                    <View style={styles.rowMeta}><Ionicons name="calendar" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> {formatLongDate(featuredEvent.date)}</Text></View>
+                    <View style={styles.rowMeta}><Ionicons name="location" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> {featuredEvent.location}</Text></View>
+                  </View>
+                  <Text style={styles.featuredProgramTitle}>{featuredEvent.title}</Text>
+                  <Text style={styles.featuredProgramDesc}>{featuredEvent.description}</Text>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.metaTextWhite}>
+                      {featuredEvent.spotsLeft != null ? `${featuredEvent.spotsLeft} spots left` : `${featuredEvent.pointsReward} ECO points reward`}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.eventJoinBtnInfo}
+                      onPress={() => (
+                        model.isReadOnlyExperience
+                          ? void model.leaveReadOnlyAccess()
+                          : void model.handleJoinEvent(featuredEvent.id)
+                      )}
+                    >
+                      <Text style={styles.eventJoinBtnInfoText}>
+                        {model.isReadOnlyExperience ? 'Sign In to Join' : 'Join Event'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ImageBackground>
+            ) : (
+              <SurfaceCard style={styles.publicInfoCard}>
+                <Text style={styles.sectionHeadline}>No public events yet</Text>
+                <Text style={styles.metaTextSmallDark}>Check back soon for new clean-ups, workshops, and community eco campaigns.</Text>
+              </SurfaceCard>
+            )}
+
+            {otherEvents.map((event) => (
+              <View key={event.id} style={styles.eventListCard}>
+                <ImageBackground
+                  source={{ uri: event.imageUrl ?? 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
+                  style={styles.eventListImg}
+                  imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+                >
+                  <View style={styles.dateTagRight}><Text style={styles.dateTagRightText}>{formatEventDateTag(event.date)}</Text></View>
+                </ImageBackground>
+                <View style={styles.eventListBody}>
+                  <Text style={styles.welcomeLabel}>PUBLIC EVENT</Text>
+                  <Text style={styles.cardTitle}>{event.title}</Text>
+                  <Text style={styles.metaTextSmallDark}>{event.description}</Text>
+                  <View style={[styles.rowMeta, { marginTop: 12 }]}>
+                    <Ionicons name="location" size={14} color="#6B7A75" />
+                    <Text style={styles.metaTextSmallDark}> {event.location}</Text>
+                  </View>
+                  <View style={[styles.rowMeta, { marginBottom: 16 }]}>
+                    <Ionicons name="leaf" size={14} color="#6B7A75" />
+                    <Text style={styles.metaTextSmallDark}> {event.pointsReward} ECO points reward</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.quickJoinBtn}
+                    onPress={() => (
+                      model.isReadOnlyExperience
+                        ? void model.leaveReadOnlyAccess()
+                        : void model.handleJoinEvent(event.id)
+                    )}
+                  >
+                    <Text style={styles.quickJoinBtnText}>
+                      {model.isReadOnlyExperience ? 'Sign In to Join' : 'Quick Join'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -961,6 +1101,12 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 <TinyBadge label={`${displayProgress}%`} />
               </View>
               <Text style={styles.sectionCaption}>{model.selectedLesson.description}</Text>
+              
+              {model.selectedLesson.durationMinutes ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#E6F4EC', borderRadius: 8, alignSelf: 'flex-start' }}>
+                  <Text style={{ fontSize: 13, color: '#126027', fontWeight: '700' }}>⏱ {model.selectedLesson.durationMinutes} minutes</Text>
+                </View>
+              ) : null}
 
               {model.selectedLesson.content ? (
                 <View style={{ marginTop: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#E8F0EA' }}>
@@ -2954,3 +3100,38 @@ const localStyles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+
+export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
+  const logs = model.transparency?.logs ?? [];
+
+  return (
+    <View style={styles.fullscreenOverlay}>
+      <TopNavbar model={model} showBack={true} />
+      <ScrollView contentContainerStyle={styles.homeContent}>
+        <Text style={styles.welcomeLabel}>HISTORY</Text>
+        <Text style={styles.pageTitle}>Coins & Points</Text>
+
+        <View style={{ marginTop: 24, gap: 12 }}>
+          {logs.length > 0 ? (
+            logs.map((log) => (
+              <SurfaceCard key={log.id} style={{ padding: 16, borderRadius: 16, backgroundColor: '#FFF' }}>
+                <View style={styles.rowBetween}>
+                  <Text style={[styles.cardTitle, { flex: 1 }]}>{log.publicLabel}</Text>
+                  <Text style={{ color: '#10B981', fontWeight: 'bold', fontSize: 16 }}>+{log.pointsAwarded}</Text>
+                </View>
+                <Text style={[styles.metaTextSmallDark, { marginTop: 4 }]}>Action: {log.actionType}</Text>
+                <Text style={[styles.metaTextSmallDark, { marginTop: 4 }]}>Date: {formatLongDate(log.timestamp)}</Text>
+              </SurfaceCard>
+            ))
+          ) : (
+            <SurfaceCard style={styles.publicInfoCard}>
+              <Text style={styles.sectionHeadline}>No history yet</Text>
+              <Text style={styles.metaTextSmallDark}>Complete missions to earn points and coins!</Text>
+            </SurfaceCard>
+          )}
+        </View>
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </View>
+  );
+}

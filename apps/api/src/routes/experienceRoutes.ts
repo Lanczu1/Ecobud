@@ -95,7 +95,7 @@ experienceRoutes.get(
       dailyChallenge: primaryChallenge
         ? {
             ...primaryChallenge,
-            progressPercentage: activeChallengeProgress?.progressPercentage ?? 65,
+            progressPercentage: activeChallengeProgress?.progressPercentage ?? 0,
             deadlineLabel: 'Complete before 11:59 PM',
           }
         : null,
@@ -206,6 +206,7 @@ experienceRoutes.get(
         rank: index + 1,
         id: user.id,
         displayName: user.profile?.displayName ?? user.name,
+        avatarUrl: user.profile?.avatarUrl ?? null,
         points: user.points,
         badges: user.badges.slice(0, 3).map((item) => item.badge.name),
         isCurrentUser: user.id === currentUserId,

@@ -2,8 +2,8 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-// Define the upload directory based on the user's requirement
-const uploadDirectory = path.join('c:', 'xampp', 'htdocs', 'Ecobud', 'apps', 'api', 'uploads');
+// Define the upload directory relative to the project root
+const uploadDirectory = path.join(__dirname, '..', '..', 'uploads');
 
 // Ensure directory exists
 if (!fs.existsSync(uploadDirectory)) {

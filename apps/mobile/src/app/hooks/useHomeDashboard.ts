@@ -33,6 +33,7 @@ import { offlineSyncService } from '../../shared/offline/offlineSyncService';
 import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMutationQueue.types';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { realtimeService } from '../../shared/supabase/realtimeService';
+import { type EcoBadge } from '../../shared/api/ecobudApi';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [assistantQuickReplies, setAssistantQuickReplies] = useState<string[]>([
     'How to compost?', 'What goes in recycling?', 'Tips for reducing waste', 'Tell me about eco-points',
   ]);
-  const [authEmail, setAuthEmail] = useState('lanczu@ecobud.app');
+  const [authEmail, setAuthEmail] = useState('member@ecobud.app');
   const [authPassword, setAuthPassword] = useState('eco12345');
   const [authMode, setAuthMode] = useState<AuthMode>('member');
   const [authLoading, setAuthLoading] = useState(false);
@@ -129,6 +130,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [quizScore, setQuizScore] = useState(0);
   const [earnedPoints, setEarnedPoints] = useState(0);
   const [earnedCoins, setEarnedCoins] = useState(0);
+  const [newlyUnlockedBadges, setNewlyUnlockedBadges] = useState<EcoBadge[]>([]);
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
   const isReadOnlyExperience = useMemo(() => isReadOnlySession(session), [session]);
   const presence = usePresence(session, isReadOnlyExperience);
@@ -801,6 +803,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     };
   }, [presence.shouldMaintainRealtimeConnection, queueRealtimeRefresh, session]);
 
+
+
   const openLesson = useCallback(async (lessonId: string) => {
     await runWithActionLoader('Opening lesson...', async () => {
       try {
@@ -863,6 +867,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
 
         setRefreshing(true);
+        let unlockedBadges: EcoBadge[] = [];
+        let earnedPts = selectedLesson?.pointsReward ?? 10;
+        let earnedCns = 0; // Default or maybe 5 if we want offline fallback, but we'll get from online
+
         const mutationMode = await runMutationWithOfflineFallback({
           mutation: {
             userId: activeSession.user.id,
@@ -871,7 +879,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
             dedupeKey: `lesson-complete:${selectedLessonId}`,
           },
           onlineAction: async () => {
-            await homeService.completeLesson(activeSession.token, selectedLessonId);
+            const res = await homeService.completeLesson(activeSession.token, selectedLessonId);
+            if (res?.awardedBadges) {
+              unlockedBadges = res.awardedBadges;
+            }
+            if (res?.pointsAwarded !== undefined) {
+              earnedPts = res.pointsAwarded;
+            }
+            if (res?.ecoCoinsAwarded !== undefined) {
+              earnedCns = res.ecoCoinsAwarded;
+            }
           },
           applyOptimisticUpdate: () => {
             applyOfflineLessonCompletion(selectedLessonId);
@@ -882,8 +899,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         if (mutationMode === 'online') {
           await hydrateApp(activeSession, true);
-          const points = selectedLesson?.pointsReward ?? 10;
-          setEarnedPoints(points);
+          setEarnedPoints(earnedPts);
+          setEarnedCoins(earnedCns);
+          setNewlyUnlockedBadges(unlockedBadges);
           setCompletionCelebrationType('lesson');
           setActiveOverlayState('lessonCompleted');
         }
@@ -1276,6 +1294,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         transparency: 'Opening transparency feed',
         ai_mission: 'Opening mission',
         settings: 'Opening settings',
+        coinsHistory: 'Opening Coins History',
       };
 
       // We explicitly excluded claimParticles, streakRewards, and streakUnlocked above, so we must cast screen to the narrowed type
@@ -1341,47 +1360,43 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }) => {
+    const challenge = challenges.find((c) => c.id === challengeId);
+    if (!challenge) {
+      return;
+    }
+
+    setRefreshing(true);
     try {
       const activeSession = ensureSession();
-      setRefreshing(true);
 
-      const challengeToClaim = challenges.find((c) => c.id === challengeId);
+      setEarnedPoints(challenge.expReward);
+      setEarnedCoins(challenge.ecoCoinReward);
 
-      if (challengeToClaim) {
-        setClaimRewardData({
-          points: challengeToClaim.expReward || 0,
-          coins: challengeToClaim.ecoCoinReward || 0,
-          origin,
-        });
+      if (origin) {
+        setClaimRewardData({ points: challenge.expReward, coins: challenge.ecoCoinReward, origin });
       }
-
+      
+      setCompletionCelebrationType('claim');
       setActiveOverlayState('claimParticles');
 
-      if (challengeToClaim) {
-        setDashboard((prev) =>
-          prev ? {
-            ...prev,
-            ecoCoins: prev.ecoCoins + (challengeToClaim.ecoCoinReward || 0),
-            ecoPoints: prev.ecoPoints + (challengeToClaim.expReward || 0)
-          } : null
-        );
-      }
-
-      setChallenges((currentChallenges) =>
-        currentChallenges.map((challenge) =>
-          challenge.id === challengeId
+      setChallenges((prev) =>
+        prev.map((c) =>
+          c.id === challengeId
             ? {
-              ...challenge,
-              progress: {
-                progressPercentage: 100,
-                status: 'completed',
-              },
-            }
-            : challenge
+                ...c,
+                progress: {
+                  ...c.progress!,
+                  status: 'completed',
+                },
+              }
+            : c
         )
       );
 
-      await homeService.claimChallengeReward(activeSession.token, challengeId);
+      const res = await homeService.claimChallengeReward(activeSession.token, challengeId);
+      if (res?.awardedBadges) {
+        setNewlyUnlockedBadges(res.awardedBadges);
+      }
 
       await hydrateApp(activeSession, true);
     } catch (error) {
@@ -1486,6 +1501,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     tracker,
     profile,
     rewards,
+    newlyUnlockedBadges,
+    setNewlyUnlockedBadges,
     leaderboard,
     events,
     transparency,

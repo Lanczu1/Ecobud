@@ -73,13 +73,13 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
 
         {/* Top Navbar */}
         <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'between' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img
               src={logoImg}
-              alt="Ecobud Logo"
-              style={{ width: 32, height: 32, marginRight: 12, objectFit: 'contain', borderRadius: 8 }}
+              alt="Logo"
+              style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 8 }}
             />
-            <span style={{ fontWeight: 800, fontSize: '1.125rem', letterSpacing: '0.05em' }}>ECOBUD</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-auth-primary)' }}>ECOBUD</span>
           </div>
           <button
             type="button"
@@ -102,14 +102,14 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
         </div>
 
         {/* Center Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 24px', alignItems: 'flex-start' }}>
 
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', marginBottom: 8 }}>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0 }}>Admin Access</h1>
+          <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 8 }}>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0 }}>Admin Panel</h1>
             <Leaf size={20} color="var(--color-auth-primary)" style={{ marginTop: 4, marginLeft: 4 }} />
           </div>
-          <p style={{ fontSize: '0.95rem', color: 'var(--color-auth-subtitle)', textAlign: 'center', maxWidth: 320, marginBottom: 24, lineHeight: 1.5 }}>
-            Sign in to manage users, verify eco goals, and monitor transparency logs.
+          <p style={{ color: 'var(--color-auth-subtitle)', marginBottom: 32, textAlign: 'left' }}>
+            Sign in to manage the Ecobud platform
           </p>
 
           <form onSubmit={handleSubmit} className="auth-card">
@@ -127,7 +127,7 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
               onBlur={() => markTouched('email')}
               icon={<Mail size={18} />}
               type="email"
-              placeholder="admin@ecobud.com"
+              placeholder="admin@ecobud.app"
               error={touched.email ? errors.email : undefined}
             />
 

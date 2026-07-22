@@ -33,7 +33,7 @@ export const homeService = {
     ecobudApi.fetchDashboard(token),
 
   getLessons: (token: string) =>
-    ecobudApi.fetchLessons(token),
+    ecobudApi.fetchLessons(token).then((res: any) => res.items || res),
 
   getChallenges: (token: string) =>
     ecobudApi.fetchChallenges(token).then(res => res.items),

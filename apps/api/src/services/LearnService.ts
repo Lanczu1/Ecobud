@@ -186,7 +186,7 @@ export class LearnService {
       throw new HttpError(404, 'Published lesson not found.');
     }
 
-    await this.gamificationService.completeLesson(userId, lessonId);
+    const rewardResult = await this.gamificationService.completeLesson(userId, lessonId);
 
     const progress = await this.database.userLessonProgress.findUnique({
       where: {
@@ -203,6 +203,9 @@ export class LearnService {
       status: progress.status as LessonStatus,
       progress: progress.progress,
       videoTimestamp: progress.videoTimestamp,
+      awardedBadges: rewardResult.awardedBadges,
+      pointsAwarded: rewardResult.pointsAwarded,
+      ecoCoinsAwarded: rewardResult.ecoCoinsAwarded,
     };
   }
 

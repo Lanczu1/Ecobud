@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete } from '../../../utils/adminApi';
 
@@ -78,6 +78,29 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
 
+  const modalWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = document.getElementById('admin-scroll-container');
+    if (!container) return;
+    let rafId: number;
+    const updatePosition = () => {
+      if (modalWrapperRef.current) {
+        modalWrapperRef.current.style.transform = `translateY(${container.scrollTop + 40}px)`;
+      }
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updatePosition);
+    };
+    updatePosition();
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+
   const handleClose = () => {
     setIsClosing(true);
     setTimeout(onClose, 280);
@@ -96,14 +119,13 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className={`absolute -inset-[300px] bg-black/60 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} />
-      <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}>
+    <div ref={modalWrapperRef} className="absolute inset-x-0 z-50 flex justify-center p-4 pointer-events-none" style={{ top: 0, willChange: 'transform' }}>
+      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden pointer-events-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 160px)' }}>
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Event' : 'Create Event'}</h2>
           <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form id="event-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
           {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
@@ -118,7 +140,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" placeholder="e.g. Bondi Beach, Sydney" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date &amp; Time *</label>
             <input type="datetime-local" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -131,14 +153,15 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
               <input type="number" min={0} value={form.pointsReward} onChange={e => setForm(f => ({ ...f, pointsReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={handleClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-60 flex items-center justify-center gap-2">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {saving ? 'Saving…' : (initial ? 'Update Event' : 'Create Event')}
-            </button>
-          </div>
         </form>
+        {/* Footer buttons */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3">
+          <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+          <button form="event-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving ? 'Saving…' : (initial ? 'Update Event' : 'Create Event')}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -196,7 +219,14 @@ export function Events() {
   const totalAttendees = events.reduce((a, e) => a + e.registrations.length, 0);
 
   return (
-    <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">
+    <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
+      {/* Backdrop overlay - blur only, covers full scroll content area */}
+      {modal && (
+        <div
+          className="absolute inset-0 z-40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setModal(null); setEditing(null); }}
+        />
+      )}
       {modal === 'add' && <EventModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <EventModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
 

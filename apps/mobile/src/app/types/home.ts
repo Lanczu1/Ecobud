@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -64,6 +64,7 @@ export interface AssistantMessage {
 
 export interface HeaderProps {
   userDisplayName: string;
+  userAvatarUrl?: string;
   notificationCount: number;
   hasUsableInternet: boolean;
   showBack?: boolean;
@@ -153,6 +154,8 @@ export interface EcoBudMobileModel {
   tracker: TrackerData | null;
   profile: ProfileData | null;
   rewards: RewardsData | null;
+  newlyUnlockedBadges: EcoBadge[];
+  setNewlyUnlockedBadges: (badges: EcoBadge[]) => void;
   leaderboard: LeaderboardData | null;
   events: EcoEvent[];
   transparency: TransparencyFeed | null;

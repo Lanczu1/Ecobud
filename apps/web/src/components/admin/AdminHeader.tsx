@@ -14,7 +14,6 @@ const sectionDescriptions: Record<AdminSection, string> = {
   'Learning Content': 'Manage eco-education articles and modules',
   Challenges: 'Design and manage community eco-challenges',
   Events: 'Organize and track community eco-events',
-  Vendors: 'Manage eco-friendly vendor partners',
   'Swap Goods': 'Monitor and moderate community swap listings',
   Reports: 'Platform-wide performance metrics and insights',
   Submissions: 'Review and moderate user challenge proofs',

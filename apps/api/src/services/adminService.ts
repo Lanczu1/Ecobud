@@ -54,7 +54,7 @@ export class AdminService {
         videoUrl: data.videoUrl,
         imageUrl: data.imageUrl,
         transcript: data.transcript,
-        durationMinutes: data.durationMinutes ?? 8,
+        durationMinutes: data.durationMinutes ?? 0,
         quizPassingScore: data.quizPassingScore ?? 70,
         pointsReward: data.pointsReward ?? 10,
         featured: data.featured ?? false,

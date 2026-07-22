@@ -27,7 +27,7 @@ def main():
         sys.exit(1)
         
     try:
-        results = model(image_path)
+        results = model(image_path, verbose=False)
     except Exception as e:
         print(json.dumps({"error": f"Failed to analyze image: {str(e)}"}))
         sys.exit(1)

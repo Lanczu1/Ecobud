@@ -1,4 +1,5 @@
 import logo from '../assets/logo.png';
+import logoname from '../assets/logoname.png';
 
 interface LoadingScreenProps {
   message?: string;
@@ -82,28 +83,9 @@ export function LoadingScreen({
         </div>
 
         {/* Wordmark */}
-        <div className="mt-7 flex items-center gap-4">
-          <div
-            style={{
-              width: 58, height: 58,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.14)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <img src={logo} alt="" style={{ width: 30, height: 30, objectFit: 'contain' }} aria-hidden />
-          </div>
-          <span
-            style={{
-              color: '#fff',
-              fontSize: 34,
-              fontWeight: 900,
-              letterSpacing: '0.08em',
-            }}
-          >
-            ECOBUD
-          </span>
+        <div className="mt-7 flex items-center justify-center gap-4">
+          <img src={logo} alt="Logo" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+          <img src={logoname} alt="Brand Name" style={{ width: 160, height: 'auto', objectFit: 'contain' }} />
         </div>
 
         {/* Message */}

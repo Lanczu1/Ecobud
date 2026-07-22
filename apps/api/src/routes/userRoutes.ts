@@ -133,6 +133,7 @@ userRoutes.post(
   requireUserAccess,
   avatarUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
+    console.log('[API] /me/avatar hit, req.file:', req.file);
     if (!req.file) {
       throw new HttpError(400, 'Image file is required');
     }

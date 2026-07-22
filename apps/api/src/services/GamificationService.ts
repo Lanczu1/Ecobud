@@ -46,6 +46,9 @@ export class GamificationService {
         return {
           alreadyCompleted: true,
           lessonId,
+          awardedBadges: [],
+          pointsAwarded: 0,
+          ecoCoinsAwarded: 0,
         };
       }
 
@@ -72,7 +75,7 @@ export class GamificationService {
         actionType: `Lesson completed: ${lesson.title}`,
         knowledgePointsAwarded: lesson.pointsReward,
         pointsAwarded: lesson.pointsReward,
-        ecoCoinsAwarded: lesson.pointsReward,
+        ecoCoinsAwarded: 0,
         metadata: {
           lessonId: lesson.id,
           category: lesson.category,
@@ -390,6 +393,7 @@ export class GamificationService {
         currentHash: log.currentHash,
         knowledgePointsTotal: updatedStats.knowledgePoints,
         pointsAwarded: action.pointsAwarded,
+        ecoCoinsAwarded: action.ecoCoinsAwarded ?? 0,
         pointsTotal: updatedUser.points,
         streak: updatedUser.currentStreak,
         userId: updatedUser.id,

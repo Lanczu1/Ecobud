@@ -44,7 +44,6 @@ export const startPresenceCleanupScheduler = () => {
     void runCleanupTick();
   }, intervalMs);
 
-  cleanupInterval.unref?.();
   void runCleanupTick();
 
   return cleanupInterval;

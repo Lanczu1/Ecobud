@@ -23,6 +23,7 @@ import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { LoadingGlyph, LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
 import { initialsFromLabel, usePressScale } from '../utils/appUtils';
+import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { Header } from './Header';
 
 export function ChatbotFAB({ onPress }: { onPress: () => void }) {
@@ -109,6 +110,7 @@ export function TopNavbar({ model, title, showBack }: { model: EcoBudMobileModel
   return (
     <Header
       userDisplayName={model.userDisplayName}
+      userAvatarUrl={model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl || undefined}
       notificationCount={model.notificationCount}
       hasUsableInternet={model.hasUsableInternet}
       showBack={showBack}
@@ -234,13 +236,10 @@ export function EcoLogo({ light = false, emphasis = 'default' }: { light?: boole
 
   return (
     <View style={[styles.logoRow, hero && styles.logoRowHero]}>
-      <View style={[styles.logoBadge, light && styles.logoBadgeLight, hero && styles.logoBadgeHero, { backgroundColor: 'transparent', borderWidth: 0 }]}>
-        <Image
-          source={require('../../../assets/logo.png')}
-          style={{ width: hero ? 48 : 34, height: hero ? 48 : 34, resizeMode: 'contain' }}
-        />
-      </View>
-      <Text style={[styles.logoText, light && styles.logoTextLight, hero && styles.logoTextHero]}>ECOBUD</Text>
+      <Image
+        source={require('../../../assets/logo.png')}
+        style={{ width: hero ? 240 : 180, height: hero ? 80 : 60, resizeMode: 'contain' }}
+      />
     </View>
   );
 }
@@ -435,12 +434,31 @@ export function AvatarBubble({
   size,
   style,
   textStyle,
+  avatarUrl,
 }: {
   label: string;
   size: number;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
+  avatarUrl?: string | null;
 }) {
+  let parsedUrl = null;
+  if (avatarUrl && avatarUrl !== 'null') {
+    let cleanUrl = avatarUrl.replace(/\\/g, '/');
+    if (cleanUrl.includes('localhost:3000')) {
+      cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
+    }
+    parsedUrl = cleanUrl.startsWith('http') ? cleanUrl : `${ecobudApiOrigin}${cleanUrl}`;
+  }
+
+  if (parsedUrl) {
+    return (
+      <View style={[styles.avatarBubble, style, { width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }]}>
+        <Image source={{ uri: parsedUrl }} style={{ width: size, height: size, resizeMode: 'cover' }} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.avatarBubble, style, { width: size, height: size, borderRadius: size / 2 }]}>
       <Text style={[styles.avatarInitials, textStyle]}>{initialsFromLabel(label)}</Text>
