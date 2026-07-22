@@ -167,8 +167,14 @@ challengeRoutes.post(
 
           for (const det of detected) {
             const detObj = det.object.toLowerCase().trim();
-            // Flexible match: e.g. target="plastic bottle" matches detection="bottle"
-            const matchedTargetIndex = targets.findIndex(t => t === detObj || t.includes(detObj) || detObj.includes(t));
+            const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Flexible word-boundary match: e.g. target="plastic bottle" matches detection="bottle"
+            const matchedTargetIndex = targets.findIndex(t => {
+              if (t === detObj) return true;
+              const tRegex = new RegExp(`\\b${escapeRegExp(t)}\\b`, 'i');
+              const detRegex = new RegExp(`\\b${escapeRegExp(detObj)}\\b`, 'i');
+              return tRegex.test(detObj) || detRegex.test(t);
+            });
             const isMatch = matchedTargetIndex !== -1;
             
             if (isMatch) {

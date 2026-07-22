@@ -83,7 +83,7 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
       
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
         <Text style={{ fontSize: 13, color: '#6B7A75', fontWeight: '700' }}>
-          🔖 {lesson.category || 'General'}  •  {lesson.difficulty?.toLowerCase() === 'advanced' ? '🔴' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '🟠' : '🟢'} {lesson.difficulty || 'Beginner'}  •  ⏱ {lesson.durationMinutes || 8} min
+          🔖 {lesson.category || 'General'}  •  {lesson.difficulty?.toLowerCase() === 'advanced' ? '🔴' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '🟠' : '🟢'} {lesson.difficulty || 'Beginner'}{lesson.durationMinutes && lesson.durationMinutes > 0 ? `  •  ⏱ ${lesson.durationMinutes} min` : ''}
         </Text>
       </View>
 

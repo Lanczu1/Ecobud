@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet, adminPost } from '../../../utils/adminApi';
+import { adminGet, adminPost, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 
 interface AdminUser {
@@ -29,6 +29,30 @@ const roleColors: Record<string, string> = {
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+}
+
+function UserAvatar({ user }: { user: AdminUser }) {
+  const [error, setError] = useState(false);
+  const avatarUrl = user.profile?.avatarUrl;
+  const isValidUrl = avatarUrl && avatarUrl !== 'null';
+
+  if (isValidUrl && !error) {
+    const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : `${API_HOST}${avatarUrl}`;
+    return (
+      <img 
+        src={fullUrl} 
+        alt={user.name} 
+        className="w-9 h-9 rounded-full bg-gray-100 object-cover" 
+        onError={() => setError(true)} 
+      />
+    );
+  }
+
+  return (
+    <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
+      <span className="text-xs font-bold text-green-700">{user.name.charAt(0).toUpperCase()}</span>
+    </div>
+  );
 }
 
 export function ManageUsers() {
@@ -158,7 +182,7 @@ export function ManageUsers() {
         {[
           { label: `Total ${viewTab}`, value: loading ? '—' : tabUsers.length, color: 'text-gray-900', bg: 'bg-white' },
           { label: 'Online', value: loading ? '—' : totalOnline, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Offline', value: loading ? '—' : totalOffline, color: 'text-gray-600', bg: 'bg-gray-50' },
+          { label: 'Offline', value: loading ? '—' : totalOffline, color: 'text-red-600', bg: 'bg-red-50' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
@@ -236,13 +260,7 @@ export function ManageUsers() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          {user.profile?.avatarUrl ? (
-                            <img src={user.profile.avatarUrl} alt={user.name} className="w-9 h-9 rounded-full bg-gray-100 object-cover" />
-                          ) : (
-                            <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
-                              <span className="text-xs font-bold text-green-700">{user.name.charAt(0).toUpperCase()}</span>
-                            </div>
-                          )}
+                          <UserAvatar user={user} />
                           {user.isOnlineNow ? (
                             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
                           ) : (

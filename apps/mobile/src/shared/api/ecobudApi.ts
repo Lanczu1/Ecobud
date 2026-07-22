@@ -270,6 +270,7 @@ export interface LeaderboardData {
     rank: number;
     id: string;
     displayName: string;
+    avatarUrl?: string | null;
     points: number;
     badges: string[];
     isCurrentUser: boolean;
@@ -508,7 +509,7 @@ export const ecobudApi = {
       body: { lessonId },
     }),
   completeLesson: (token: string, lessonId: string) =>
-    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number }>('/learn/complete', {
+    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number; awardedBadges?: EcoBadge[]; pointsAwarded?: number; ecoCoinsAwarded?: number }>('/learn/complete', {
       method: 'POST',
       token,
       body: { lessonId },
@@ -546,7 +547,7 @@ export const ecobudApi = {
       body: { proofUrl, afterProofUrl },
     }),
   claimChallengeReward: (token: string, challengeId: string) =>
-    request(`/challenges/${challengeId}/claim`, {
+    request<{ message: string; awardedBadges?: EcoBadge[] }>(`/challenges/${challengeId}/claim`, {
       method: 'POST',
       token,
       body: {},

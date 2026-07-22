@@ -108,7 +108,7 @@ async function main() {
   const member = await prisma.user.create({
     data: {
       name: 'Lanczu',
-      email: 'lanczu@ecobud.app',
+      email: 'member@ecobud.app',
       passwordHash: memberPassword,
       role: 'user',
       status: 'active',
@@ -228,7 +228,8 @@ async function main() {
         difficulty: 'EASY',
         category: 'Waste',
         durationDays: 7,
-        pointsReward: 20,
+        expReward: 20,
+        ecoCoinReward: 20,
         imageUrl:
           'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80',
         badgeLabel: 'Clean Start',
@@ -239,7 +240,8 @@ async function main() {
         difficulty: 'MEDIUM',
         category: 'Energy',
         durationDays: 14,
-        pointsReward: 50,
+        expReward: 50,
+        ecoCoinReward: 50,
         imageUrl:
           'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80',
         badgeLabel: 'Power Down',
@@ -250,7 +252,8 @@ async function main() {
         difficulty: 'HARD',
         category: 'Food',
         durationDays: 7,
-        pointsReward: 30,
+        expReward: 30,
+        ecoCoinReward: 30,
         imageUrl:
           'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=80',
         badgeLabel: 'Green Plate',
@@ -481,7 +484,7 @@ async function main() {
   });
 
   console.log('ECOBUD seed complete.');
-  console.log('Member login: lanczu@ecobud.app / eco12345');
+  console.log('Member login: member@ecobud.app / eco12345');
   console.log('Admin login: admin@ecobud.app / admin12345');
   console.log('Moderator login: moderator@ecobud.app / moderator123');
 }

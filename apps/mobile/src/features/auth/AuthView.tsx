@@ -82,7 +82,7 @@ const AUTH_COPY: Record<
   },
   signup: {
     title: 'Create your account',
-    subtitle: 'Join ECOBUD and start building greener habits with guided rewards.',
+    subtitle: 'Join BAYANI JUAN and start building greener habits with guided rewards.',
     primaryLabel: 'Send Verification Code',
     loadingLabel: 'Sending Code...',
   },
@@ -402,13 +402,12 @@ export function AuthView({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.topNavbar}>
+          <View style={[styles.topNavbar, { justifyContent: 'center' }]}>
             <Image
               source={require('../../../assets/logo.png')}
-              style={[styles.topNavAvatar, isLegacyAndroid && styles.topNavAvatarLegacy]}
+              style={{ width: 180, height: 60, resizeMode: 'contain' }}
               fadeDuration={0}
             />
-            <Text style={styles.topNavTitle}>ECOBUD</Text>
           </View>
 
           <View style={styles.contentContainer}>

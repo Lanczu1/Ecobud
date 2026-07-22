@@ -58,9 +58,10 @@ model Lesson {
   content          String
   category         String
   imageUrl         String?
-  durationMinutes  Int                  @default(8)
+  durationMinutes  Int                  @default(0)
   rating           Float                @default(4.8)
   pointsReward     Int                  @default(10)
+  ecoCoinsReward   Int                  @default(5) @map("eco_coins_reward")
   featured         Boolean              @default(false)
   isPublished      Boolean              @default(false) @map("is_published")
   scheduledAt      DateTime?            @map("scheduled_at")

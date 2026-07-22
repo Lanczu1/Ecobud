@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,6 +13,7 @@ import {
 
 import { type HeaderProps } from '../types/home';
 import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndicator';
+import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 
 function initialsFromLabel(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || 'E';
@@ -37,6 +39,7 @@ function AvatarBubble({
 
 export function Header({
   userDisplayName,
+  userAvatarUrl,
   notificationCount,
   hasUsableInternet,
   showBack,
@@ -44,6 +47,19 @@ export function Header({
   onBack,
   onEventsPress,
 }: HeaderProps) {
+  const getAvatarSource = () => {
+    if (!userAvatarUrl || userAvatarUrl === 'null') return null;
+    let cleanUrl = userAvatarUrl.replace(/\\/g, '/');
+    if (cleanUrl.includes('localhost:3000')) {
+      cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
+    } else if (!cleanUrl.startsWith('http')) {
+      cleanUrl = `${ecobudApiOrigin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
+    }
+    return { uri: cleanUrl };
+  };
+
+  const avatarSource = getAvatarSource();
+
   return (
     <View style={styles.topNavbar}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -53,12 +69,19 @@ export function Header({
           </TouchableOpacity>
         ) : (
           <View style={styles.avatarWrap}>
-            <AvatarBubble
-              label={userDisplayName}
-              size={44}
-              style={styles.topNavAvatar}
-              textStyle={styles.topNavAvatarText}
-            />
+            {avatarSource ? (
+              <Image
+                source={avatarSource}
+                style={[styles.topNavAvatar, { width: 44, height: 44, borderRadius: 22 }]}
+              />
+            ) : (
+              <AvatarBubble
+                label={userDisplayName}
+                size={44}
+                style={styles.topNavAvatar}
+                textStyle={styles.topNavAvatarText}
+              />
+            )}
             <ConnectionStatusIndicator
               hasUsableInternet={hasUsableInternet}
               size={11}
@@ -67,7 +90,16 @@ export function Header({
           </View>
         )}
       </View>
-      <Text style={[styles.topNavTitle, title ? styles.topNavTitleDark : {}]}>{title || 'ECOBUD'}</Text>
+      {title ? (
+        <Text style={[styles.topNavTitle, styles.topNavTitleDark]}>{title}</Text>
+      ) : (
+        <View style={styles.brandTitleContainer}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={{ width: 160, height: 50, resizeMode: 'contain' }}
+          />
+        </View>
+      )}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         {onEventsPress && (
           <TouchableOpacity onPress={onEventsPress}>
@@ -139,5 +171,25 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
     color: '#126027',
+  },
+  brandTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  brandLogo: {
+    width: 26,
+    height: 26,
+    resizeMode: 'contain',
+  },
+  brandText: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(20, 83, 45, 0.18)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
 });

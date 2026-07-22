@@ -1,4 +1,5 @@
 import logo from '../assets/logo.png';
+import logoname from '../assets/logoname.png';
 
 interface TopNavigationProps {
   onHomeTap: () => void;
@@ -76,37 +77,15 @@ export function TopNavigation({
   );
 }
 
-/** EcoBud logo + text wordmark */
-function EcobudWordmark({ large = false, light = false }: { large?: boolean; light?: boolean }) {
-  const badgeSize = large ? 58 : 42;
-  const iconSize = large ? 30 : 22;
-  const textSize = large ? 34 : 24;
-  const gap = large ? 14 : 10;
+function EcobudWordmark({ large = false }: { large?: boolean }) {
+  const iconSize = large ? 36 : 28;
+  const nameWidth = large ? 140 : 110;
+  const gap = large ? 12 : 8;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap }}>
-      <div
-        style={{
-          width: badgeSize, height: badgeSize,
-          borderRadius: '50%',
-          background: light ? 'rgba(255,255,255,0.14)' : '#fff',
-          border: `1px solid ${light ? 'rgba(255,255,255,0.18)' : '#D6E5DC'}`,
-          boxShadow: light ? 'none' : '0 8px 14px rgba(0,0,0,0.07)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        <img src={logo} alt="EcoBud" style={{ width: iconSize, height: iconSize, objectFit: 'contain' }} />
-      </div>
-      <span
-        style={{
-          color: light ? '#fff' : '#14231E',
-          fontSize: textSize,
-          fontWeight: 900,
-          letterSpacing: large ? '0.055em' : '0.04em',
-        }}
-      >
-        ECOBUD
-      </span>
+      <img src={logo} alt="Logo" style={{ width: iconSize, height: iconSize, objectFit: 'contain' }} />
+      <img src={logoname} alt="Ecobud" style={{ width: nameWidth, height: 'auto', objectFit: 'contain' }} />
     </div>
   );
 }

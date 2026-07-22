@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Trophy, Plus, Edit3, Trash2, Users, Clock, Coins, Search, Target, AlertCircle, X, Loader2, UploadCloud, Power, Star } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 
 interface Challenge {
   id: string;
@@ -79,11 +79,26 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const [isClosing, setIsClosing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const modalWrapperRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const scrollContainer = document.getElementById('admin-scroll-container');
-    if (scrollContainer) scrollContainer.style.overflow = 'hidden';
-    return () => { 
-      if (scrollContainer) scrollContainer.style.overflow = ''; 
+    const container = document.getElementById('admin-scroll-container');
+    if (!container) return;
+    let rafId: number;
+    const updatePosition = () => {
+      if (modalWrapperRef.current) {
+        modalWrapperRef.current.style.transform = `translateY(${container.scrollTop + 40}px)`;
+      }
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updatePosition);
+    };
+    updatePosition();
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -119,14 +134,13 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className={`absolute -inset-[100px] bg-black/60 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} />
-      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-[960px] max-h-[600px] flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}>
+    <div ref={modalWrapperRef} className="absolute inset-x-0 z-50 flex justify-center p-4 pointer-events-none" style={{ top: 0, willChange: 'transform' }}>
+      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-[960px] flex flex-col overflow-hidden pointer-events-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 160px)' }}>
         <div className="flex flex-shrink-0 items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Challenge' : 'New Challenge'}</h2>
           <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col md:flex-row">
+        <form id="challenge-form" onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col md:flex-row">
           
           {/* Left Side */}
           <div className="flex-1 space-y-4 overflow-y-auto challenge-modal-scroll p-6">
@@ -279,17 +293,17 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
                   <span className="text-sm font-medium text-gray-700">Set active</span>
                 </label>
               </div>
-
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={handleClose} className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
-                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {saving ? 'Saving…' : (initial ? 'Update Challenge' : 'Create Challenge')}
-                </button>
-              </div>
             </div>
           </div>
         </form>
+        {/* Footer buttons */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
+          <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+          <button form="challenge-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving ? 'Saving…' : (initial ? 'Update Challenge' : 'Create Challenge')}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -380,7 +394,14 @@ export function Challenges() {
   const totalPoints = challenges.reduce((a, c) => a + c.expReward, 0);
 
   return (
-    <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">
+    <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
+      {/* Backdrop overlay - covers full scroll content area */}
+      {modal && (
+        <div
+          className="absolute inset-0 z-40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setModal(null); setEditing(null); }}
+        />
+      )}
       {modal === 'add' && <ChallengeModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <ChallengeModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
 
@@ -464,7 +485,7 @@ export function Challenges() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl overflow-hidden bg-green-50 border border-green-100 flex-shrink-0 flex items-center justify-center">
                         {c.imageUrl ? (
-                          <img src={c.imageUrl.startsWith('http') ? c.imageUrl : `http://localhost:3000${c.imageUrl}`} className="w-full h-full object-cover" alt="Challenge" />
+                          <img src={c.imageUrl.startsWith('http') ? c.imageUrl : `${API_HOST}${c.imageUrl}`} className="w-full h-full object-cover" alt="Challenge" />
                         ) : (
                           <Trophy className="w-5 h-5 text-green-600 opacity-60" />
                         )}

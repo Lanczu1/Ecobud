@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_HOST } from './utils/adminApi';
 import { WebAuthView } from './components/WebAuthView';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminSection } from './components/admin/AdminSidebar';
@@ -66,13 +67,13 @@ export default function App() {
     if (isAuthenticated) {
       document.title = `Ecobud Admin — ${activeSection}`;
     } else {
-      document.title = 'Ecobud';
+      document.title = 'Ecobud Admin';
     }
   }, [isAuthenticated, activeSection]);
 
   const handleLogin = async (email: string, pass: string) => {
     setAuthError(null);
-    const res = await fetch('http://localhost:3000/api/auth/login', {
+    const res = await fetch(`${API_HOST}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password: pass }),
