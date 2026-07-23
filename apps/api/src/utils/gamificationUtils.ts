@@ -1,8 +1,17 @@
 export function resolveLiveStreak(currentStreak: number, lastActionDate: Date | null | undefined): number {
   if (!lastActionDate || currentStreak === 0) return 0;
   
-  const today = new Date().toISOString().slice(0, 10);
-  const lastActionDay = lastActionDate.toISOString().slice(0, 10);
+  const getPhDate = (date: Date) => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  };
+  
+  const today = getPhDate(new Date());
+  const lastActionDay = getPhDate(lastActionDate);
   
   if (today === lastActionDay) {
     return currentStreak;
@@ -10,7 +19,7 @@ export function resolveLiveStreak(currentStreak: number, lastActionDate: Date | 
   
   const yesterdayDate = new Date();
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterdayDay = yesterdayDate.toISOString().slice(0, 10);
+  const yesterdayDay = getPhDate(yesterdayDate);
   
   if (lastActionDay === yesterdayDay) {
     return currentStreak;

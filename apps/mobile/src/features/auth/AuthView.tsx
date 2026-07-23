@@ -35,7 +35,7 @@ interface AuthViewProps {
   authError: string | null;
   onLogin: (email: string, pass: string) => void;
   onGoogleSignIn: () => void;
-  onContinueAsGuest: () => void;
+
   onSignUp: (username: string, email: string, pass: string, otpCode: string) => void;
   onSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
   onCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
@@ -163,7 +163,7 @@ export function AuthView({
   authError,
   onLogin,
   onGoogleSignIn,
-  onContinueAsGuest,
+
   onSignUp,
   onSendOTP,
   onCheckUsernameAvailability,
@@ -531,18 +531,6 @@ export function AuthView({
                     onPress={onGoogleSignIn}
                     disabled={isLoading}
                   />
-
-                  <SecondaryButton
-                    label="Continue as Guest Viewer"
-                    iconName="eye-outline"
-                    onPress={onContinueAsGuest}
-                    disabled={isLoading}
-                    tone="soft"
-                  />
-
-                  <Text style={styles.guestViewerHint}>
-                    Guests can browse public events and transparency updates only.
-                  </Text>
                 </>
               ) : null}
             </View>

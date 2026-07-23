@@ -409,16 +409,25 @@ export class GamificationService {
       return 1;
     }
 
-    const actionDay = actionDate.toISOString().slice(0, 10);
-    const lastDay = lastActionDate.toISOString().slice(0, 10);
+    const getPhDate = (date: Date) => {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(date);
+    };
+
+    const actionDay = getPhDate(actionDate);
+    const lastDay = getPhDate(lastActionDate);
 
     if (actionDay === lastDay) {
       return currentStreak;
     }
 
-    const previousDate = new Date(actionDate);
+    const previousDate = new Date(actionDate.getTime());
     previousDate.setDate(previousDate.getDate() - 1);
-    const previousDay = previousDate.toISOString().slice(0, 10);
+    const previousDay = getPhDate(previousDate);
 
     if (lastDay === previousDay) {
       return currentStreak + 1;

@@ -55,7 +55,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
         <View style={[styles.streakNumberRow, { justifyContent: 'space-between', alignItems: 'flex-end' }]}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
             <Text style={styles.streakNumber}>{visibleStreak}</Text>
-            <Text style={styles.streakUnit}>Days</Text>
+            <Text style={styles.streakUnit}>{visibleStreak === 1 ? 'Streak' : 'Streaks'}</Text>
           </View>
           {onPressRewards && (
             <TouchableOpacity 
