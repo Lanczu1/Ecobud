@@ -18,11 +18,10 @@ export class UserActivityService {
   constructor(private readonly database: PrismaClient = prisma) {}
 
   async touchUserActivity(userId: string, activityAt: Date = new Date()) {
-    return this.database.user.update({
+    // DO NOT update lastActionDate here, as it is used for streak calculations.
+    // Updating it here breaks the resolveStreak logic if a user views and completes a lesson on the same day.
+    return this.database.user.findUnique({
       where: { id: userId },
-      data: {
-        lastActionDate: activityAt,
-      },
       select: {
         id: true,
         lastActionDate: true,

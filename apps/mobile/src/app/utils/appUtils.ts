@@ -38,7 +38,7 @@ export function getPhMonthKey(date: Date = new Date()): string {
  * If the actual streak is less than 3, it returns 0.
  */
 export function getVisibleStreak(actualStreak: number): number {
-  return actualStreak >= 3 ? actualStreak : 0;
+  return actualStreak >= 3 ? Math.floor(actualStreak / 3) : 0;
 }
 
 // ─── Eco Level System ────────────────────────────────────────────────────────

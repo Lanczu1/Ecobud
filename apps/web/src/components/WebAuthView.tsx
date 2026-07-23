@@ -102,17 +102,17 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
         </div>
 
         {/* Center Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 24px', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 24px', alignItems: 'center' }}>
 
-          <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0 }}>Admin Panel</h1>
             <Leaf size={20} color="var(--color-auth-primary)" style={{ marginTop: 4, marginLeft: 4 }} />
           </div>
-          <p style={{ color: 'var(--color-auth-subtitle)', marginBottom: 32, textAlign: 'left' }}>
+          <p style={{ color: 'var(--color-auth-subtitle)', marginBottom: 32, textAlign: 'center' }}>
             Sign in to manage the Ecobud platform
           </p>
 
-          <form onSubmit={handleSubmit} className="auth-card">
+          <form onSubmit={handleSubmit} className="auth-card" style={{ width: '100%', maxWidth: '400px' }}>
             {authError && (
               <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--color-auth-danger-soft)', padding: '12px 16px', borderRadius: 12, marginBottom: 20 }}>
                 <AlertCircle size={18} color="var(--color-auth-danger)" style={{ marginRight: 8, flexShrink: 0 }} />

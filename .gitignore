@@ -33,6 +33,11 @@ uploads/
 *.onnx
 *.weights
 
+# Large map data files
+*.pbf
+*.osm.pbf
+apps/mobile/map/
+
 # Python
 __pycache__/
 *.pyc

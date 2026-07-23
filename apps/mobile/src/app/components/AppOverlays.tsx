@@ -23,7 +23,8 @@ import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { styles } from '../styles/appStyles';
 import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
@@ -689,54 +690,179 @@ function AnimatedMapMarker({ event }: { event: any }) {
   );
 }
 
-function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: { latitude: number; longitude: number } | null }) {
-  const mapRef = React.useRef<MapView | null>(null);
+const PH_BOUNDS = {
+  minLat: 4.5,
+  maxLat: 21.5,
+  minLng: 116.0,
+  maxLng: 127.0,
+};
 
-  React.useEffect(() => {
-    if (userLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }, 1500);
-    }
-  }, [userLocation]);
+const DEFAULT_PH_CENTER = {
+  latitude: 14.5995,
+  longitude: 120.9842,
+  latitudeDelta: 0.1,
+  longitudeDelta: 0.1,
+};
+
+function isWithinPhilippines(lat: number, lng: number) {
+  return lat >= PH_BOUNDS.minLat && lat <= PH_BOUNDS.maxLat && lng >= PH_BOUNDS.minLng && lng <= PH_BOUNDS.maxLng;
+}
+
+function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: { latitude: number; longitude: number } | null }) {
+  const webViewRef = React.useRef<WebView | null>(null);
+
+  const initialLat = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
+    ? userLocation.latitude
+    : DEFAULT_PH_CENTER.latitude;
+
+  const initialLng = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
+    ? userLocation.longitude
+    : DEFAULT_PH_CENTER.longitude;
+
+  const phEvents = React.useMemo(() => {
+    return (model.events || []).filter((event: any) => 
+      event.latitude && event.longitude && isWithinPhilippines(event.latitude, event.longitude)
+    );
+  }, [model.events]);
+
+  const leafletHtml = React.useMemo(() => {
+    const markersJson = JSON.stringify(
+      phEvents.map((e: any) => ({
+        id: e.id,
+        title: e.title || 'Eco Event',
+        location: e.location || 'Philippines',
+        lat: e.latitude,
+        lng: e.longitude,
+      }))
+    );
+
+    const userLocJson = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
+      ? JSON.stringify({ lat: userLocation.latitude, lng: userLocation.longitude })
+      : 'null';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #e2e8f0; }
+          .custom-popup .leaflet-popup-content-wrapper {
+            background: #126027; color: white; border-radius: 12px; font-family: -apple-system, sans-serif;
+          }
+          .custom-popup .leaflet-popup-tip { background: #126027; }
+          .popup-btn {
+            background: #4ade80; color: #052e16; border: none; padding: 6px 12px; border-radius: 6px;
+            font-weight: bold; cursor: pointer; margin-top: 6px; width: 100%; font-size: 13px;
+          }
+          .user-marker {
+            background-color: #2563eb; width: 18px; height: 18px; border-radius: 50%;
+            border: 3px solid #ffffff; box-shadow: 0 0 12px rgba(37,99,235,0.8);
+            animation: pulse-ring 1.8s infinite;
+          }
+          @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(37,99,235,0); }
+            100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
+          }
+          .osm-badge {
+            position: absolute; bottom: 10px; left: 10px; z-index: 1000;
+            background: rgba(18, 96, 39, 0.9); color: #fff; padding: 4px 10px;
+            border-radius: 20px; font-size: 11px; font-weight: bold;
+            font-family: -apple-system, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            pointer-events: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <div class="osm-badge">🇵🇭 OpenStreetMap Philippines Data</div>
+        <script>
+          const phBounds = L.latLngBounds(
+            L.latLng(4.5, 116.0),
+            L.latLng(21.5, 127.0)
+          );
+
+          const map = L.map('map', {
+            center: [${initialLat}, ${initialLng}],
+            zoom: ${userLocation ? 13 : 7},
+            minZoom: 5,
+            maxZoom: 18,
+            maxBounds: phBounds,
+            maxBoundsViscosity: 0.85
+          });
+
+          const osmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            subdomains: ['a', 'b', 'c'],
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap Philippines'
+          });
+
+          const cartoTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 19
+          });
+
+          osmTileLayer.on('tileerror', function() {
+            if (!map.hasLayer(cartoTileLayer)) {
+              cartoTileLayer.addTo(map);
+            }
+          });
+
+          osmTileLayer.addTo(map);
+
+          const userLoc = ${userLocJson};
+          if (userLoc) {
+            const userIcon = L.divIcon({ className: 'user-marker', iconSize: [22, 22] });
+            L.marker([userLoc.lat, userLoc.lng], { icon: userIcon })
+              .addTo(map)
+              .bindPopup('<b>📍 Your Live Location</b><br/>Philippines');
+            
+            map.flyTo([userLoc.lat, userLoc.lng], 13, { duration: 2.2 });
+          }
+
+          const events = ${markersJson};
+          events.forEach(ev => {
+            const marker = L.marker([ev.lat, ev.lng]).addTo(map);
+            const popupContent = \`
+              <div style="padding: 2px;">
+                <div style="font-weight: 800; font-size: 14px;">\${ev.title}</div>
+                <div style="font-size: 12px; opacity: 0.9; margin-top: 2px;">📍 \${ev.location}</div>
+                <button class="popup-btn" onclick="window.ReactNativeWebView.postMessage(JSON.stringify({type:'join', id:'\${ev.id}'}))">Join Event</button>
+              </div>
+            \`;
+            marker.bindPopup(popupContent, { className: 'custom-popup' });
+          });
+        </script>
+      </body>
+      </html>
+    `;
+  }, [phEvents, userLocation, initialLat, initialLng]);
+
+  const WebViewComponent = WebView as any;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#F1F5F9' }}>
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_DEFAULT}
-        style={{ flex: 1 }}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
-        initialRegion={{
-          latitude: userLocation?.latitude ?? 14.6091,
-          longitude: userLocation?.longitude ?? 121.0223,
-          latitudeDelta: 1.5,
-          longitudeDelta: 1.5,
+    <View style={{ height: 500, width: '100%', backgroundColor: '#E2E8F0', overflow: 'hidden', borderRadius: 16 }}>
+      <WebViewComponent
+        ref={webViewRef}
+        originWhitelist={['*']}
+        source={{ html: leafletHtml }}
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        onMessage={(event: any) => {
+          try {
+            const data = JSON.parse(event.nativeEvent.data);
+            if (data.type === 'join' && data.id) {
+              if (!model.isReadOnlyExperience) {
+                void model.handleJoinEvent(data.id);
+              }
+            }
+          } catch (e) {
+            console.error('WebView message error:', e);
+          }
         }}
-      >
-        {model.events.map((event: any) => {
-          if (!event.latitude || !event.longitude) return null;
-          return (
-            <Marker
-              key={event.id}
-              coordinate={{ latitude: event.latitude, longitude: event.longitude }}
-              title={event.title}
-              description={event.location}
-              onCalloutPress={() => {
-                if (!model.isReadOnlyExperience) {
-                  void model.handleJoinEvent(event.id);
-                }
-              }}
-            >
-              <AnimatedMapMarker event={event} />
-            </Marker>
-          );
-        })}
-      </MapView>
+      />
     </View>
   );
 }

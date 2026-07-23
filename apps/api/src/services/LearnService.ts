@@ -33,6 +33,7 @@ export interface LearnLessonPayload {
   videoUrl?: string | null;
   transcript?: string | null;
   pointsReward?: number;
+  durationMinutes?: number;
   featured: boolean;
   author?: {
     id: string;
@@ -286,6 +287,7 @@ export class LearnService {
     featured: boolean;
     createdAt: Date;
     pointsReward: number;
+    durationMinutes: number;
     progress: Array<{
       status: string;
       progress: number;
@@ -321,6 +323,7 @@ export class LearnService {
       videoUrl: lesson.videoUrl,
       transcript: lesson.transcript,
       pointsReward: lesson.pointsReward,
+      durationMinutes: lesson.durationMinutes,
       author: lesson.createdBy ? {
         id: lesson.createdBy.id,
         name: lesson.createdBy.name,

@@ -20,9 +20,6 @@ import {
 import { ecoTheme } from '../shared/theme/ecoTheme';
 import { AuthView } from '../features/auth/AuthView';
 import {
-  ReadOnlyExperienceView,
-} from './ReadOnlyExperience';
-import {
   BootView,
   LaunchBackdrop,
   OnboardingView,
@@ -79,7 +76,6 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         authError={model.authError}
         onLogin={(email, pass) => void model.handleLoginArgs(email, pass)}
         onGoogleSignIn={() => console.log('Google Sign In')}
-        onContinueAsGuest={() => void model.continueWithReadOnlyAccess()}
         onSignUp={(username, email, pass, otpCode) => void model.handleSignUpArgs(username, email, pass, otpCode)}
         onSendOTP={(email) => model.handleSendOTP(email)}
         onCheckUsernameAvailability={(displayName) => model.handleCheckUsernameAvailability(displayName)}
@@ -100,27 +96,15 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           }
           contentContainerStyle={styles.mainScrollContent}
         >
-          {model.isReadOnlyExperience ? (
-            <ReadOnlyExperienceView
-              activeTab={model.activeTab}
-              notificationCount={model.notificationCount}
-              featuredEvent={model.events[0] ?? null}
-              transparencyMetrics={model.transparency?.metrics ?? null}
-              onOpenEvents={() => model.setActiveOverlay('events')}
-              onOpenTransparency={() => model.setActiveOverlay('transparency')}
-              onExitReadOnlyExperience={() => void model.leaveReadOnlyAccess()}
-            />
-          ) : (
-            <>
-              {model.activeTab === 'home' && <HomeView model={model} />}
-              {model.activeTab === 'learn' && <LearnView model={model} />}
-              {model.activeTab === 'challenges' && <ChallengesView model={model} />}
-              {model.activeTab === 'tracker' && <TrackerView model={model} />}
-              {model.activeTab === 'profile' && <ProfileView model={model} />}
-            </>
-          )}
+          <>
+            {model.activeTab === 'home' && <HomeView model={model} />}
+            {model.activeTab === 'learn' && <LearnView model={model} />}
+            {model.activeTab === 'challenges' && <ChallengesView model={model} />}
+            {model.activeTab === 'tracker' && <TrackerView model={model} />}
+            {model.activeTab === 'profile' && <ProfileView model={model} />}
+          </>
         </ScrollView>
-        {!model.isReadOnlyExperience ? <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} /> : null}
+        <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
         <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
       </SafeAreaView>
     );

@@ -130,6 +130,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [quizScore, setQuizScore] = useState(0);
   const [earnedPoints, setEarnedPoints] = useState(0);
   const [earnedCoins, setEarnedCoins] = useState(0);
+  const [pendingStreakUnlock, setPendingStreakUnlock] = useState(false);
   const [newlyUnlockedBadges, setNewlyUnlockedBadges] = useState<EcoBadge[]>([]);
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
   const isReadOnlyExperience = useMemo(() => isReadOnlySession(session), [session]);
@@ -546,13 +547,27 @@ export function useHomeDashboard(): EcoBudMobileModel {
   useEffect(() => {
     if (dashboard) {
       if (previousStreakRef.current !== null) {
-        if (previousStreakRef.current < 3 && dashboard.streak >= 3) {
-          setActiveOverlayState('streakUnlocked');
+        const prevEcoStreak = Math.floor(previousStreakRef.current / 3);
+        const newEcoStreak = Math.floor(dashboard.streak / 3);
+        if (newEcoStreak > prevEcoStreak && newEcoStreak > 0) {
+          setPendingStreakUnlock(true);
         }
       }
       previousStreakRef.current = dashboard.streak;
     }
   }, [dashboard?.streak]);
+
+  // Trigger streak overlay when other overlays finish
+  useEffect(() => {
+    if (activeOverlay === null && pendingStreakUnlock) {
+      // Small timeout to allow previous overlay to fully unmount
+      const t = setTimeout(() => {
+        setActiveOverlayState('streakUnlocked');
+        setPendingStreakUnlock(false);
+      }, 500);
+      return () => clearTimeout(t);
+    }
+  }, [activeOverlay, pendingStreakUnlock]);
 
   useEffect(() => () => {
     if (realtimeRefreshTimer.current) {
