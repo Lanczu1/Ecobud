@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import type { SessionPayload } from './types/home';
+import { ecobudApiOrigin } from '../shared/api/ecobudApi';
 
 type GuestViewerTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
 type GuestViewerOverlay =
@@ -73,7 +74,7 @@ interface GuestViewerEvent {
   title: string;
   description: string;
   location: string;
-  date: string;
+  startDatetime: string;
   imageUrl?: string | null;
 }
 
@@ -186,7 +187,7 @@ export function GuestViewer({
         {featuredEvent ? (
           <View style={styles.eventCard}>
             {featuredEvent.imageUrl ? (
-              <Image source={{ uri: featuredEvent.imageUrl }} style={styles.eventImage} />
+              <Image source={{ uri: featuredEvent.imageUrl.startsWith('http') ? featuredEvent.imageUrl : `${ecobudApiOrigin}${featuredEvent.imageUrl}` }} style={styles.eventImage} />
             ) : (
               <LinearGradient
                 colors={['#126027', '#1F7A3A']}
@@ -201,7 +202,7 @@ export function GuestViewer({
               <Text style={styles.metaText}>{featuredEvent.description}</Text>
               <View style={styles.rowMeta}>
                 <Ionicons name="calendar" size={14} color="#6B7A75" />
-                <Text style={styles.metaText}> {formatLongDate(featuredEvent.date)}</Text>
+                <Text style={styles.metaText}> {formatLongDate(featuredEvent.startDatetime)}</Text>
               </View>
               <View style={[styles.rowMeta, styles.eventLocation]}>
                 <Ionicons name="location" size={14} color="#6B7A75" />

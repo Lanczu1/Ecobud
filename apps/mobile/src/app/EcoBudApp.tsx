@@ -30,6 +30,7 @@ import {
   ChatbotFAB,
   BottomTabBar,
   ActionOverlayWrapper,
+  MarketplaceView,
 } from './components';
 import { HomeView, LearnView } from './components/HomeLearnViews';
 import { styles } from './styles/appStyles';
@@ -102,6 +103,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
             {model.activeTab === 'challenges' && <ChallengesView model={model} />}
             {model.activeTab === 'tracker' && <TrackerView model={model} />}
             {model.activeTab === 'profile' && <ProfileView model={model} />}
+            {model.activeTab === 'marketplace' && <MarketplaceView model={model} />}
           </>
         </ScrollView>
         <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />

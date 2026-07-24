@@ -579,7 +579,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   useEffect(() => {
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') {
-        homeService.getEvents()
+        const token = session && !isReadOnlySession(session) ? session.token : undefined;
+        homeService.getEvents(token)
           .then((newEvents) => {
             setEvents(newEvents);
           })
@@ -590,7 +591,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }, 5000); // Poll every 5 seconds for real-time feel
 
     return () => clearInterval(interval);
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     if (!session || isReadOnlySession(session) || !presence.hasUsableInternet) {
@@ -1289,6 +1290,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         challenges: 'Opening Challenges',
         tracker: 'Opening Tracker',
         profile: 'Opening Profile',
+        marketplace: 'Opening Marketplace',
       };
 
       flashActionLoader(`${labels[tab]}...`, () => {

@@ -114,6 +114,16 @@ export function formatEventDateTag(isoDate: string) {
   }).toUpperCase();
 }
 
+export function getEventLifecycleStatus(startDatetime: string, endDatetime: string) {
+  const now = new Date();
+  const start = new Date(startDatetime);
+  const end = new Date(endDatetime);
+  
+  if (now < start) return 'upcoming';
+  if (now > end) return 'ended';
+  return 'ongoing';
+}
+
 export function formatMonthLabel(month: string) {
   const [year, monthIndex] = month.split('-').map(Number);
   return new Date(year, monthIndex - 1, 1).toLocaleDateString([], {

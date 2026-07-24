@@ -311,7 +311,7 @@ export class GamificationService {
       return this.awardAction(tx, {
         userId: registration.userId,
         actionType: `Event attended: ${event.title}`,
-        pointsAwarded: event.pointsReward,
+        pointsAwarded: event.expReward,
         metadata: {
           eventId: event.id,
           location: event.location,

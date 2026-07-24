@@ -32,7 +32,7 @@ export type {
 
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
-export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile';
+export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
 export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
@@ -71,6 +71,7 @@ export interface HeaderProps {
   title?: string;
   onBack?: () => void;
   onEventsPress?: () => void;
+  onTrackerPress?: () => void;
 }
 
 export interface SummaryCardsProps {
@@ -90,9 +91,10 @@ export interface ActiveChallengeCardProps {
 
 export interface UpcomingEventCardProps {
   event: EcoEvent;
-  isReadOnly: boolean;
-  onJoin: () => void;
-  onSignIn: () => void;
+  isReadOnly?: boolean;
+  onJoin?: () => void;
+  onSignIn?: () => void;
+  onRecordAttendance?: () => void;
 }
 
 export interface QuickActionsProps {

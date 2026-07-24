@@ -624,7 +624,7 @@ export class AdminService {
   // Event Management
   static async getAllEvents() {
     return await prisma.event.findMany({
-      orderBy: { date: 'asc' },
+      orderBy: { startDatetime: 'asc' },
       include: {
         registrations: {
           select: { id: true }
@@ -640,7 +640,8 @@ export class AdminService {
     title: string;
     description: string;
     location: string;
-    date: string;
+    startDatetime: string;
+    endDatetime: string;
     capacity: number;
     pointsReward: number;
     imageUrl?: string;
@@ -653,13 +654,15 @@ export class AdminService {
         title: data.title,
         description: data.description,
         location: data.location,
-        date: new Date(data.date),
+        startDatetime: new Date(data.startDatetime),
+        endDatetime: new Date(data.endDatetime),
         capacity: data.capacity,
-        pointsReward: data.pointsReward,
+        ecoCoinsReward: 0,
+        expReward: data.pointsReward,
+        managedById: data.managedById,
         imageUrl: data.imageUrl,
         latitude: data.latitude,
         longitude: data.longitude,
-        managedById: data.managedById,
       },
       include: {
         registrations: { select: { id: true } },
@@ -672,7 +675,8 @@ export class AdminService {
     title: string;
     description: string;
     location: string;
-    date: string;
+    startDatetime: string;
+    endDatetime: string;
     capacity: number;
     pointsReward: number;
     imageUrl: string;
@@ -680,7 +684,16 @@ export class AdminService {
     longitude: number;
   }>) {
     const updateData: any = { ...data };
-    if (data.date) updateData.date = new Date(data.date);
+    if (data.startDatetime) {
+      updateData.startDatetime = new Date(data.startDatetime);
+    }
+    if (data.endDatetime) {
+      updateData.endDatetime = new Date(data.endDatetime);
+    }
+    if (data.pointsReward !== undefined) {
+      updateData.expReward = data.pointsReward;
+      delete updateData.pointsReward;
+    }
     return await prisma.event.update({
       where: { id },
       data: updateData,

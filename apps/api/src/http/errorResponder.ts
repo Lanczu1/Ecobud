@@ -28,6 +28,10 @@ export const errorResponder = (
     return res.status(error.statusCode).json({ message: error.message });
   }
 
+  if ('type' in error && (error as any).type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'Invalid JSON payload.' });
+  }
+
   console.error(error);
   return res.status(500).json({ message: 'Unexpected server error.' });
 };

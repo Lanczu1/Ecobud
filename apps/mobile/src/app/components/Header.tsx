@@ -46,6 +46,7 @@ export function Header({
   title,
   onBack,
   onEventsPress,
+  onTrackerPress,
 }: HeaderProps) {
   const getAvatarSource = () => {
     if (!userAvatarUrl || userAvatarUrl === 'null') return null;
@@ -101,6 +102,11 @@ export function Header({
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {onTrackerPress && (
+          <TouchableOpacity onPress={onTrackerPress}>
+            <Ionicons name="bar-chart-outline" size={24} color="#126027" />
+          </TouchableOpacity>
+        )}
         {onEventsPress && (
           <TouchableOpacity onPress={onEventsPress}>
             <Ionicons name="calendar-outline" size={24} color="#126027" />
