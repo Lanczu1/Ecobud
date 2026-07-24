@@ -13,7 +13,8 @@ const eventSchema = z.object({
   title: z.string().min(3),
   description: z.string().min(10),
   location: z.string().min(3),
-  date: z.string(),
+  startDatetime: z.string(),
+  endDatetime: z.string(),
   capacity: z.number().int().min(1).max(5000),
   pointsReward: z.number().int().min(1).max(300),
   imageUrl: z.string().url().optional().or(z.literal('')),
@@ -120,7 +121,7 @@ moderationRoutes.get(
           },
         },
       },
-      orderBy: { date: 'asc' },
+      orderBy: { startDatetime: 'asc' },
     });
 
     return res.json({ items });
@@ -133,8 +134,17 @@ moderationRoutes.post(
     const payload = eventSchema.parse(req.body);
     const item = await prisma.event.create({
       data: {
-        ...payload,
-        date: new Date(payload.date),
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startDatetime: new Date(payload.startDatetime),
+        endDatetime: new Date(payload.endDatetime),
+        capacity: payload.capacity,
+        expReward: payload.pointsReward,
+        ecoCoinsReward: 0,
+        imageUrl: payload.imageUrl,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
         managedById: req.auth!.userId,
       },
     });
@@ -150,8 +160,16 @@ moderationRoutes.put(
     const item = await prisma.event.update({
       where: { id: req.params.eventId },
       data: {
-        ...payload,
-        date: new Date(payload.date),
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startDatetime: new Date(payload.startDatetime),
+        endDatetime: new Date(payload.endDatetime),
+        capacity: payload.capacity,
+        expReward: payload.pointsReward,
+        imageUrl: payload.imageUrl,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
       },
     });
 
