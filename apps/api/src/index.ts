@@ -39,6 +39,14 @@ app.use(express.json());
 // Serve uploads directory statically
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
+// Prevent aggressive caching on mobile devices
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 app.get('/api/health', (_req, res) => {
   return res.json({
     status: 'ok',

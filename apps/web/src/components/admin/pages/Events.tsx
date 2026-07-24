@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete } from '../../../utils/adminApi';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 interface AdminEvent {
   id: string;
@@ -44,21 +47,68 @@ interface FormData {
   date: string;
   capacity: number;
   pointsReward: number;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+function formatDateForInput(dateStr?: string | Date): string {
+  const date = dateStr ? new Date(dateStr) : new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date);
+  
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
 const emptyForm: FormData = {
   title: '',
   description: '',
   location: '',
-  date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+  date: '', // Set in component
   capacity: 50,
   pointsReward: 100,
+  latitude: null,
+  longitude: null,
 };
 
 interface ModalProps {
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
   initial?: AdminEvent | null;
+}
+
+function LocationPickerMarker({ position, onChange }: { position: [number, number] | null, onChange: (lat: number, lng: number) => void }) {
+  const map = useMap();
+
+  const prevPos = useRef<[number, number] | null>(null);
+
+  useEffect(() => {
+    if (position && (!prevPos.current || prevPos.current[0] !== position[0] || prevPos.current[1] !== position[1])) {
+      map.flyTo(position, 16);
+      prevPos.current = position;
+    }
+  }, [position, map]);
+
+  const icon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+  });
+
+  useMapEvents({
+    click(e) {
+      onChange(e.latlng.lat, e.latlng.lng);
+    },
+  });
+
+  return position === null ? null : (
+    <Marker position={position} icon={icon} />
+  );
 }
 
 function EventModal({ onClose, onSave, initial }: ModalProps) {
@@ -68,11 +118,13 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
         title: initial.title,
         description: initial.description,
         location: initial.location,
-        date: new Date(initial.date).toISOString().slice(0, 16),
+        date: formatDateForInput(initial.date),
         capacity: initial.capacity,
         pointsReward: initial.pointsReward,
+        latitude: initial.latitude,
+        longitude: initial.longitude,
       }
-      : emptyForm
+      : { ...emptyForm, date: formatDateForInput() }
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -113,7 +165,14 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
       return;
     }
     setSaving(true); setErr('');
-    try { await onSave(form); handleClose(); }
+    try { 
+      const payload = { ...form };
+      if (!payload.date.includes('+') && !payload.date.endsWith('Z')) {
+        payload.date = `${payload.date}:00+08:00`; // append seconds and PH offset
+      }
+      await onSave(payload); 
+      handleClose(); 
+    }
     catch (e: any) { setErr(e.message || 'Failed to save.'); }
     finally { setSaving(false); }
   };
@@ -138,6 +197,62 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
             <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" placeholder="e.g. Bondi Beach, Sydney" />
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700">Map Pin (Optional)</label>
+              <button 
+                type="button"
+                onClick={() => {
+                  if (navigator.geolocation) {
+                    const handleSuccess = (pos: GeolocationPosition) => {
+                      setForm(f => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+                    };
+                    const handleFallback = (err: GeolocationPositionError) => {
+                      if (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE) {
+                        // Fallback to low accuracy
+                        navigator.geolocation.getCurrentPosition(
+                          handleSuccess,
+                          (err2) => alert('Unable to fetch location: ' + err2.message),
+                          { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+                        );
+                      } else {
+                        alert('Unable to fetch location: ' + err.message);
+                      }
+                    };
+                    navigator.geolocation.getCurrentPosition(
+                      handleSuccess,
+                      handleFallback,
+                      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                    );
+                  } else {
+                    alert('Geolocation is not supported by this browser.');
+                  }
+                }}
+                className="text-xs text-green-600 hover:text-green-700 font-semibold flex items-center gap-1"
+              >
+                <MapPin className="w-3 h-3" /> Use My Location
+              </button>
+            </div>
+            <div className="h-48 rounded-xl overflow-hidden border border-gray-200 relative z-0">
+              <MapContainer 
+                center={form.latitude && form.longitude ? [form.latitude, form.longitude] : [14.5995, 120.9842]}
+                zoom={11} 
+                scrollWheelZoom={false}
+                className="w-full h-full"
+                style={{ height: '100%', width: '100%', zIndex: 0 }}
+              >
+                <TileLayer
+                  attribution='&copy; OpenStreetMap contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <LocationPickerMarker 
+                  position={form.latitude && form.longitude ? [form.latitude, form.longitude] : null}
+                  onChange={(lat, lng) => setForm(f => ({ ...f, latitude: lat, longitude: lng }))}
+                />
+              </MapContainer>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Tap on the map to pin the exact coordinates for the mobile app.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date &amp; Time *</label>
@@ -313,8 +428,8 @@ export function Events() {
                     <MapPin className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />{event.location}
                   </div>
                   <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleDateString()}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
                 </div>

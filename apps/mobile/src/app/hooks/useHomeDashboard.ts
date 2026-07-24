@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, DeviceEventEmitter } from 'react-native';
+import { Alert, DeviceEventEmitter, AppState } from 'react-native';
 import { homeService } from '../services/homeService';
 import {
   type AppTab,
@@ -573,6 +573,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
     if (realtimeRefreshTimer.current) {
       clearTimeout(realtimeRefreshTimer.current);
     }
+  }, []);
+
+  // Auto-sync polling specifically for Events
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        homeService.getEvents()
+          .then((newEvents) => {
+            setEvents(newEvents);
+          })
+          .catch(() => {
+            // Silently ignore polling errors
+          });
+      }
+    }, 5000); // Poll every 5 seconds for real-time feel
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {

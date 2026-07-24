@@ -363,10 +363,13 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    const cacheBuster = path.includes('?') ? `&_cb=${Date.now()}` : `?_cb=${Date.now()}`;
+    const url = `${API_BASE}${path}${cacheBuster}`;
+    response = await fetch(url, {
       method: options.method ?? 'GET',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
+      cache: 'no-store',
     });
   } catch {
     throw new Error(

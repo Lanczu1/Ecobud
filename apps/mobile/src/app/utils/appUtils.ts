@@ -97,7 +97,8 @@ export function formatChatTime(isoDate: string) {
 
 export function formatLongDate(isoDate: string) {
   const date = new Date(isoDate);
-  return date.toLocaleDateString([], {
+  return date.toLocaleDateString(PH_LOCALE, {
+    timeZone: PH_TIMEZONE,
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -106,7 +107,11 @@ export function formatLongDate(isoDate: string) {
 
 export function formatEventDateTag(isoDate: string) {
   const date = new Date(isoDate);
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' }).toUpperCase();
+  return date.toLocaleDateString(PH_LOCALE, {
+    timeZone: PH_TIMEZONE,
+    month: 'short',
+    day: 'numeric'
+  }).toUpperCase();
 }
 
 export function formatMonthLabel(month: string) {

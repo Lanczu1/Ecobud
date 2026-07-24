@@ -90,6 +90,8 @@ interface GuestViewerProps {
   onOpenEvents: () => void;
   onOpenTransparency: () => void;
   onExitReadOnlyExperience: () => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 export function GuestViewer({
@@ -100,6 +102,8 @@ export function GuestViewer({
   onOpenEvents,
   onOpenTransparency,
   onExitReadOnlyExperience,
+  refreshing = false,
+  onRefresh,
 }: GuestViewerProps) {
   if (activeTab === 'profile') {
     return (
