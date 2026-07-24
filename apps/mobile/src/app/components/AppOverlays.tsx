@@ -18,6 +18,7 @@ import {
   Dimensions,
   DeviceEventEmitter,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
@@ -889,7 +890,16 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <View style={styles.fullscreenOverlay}>
       <TopNavbar model={model} showBack={true} />
-      <ScrollView contentContainerStyle={styles.homeContent}>
+      <ScrollView
+        contentContainerStyle={styles.homeContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={model.refreshing}
+            onRefresh={() => void model.refreshEverything()}
+            tintColor='#126027'
+          />
+        }
+      >
         <Text style={styles.welcomeLabel}>DIRECTORY</Text>
         <View style={styles.rowBetween}>
           <Text style={styles.pageTitle}>Eco Events</Text>

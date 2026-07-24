@@ -258,7 +258,6 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
       formData.append('quizPassingScore', enableQuiz ? String(form.quizPassingScore) : '0');
       formData.append('pointsReward', String(form.pointsReward));
 
-      const hasVideoSubmit = enableVideo && !!(videoFile || uploadedVideoUrl || (initial?.videoUrl && !removeVideo));
       formData.append('durationMinutes', String(form.durationMinutes || 0));
 
       formData.append('quizQuestions', JSON.stringify(enableQuiz ? form.quizQuestions : []));
