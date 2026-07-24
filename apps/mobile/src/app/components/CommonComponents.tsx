@@ -106,7 +106,7 @@ export function ActionOverlayWrapper({ visible, label }: { visible: boolean; lab
   );
 }
 
-export function TopNavbar({ model, title, showBack }: { model: EcoBudMobileModel; title?: string; showBack?: boolean }) {
+export function TopNavbar({ model, title, showBack, onBack }: { model: EcoBudMobileModel; title?: string; showBack?: boolean; onBack?: () => void }) {
   return (
     <Header
       userDisplayName={model.userDisplayName}
@@ -115,8 +115,12 @@ export function TopNavbar({ model, title, showBack }: { model: EcoBudMobileModel
       hasUsableInternet={model.hasUsableInternet}
       showBack={showBack}
       title={title}
-      onBack={() => model.setActiveOverlay(null)}
+      onBack={onBack || (() => model.setActiveOverlay(null))}
       onEventsPress={() => model.setActiveOverlay('events')}
+      onTrackerPress={() => {
+        model.setActiveOverlay(null);
+        model.setActiveTab('tracker');
+      }}
     />
   );
 }
@@ -516,7 +520,7 @@ export function BottomTabBar({
     { key: 'home', label: 'Home', icon: 'home-outline' },
     { key: 'learn', label: 'Learn', icon: 'book-outline' },
     { key: 'challenges', label: 'Challenges', icon: 'trophy-outline' },
-    { key: 'tracker', label: 'Tracker', icon: 'bar-chart-outline' },
+    { key: 'marketplace', label: 'Give & Get Hub', icon: 'cart-outline' },
     { key: 'profile', label: 'Profile', icon: 'person-outline' },
   ];
 
@@ -538,7 +542,8 @@ export function BottomTabBar({
     setBarWidth(width);
   };
 
-  const tabWidth = barWidth / 5;
+  const tabCount = items.length;
+  const tabWidth = barWidth / tabCount;
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1, 2, 3, 4],
     outputRange: [0, tabWidth, 2 * tabWidth, 3 * tabWidth, 4 * tabWidth],

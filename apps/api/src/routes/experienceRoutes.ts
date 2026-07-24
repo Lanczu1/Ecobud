@@ -57,13 +57,13 @@ experienceRoutes.get(
           where: {
             userId,
             event: {
-              date: {
+              startDatetime: {
                 gte: new Date(),
               },
             },
           },
           include: { event: true },
-          orderBy: { event: { date: 'asc' } },
+          orderBy: { event: { startDatetime: 'asc' } },
         }),
         prisma.habit.findMany({
           where: { active: true },

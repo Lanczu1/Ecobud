@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete } from '../../../utils/adminApi';
+import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -10,9 +10,10 @@ interface AdminEvent {
   title: string;
   description: string;
   location: string;
-  date: string;
+  startDatetime: string;
+  endDatetime: string;
   capacity: number;
-  pointsReward: number;
+  expReward: number;
   imageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -30,7 +31,7 @@ const statusColors: Record<string, string> = {
 
 function getEventStatus(event: AdminEvent) {
   const now = new Date();
-  const eventDate = new Date(event.date);
+  const eventDate = new Date(event.startDatetime);
   if (eventDate < now) return 'Past';
   if (event.registrations.length >= event.capacity) return 'Full';
   return 'Upcoming';
@@ -44,34 +45,38 @@ interface FormData {
   title: string;
   description: string;
   location: string;
-  date: string;
+  startDatetime: string;
+  endDatetime: string;
   capacity: number;
   pointsReward: number;
   latitude: number | null;
   longitude: number | null;
+  imageFile?: File | null;
+  imageUrl?: string | null;
 }
 
 function formatDateForInput(dateStr?: string | Date): string {
   const date = dateStr ? new Date(dateStr) : new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-  }).formatToParts(date);
-  
-  const get = (type: string) => parts.find((p) => p.type === type)?.value;
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+  try {
+    return date.toLocaleString('sv-SE', { timeZone: 'Asia/Manila' }).replace(' ', 'T').slice(0, 16);
+  } catch (err) {
+    const iso = date.toISOString();
+    return iso.substring(0, 16);
+  }
 }
 
 const emptyForm: FormData = {
   title: '',
   description: '',
   location: '',
-  date: '', // Set in component
+  startDatetime: '',
+  endDatetime: '',
   capacity: 50,
   pointsReward: 100,
   latitude: null,
   longitude: null,
+  imageFile: null,
+  imageUrl: null,
 };
 
 interface ModalProps {
@@ -118,14 +123,24 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
         title: initial.title,
         description: initial.description,
         location: initial.location,
-        date: formatDateForInput(initial.date),
+        startDatetime: formatDateForInput(initial.startDatetime),
+        endDatetime: formatDateForInput(initial.endDatetime),
         capacity: initial.capacity,
-        pointsReward: initial.pointsReward,
+        pointsReward: initial.expReward,
         latitude: initial.latitude,
         longitude: initial.longitude,
       }
-      : { ...emptyForm, date: formatDateForInput() }
+        : { 
+            ...emptyForm, 
+            startDatetime: formatDateForInput(), 
+            endDatetime: (() => {
+              const d = new Date();
+              d.setHours(d.getHours() + 1);
+              return formatDateForInput(d);
+            })() 
+          }
   );
+  const [imagePreview, setImagePreview] = useState<string | null>(initial?.imageUrl ? `${API_HOST}${initial.imageUrl}` : null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
@@ -160,15 +175,22 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title || !form.description || !form.location || !form.date) {
+    if (!form.title || !form.description || !form.location || !form.startDatetime || !form.endDatetime) {
       setErr('All fields are required.');
+      return;
+    }
+    if (new Date(form.endDatetime) <= new Date(form.startDatetime)) {
+      setErr('End date & time must be after start date & time.');
       return;
     }
     setSaving(true); setErr('');
     try { 
       const payload = { ...form };
-      if (!payload.date.includes('+') && !payload.date.endsWith('Z')) {
-        payload.date = `${payload.date}:00+08:00`; // append seconds and PH offset
+      if (!payload.startDatetime.includes('+') && !payload.startDatetime.endsWith('Z')) {
+        payload.startDatetime = `${payload.startDatetime}:00+08:00`;
+      }
+      if (!payload.endDatetime.includes('+') && !payload.endDatetime.endsWith('Z')) {
+        payload.endDatetime = `${payload.endDatetime}:00+08:00`;
       }
       await onSave(payload); 
       handleClose(); 
@@ -199,14 +221,76 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" placeholder="e.g. Bondi Beach, Sydney" />
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Event Image</label>
+            <div className="flex items-center gap-4">
+              {imagePreview && (
+                <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="flex-1 relative">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setForm(f => ({ ...f, imageFile: file }));
+                      setImagePreview(URL.createObjectURL(file));
+                    }
+                  }} 
+                  className="hidden" 
+                  id="event-image-upload" 
+                />
+                <label 
+                  htmlFor="event-image-upload" 
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm border-2 border-dashed border-gray-300 rounded-xl hover:border-green-400 hover:bg-green-50 cursor-pointer transition-colors text-gray-500"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span>Choose an image...</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div>
             <div className="flex justify-between items-center mb-1">
               <label className="block text-sm font-medium text-gray-700">Map Pin (Optional)</label>
               <button 
                 type="button"
                 onClick={() => {
                   if (navigator.geolocation) {
-                    const handleSuccess = (pos: GeolocationPosition) => {
-                      setForm(f => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+                    const handleSuccess = async (pos: GeolocationPosition) => {
+                      const lat = pos.coords.latitude;
+                      const lng = pos.coords.longitude;
+                      setForm(f => ({ ...f, latitude: lat, longitude: lng }));
+                      try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+                        const data = await res.json();
+                        if (data) {
+                          const { address, name } = data;
+                          let loc = '';
+                          if (address) {
+                            const parts = [];
+                            if (name) parts.push(name);
+                            else if (address.amenity) parts.push(address.amenity);
+                            else if (address.building) parts.push(address.building);
+                            else if (address.road) parts.push(address.road);
+                            
+                            if (address.neighbourhood) parts.push(address.neighbourhood);
+                            else if (address.suburb) parts.push(address.suburb);
+                            else if (address.village) parts.push(address.village);
+                            
+                            if (address.city || address.town || address.municipality) {
+                              parts.push(address.city || address.town || address.municipality);
+                            }
+                            
+                            loc = Array.from(new Set(parts)).filter(Boolean).join(', ');
+                          }
+                          setForm(f => ({ ...f, location: loc || data.display_name }));
+                        }
+                      } catch (e) {
+                        console.error('Reverse geocoding failed', e);
+                      }
                     };
                     const handleFallback = (err: GeolocationPositionError) => {
                       if (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE) {
@@ -248,15 +332,81 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                 />
                 <LocationPickerMarker 
                   position={form.latitude && form.longitude ? [form.latitude, form.longitude] : null}
-                  onChange={(lat, lng) => setForm(f => ({ ...f, latitude: lat, longitude: lng }))}
+                  onChange={async (lat, lng) => {
+                    setForm(f => ({ ...f, latitude: lat, longitude: lng }));
+                    try {
+                      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+                      const data = await res.json();
+                      if (data) {
+                        const { address, name } = data;
+                        let loc = '';
+                        if (address) {
+                          const parts = [];
+                          if (name) parts.push(name);
+                          else if (address.amenity) parts.push(address.amenity);
+                          else if (address.building) parts.push(address.building);
+                          else if (address.road) parts.push(address.road);
+                          
+                          if (address.neighbourhood) parts.push(address.neighbourhood);
+                          else if (address.suburb) parts.push(address.suburb);
+                          else if (address.village) parts.push(address.village);
+                          
+                          if (address.city || address.town || address.municipality) {
+                            parts.push(address.city || address.town || address.municipality);
+                          }
+                          
+                          loc = Array.from(new Set(parts)).filter(Boolean).join(', ');
+                        }
+                        setForm(f => ({ ...f, location: loc || data.display_name }));
+                      }
+                    } catch (e) {
+                      console.error('Reverse geocoding failed', e);
+                    }
+                  }}
                 />
               </MapContainer>
             </div>
             <p className="text-xs text-gray-500 mt-1">Tap on the map to pin the exact coordinates for the mobile app.</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date &amp; Time *</label>
-            <input type="datetime-local" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date &amp; Time *</label>
+              <input type="datetime-local" value={form.startDatetime} onChange={e => setForm(f => ({ ...f, startDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date &amp; Time *</label>
+              <input type="datetime-local" value={form.endDatetime} onChange={e => setForm(f => ({ ...f, endDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+            </div>
+          </div>
+
+          <div className="bg-[#0a0a0a] rounded-xl overflow-hidden text-white border border-gray-800 my-4">
+            <div className="p-4 border-b border-gray-800">
+              <h3 className="font-semibold text-sm">Automatic status</h3>
+            </div>
+            <div className="p-4 overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-gray-800 text-gray-400">
+                    <th className="pb-3 font-medium">Current Time</th>
+                    <th className="pb-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  <tr>
+                    <td className="py-3">Before {form.startDatetime ? new Date(form.startDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[Start Time]'}</td>
+                    <td className="py-3">Upcoming</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3">{form.startDatetime ? new Date(form.startDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[Start Time]'} – {form.endDatetime ? new Date(form.endDatetime).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' }) : '[End Time]'}</td>
+                    <td className="py-3">Ongoing</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3">After {form.endDatetime ? new Date(form.endDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[End Time]'}</td>
+                    <td className="py-3">Ended</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -311,13 +461,39 @@ export function Events() {
   }, [events, search, filterStatus]);
 
   const handleAdd = async (form: FormData) => {
-    const item = await adminPost<AdminEvent>('/admin/events', form);
+    let item: AdminEvent;
+    if (form.imageFile) {
+      const data = new window.FormData();
+      Object.entries(form).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && key !== 'imageFile' && key !== 'imageUrl') {
+          data.append(key, String(value));
+        }
+      });
+      data.append('image', form.imageFile);
+      item = await adminPostForm<AdminEvent>('/admin/events', data);
+    } else {
+      const { imageFile, imageUrl, ...rest } = form;
+      item = await adminPost<AdminEvent>('/admin/events', rest);
+    }
     setEvents(prev => [item, ...prev]);
   };
 
   const handleEdit = async (form: FormData) => {
     if (!editing) return;
-    const updated = await adminPut<AdminEvent>(`/admin/events/${editing.id}`, form);
+    let updated: AdminEvent;
+    if (form.imageFile) {
+      const data = new window.FormData();
+      Object.entries(form).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && key !== 'imageFile' && key !== 'imageUrl') {
+          data.append(key, String(value));
+        }
+      });
+      data.append('image', form.imageFile);
+      updated = await adminPutForm<AdminEvent>(`/admin/events/${editing.id}`, data);
+    } else {
+      const { imageFile, imageUrl, ...rest } = form;
+      updated = await adminPut<AdminEvent>(`/admin/events/${editing.id}`, rest);
+    }
     setEvents(prev => prev.map(e => e.id === updated.id ? updated : e));
   };
 
@@ -428,8 +604,8 @@ export function Events() {
                     <MapPin className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />{event.location}
                   </div>
                   <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.date).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.startDatetime).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.startDatetime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
                 </div>

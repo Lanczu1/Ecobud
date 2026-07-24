@@ -53,8 +53,8 @@ export const homeService = {
   getLeaderboard: (token: string) =>
     ecobudApi.fetchLeaderboard(token),
 
-  getEvents: () =>
-    ecobudApi.fetchEvents().then(res => res.items),
+  getEvents: (token?: string) =>
+    ecobudApi.fetchEvents(token).then(res => res.items),
 
   getTransparency: (token: string) =>
     ecobudApi.fetchTransparency(token),
@@ -129,7 +129,7 @@ export const homeService = {
       this.getProfile(token),
       this.getRewards(token),
       this.getLeaderboard(token),
-      this.getEvents(),
+      this.getEvents(token),
       this.getTransparency(token),
     ]);
 

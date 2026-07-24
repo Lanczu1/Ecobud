@@ -33,12 +33,14 @@ import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
+import { EventAttendanceOverlay } from './EventAttendanceOverlay';
 import {
   formatLongDate,
   formatEventDateTag,
   getEcoLevel,
   getVisibleStreak,
   shortHash,
+  getEventLifecycleStatus,
 } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import {
@@ -53,6 +55,7 @@ import {
   BadgeCard,
   SecondaryButton,
 } from './CommonComponents';
+import { UpcomingEventCard } from './UpcomingEventCard';
 import { FireStreak } from './FireStreak';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
@@ -871,6 +874,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
+  const [attendanceEvent, setAttendanceEvent] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (viewMode === 'map') {
@@ -928,44 +932,13 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         ) : (
           <>
             {featuredEvent ? (
-              <ImageBackground
-                source={{ uri: featuredEvent.imageUrl ?? 'https://images.unsplash.com/photo-1618477461853-cf6ed80fabe5?q=80&w=800&auto=format&fit=crop' }}
-                style={styles.eventFeaturedCard}
-                imageStyle={{ borderRadius: 24 }}
-              >
-                <View style={styles.eventFeaturedOverlay} />
-                <View style={styles.featuredProgramContent}>
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 'auto' }}>
-                    <View style={styles.tagLight}><Text style={styles.tagLightText}>FEATURED</Text></View>
-                    <View style={styles.tagDark}><Text style={styles.tagDarkText}>PUBLIC EVENT</Text></View>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', gap: 16, marginBottom: 8, marginTop: 40 }}>
-                    <View style={styles.rowMeta}><Ionicons name="calendar" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> {formatLongDate(featuredEvent.date)}</Text></View>
-                    <View style={styles.rowMeta}><Ionicons name="location" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> {featuredEvent.location}</Text></View>
-                  </View>
-                  <Text style={styles.featuredProgramTitle}>{featuredEvent.title}</Text>
-                  <Text style={styles.featuredProgramDesc}>{featuredEvent.description}</Text>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={styles.metaTextWhite}>
-                      {featuredEvent.spotsLeft != null ? `${featuredEvent.spotsLeft} spots left` : `${featuredEvent.pointsReward} ECO points reward`}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.eventJoinBtnInfo}
-                      onPress={() => (
-                        model.isReadOnlyExperience
-                          ? void model.leaveReadOnlyAccess()
-                          : void model.handleJoinEvent(featuredEvent.id)
-                      )}
-                    >
-                      <Text style={styles.eventJoinBtnInfoText}>
-                        {model.isReadOnlyExperience ? 'Sign In to Join' : 'Join Event'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </ImageBackground>
+              <UpcomingEventCard
+                      event={featuredEvent}
+                      isReadOnly={model.isReadOnlyExperience}
+                      onJoin={() => model.handleJoinEvent(featuredEvent.id)}
+                      onSignIn={() => model.leaveReadOnlyAccess()}
+                      onRecordAttendance={() => setAttendanceEvent(featuredEvent.id)}
+                    />
             ) : (
               <SurfaceCard style={styles.publicInfoCard}>
                 <Text style={styles.sectionHeadline}>No public events yet</Text>
@@ -980,7 +953,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                   style={styles.eventListImg}
                   imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
                 >
-                  <View style={styles.dateTagRight}><Text style={styles.dateTagRightText}>{formatEventDateTag(event.date)}</Text></View>
+                  <View style={styles.dateTagRight}><Text style={styles.dateTagRightText}>{formatEventDateTag(event.startDatetime)}</Text></View>
                 </ImageBackground>
                 <View style={styles.eventListBody}>
                   <Text style={styles.welcomeLabel}>PUBLIC EVENT</Text>
@@ -992,20 +965,60 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                   </View>
                   <View style={[styles.rowMeta, { marginBottom: 16 }]}>
                     <Ionicons name="leaf" size={14} color="#6B7A75" />
-                    <Text style={styles.metaTextSmallDark}> {event.pointsReward} ECO points reward</Text>
+                    <Text style={styles.metaTextSmallDark}> {event.expReward} ECO points reward</Text>
                   </View>
-                  <TouchableOpacity
-                    style={styles.quickJoinBtn}
-                    onPress={() => (
-                      model.isReadOnlyExperience
-                        ? void model.leaveReadOnlyAccess()
-                        : void model.handleJoinEvent(event.id)
-                    )}
-                  >
-                    <Text style={styles.quickJoinBtnText}>
-                      {model.isReadOnlyExperience ? 'Sign In to Join' : 'Quick Join'}
-                    </Text>
-                  </TouchableOpacity>
+                  {(() => {
+                    const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
+                    if (lc === 'ended') {
+                      return null;
+                    }
+                    if (model.isReadOnlyExperience) {
+                      return (
+                        <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.leaveReadOnlyAccess()}>
+                          <Text style={styles.quickJoinBtnText}>Sign In to Join</Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    if (event.userStatus === 'attended') {
+                      return (
+                        <View style={[styles.quickJoinBtn, { backgroundColor: '#126027' }]}>
+                          <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Attended</Text>
+                        </View>
+                      );
+                    }
+                    if (event.userStatus === 'joined') {
+                      if (lc === 'ongoing') {
+                        return (
+                          <TouchableOpacity 
+                            style={[styles.quickJoinBtn, { backgroundColor: '#126027' }]}
+                            onPress={() => setAttendanceEvent(event.id)}
+                          >
+                            <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Record Attendance</Text>
+                          </TouchableOpacity>
+                        );
+                      } else {
+                        return (
+                          <View style={[styles.quickJoinBtn, { backgroundColor: '#E0EBE4' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Joined - Starts Soon</Text>
+                          </View>
+                        );
+                      }
+                    }
+
+                    if (lc === 'ongoing') {
+                      return (
+                        <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
+                          <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Registration Closed</Text>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.handleJoinEvent(event.id)}>
+                        <Text style={styles.quickJoinBtnText}>Quick Join</Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                 </View>
               </View>
             ))}
@@ -1014,6 +1027,13 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      {attendanceEvent && (
+        <EventAttendanceOverlay 
+          eventId={attendanceEvent} 
+          model={model}
+          onClose={() => setAttendanceEvent(null)} 
+        />
+      )}
     </View>
   );
 }

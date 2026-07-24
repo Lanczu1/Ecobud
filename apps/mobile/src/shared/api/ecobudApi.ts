@@ -282,13 +282,15 @@ export interface EcoEvent {
   title: string;
   description: string;
   location: string;
-  date: string;
+  startDatetime: string;
+  endDatetime: string;
   capacity: number;
-  pointsReward: number;
+  expReward: number;
   imageUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   spotsLeft?: number;
+  userStatus?: 'joined' | 'attended' | null;
 }
 
 export interface TransparencyFeed {
@@ -585,8 +587,8 @@ export const ecobudApi = {
     request<RewardsData>('/experience/rewards', { token }),
   fetchLeaderboard: (token: string) =>
     request<LeaderboardData>('/experience/leaderboard', { token }),
-  fetchEvents: () =>
-    request<{ items: EcoEvent[] }>('/events'),
+  fetchEvents: (token?: string) =>
+    request<{ items: EcoEvent[] }>('/events', token ? { token } : undefined),
   joinEvent: (token: string, eventId: string) =>
     request(`/events/${eventId}/join`, { method: 'POST', token }),
   fetchTransparency: async (token: string) => {

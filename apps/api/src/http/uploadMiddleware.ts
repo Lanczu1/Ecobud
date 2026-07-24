@@ -93,3 +93,47 @@ export const avatarUploadMiddleware = multer({
     fileSize: 5 * 1024 * 1024, // 5MB limit for avatars
   }
 });
+
+const eventsUploadDirectory = path.join(uploadDirectory, 'Events');
+if (!fs.existsSync(eventsUploadDirectory)) {
+  fs.mkdirSync(eventsUploadDirectory, { recursive: true });
+}
+
+const eventStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, eventsUploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, 'event-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const eventUploadMiddleware = multer({
+  storage: eventStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for event images
+  }
+});
+
+const eventSubmissionsUploadDirectory = path.join(uploadDirectory, 'EventSubmissions');
+if (!fs.existsSync(eventSubmissionsUploadDirectory)) {
+  fs.mkdirSync(eventSubmissionsUploadDirectory, { recursive: true });
+}
+
+const eventSubmissionsStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, eventSubmissionsUploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const eventSubmissionUploadMiddleware = multer({
+  storage: eventSubmissionsStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for images
+  }
+});

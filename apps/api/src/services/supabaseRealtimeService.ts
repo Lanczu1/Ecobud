@@ -266,8 +266,10 @@ class SupabaseRealtimeService {
       }
 
       return response.success;
-    } catch (error) {
-      console.error(`Failed to publish Supabase realtime payload for ${channelName}.`, error);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        console.error(`Failed to publish Supabase realtime payload for ${channelName}.`, error);
+      }
       return false;
     } finally {
       await client.removeChannel(channel);

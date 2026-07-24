@@ -5,7 +5,7 @@ import {
   requireAdminAccess,
   requireModeratorAccess,
 } from "../http/authentication";
-import { uploadMiddleware, challengeUploadMiddleware } from "../http/uploadMiddleware";
+import { uploadMiddleware, challengeUploadMiddleware, eventUploadMiddleware } from "../http/uploadMiddleware";
 
 const adminRoutes = Router();
 
@@ -56,8 +56,8 @@ adminRoutes.delete("/audit", requireAdminAccess, AdminController.clearAuditLogs)
 
 // Events Management
 adminRoutes.get("/events", AdminController.getEvents);
-adminRoutes.post("/events", AdminController.createEvent);
-adminRoutes.put("/events/:id", AdminController.updateEvent);
+adminRoutes.post("/events", eventUploadMiddleware.single('image'), AdminController.createEvent);
+adminRoutes.put("/events/:id", eventUploadMiddleware.single('image'), AdminController.updateEvent);
 adminRoutes.delete("/events/:id", AdminController.deleteEvent);
 
 export { adminRoutes };

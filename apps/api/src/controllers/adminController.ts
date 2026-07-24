@@ -8,9 +8,8 @@ import path from "path";
 
 const safelyDeleteUpload = (url?: string | null) => {
   if (!url) return;
-  const filename = url.split('/').pop();
-  if (!filename) return;
-  const filePath = path.join(__dirname, '..', '..', 'uploads', filename);
+  const relativePath = url.replace(/^\/uploads\//, '');
+  const filePath = path.join(__dirname, '..', '..', 'uploads', ...relativePath.split('/'));
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
@@ -467,7 +466,17 @@ export class AdminController {
 
   static async createEvent(req: AuthenticatedRequest, res: Response) {
     try {
-      const item = await AdminService.createEvent({ ...req.body, managedById: req.auth!.userId });
+      const payload = { ...req.body };
+      if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
+      if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
+      if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
+      if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
+
+      if (req.file) {
+        payload.imageUrl = `/uploads/Events/${req.file.filename}`;
+      }
+
+      const item = await AdminService.createEvent({ ...payload, managedById: req.auth!.userId });
       return res.status(201).json(item);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to create event.", error: error.message });
@@ -476,7 +485,28 @@ export class AdminController {
 
   static async updateEvent(req: AuthenticatedRequest, res: Response) {
     try {
-      const item = await AdminService.updateEvent(req.params.id, req.body);
+      const payload = { ...req.body };
+      if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
+      if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
+      if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
+      if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
+
+      let existingEvent;
+      try {
+        existingEvent = await prisma.event.findUnique({ where: { id: req.params.id } });
+      } catch (e) {}
+
+      if (req.file) {
+        payload.imageUrl = `/uploads/Events/${req.file.filename}`;
+        if (existingEvent?.imageUrl && existingEvent.imageUrl !== payload.imageUrl) {
+          safelyDeleteUpload(existingEvent.imageUrl);
+        }
+      } else if (payload.imageUrl === '') {
+        payload.imageUrl = null;
+        if (existingEvent?.imageUrl) safelyDeleteUpload(existingEvent.imageUrl);
+      }
+
+      const item = await AdminService.updateEvent(req.params.id, payload);
       return res.status(200).json(item);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to update event.", error: error.message });
@@ -485,6 +515,9 @@ export class AdminController {
 
   static async deleteEvent(req: AuthenticatedRequest, res: Response) {
     try {
+      const existingEvent = await prisma.event.findUnique({ where: { id: req.params.id } });
+      if (existingEvent?.imageUrl) safelyDeleteUpload(existingEvent.imageUrl);
+
       await AdminService.deleteEvent(req.params.id);
       return res.status(204).send();
     } catch (error: any) {

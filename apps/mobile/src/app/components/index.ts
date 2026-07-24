@@ -13,3 +13,4 @@ export * from './CommonComponents';
 // Re-export views and overlays
 export * from './AppViews';
 export * from './AppOverlays';
+export * from './MarketplaceView';
