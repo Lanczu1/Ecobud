@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { RejectionModal } from './RejectionModal';
 import { type UpcomingEventCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { getEventLifecycleStatus } from '../utils/appUtils';
@@ -21,6 +22,8 @@ function formatLongDate(isoDate: string) {
 }
 
 export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecordAttendance }: UpcomingEventCardProps) {
+  const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string }>({ visible: false, reason: '' });
+  
   const defaultImage = 'https://images.unsplash.com/photo-1618477461853-cf6ed80fabe5?q=80&w=800&auto=format&fit=crop';
   const imageUrl = event.imageUrl 
     ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`)
@@ -32,7 +35,7 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
   if (lifecycle === 'ended') statusText = 'ENDED';
 
   const renderActionBtn = () => {
-    if (lifecycle === 'ended') {
+    if (lifecycle === 'ended' && !event.userStatus) {
       return null;
     }
     
@@ -52,11 +55,39 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
       );
     }
     
+    if (event.userStatus === 'rejected') {
+      if (lifecycle === 'ongoing') {
+        return (
+          <TouchableOpacity style={[styles.eventJoinBtnInfo, { backgroundColor: '#DC2626' }]} onPress={() => {
+            setRejectionModal({ visible: true, reason: event.rejectionReason || 'No reason provided.' });
+          }}>
+            <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Rejected - Resubmit</Text>
+          </TouchableOpacity>
+        );
+      } else {
+        return (
+          <TouchableOpacity style={[styles.eventJoinBtnInfo, { backgroundColor: '#DC2626' }]} onPress={() => {
+            setRejectionModal({ visible: true, reason: event.rejectionReason || 'No reason provided.' });
+          }}>
+            <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Rejected</Text>
+          </TouchableOpacity>
+        );
+      }
+    }
+    
+    if (event.userStatus === 'pending_approval') {
+      return (
+        <View style={[styles.eventJoinBtnInfo, { backgroundColor: '#FFD700' }]}>
+          <Text style={[styles.eventJoinBtnInfoText, { color: '#000' }]}>Waiting for Approval</Text>
+        </View>
+      );
+    }
+    
     if (event.userStatus === 'joined') {
       if (lifecycle === 'ongoing') {
         return (
           <TouchableOpacity style={[styles.eventJoinBtnInfo, { backgroundColor: '#126027' }]} onPress={onRecordAttendance}>
-            <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Record Attendance</Text>
+            <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Submit Picture & Scan QR</Text>
           </TouchableOpacity>
         );
       } else {
@@ -109,6 +140,16 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
           </Text>
           {renderActionBtn()}
         </View>
+
+        <RejectionModal
+          visible={rejectionModal.visible}
+          title="Attendance Rejected"
+          reason={rejectionModal.reason}
+          onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
+          onResubmit={lifecycle === 'ongoing' ? () => {
+            if (onRecordAttendance) onRecordAttendance();
+          } : undefined}
+        />
       </View>
     </ImageBackground>
   );

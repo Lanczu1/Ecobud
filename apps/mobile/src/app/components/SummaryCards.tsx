@@ -9,7 +9,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
 
   // Visual placeholder for streak progress if real data is not provided
   const visibleStreak = getVisibleStreak(currentStreak);
-  const cycleDay = currentStreak > 0 ? (currentStreak - 1) % 7 + 1 : 0;
+  const cycleDay = visibleStreak > 0 ? (visibleStreak - 1) % 7 + 1 : 0;
   const maxVisualStreak = cycleDay;
   const todayIndex = cycleDay === 0 ? 0 : cycleDay - 1;
 

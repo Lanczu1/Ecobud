@@ -28,17 +28,40 @@ eventRoutes.get(
     const events = await prisma.event.findMany({
       include: {
         registrations: true,
+        ...(userId ? { submissions: { where: { userId }, orderBy: { submittedAt: 'desc' }, take: 1 } } : {})
       },
       orderBy: { startDatetime: 'asc' },
     });
 
+    const now = new Date();
+    const filteredEvents = events.filter((event) => {
+      const isEnded = now > new Date(event.endDatetime);
+      if (isEnded) {
+        if (!userId) return false;
+        const userReg = event.registrations.find(r => r.userId === userId);
+        if (!userReg) return false;
+      }
+      return true;
+    });
+
     return res.json({
-      items: events.map((event) => {
+      items: filteredEvents.map((event) => {
         let userStatus = null;
+        let rejectionReason = undefined;
         if (userId) {
           const userReg = event.registrations.find(r => r.userId === userId);
+          const submission = (event as any).submissions?.[0];
+          
           if (userReg) {
-            userStatus = userReg.status === 'ATTENDED' ? 'attended' : 'joined';
+            userStatus =
+              userReg.status === 'ATTENDED'
+                ? 'attended'
+                : userReg.status === 'PENDING_APPROVAL'
+                ? 'pending_approval'
+                : (submission?.status === 'rejected' ? 'rejected' : 'joined');
+          }
+          if (submission?.status === 'rejected') {
+            rejectionReason = submission.rejectionReason || undefined;
           }
         }
         
@@ -46,6 +69,8 @@ eventRoutes.get(
           ...event,
           spotsLeft: Math.max(0, event.capacity - event.registrations.length),
           userStatus,
+          rejectionReason,
+          submissions: undefined,
         };
       }),
     });
@@ -126,8 +151,8 @@ eventRoutes.post(
       throw new HttpError(400, 'Attendance can only be recorded while the event is ongoing.');
     }
 
+    let qrCodeValid = false;
     if (qrData) {
-      // Validate QR
       const qrCode = await prisma.eventQrCode.findFirst({
         where: { eventId, qrData },
       });
@@ -139,26 +164,32 @@ eventRoutes.post(
       if (now > new Date(qrCode.expiresAt)) {
         throw new HttpError(400, 'This QR code has expired.');
       }
-
-      // Automatically mark as attended!
-      const result = await gamificationService.markEventAttendance(eventId, registration.id);
-      return res.json({ success: true, message: 'QR Code verified! Attendance recorded.', result });
+      qrCodeValid = true;
     }
 
-    if (req.file) {
-      const imageUrl = `/uploads/EventSubmissions/${req.file.filename}`;
-      const submission = await prisma.eventSubmission.upsert({
-        where: { userId_eventId: { userId, eventId } },
-        update: { attendanceImageUrl: imageUrl, status: 'pending' },
-        create: {
-          userId,
-          eventId,
-          attendanceImageUrl: imageUrl,
-          status: 'pending',
-        },
-      });
-      return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
+    if (!req.file) {
+      throw new HttpError(400, 'Please provide an image for attendance proof.');
     }
+
+    const imageUrl = `/uploads/EventSubmissions/${req.file.filename}`;
+    const submission = await prisma.eventSubmission.upsert({
+      where: { userId_eventId: { userId, eventId } },
+      update: { attendanceImageUrl: imageUrl, status: 'pending' },
+      create: {
+        userId,
+        eventId,
+        attendanceImageUrl: imageUrl,
+        status: 'pending',
+      },
+    });
+
+    // We also set the registration status to PENDING_APPROVAL so the app knows it's waiting
+    await prisma.eventRegistration.update({
+      where: { id: registration.id },
+      data: { status: 'PENDING_APPROVAL' },
+    });
+
+    return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
 
     throw new HttpError(400, 'Please provide an image or scan a QR code.');
   })

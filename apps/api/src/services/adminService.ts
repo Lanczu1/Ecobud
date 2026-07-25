@@ -515,7 +515,7 @@ export class AdminService {
   }
 
   static async getSubmissions() {
-    return await prisma.challengeSubmission.findMany({
+    const challengeSubs = await prisma.challengeSubmission.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         user: {
@@ -528,22 +528,68 @@ export class AdminService {
         challenge: true
       }
     });
+
+    const eventSubs = await prisma.eventSubmission.findMany({
+      orderBy: { submittedAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            profile: true
+          }
+        },
+        event: true
+      }
+    });
+
+    const unified = [
+      ...challengeSubs.map(s => ({
+        ...s,
+        submissionType: 'CHALLENGE'
+      })),
+      ...eventSubs.map(s => ({
+        id: s.id,
+        userId: s.userId,
+        challengeId: s.eventId,
+        proofText: s.qrVerified ? 'QR Code Scanned' : 'Event Attendance Photo',
+        proofUrl: s.attendanceImageUrl,
+        afterProofUrl: null,
+        status: s.status,
+        moderatorNotes: s.rejectionReason,
+        createdAt: s.submittedAt,
+        user: s.user,
+        challenge: {
+          id: s.eventId,
+          title: `[EVENT] ${s.event.title}`,
+          type: 'EVENT'
+        },
+        submissionType: 'EVENT'
+      }))
+    ];
+
+    unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return unified;
   }
 
   static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected', notes?: string) {
-    const submission = await prisma.challengeSubmission.update({
-      where: { id },
-      data: {
-        status,
-        moderatorNotes: notes,
-        reviewedById: reviewerId,
-        reviewedAt: new Date()
-      },
-      include: {
-        challenge: true,
-        user: true
-      }
-    });
+    const challengeSub = await prisma.challengeSubmission.findUnique({ where: { id } });
+    
+    if (challengeSub) {
+      const submission = await prisma.challengeSubmission.update({
+        where: { id },
+        data: {
+          status,
+          moderatorNotes: notes,
+          reviewedById: reviewerId,
+          reviewedAt: new Date()
+        },
+        include: {
+          challenge: true,
+          user: true
+        }
+      });
 
     if (status === 'approved') {
       // Points and Coins will now be awarded when the user claims the reward in the mobile app.
@@ -586,18 +632,101 @@ export class AdminService {
       title: status === 'approved' ? 'Challenge approved' : 'Challenge review update',
     });
 
-    await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
-      actorRole: 'admin',
-      actorUserId: reviewerId,
-      entityId: submission.userId,
-      reason: `submission-${status}`,
-    });
+      await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+        actorRole: 'admin',
+        actorUserId: reviewerId,
+        entityId: submission.userId,
+        reason: `submission-${status}`,
+      });
 
-    return submission;
+      return submission;
+    }
+
+    const eventSub = await prisma.eventSubmission.findUnique({ where: { id } });
+    if (eventSub) {
+      const submission = await prisma.eventSubmission.update({
+        where: { id },
+        data: {
+          status,
+          rejectionReason: notes,
+          reviewedAt: new Date()
+        },
+        include: {
+          event: true,
+          user: true
+        }
+      });
+
+      await prisma.eventRegistration.update({
+        where: { userId_eventId: { userId: submission.userId, eventId: submission.eventId } },
+        data: {
+          status: status === 'approved' ? 'ATTENDED' : 'REGISTERED',
+          attendedAt: status === 'approved' ? new Date() : null
+        }
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          action: `EVENT_SUBMISSION_${status.toUpperCase()}`,
+          userId: submission.userId,
+          details: JSON.stringify({
+            eventId: submission.eventId,
+            eventTitle: submission.event.title,
+            reviewerId,
+            notes
+          }),
+          timestamp: new Date()
+        }
+      });
+
+      await supabaseRealtimeService.publishUserNotice(submission.userId, {
+        level: status === 'approved' ? 'success' : 'warning',
+        message:
+          status === 'approved'
+            ? `Your attendance for event "${submission.event.title}" has been approved.`
+            : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
+        scope: 'moderation',
+        title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
+      });
+
+      return {
+        id: submission.id,
+        userId: submission.userId,
+        challengeId: submission.eventId,
+        proofText: submission.qrVerified ? 'QR Code Scanned' : 'Event Attendance Photo',
+        proofUrl: submission.attendanceImageUrl,
+        afterProofUrl: null,
+        status: submission.status,
+        moderatorNotes: submission.rejectionReason,
+        createdAt: submission.submittedAt,
+        user: submission.user,
+        challenge: {
+          id: submission.eventId,
+          title: `[EVENT] ${submission.event.title}`,
+          type: 'EVENT'
+        },
+        submissionType: 'EVENT'
+      };
+    }
+
+    throw new Error('Submission not found');
   }
 
   static async deleteSubmission(id: string) {
     return await prisma.challengeSubmission.delete({
+      where: { id },
+    });
+  }
+
+  static async deleteEventSubmission(id: string) {
+    const sub = await prisma.eventSubmission.findUnique({ where: { id } });
+    if (sub) {
+      await prisma.eventRegistration.updateMany({
+        where: { userId: sub.userId, eventId: sub.eventId, status: 'PENDING_APPROVAL' },
+        data: { status: 'REGISTERED' }
+      });
+    }
+    return await prisma.eventSubmission.delete({
       where: { id },
     });
   }
@@ -706,5 +835,32 @@ export class AdminService {
 
   static async deleteEvent(id: string) {
     return await prisma.event.delete({ where: { id } });
+  }
+
+  static async getEventQr(eventId: string) {
+    return await prisma.eventQrCode.findFirst({
+      where: { eventId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  static async generateEventQr(eventId: string) {
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new Error('Event not found');
+
+    const qrData = require('crypto').randomBytes(16).toString('hex');
+    
+    // Set expiration to 1 hour after the event end time (or 24 hours if not set)
+    const expiresAt = event.endDatetime 
+      ? new Date(new Date(event.endDatetime).getTime() + 60 * 60 * 1000)
+      : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    return await prisma.eventQrCode.create({
+      data: {
+        eventId,
+        qrData,
+        expiresAt,
+      }
+    });
   }
 }

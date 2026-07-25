@@ -66,6 +66,7 @@ challengeRoutes.get(
           progress: {
             progressPercentage: userChallenge?.progressPercentage || 0,
             status: finalStatus,
+            rejectionReason: submission?.status === 'rejected' ? submission.moderatorNotes : undefined,
           },
           submissions: undefined,
         };
