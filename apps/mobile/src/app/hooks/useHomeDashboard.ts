@@ -983,7 +983,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [ensureSession]);
 
   const startQuiz = useCallback(() => {
-    const questions = selectedLesson?.quizQuestions ?? [];
+    const questions = selectedLesson?.quizQuestions ? [...selectedLesson.quizQuestions] : [];
+    
+    for (let i = questions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [questions[i], questions[j]] = [questions[j], questions[i]];
+    }
+
     setQuizQuestions(questions);
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);

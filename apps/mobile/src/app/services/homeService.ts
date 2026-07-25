@@ -103,6 +103,9 @@ export const homeService = {
   sendAssistantMessage: (token: string, message: string, history: { role: 'user' | 'assistant'; content: string }[] = []) =>
     ecobudApi.sendAssistantMessage(token, message, history),
 
+  submitEventAttendance: (token: string, eventId: string, imageUri: string, qrData: string) =>
+    ecobudApi.submitEventAttendance(token, eventId, imageUri, qrData),
+
   // ─── Composite Loaders ────────────────────────────────────────────────────────
 
   /**

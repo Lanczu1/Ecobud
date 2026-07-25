@@ -34,6 +34,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
+import { RejectionModal } from './RejectionModal';
 import {
   formatLongDate,
   formatEventDateTag,
@@ -875,6 +876,11 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [attendanceEvent, setAttendanceEvent] = React.useState<string | null>(null);
+  const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string; eventId: string | null }>({
+    visible: false,
+    reason: '',
+    eventId: null,
+  });
 
   React.useEffect(() => {
     if (viewMode === 'map') {
@@ -919,11 +925,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginTop: 16, marginBottom: 24 }}>
-          <View style={styles.categoryPillActive}><Text style={styles.categoryPillActiveText}>All Events</Text></View>
-          <View style={styles.categoryPillInactive}><Text style={styles.categoryPillInactiveText}>Clean-ups</Text></View>
-          <View style={styles.categoryPillInactive}><Text style={styles.categoryPillInactiveText}>Tree Planting</Text></View>
-        </ScrollView>
+
 
         {viewMode === 'map' ? (
           <View style={{ height: 500, width: '100%', marginTop: 8 }}>
@@ -969,13 +971,26 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                   </View>
                   {(() => {
                     const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
-                    if (lc === 'ended') {
+                    if (lc === 'ended' && !event.userStatus) {
                       return null;
                     }
                     if (model.isReadOnlyExperience) {
                       return (
                         <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.leaveReadOnlyAccess()}>
                           <Text style={styles.quickJoinBtnText}>Sign In to Join</Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    if (event.userStatus === 'rejected') {
+                      return (
+                        <TouchableOpacity style={[styles.quickJoinBtn, { backgroundColor: '#DC2626' }]} onPress={() => {
+                          setRejectionModal({
+                            visible: true,
+                            reason: event.rejectionReason || 'No reason provided.',
+                            eventId: event.id,
+                          });
+                        }}>
+                          <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Rejected - Resubmit</Text>
                         </TouchableOpacity>
                       );
                     }
@@ -1012,6 +1027,13 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                         </View>
                       );
                     }
+                    if (lc === 'ended') {
+                      return (
+                        <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
+                          <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Ended</Text>
+                        </View>
+                      );
+                    }
 
                     return (
                       <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.handleJoinEvent(event.id)}>
@@ -1034,6 +1056,15 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           onClose={() => setAttendanceEvent(null)} 
         />
       )}
+      <RejectionModal
+        visible={rejectionModal.visible}
+        title="Attendance Rejected"
+        reason={rejectionModal.reason}
+        onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
+        onResubmit={rejectionModal.eventId ? () => {
+          setAttendanceEvent(rejectionModal.eventId);
+        } : undefined}
+      />
     </View>
   );
 }

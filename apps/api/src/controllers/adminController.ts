@@ -429,7 +429,32 @@ export class AdminController {
         }
       }
 
-      await AdminService.deleteSubmission(id);
+      if (submission) {
+        await AdminService.deleteSubmission(id);
+      } else {
+        const eventSubmission = await prisma.eventSubmission.findUnique({ where: { id } });
+        if (eventSubmission?.attendanceImageUrl) {
+          const filename = eventSubmission.attendanceImageUrl.split('/').pop();
+          if (filename) {
+            const fs = require('fs');
+            const path = require('path');
+            const filePath = path.join(__dirname, '..', '..', 'uploads', 'EventSubmissions', filename);
+            if (fs.existsSync(filePath)) {
+              try {
+                fs.unlinkSync(filePath);
+              } catch (e) {
+                console.error('Failed to delete event submission image', filePath, e);
+              }
+            }
+          }
+        }
+        if (eventSubmission) {
+          await AdminService.deleteEventSubmission(id);
+        } else {
+          throw new Error('Submission not found');
+        }
+      }
+
       return res.status(204).send();
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to delete submission.", error: error.message });
@@ -522,6 +547,25 @@ export class AdminController {
       return res.status(204).send();
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to delete event.", error: error.message });
+    }
+  }
+
+  static async getEventQr(req: AuthenticatedRequest, res: Response) {
+    try {
+      const qrCode = await AdminService.getEventQr(req.params.id);
+      if (!qrCode) return res.status(404).json({ message: 'No QR code generated yet.' });
+      return res.status(200).json(qrCode);
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to get QR code.", error: error.message });
+    }
+  }
+
+  static async generateEventQr(req: AuthenticatedRequest, res: Response) {
+    try {
+      const qrCode = await AdminService.generateEventQr(req.params.id);
+      return res.status(201).json(qrCode);
+    } catch (error: any) {
+      return res.status(500).json({ message: "Failed to generate QR code.", error: error.message });
     }
   }
 }

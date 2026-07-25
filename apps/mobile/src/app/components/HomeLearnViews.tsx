@@ -215,7 +215,11 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             <UpcomingEventCard
               event={model.events[0]}
               isReadOnly={model.isReadOnlyExperience}
-              onJoin={() => model.setActiveOverlay('events')}
+              onJoin={() => {
+                if (model.events[0]?.id) {
+                  void model.handleJoinEvent(model.events[0].id);
+                }
+              }}
               onSignIn={() => model.leaveReadOnlyAccess()}
             />
           </View>

@@ -59,5 +59,7 @@ adminRoutes.get("/events", AdminController.getEvents);
 adminRoutes.post("/events", eventUploadMiddleware.single('image'), AdminController.createEvent);
 adminRoutes.put("/events/:id", eventUploadMiddleware.single('image'), AdminController.updateEvent);
 adminRoutes.delete("/events/:id", AdminController.deleteEvent);
+adminRoutes.get("/events/:id/qr", AdminController.getEventQr);
+adminRoutes.post("/events/:id/qr", AdminController.generateEventQr);
 
 export { adminRoutes };

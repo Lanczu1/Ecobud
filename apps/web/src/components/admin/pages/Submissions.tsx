@@ -25,6 +25,7 @@ interface Submission {
     title: string;
     type: string;
   };
+  submissionType?: 'CHALLENGE' | 'EVENT';
 }
 
 const statusColors: Record<string, string> = {
@@ -43,6 +44,7 @@ export function Submissions() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [filterType, setFilterType] = useState('All');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -61,6 +63,15 @@ export function Submissions() {
 
   useEffect(() => {
     loadSubmissions();
+    
+    // Auto-refresh every 5 seconds to get new submissions in real-time
+    const interval = setInterval(() => {
+      adminGet<Submission[]>('/admin/submissions')
+        .then(data => setSubmissions(data))
+        .catch(console.error);
+    }, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const handleApprove = async (id: string) => {
@@ -107,11 +118,12 @@ export function Submissions() {
   const filtered = useMemo(() =>
     submissions.filter(s => {
       const matchStatus = filterStatus === 'All' || s.status === filterStatus.toLowerCase();
+      const matchType = filterType === 'All' || (filterType === 'Events' ? s.submissionType === 'EVENT' : (!s.submissionType || s.submissionType === 'CHALLENGE'));
       const userName = s.user?.profile?.displayName || s.user?.name || '';
       const matchSearch = userName.toLowerCase().includes(search.toLowerCase()) || 
                           s.challenge?.title.toLowerCase().includes(search.toLowerCase());
-      return matchStatus && matchSearch;
-    }), [submissions, search, filterStatus]);
+      return matchStatus && matchType && matchSearch;
+    }), [submissions, search, filterStatus, filterType]);
 
   const totalPending = submissions.filter(s => s.status === 'pending').length;
   const totalApproved = submissions.filter(s => s.status === 'approved').length;
@@ -167,6 +179,16 @@ export function Submissions() {
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
+          {['All', 'Challenges', 'Events'].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterType(f)}
+              className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterType === f ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700'}`}
+            >
+              {f}
+            </button>
+          ))}
+          <div className="w-px h-6 bg-gray-200 mx-1"></div>
           {['All', 'Pending', 'Approved', 'Rejected'].map(f => (
             <button
               key={f}
@@ -213,13 +235,14 @@ export function Submissions() {
                 ))
               : filtered.map(sub => {
                   const fullProofUrl = sub.proofUrl ? (sub.proofUrl.startsWith('/') ? `${API_HOST}${sub.proofUrl}` : sub.proofUrl) : null;
+                  const avatarUrl = sub.user?.profile?.avatarUrl ? (sub.user.profile.avatarUrl.startsWith('/') ? `${API_HOST}${sub.user.profile.avatarUrl}` : sub.user.profile.avatarUrl) : null;
                   
                   return (
                     <tr key={sub.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          {sub.user?.profile?.avatarUrl ? (
-                            <img src={sub.user.profile.avatarUrl} alt={sub.user.name} className="w-9 h-9 rounded-full bg-gray-100 object-cover" />
+                          {avatarUrl ? (
+                            <img src={avatarUrl} alt={sub.user?.name || 'User'} className="w-9 h-9 rounded-full bg-gray-100 object-cover" />
                           ) : (
                             <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
                               <span className="text-xs font-bold text-green-700">{(sub.user?.name || '?').charAt(0).toUpperCase()}</span>

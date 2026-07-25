@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -441,6 +442,7 @@ export function Events() {
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [editing, setEditing] = useState<AdminEvent | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean }>({ open: false, eventId: null, qrData: null, loading: false });
 
   const load = async () => {
     try {
@@ -507,19 +509,120 @@ export function Events() {
     finally { setDeleting(null); }
   };
 
+  const handleOpenQr = async (eventId: string) => {
+    setQrModal({ open: true, eventId, qrData: null, loading: true });
+    try {
+      const data = await adminGet<{ qrData: string }>(`/admin/events/${eventId}/qr`);
+      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false }));
+    } catch (err: any) {
+      if (err.message && err.message.includes('No QR code generated yet')) {
+        setQrModal(prev => ({ ...prev, loading: false })); // No QR yet
+      } else {
+        alert(err.message || 'Failed to fetch QR code.');
+        setQrModal({ open: false, eventId: null, qrData: null, loading: false });
+      }
+    }
+  };
+
+  const handleGenerateQr = async () => {
+    if (!qrModal.eventId) return;
+    setQrModal(prev => ({ ...prev, loading: true }));
+    try {
+      const data = await adminPost<{ qrData: string }>(`/admin/events/${qrModal.eventId}/qr`, {});
+      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false }));
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate QR code.');
+      setQrModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleDownloadQr = () => {
+    const canvas = document.getElementById('event-qr-canvas') as HTMLCanvasElement;
+    if (canvas) {
+      const pngUrl = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pngUrl;
+      downloadLink.download = `event-qr-${qrModal.eventId}.png`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+  };
+
   const totalAttendees = events.reduce((a, e) => a + e.registrations.length, 0);
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
       {/* Backdrop overlay - blur only, covers full scroll content area */}
-      {modal && (
+      {(modal || qrModal.open) && (
         <div
           className="absolute inset-0 z-40 backdrop-blur-sm pointer-events-auto"
-          onClick={() => { setModal(null); setEditing(null); }}
+          onClick={() => { setModal(null); setEditing(null); setQrModal({ open: false, eventId: null, qrData: null, loading: false }); }}
         />
       )}
       {modal === 'add' && <EventModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <EventModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
+      
+      {qrModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md pointer-events-auto flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.15)] overflow-hidden max-h-full">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h3 className="text-xl font-serif font-bold text-gray-900">Event QR Code</h3>
+                <p className="text-sm text-gray-500 mt-1">Users will scan this at the venue</p>
+              </div>
+              <button onClick={() => setQrModal({ open: false, eventId: null, qrData: null, loading: false })} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-8 flex flex-col items-center justify-center bg-gray-50/50">
+              {qrModal.loading ? (
+                <div className="flex flex-col items-center justify-center p-12">
+                  <Loader2 className="w-8 h-8 text-green-600 animate-spin mb-4" />
+                  <p className="text-gray-500 text-sm">Loading QR Code...</p>
+                </div>
+              ) : qrModal.qrData ? (
+                <div className="flex flex-col items-center">
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
+                    <QRCodeCanvas 
+                      id="event-qr-canvas"
+                      value={qrModal.qrData} 
+                      size={240} 
+                      bgColor={"#ffffff"} 
+                      fgColor={"#126027"} 
+                      level={"H"}
+                      includeMargin={false}
+                    />
+                  </div>
+                  <button
+                    onClick={handleDownloadQr}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 font-semibold rounded-xl hover:bg-blue-100 transition-colors mb-6"
+                  >
+                    <Download className="w-4 h-4" /> Download PNG
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center p-8 bg-gray-100 rounded-3xl mb-6 border border-dashed border-gray-300 w-full">
+                  <QrCode className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 font-medium mb-1">No QR Code generated yet</p>
+                  <p className="text-sm text-gray-500">Generate one so attendees can check in.</p>
+                </div>
+              )}
+              
+              {!qrModal.loading && (
+                <button
+                  onClick={handleGenerateQr}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 active:scale-95 transition-all shadow-md"
+                >
+                  <QrCode className="w-5 h-5" />
+                  {qrModal.qrData ? 'Regenerate New QR Code' : 'Generate QR Code'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <div>
@@ -625,6 +728,9 @@ export function Events() {
                 </div>
 
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <button onClick={() => handleOpenQr(event.id)} className="flex items-center justify-center px-3 py-2 bg-purple-50 text-purple-700 text-xs font-semibold rounded-xl hover:bg-purple-100 transition-colors">
+                    <QrCode className="w-3 h-3" />
+                  </button>
                   <button onClick={() => { setEditing(event); setModal('edit'); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
                     <Edit3 className="w-3 h-3" />Edit
                   </button>

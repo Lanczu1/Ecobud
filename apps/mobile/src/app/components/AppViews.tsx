@@ -42,6 +42,7 @@ import {
   SurfaceCard,
   SecondaryButton,
 } from './CommonComponents';
+import { RejectionModal } from './RejectionModal';
 import { FireStreak } from './FireStreak';
 import { LevelCard, getLevelFromPoints } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
@@ -272,6 +273,26 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
   );
 }
 
+function getDisplayStreak(model: EcoBudMobileModel): number {
+  const completedDays = model.tracker?.completedDays ?? [];
+  const trackerMonth = model.tracker?.month ?? getPhMonthKey();
+  const calendarCells = buildCalendarCells(trackerMonth, completedDays);
+  let calcStreak = 0;
+  const todayIdx = calendarCells.findIndex(c => c.isToday);
+  let startIdx = calendarCells.length - 1;
+  if (todayIdx !== -1) startIdx = todayIdx;
+  let i = startIdx;
+  if (todayIdx !== -1 && i >= 0 && !calendarCells[i].completed) i--;
+  for (; i >= 0; i--) {
+    const c = calendarCells[i];
+    if (!c.dateKey) continue;
+    if (c.completed) calcStreak++;
+    else break;
+  }
+  const backendStreak = model.dashboard?.streak ?? model.tracker?.currentStreak ?? model.session?.user.currentStreak ?? 0;
+  return Math.max(backendStreak, calcStreak);
+}
+
 export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -292,7 +313,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         <Text style={styles.welcomeSubtitle}>Let's keep your green streak going and make a positive impact today!</Text>
 
         <SummaryCards
-          currentStreak={model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0}
+          currentStreak={getDisplayStreak(model)}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
           onPressRewards={() => model.setActiveOverlay('streakRewards')}
         />
@@ -598,6 +619,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'Discover' | 'My Tasks' | 'History'>('Discover');
   const [sortOption, setSortOption] = useState<'Default' | 'Highest Reward' | 'Easiest'>('Default');
+  const [rejectionModal, setRejectionModal] = useState<{ visible: boolean; reason: string; challengeId: string | null; challengeObj: ChallengeWithProgress | null }>({
+    visible: false,
+    reason: '',
+    challengeId: null,
+    challengeObj: null,
+  });
 
   const categories = ['All', 'General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
 
@@ -716,12 +743,21 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           <View style={{ marginTop: 24, marginBottom: 8 }}>
             <Text style={[styles.welcomeLabel, { marginBottom: 8 }]}>RECENT ACTIVITY</Text>
             <Text style={[styles.sectionHeadline, { marginTop: 0, color: '#4ADE80' }]}>Recently Viewed</Text>
-            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { borderColor: '#4ADE80', borderWidth: 2 }]} onPress={() => {
-              const status = model.recentViewedMission!.progress?.status?.toLowerCase();
-              if (status === 'pending' || status === 'completed') {
+            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: model.recentViewedMission.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, model.recentViewedMission.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }]} onPress={() => {
+              const currentStatus = model.recentViewedMission!.progress?.status?.toLowerCase();
+              if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
               }
-              if (status === 'approved' || status === 'unclaimed') {
+              if (currentStatus === 'rejected') {
+                setRejectionModal({
+                  visible: true,
+                  reason: model.recentViewedMission!.progress?.rejectionReason || 'No reason provided.',
+                  challengeId: model.recentViewedMission!.id,
+                  challengeObj: model.recentViewedMission!,
+                });
+                return;
+              }
+              if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
                 void model.handleClaimChallengeReward(model.recentViewedMission!.id);
               } else if (model.recentViewedMission!.type === 'AI Image Recognition Challenge') {
                 model.openChallengeMission(model.recentViewedMission!);
@@ -783,16 +819,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     </Text>
                   )}
                 </View>
-                {model.recentViewedMission.progress?.status?.toLowerCase() === 'rejected' && model.recentViewedMission.progress?.rejectionReason && (
-                  <View style={{ marginTop: 12, backgroundColor: '#FEF2F2', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FECACA' }}>
-                    <Text style={{ color: '#B91C1C', fontSize: 11, fontWeight: '800', marginBottom: 4, letterSpacing: 0.5 }}>
-                      <Ionicons name="warning" size={12} color="#DC2626" /> MODERATOR NOTE
-                    </Text>
-                    <Text style={{ color: '#991B1B', fontSize: 13, lineHeight: 18 }}>
-                      {model.recentViewedMission.progress.rejectionReason}
-                    </Text>
-                  </View>
-                )}
               </View>
             </Pressable>
           </View>
@@ -906,6 +932,15 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
               }
+              if (currentStatus === 'rejected') {
+                setRejectionModal({
+                  visible: true,
+                  reason: challenge.progress?.rejectionReason || 'No reason provided.',
+                  challengeId: challenge.id,
+                  challengeObj: challenge,
+                });
+                return;
+              }
               if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
                 void model.handleClaimChallengeReward(challenge.id);
               } else if (challenge.type === 'AI Image Recognition Challenge') {
@@ -999,16 +1034,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     </Text>
                   )}
                 </View>
-                {challenge.progress?.status?.toLowerCase() === 'rejected' && challenge.progress?.rejectionReason && (
-                  <View style={{ marginTop: 12, backgroundColor: '#FEF2F2', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FECACA' }}>
-                    <Text style={{ color: '#B91C1C', fontSize: 11, fontWeight: '800', marginBottom: 4, letterSpacing: 0.5 }}>
-                      <Ionicons name="warning" size={12} color="#DC2626" /> MODERATOR NOTE
-                    </Text>
-                    <Text style={{ color: '#991B1B', fontSize: 13, lineHeight: 18 }}>
-                      {challenge.progress.rejectionReason}
-                    </Text>
-                  </View>
-                )}
               </View>
             </Pressable>
           ))}
@@ -1026,6 +1051,20 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
         <View style={{ height: 100 }} />
       </View>
+
+      <RejectionModal
+        visible={rejectionModal.visible}
+        title="Submission Rejected"
+        reason={rejectionModal.reason}
+        onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
+        onResubmit={rejectionModal.challengeObj ? () => {
+          if (rejectionModal.challengeObj!.type === 'AI Image Recognition Challenge') {
+            model.openChallengeMission(rejectionModal.challengeObj!);
+          } else {
+            void model.handleChallengeProgress(rejectionModal.challengeObj!, 100);
+          }
+        } : undefined}
+      />
     </>
   );
 }
@@ -1053,7 +1092,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
   // ── Derived gamification state ─────────────────────────────────────────────
   const totalPoints = model.tracker?.points ?? model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
   const ecoLevel = getEcoLevel(totalPoints);
-  const streak = getVisibleStreak(model.tracker?.currentStreak ?? 0);
+  const streak = getVisibleStreak(getDisplayStreak(model));
 
   // Last 7 days progress dots (oldest → newest). A day counts if it's in the
   // completed set; today is always the rightmost dot.
@@ -1181,7 +1220,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
       <View style={styles.homeContent}>
         {/* ── 🔥 Current Streak Card ─────────────────────────────────────────── */}
         <SummaryCards
-          currentStreak={model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0}
+          currentStreak={getDisplayStreak(model)}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
           onPressRewards={() => model.setActiveOverlay('streakRewards')}
         />

@@ -39,6 +39,7 @@ export async function adminGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'GET',
     headers: authHeaders(),
+    cache: 'no-store',
   });
   return handleResponse<T>(res);
 }

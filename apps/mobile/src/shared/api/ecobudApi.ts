@@ -290,7 +290,8 @@ export interface EcoEvent {
   latitude?: number | null;
   longitude?: number | null;
   spotsLeft?: number;
-  userStatus?: 'joined' | 'attended' | null;
+  userStatus?: 'joined' | 'attended' | 'pending_approval' | 'rejected' | null;
+  rejectionReason?: string;
 }
 
 export interface TransparencyFeed {
@@ -354,9 +355,11 @@ const parseJsonSafely = async (response: Response) => {
 };
 
 const request = async <T>(path: string, options: RequestOptions = {}) => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
+
+  if (options.body) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
@@ -392,7 +395,7 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   return data as T;
 };
 
-const uploadFileAsync = async <T>(path: string, token: string, uri: string) => {
+const uploadFileAsync = async <T>(path: string, token: string, uri: string, extraFields?: Record<string, string>) => {
   try {
     const uploadUrl = `${API_BASE}${path}`;
 
@@ -402,6 +405,12 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string) => {
         const blob = await response.blob();
         const formData = new FormData();
         formData.append('image', blob, 'upload.jpg');
+        
+        if (extraFields) {
+          Object.entries(extraFields).forEach(([key, value]) => {
+            formData.append(key, value);
+          });
+        }
         
         const res = await fetch(uploadUrl, {
           method: 'POST',
@@ -440,7 +449,8 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string) => {
       mimeType: 'image/jpeg',
       headers: {
         Authorization: `Bearer ${token}`
-      }
+      },
+      ...(extraFields ? { parameters: extraFields } : {})
     });
 
     let data;
@@ -590,7 +600,15 @@ export const ecobudApi = {
   fetchEvents: (token?: string) =>
     request<{ items: EcoEvent[] }>('/events', token ? { token } : undefined),
   joinEvent: (token: string, eventId: string) =>
-    request(`/events/${eventId}/join`, { method: 'POST', token }),
+    request(`/events/${eventId}/join`, { method: 'POST', token, body: {} }),
+  submitEventAttendance: (token: string, eventId: string, imageUri: string, qrData: string) => {
+    return uploadFileAsync<{ success: boolean; message: string }>(
+      `/events/${eventId}/submissions`,
+      token,
+      imageUri,
+      { qrData }
+    );
+  },
   fetchTransparency: async (token: string) => {
     const [metrics, logs] = await Promise.all([
       request<TransparencyFeed['metrics']>('/transparency/metrics'),
