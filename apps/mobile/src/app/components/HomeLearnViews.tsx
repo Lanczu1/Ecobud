@@ -105,7 +105,7 @@ const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
 export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;
   const baseEcoPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
-  const ecoPoints = model.activeOverlay === 'lessonCompleted' 
+  const ecoPoints = (model.activeOverlay === 'lessonCompleted' || model.activeOverlay === 'eventApproved')
     ? Math.max(0, baseEcoPoints - (model.earnedPoints || 0)) 
     : baseEcoPoints;
   const weeklyGoal = model.dashboard?.weeklyGoal ?? 0;
@@ -221,6 +221,11 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                 }
               }}
               onSignIn={() => model.leaveReadOnlyAccess()}
+              onClaimReward={() => {
+                if (model.events[0]?.id) {
+                  void model.handleClaimEventReward(model.events[0].id);
+                }
+              }}
             />
           </View>
         ) : null}

@@ -837,6 +837,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [presence.shouldMaintainRealtimeConnection, queueRealtimeRefresh, session]);
 
 
+  React.useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('ECO_POINTS_DROP_ANIMATION', () => {
+      const activeSession = session;
+      if (activeSession && !isReadOnlySession(activeSession)) {
+        void hydrateApp(activeSession, true);
+      }
+    });
+    return () => sub.remove();
+  }, [session, hydrateApp]);
+
+
 
   const openLesson = useCallback(async (lessonId: string) => {
     await runWithActionLoader('Opening lesson...', async () => {
@@ -1204,6 +1215,43 @@ export function useHomeDashboard(): EcoBudMobileModel {
     [ensureSession, hydrateApp, runMutationWithOfflineFallback, runWithActionLoader],
   );
 
+  const handleClaimEventReward = useCallback(
+    async (eventId: string) => {
+      await runWithActionLoader('Claiming reward...', async () => {
+        try {
+          const activeSession = ensureSession();
+          setRefreshing(true);
+
+          const event = events.find((e) => e.id === eventId);
+          const expReward = event?.expReward ?? 0;
+          const coinReward = event?.ecoCoinsReward ?? 0;
+
+          const result = await homeService.claimEventReward(activeSession.token, eventId);
+
+          const pointsAwarded = result.pointsAwarded || expReward;
+          const coinsAwarded = result.ecoCoinsAwarded || coinReward;
+
+          // Hydrate first (mirrors lesson flow) so dashboard.ecoPoints is
+          // already the NEW value before the overlay shows. The overlay
+          // display logic will subtract earnedPoints to show the PRE-reward
+          // value on the LevelCard — then when the user taps Continue and
+          // the particles land, ECO_POINTS_DROP_ANIMATION triggers hydrateApp
+          // again and the LevelCard counts up to the new total.
+          await hydrateApp(activeSession, true);
+
+          setEarnedPoints(pointsAwarded);
+          setEarnedCoins(coinsAwarded);
+          setActiveOverlayState('eventApproved');
+        } catch (error: any) {
+          Alert.alert('Error', error.message || 'Failed to claim reward.');
+        } finally {
+          setRefreshing(false);
+        }
+      });
+    },
+    [events, ensureSession, runWithActionLoader, hydrateApp]
+  );
+
   const handleAssistantSend = useCallback(
     async (seedMessage?: string) => {
       const outgoingText = (seedMessage ?? assistantInput).trim();
@@ -1318,12 +1366,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      if (screen === 'claimParticles' || screen === 'streakRewards' || screen === 'streakUnlocked') {
+      if (screen === 'claimParticles' || screen === 'streakRewards' || screen === 'streakUnlocked' || screen === 'eventApproved') {
         setActiveOverlayState(screen);
         return;
       }
 
-      const labels: Record<Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | null>, string> = {
+      const labels: Record<Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | 'eventApproved' | null>, string> = {
         assistant: 'Opening EcoBud Assistant',
         events: 'Opening Eco Events',
         lesson: 'Opening lesson details',
@@ -1335,10 +1383,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
         ai_mission: 'Opening mission',
         settings: 'Opening settings',
         coinsHistory: 'Opening Coins History',
+        redeemPoints: 'Opening Redeem Points',
+        notifications: 'Opening notifications',
       };
 
       // We explicitly excluded claimParticles, streakRewards, and streakUnlocked above, so we must cast screen to the narrowed type
-      flashActionLoader(`${labels[screen as Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | null>]}...`, () => {
+      flashActionLoader(`${labels[screen as Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | 'eventApproved' | null>]}...`, () => {
         setActiveOverlayState(screen);
       });
     },
@@ -1451,6 +1501,19 @@ export function useHomeDashboard(): EcoBudMobileModel {
       try {
         const activeSession = ensureSession();
         const res = await homeService.uploadAvatar(activeSession.token, uri);
+
+        if (res?.avatarUrl) {
+          const updatedSession = {
+            ...activeSession,
+            user: {
+              ...activeSession.user,
+              avatarUrl: res.avatarUrl,
+            },
+          };
+          setSession(updatedSession);
+          await persistSession(updatedSession);
+        }
+
         await hydrateApp(activeSession, true);
         return res;
       } catch (error) {
@@ -1458,7 +1521,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         throw error;
       }
     });
-  }, [ensureSession, runWithActionLoader, hydrateApp]);
+  }, [ensureSession, runWithActionLoader, hydrateApp, persistSession]);
 
   const handleUpdateSecuritySettings = useCallback(async (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => {
     await runWithActionLoader('Updating security settings...', async () => {
@@ -1582,6 +1645,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
     handleHabitCheckIn,
     handleJoinEvent,
+    handleClaimEventReward,
     handleAssistantSend,
     loadTrackerMonth,
     openChallengeMission,

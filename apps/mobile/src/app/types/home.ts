@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -72,6 +72,7 @@ export interface HeaderProps {
   onBack?: () => void;
   onEventsPress?: () => void;
   onTrackerPress?: () => void;
+  onNotificationsPress?: () => void;
 }
 
 export interface SummaryCardsProps {
@@ -95,6 +96,7 @@ export interface UpcomingEventCardProps {
   onJoin?: () => void;
   onSignIn?: () => void;
   onRecordAttendance?: () => void;
+  onClaimReward?: () => void;
 }
 
 export interface QuickActionsProps {
@@ -198,6 +200,7 @@ export interface EcoBudMobileModel {
   handleChallengeProgress: (challenge: ChallengeWithProgress, nextProgress: number) => Promise<void>;
   handleHabitCheckIn: (habitId: string) => Promise<void>;
   handleJoinEvent: (eventId: string) => Promise<void>;
+  handleClaimEventReward: (eventId: string) => Promise<void>;
   handleAssistantSend: (seedMessage?: string) => Promise<void>;
   loadTrackerMonth: (offset: number) => Promise<void>;
   analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>;

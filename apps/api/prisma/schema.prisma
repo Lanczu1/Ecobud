@@ -39,6 +39,10 @@ model User {
   eventSubmissions             EventSubmission[]
   rewardTransactions           RewardTransaction[]
   notifications                Notification[]
+  giveAndGetItems              GiveAndGetItem[]
+  swapListings                 SwapListing[]
+  swapRequestsSent            SwapRequest[] @relation("SwapRequestFrom")
+  swapRequestsReceived        SwapRequest[] @relation("SwapRequestTo")
 
   @@map("users")
 }
@@ -455,4 +459,151 @@ enum EventSubmissionStatus {
 enum RewardType {
   eco_coins
   exp
+}
+
+model GiveAndGetItem {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  title       String
+  description String?
+  category    String
+  condition   String
+  wantedFor   String?  @map("wanted_for")
+  status      String   @default("Available")
+  imageUrl    String?  @map("image_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("give_and_get_items")
+}
+
+model RedeemItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  coinCost    Int      @map("coin_cost")
+  imageUrl    String?  @map("image_url")
+  category    String   @default("general")
+  stock       Int      @default(-1)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("redeem_items")
+}
+
+model SwapListing {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  title          String
+  category       String
+  quantity       String
+  condition      String
+  description    String  @default("")
+  lookingFor     String   @map("looking_for")
+  images         Json     @default("[]")
+  meetupMethod   String   @map("meetup_method")
+  meetupLocation String?  @map("meetup_location")
+  meetupLandmark String?  @map("meetup_landmark")
+  meetupNotes    String?  @map("meetup_notes")
+  city           String?
+  province       String?
+  latitude       Float?
+  longitude      Float?
+  distanceKm     Float?   @map("distance_km")
+  isActive       Boolean  @default(true) @map("is_active")
+  approvalStatus String   @default("pending") @map("approval_status")
+  reportCount    Int      @default(0) @map("report_count")
+  isReported     Boolean  @default(false) @map("is_reported")
+  reportReason   String?  @map("report_reason")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requests       SwapRequest[]
+  conversations  SwapConversation[]
+
+  @@index([userId])
+  @@index([category])
+  @@index([isActive, createdAt])
+  @@index([approvalStatus])
+  @@map("swap_listings")
+}
+
+model SwapRequest {
+  id          String   @id @default(cuid())
+  listingId   String   @map("listing_id")
+  fromUserId  String   @map("from_user_id")
+  toUserId    String   @map("to_user_id")
+  status      String   @default("pending")
+  message     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  listing     SwapListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  fromUser    User     @relation("SwapRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser      User     @relation("SwapRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  conversation SwapConversation?
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([listingId])
+  @@map("swap_requests")
+}
+
+model SwapConversation {
+  id              String   @id @default(cuid())
+  swapRequestId   String   @unique @map("swap_request_id")
+  listingId       String   @map("listing_id")
+  user1Id         String   @map("user1_id")
+  user2Id         String   @map("user2_id")
+  status          String   @default("pending")
+  unreadCount     Int      @default(0) @map("unread_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  swapRequest     SwapRequest @relation(fields: [swapRequestId], references: [id], onDelete: Cascade)
+  listing         SwapListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  messages        SwapMessage[]
+
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("swap_conversations")
+}
+
+model SwapMessage {
+  id              String   @id @default(cuid())
+  swapRequestId   String   @map("swap_request_id")
+  senderId        String   @map("sender_id")
+  text            String   @default("")
+  imageUrl        String?  @map("image_url")
+  timestamp       DateTime @default(now())
+  read            Boolean  @default(false)
+  delivered       Boolean  @default(true)
+  conversation    SwapConversation @relation(fields: [swapRequestId], references: [id], onDelete: Cascade)
+
+  @@index([swapRequestId])
+  @@index([senderId])
+  @@map("swap_messages")
+}
+
+model RedeemRequest {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  itemId      String   @map("item_id")
+  coinCost    Int      @map("coin_cost")
+  status      String   @default("pending") // pending | approved | rejected | ready_to_claim | claimed
+  rejectReason String? @map("reject_reason")
+  userName    String   @default("") @map("user_name")
+  itemTitle   String   @default("") @map("item_title")
+  itemImage   String?  @map("item_image")
+  claimCode       String?  @map("claim_code")
+  claimLocation   String?  @map("claim_location")
+  claimUntil      DateTime? @map("claim_until")
+  claimInstructions String? @map("claim_instructions")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("redeem_requests")
 }

@@ -11,6 +11,10 @@ import { eventRoutes } from './routes/eventRoutes';
 import { transparencyRoutes } from './routes/transparencyRoutes';
 import { experienceRoutes } from './routes/experienceRoutes';
 import { adminRoutes } from './routes/adminRoutes';
+import giveAndGetRoutes from './routes/giveAndGetRoutes';
+import swapRoutes from './routes/swapRoutes';
+import reportRoutes from './routes/reportRoutes';
+import redeemRoutes from './routes/redeemRoutes';
 import { moderationRoutes } from './routes/moderationRoutes';
 import { faqRoutes } from './routes/faqRoutes';
 import { homeRoutes } from './routes/homeRoutes';
@@ -70,6 +74,10 @@ app.use('/api/transparency', transparencyRoutes);
 app.use('/api/experience', experienceRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/give-and-get', giveAndGetRoutes);
+app.use('/api/swap', swapRoutes);
+app.use('/api/redeem', redeemRoutes);
+app.use('/api/reports', reportRoutes);
 
 app.use(errorResponder);
 

@@ -494,6 +494,7 @@ export class AdminController {
       const payload = { ...req.body };
       if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
       if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
+      if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
       if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
       if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
 
@@ -513,6 +514,7 @@ export class AdminController {
       const payload = { ...req.body };
       if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
       if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
+      if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
       if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
       if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
 

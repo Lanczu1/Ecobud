@@ -21,7 +21,7 @@ function formatLongDate(isoDate: string) {
   });
 }
 
-export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecordAttendance }: UpcomingEventCardProps) {
+export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecordAttendance, onClaimReward }: UpcomingEventCardProps) {
   const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string }>({ visible: false, reason: '' });
   
   const defaultImage = 'https://images.unsplash.com/photo-1618477461853-cf6ed80fabe5?q=80&w=800&auto=format&fit=crop';
@@ -47,11 +47,22 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
       );
     }
     
+    if (event.userStatus === 'reward_claimed') {
+      return (
+        <View style={[styles.eventJoinBtnInfo, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+          <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Reward Claimed</Text>
+        </View>
+      );
+    }
+    
     if (event.userStatus === 'attended') {
       return (
-        <View style={[styles.eventJoinBtnInfo, { backgroundColor: '#126027' }]}>
-          <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Attended</Text>
-        </View>
+        <TouchableOpacity 
+          style={[styles.eventJoinBtnInfo, { backgroundColor: '#F59E0B' }]}
+          onPress={onClaimReward}
+        >
+          <Text style={[styles.eventJoinBtnInfoText, { color: '#FFF' }]}>Claim Reward</Text>
+        </TouchableOpacity>
       );
     }
     
@@ -99,6 +110,7 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
       }
     }
     
+
     if (lifecycle === 'ongoing') {
       return (
         <View style={[styles.eventJoinBtnInfo, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>

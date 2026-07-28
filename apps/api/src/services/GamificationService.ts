@@ -292,7 +292,7 @@ export class GamificationService {
         throw new HttpError(404, 'Registration not found.');
       }
 
-      if (registration.status === 'ATTENDED') {
+      if (registration.status === 'REWARD_CLAIMED') {
         return {
           alreadyCompleted: true,
           pointsAwarded: 0,
@@ -300,18 +300,22 @@ export class GamificationService {
         };
       }
 
+      if (registration.status !== 'ATTENDED') {
+        throw new HttpError(400, 'Your attendance photo is still pending admin approval. Please wait for a moderator to review your submission.');
+      }
+
       await tx.eventRegistration.update({
         where: { id: registrationId },
         data: {
-          status: 'ATTENDED',
-          attendedAt: new Date(),
+          status: 'REWARD_CLAIMED',
         },
       });
 
       return this.awardAction(tx, {
         userId: registration.userId,
-        actionType: `Event attended: ${event.title}`,
+        actionType: `Event reward claimed: ${event.title}`,
         pointsAwarded: event.expReward,
+        ecoCoinsAwarded: event.ecoCoinsReward,
         metadata: {
           eventId: event.id,
           location: event.location,
@@ -374,6 +378,29 @@ export class GamificationService {
           update: { ecoCoins: { increment: action.ecoCoinsAwarded } },
           create: { userId: user.id, ecoCoins: action.ecoCoinsAwarded, currentStreak: nextStreak, knowledgePoints: 0, ecoPoints: 0 },
         });
+      }
+
+      if (action.metadata?.eventId) {
+        if (action.ecoCoinsAwarded && action.ecoCoinsAwarded > 0) {
+          await tx.rewardTransaction.create({
+            data: {
+              userId: user.id,
+              eventId: String(action.metadata.eventId),
+              type: 'eco_coins',
+              amount: action.ecoCoinsAwarded
+            }
+          });
+        }
+        if (action.pointsAwarded && action.pointsAwarded > 0) {
+          await tx.rewardTransaction.create({
+            data: {
+              userId: user.id,
+              eventId: String(action.metadata.eventId),
+              type: 'exp',
+              amount: action.pointsAwarded
+            }
+          });
+        }
       }
 
       const updatedStats = await this.userStatsService.syncEcoPointsAndStreak(

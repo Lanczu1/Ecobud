@@ -80,7 +80,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
         session.token,
         eventId,
         capturedImage,
-        data
+        data.trim()
       );
 
       if (!result.success) throw new Error(result.message || 'Failed to submit attendance');
