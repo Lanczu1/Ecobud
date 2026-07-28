@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -55,6 +55,11 @@ export default function App() {
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const scrollRef = React.useRef<ScrollView>(null);
+  const [hideMarketplaceChrome, setHideMarketplaceChrome] = useState(false);
+
+  const handleMarketplaceChromeChange = useCallback((hidden: boolean) => {
+    setHideMarketplaceChrome(hidden);
+  }, []);
 
   React.useEffect(() => {
     if (scrollRef.current) {
@@ -86,28 +91,40 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     content = (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
-        <ScrollView
-          ref={scrollRef}
-          refreshControl={
-            <RefreshControl
-              refreshing={model.refreshing}
-              onRefresh={() => void model.refreshEverything()}
-              tintColor={ecoTheme.colors.primaryDark}
-            />
-          }
-          contentContainerStyle={styles.mainScrollContent}
-        >
+        {model.activeTab === 'marketplace' ? (
           <>
-            {model.activeTab === 'home' && <HomeView model={model} />}
-            {model.activeTab === 'learn' && <LearnView model={model} />}
-            {model.activeTab === 'challenges' && <ChallengesView model={model} />}
-            {model.activeTab === 'tracker' && <TrackerView model={model} />}
-            {model.activeTab === 'profile' && <ProfileView model={model} />}
-            {model.activeTab === 'marketplace' && <MarketplaceView model={model} />}
+            <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
+            {!hideMarketplaceChrome && (
+              <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+            )}
           </>
-        </ScrollView>
-        <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
-        <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            refreshControl={
+              <RefreshControl
+                refreshing={model.refreshing}
+                onRefresh={() => void model.refreshEverything()}
+                tintColor={ecoTheme.colors.primaryDark}
+              />
+            }
+            contentContainerStyle={styles.mainScrollContent}
+          >
+            <>
+              {model.activeTab === 'home' && <HomeView model={model} />}
+              {model.activeTab === 'learn' && <LearnView model={model} />}
+              {model.activeTab === 'challenges' && <ChallengesView model={model} />}
+              {model.activeTab === 'tracker' && <TrackerView model={model} />}
+              {model.activeTab === 'profile' && <ProfileView model={model} />}
+            </>
+          </ScrollView>
+        )}
+        {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
+          <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
+        )}
+        {model.activeTab !== 'marketplace' && (
+          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+        )}
       </SafeAreaView>
     );
   }

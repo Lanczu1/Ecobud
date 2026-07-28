@@ -657,7 +657,7 @@ export class AdminService {
         }
       });
 
-      await prisma.eventRegistration.update({
+      const eventReg = await prisma.eventRegistration.update({
         where: { userId_eventId: { userId: submission.userId, eventId: submission.eventId } },
         data: {
           status: status === 'approved' ? 'ATTENDED' : 'REGISTERED',
@@ -773,6 +773,7 @@ export class AdminService {
     endDatetime: string;
     capacity: number;
     pointsReward: number;
+    coinReward?: number;
     imageUrl?: string;
     latitude?: number;
     longitude?: number;
@@ -786,7 +787,7 @@ export class AdminService {
         startDatetime: new Date(data.startDatetime),
         endDatetime: new Date(data.endDatetime),
         capacity: data.capacity,
-        ecoCoinsReward: 0,
+        ecoCoinsReward: data.coinReward ?? 0,
         expReward: data.pointsReward,
         managedById: data.managedById,
         imageUrl: data.imageUrl,
@@ -808,6 +809,7 @@ export class AdminService {
     endDatetime: string;
     capacity: number;
     pointsReward: number;
+    coinReward: number;
     imageUrl: string;
     latitude: number;
     longitude: number;
@@ -822,6 +824,10 @@ export class AdminService {
     if (data.pointsReward !== undefined) {
       updateData.expReward = data.pointsReward;
       delete updateData.pointsReward;
+    }
+    if (data.coinReward !== undefined) {
+      updateData.ecoCoinsReward = data.coinReward;
+      delete updateData.coinReward;
     }
     return await prisma.event.update({
       where: { id },

@@ -14,6 +14,7 @@ import {
   StyleProp,
   ViewStyle,
   TextStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -121,6 +122,7 @@ export function TopNavbar({ model, title, showBack, onBack }: { model: EcoBudMob
         model.setActiveOverlay(null);
         model.setActiveTab('tracker');
       }}
+      onNotificationsPress={() => model.setActiveOverlay('notifications')}
     />
   );
 }
@@ -516,12 +518,18 @@ export function BottomTabBar({
   activeTab: AppTab;
   onChange: (tab: AppTab) => void;
 }) {
-  const items: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-    { key: 'home', label: 'Home', icon: 'home-outline' },
-    { key: 'learn', label: 'Learn', icon: 'book-outline' },
-    { key: 'challenges', label: 'Challenges', icon: 'trophy-outline' },
-    { key: 'marketplace', label: 'Give & Get Hub', icon: 'cart-outline' },
-    { key: 'profile', label: 'Profile', icon: 'person-outline' },
+  const { width: screenWidth } = useWindowDimensions();
+
+  // On very narrow phones (< 380px), shorten long labels to prevent overflow
+  const isNarrow = screenWidth < 380;
+  const isVeryNarrow = screenWidth < 340;
+
+  const items: { key: AppTab; label: string; shortLabel: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { key: 'home', label: 'Home', shortLabel: 'Home', icon: 'home-outline' },
+    { key: 'learn', label: 'Learn', shortLabel: 'Learn', icon: 'book-outline' },
+    { key: 'challenges', label: 'Challenges', shortLabel: 'Tasks', icon: 'trophy-outline' },
+    { key: 'marketplace', label: 'G&G', shortLabel: 'G&G', icon: 'cart-outline' },
+    { key: 'profile', label: 'Profile', shortLabel: 'Profile', icon: 'person-outline' },
   ];
 
   const activeIndex = items.findIndex((item) => item.key === activeTab);
@@ -549,6 +557,9 @@ export function BottomTabBar({
     outputRange: [0, tabWidth, 2 * tabWidth, 3 * tabWidth, 4 * tabWidth],
   });
 
+  // Pill inner margin shrinks on narrow screens so it doesn't clip
+  const pillInset = isNarrow ? 4 : 8;
+
   return (
     <View style={styles.bottomBar} onLayout={onLayout}>
       {barWidth > 0 && (
@@ -556,19 +567,23 @@ export function BottomTabBar({
           style={[
             styles.tabActivePill,
             {
-              width: tabWidth - 16,
+              width: tabWidth - pillInset * 2,
+              top: pillInset,
+              bottom: pillInset,
               transform: [{ translateX }],
             },
           ]}
         />
       )}
       {items.map((item) => {
+        const displayLabel = isVeryNarrow ? item.shortLabel : isNarrow ? item.shortLabel : item.label;
         return (
           <TabItem
             key={item.key}
-            item={item}
+            item={{ ...item, label: displayLabel }}
             isActive={item.key === activeTab}
             onPress={() => onChange(item.key)}
+            isNarrow={isNarrow}
           />
         );
       })}
@@ -580,10 +595,12 @@ function TabItem({
   item,
   isActive,
   onPress,
+  isNarrow = false,
 }: {
   item: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap };
   isActive: boolean;
   onPress: () => void;
+  isNarrow?: boolean;
 }) {
   const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
   const activeIconName = isActive
@@ -608,10 +625,19 @@ function TabItem({
       <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', gap: 2 }}>
         <Ionicons
           name={activeIconName}
-          size={22}
+          size={isNarrow ? 20 : 22}
           color={isActive ? ecoTheme.colors.primaryDark : '#9BA2A7'}
         />
-        <Text style={[styles.bottomBarLabel, isActive && styles.bottomBarLabelActive]}>
+        <Text
+          style={[
+            styles.bottomBarLabel,
+            isActive && styles.bottomBarLabelActive,
+            isNarrow && { fontSize: 9 },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
           {item.label}
         </Text>
       </Animated.View>

@@ -106,6 +106,9 @@ export const homeService = {
   submitEventAttendance: (token: string, eventId: string, imageUri: string, qrData: string) =>
     ecobudApi.submitEventAttendance(token, eventId, imageUri, qrData),
 
+  claimEventReward: (token: string, eventId: string) =>
+    ecobudApi.claimEventReward(token, eventId),
+
   // ─── Composite Loaders ────────────────────────────────────────────────────────
 
   /**

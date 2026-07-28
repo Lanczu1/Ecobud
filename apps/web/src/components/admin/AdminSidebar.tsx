@@ -8,13 +8,14 @@ import {
   FileText, 
   LogOut,
   Send,
-  ShieldCheck
+  ShieldCheck,
+  Gift
 } from 'lucide-react';
 
 import logoImg from '../../assets/logo.png';
 
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Swap Goods' | 'Audit Logs' | 'Reports';
+export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Audit Logs' | 'Reports';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -31,7 +32,8 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
 
   { name: 'Events', icon: Calendar },
 
-  { name: 'Swap Goods', icon: ArrowLeftRight },
+  { name: 'Give and Get Hub', icon: ArrowLeftRight },
+  { name: 'Redeem', icon: Gift },
   { name: 'Audit Logs', icon: ShieldCheck },
   { name: 'Reports', icon: FileText },
 ];

@@ -10,6 +10,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { type HeaderProps } from '../types/home';
 import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndicator';
@@ -47,7 +48,12 @@ export function Header({
   onBack,
   onEventsPress,
   onTrackerPress,
+  onNotificationsPress,
 }: HeaderProps) {
+  const insets = useSafeAreaInsets();
+  // Use device safe area top inset (notch / status bar) with a minimum of 16px breathing room
+  const topPadding = Math.max(insets.top, 16);
+
   const getAvatarSource = () => {
     if (!userAvatarUrl || userAvatarUrl === 'null') return null;
     let cleanUrl = userAvatarUrl.replace(/\\/g, '/');
@@ -62,7 +68,7 @@ export function Header({
   const avatarSource = getAvatarSource();
 
   return (
-    <View style={styles.topNavbar}>
+    <View style={[styles.topNavbar, { paddingTop: topPadding }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {showBack ? (
           <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
@@ -112,7 +118,7 @@ export function Header({
             <Ionicons name="calendar-outline" size={24} color="#126027" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity>
+        <TouchableOpacity onPress={onNotificationsPress}>
           <Ionicons name="notifications" size={24} color="#126027" />
           {notificationCount > 0 && <View style={styles.topNavBadge} />}
         </TouchableOpacity>
@@ -123,7 +129,7 @@ export function Header({
 
 const styles = StyleSheet.create({
   topNavbar: {
-    paddingTop: 50,
+    // paddingTop is now applied dynamically via useSafeAreaInsets() in the component
     paddingHorizontal: 24,
     paddingBottom: 16,
     flexDirection: 'row',

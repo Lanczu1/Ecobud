@@ -43,7 +43,7 @@ import {
   shortHash,
   getEventLifecycleStatus,
 } from '../utils/appUtils';
-import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
 import {
   TopNavbar,
   OverlayScaffold,
@@ -544,10 +544,33 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+export function NotificationsOverlay({ model }: { model: EcoBudMobileModel }) {
+  return (
+    <View style={styles.fullscreenOverlay}>
+      <TopNavbar model={model} showBack={true} />
+      <ScrollView contentContainerStyle={styles.homeContent}>
+        <Text style={styles.welcomeLabel}>NOTIFICATIONS</Text>
+        <Text style={styles.pageTitle}>Notifications</Text>
+        <View style={{ marginTop: 40, alignItems: 'center' }}>
+          <Ionicons name="notifications-off-outline" size={64} color="#D1D5DB" />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#9CA3AF', marginTop: 16 }}>Under Development</Text>
+          <Text style={{ fontSize: 13, color: '#D1D5DB', marginTop: 6, textAlign: 'center', paddingHorizontal: 40 }}>
+            This feature is coming soon. Stay tuned for updates!
+          </Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
   switch (model.activeOverlay) {
     case 'coinsHistory':
       return <CoinsHistoryOverlay model={model} />;
+    case 'redeemPoints':
+      return <RedeemPointsOverlay model={model} />;
+    case 'notifications':
+      return <NotificationsOverlay model={model} />;
     case 'assistant':
       return <AssistantOverlay model={model} />;
     case 'events':
@@ -572,6 +595,8 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <StreakUnlockedOverlay model={model} />;
     case 'streakRewards':
       return <StreakRewardsOverlay model={model} />;
+    case 'eventApproved':
+      return <EventApprovedOverlay model={model} />;
     case 'settings':
       return <SettingsOverlay model={model} />;
     default:
@@ -940,6 +965,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                       onJoin={() => model.handleJoinEvent(featuredEvent.id)}
                       onSignIn={() => model.leaveReadOnlyAccess()}
                       onRecordAttendance={() => setAttendanceEvent(featuredEvent.id)}
+                      onClaimReward={() => void model.handleClaimEventReward(featuredEvent.id)}
                     />
             ) : (
               <SurfaceCard style={styles.publicInfoCard}>
@@ -994,10 +1020,27 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                         </TouchableOpacity>
                       );
                     }
+                    if (event.userStatus === 'reward_claimed') {
+                      return (
+                        <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)' }]}>
+                          <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>✓ Reward Claimed</Text>
+                        </View>
+                      );
+                    }
                     if (event.userStatus === 'attended') {
                       return (
-                        <View style={[styles.quickJoinBtn, { backgroundColor: '#126027' }]}>
-                          <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Attended</Text>
+                        <TouchableOpacity
+                          style={[styles.quickJoinBtn, { backgroundColor: '#F59E0B' }]}
+                          onPress={() => void model.handleClaimEventReward(event.id)}
+                        >
+                          <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Claim Reward</Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    if (event.userStatus === 'pending_approval') {
+                      return (
+                        <View style={[styles.quickJoinBtn, { backgroundColor: '#FEF3C7' }]}>
+                          <Text style={[styles.quickJoinBtnText, { color: '#92400E' }]}>Waiting for Approval</Text>
                         </View>
                       );
                     }
@@ -2504,6 +2547,443 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { width, height } = Dimensions.get('window');
+  const contentScale = React.useRef(new Animated.Value(0.8)).current;
+  const contentOpacity = React.useRef(new Animated.Value(0)).current;
+  const checkScale = React.useRef(new Animated.Value(0)).current;
+  const checkRotate = React.useRef(new Animated.Value(0)).current;
+  const glowScale = React.useRef(new Animated.Value(0.9)).current;
+  const shineAnim = React.useRef(new Animated.Value(-150)).current;
+  const btnPulse = React.useRef(new Animated.Value(1)).current;
+  const btnOpacity = React.useRef(new Animated.Value(1)).current;
+  const bgOpacity = React.useRef(new Animated.Value(1)).current;
+
+  const [isAnimatingPoints, setIsAnimatingPoints] = React.useState(false);
+  const numParticles = 20;
+  const particleAnims = React.useRef(
+    Array.from({ length: numParticles }, () => ({
+      pos: new Animated.ValueXY({ x: width / 2 - 15, y: height / 2 - 80 }),
+      scale: new Animated.Value(0),
+      opacity: new Animated.Value(0),
+    }))
+  ).current;
+
+  const startPointsAnimation = () => {
+    model.setActiveTab('home', true);
+
+    setTimeout(() => {
+      setIsAnimatingPoints(true);
+
+      Animated.parallel([
+        Animated.timing(contentOpacity, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.timing(btnOpacity, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.timing(bgOpacity, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]).start();
+
+      const animations = particleAnims.map((particle, index) => {
+        const isCoin = index % 2 !== 0;
+        const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
+        const radius = 70 + Math.random() * 50;
+        const burstX = width / 2 - 15 + Math.cos(angle) * radius;
+        const burstY = height / 2 - 80 + Math.sin(angle) * radius;
+
+        const delay = index * 60;
+
+        return Animated.sequence([
+          Animated.delay(delay),
+          Animated.parallel([
+            Animated.spring(particle.pos, {
+              toValue: { x: burstX, y: burstY },
+              tension: 80,
+              friction: 6,
+              useNativeDriver: true,
+            }),
+            Animated.timing(particle.scale, {
+              toValue: 1.5,
+              duration: 250,
+              useNativeDriver: true,
+            }),
+            Animated.timing(particle.opacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.delay(120),
+          Animated.parallel([
+            Animated.timing(particle.pos, {
+              toValue: isCoin
+                ? { x: width + 100, y: 150 }
+                : { x: width / 2 - 15 + (Math.random() * 40 - 20), y: 434 },
+              duration: 650,
+              easing: Easing.bezier(0.25, 1, 0.5, 1),
+              useNativeDriver: true,
+            }),
+            Animated.timing(particle.scale, {
+              toValue: 0.4,
+              duration: 650,
+              useNativeDriver: true,
+            }),
+            Animated.sequence([
+              Animated.delay(450),
+              Animated.timing(particle.opacity, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: true,
+              }),
+            ]),
+          ]),
+        ]);
+      });
+
+      Animated.parallel(animations).start(() => {
+        model.setActiveOverlay(null);
+        DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
+      });
+    }, 100);
+  };
+
+  React.useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(contentScale, {
+          toValue: 1,
+          friction: 5,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(checkScale, {
+          toValue: 1,
+          friction: 3,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shineAnim, {
+          toValue: 350,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    Animated.loop(
+      Animated.timing(checkRotate, {
+        toValue: 1,
+        duration: 8000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowScale, {
+          toValue: 1.1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowScale, {
+          toValue: 0.9,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse]);
+
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(20), []);
+  const embers = React.useMemo(() => generateEmbers(6), []);
+
+  return (
+    <View style={[styles.fullscreenOverlay, isAnimatingPoints && { backgroundColor: 'transparent' }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}>
+        <LinearGradient
+          colors={['#1a1206', '#2d1f0a', '#4a3520']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]} pointerEvents="none">
+        <View style={{
+          position: 'absolute',
+          top: -60,
+          right: -60,
+          width: 280,
+          height: 280,
+          borderRadius: 140,
+          backgroundColor: 'rgba(251, 191, 36, 0.12)',
+        }} />
+        <View style={{
+          position: 'absolute',
+          bottom: -80,
+          left: -80,
+          width: 320,
+          height: 320,
+          borderRadius: 160,
+          backgroundColor: 'rgba(245, 158, 11, 0.08)',
+        }} />
+      </Animated.View>
+
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', zIndex: 5 }, { opacity: bgOpacity }]} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill}>
+          {embers.map((ember) => (
+            <FloatingEmber key={ember.id} ember={ember} />
+          ))}
+        </View>
+      </Animated.View>
+
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', zIndex: 10 }, { opacity: bgOpacity }]} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill}>
+          {confettiPieces.map((piece) => (
+            <ConfettiParticle key={piece.id} piece={piece} />
+          ))}
+        </View>
+      </Animated.View>
+
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View
+          style={{
+            opacity: contentOpacity,
+            transform: [{ scale: contentScale }],
+            alignItems: 'center',
+            width: '100%',
+          }}
+        >
+          <View style={{
+            width: '100%',
+            backgroundColor: 'rgba(255, 255, 255, 0.09)',
+            borderRadius: 32,
+            borderWidth: 1.5,
+            borderColor: 'rgba(255, 255, 255, 0.14)',
+            paddingHorizontal: 24,
+            paddingVertical: 36,
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 16 },
+            shadowOpacity: 0.25,
+            shadowRadius: 24,
+            elevation: 12,
+            overflow: 'hidden',
+          }}>
+
+            <Animated.View
+              style={{
+                position: 'absolute',
+                top: -150,
+                bottom: -150,
+                width: 60,
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                transform: [
+                  { translateX: shineAnim },
+                  { rotate: '25deg' },
+                ],
+              }}
+            />
+
+            <View style={{ position: 'relative', marginBottom: 28 }}>
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  top: -12,
+                  left: -12,
+                  right: -12,
+                  bottom: -12,
+                  borderRadius: 60,
+                  backgroundColor: 'rgba(251, 191, 36, 0.15)',
+                  transform: [{ scale: Animated.multiply(checkScale, glowScale) }]
+                }}
+              />
+
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  left: -4,
+                  right: -4,
+                  bottom: -4,
+                  borderRadius: 52,
+                  borderWidth: 2,
+                  borderColor: 'rgba(251, 191, 36, 0.6)',
+                  borderStyle: 'dashed',
+                  transform: [{
+                    rotate: checkRotate.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '360deg'],
+                    })
+                  }]
+                }}
+              />
+
+              <Animated.View
+                style={{
+                  width: 96,
+                  height: 96,
+                  borderRadius: 48,
+                  backgroundColor: '#F59E0B',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  transform: [{ scale: checkScale }],
+                  shadowColor: '#F59E0B',
+                  shadowOffset: { width: 0, height: 10 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 18,
+                  elevation: 10,
+                  borderWidth: 4,
+                  borderColor: 'rgba(255, 255, 255, 0.25)',
+                }}
+              >
+                <Ionicons name="checkmark-sharp" size={56} color="#FFFFFF" />
+              </Animated.View>
+            </View>
+
+            <View style={{
+              backgroundColor: 'rgba(251, 191, 36, 0.16)',
+              paddingHorizontal: 14,
+              paddingVertical: 6,
+              borderRadius: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 16,
+              borderWidth: 1,
+              borderColor: 'rgba(251, 191, 36, 0.3)',
+            }}>
+              <Ionicons name="sparkles" size={14} color="#FBBF24" />
+              <Text style={{ fontSize: 11, fontWeight: '900', color: '#FBBF24', letterSpacing: 1, textTransform: 'uppercase' }}>
+                Event Claimed
+              </Text>
+            </View>
+
+            <Text style={{ fontSize: 32, fontWeight: '900', color: '#FFFFFF', marginBottom: 8, textAlign: 'center', letterSpacing: -0.5 }}>
+              Event Approved!
+            </Text>
+
+            <Text style={{ fontSize: 15, color: '#C2D9CE', marginBottom: 32, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 }}>
+              Awesome! Your attendance has been verified and your eco rewards have been claimed!
+            </Text>
+
+            {model.earnedCoins > 0 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+                <ExpCounter targetPoints={model.earnedPoints} />
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+                    <View style={{ position: 'absolute', top: 5, left: 5, width: 100, height: 100, borderRadius: 50, backgroundColor: '#FBBF24' }}>
+                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: 50 }} />
+                    </View>
+                    <Image
+                      source={require('../../../assets/coin.png')}
+                      style={{ width: 50, height: 50, resizeMode: 'contain' }}
+                    />
+                  </View>
+                  <Text style={{ fontSize: 52, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: 4 }}>+{model.earnedCoins}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
+                </View>
+              </View>
+            ) : (
+              <ExpCounter targetPoints={model.earnedPoints} />
+            )}
+          </View>
+        </Animated.View>
+      </ScrollView>
+
+      <Animated.View style={{ paddingHorizontal: 24, paddingBottom: 48, backgroundColor: 'transparent', alignItems: 'center', opacity: btnOpacity }}>
+        <View style={{ width: '100%' }}>
+          <TouchableOpacity
+            onPress={startPointsAnimation}
+            style={{
+              width: '100%',
+              height: 58,
+              borderRadius: 20,
+              overflow: 'hidden',
+              shadowColor: '#F59E0B',
+              shadowOpacity: 0.35,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: 8 },
+              elevation: 8,
+            }}
+          >
+            <LinearGradient
+              colors={['#F59E0B', '#D97706']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                flexDirection: 'row',
+                gap: 8,
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
+                Continue
+              </Text>
+              <Ionicons name="arrow-forward-outline" size={18} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {particleAnims.map((particle, index) => (
+          <Animated.View
+            key={index}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              transform: [
+                { translateX: particle.pos.x },
+                { translateY: particle.pos.y },
+                { scale: particle.scale },
+              ],
+              opacity: particle.opacity,
+              zIndex: 9999,
+              shadowColor: '#F59E0B',
+              shadowRadius: 10,
+              shadowOpacity: 0.8,
+              shadowOffset: { width: 0, height: 0 },
+              elevation: 10,
+            }}
+          >
+            <View style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              backgroundColor: index % 2 === 0 ? '#10b981' : 'transparent',
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderWidth: index % 2 === 0 ? 2 : 0,
+              borderColor: '#FFF',
+            }}>
+              {index % 2 === 0 ? (
+                <Ionicons name="leaf" size={16} color="#FFF" />
+              ) : (
+                <Image
+                  source={require('../../../assets/coin.png')}
+                  style={{ width: 34, height: 34, resizeMode: 'contain' }}
+                />
+              )}
+            </View>
+          </Animated.View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   const [page, setPage] = React.useState(1);
   const itemsPerPage = 10;
@@ -3317,6 +3797,367 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
             </SurfaceCard>
           )}
         </View>
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </View>
+  );
+}
+
+export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const [displayCoins, setDisplayCoins] = React.useState(model.dashboard?.ecoCoins ?? 0);
+  const token = model.session?.token || '';
+  const [items, setItems] = React.useState<any[]>([]);
+  const [myRequests, setMyRequests] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [redeeming, setRedeeming] = React.useState<string | null>(null);
+  const [activeTab, setActiveTab] = React.useState<'shop' | 'requests'>('shop');
+
+  const loadItems = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      const [itemsData, requestsData, dashboardData] = await Promise.all([
+        ecobudApi.fetchRedeemItems(token),
+        ecobudApi.fetchMyRedeemRequests(token),
+        ecobudApi.fetchDashboard(token),
+      ]);
+      setItems(itemsData || []);
+      setMyRequests(requestsData || []);
+      // Sync coin balance from server (handles admin reject refunds)
+      if (dashboardData?.ecoCoins != null) {
+        setDisplayCoins(dashboardData.ecoCoins);
+      }
+    } catch (err) {
+      console.error('Failed to load redeem data:', err);
+      setItems([]);
+      setMyRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  React.useEffect(() => { loadItems(); }, [loadItems]);
+
+  const handleRedeem = (item: any) => {
+    if (displayCoins < item.coinCost) {
+      Alert.alert('Not Enough Coins', `You need ${item.coinCost} coins but only have ${displayCoins}.`);
+      return;
+    }
+    Alert.alert(
+      'Redeem Item',
+      `Request "${item.title}" for ${item.coinCost} coins?\n\nCoins will be deducted now. Admin will review your request.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit Request',
+          onPress: async () => {
+            try {
+              setRedeeming(item.id);
+              await ecobudApi.redeemItem(token, item.id);
+              // Deduct coins locally for instant UI update
+              setDisplayCoins(prev => prev - item.coinCost);
+              Alert.alert('Request Submitted!', `${item.title} redemption request sent for approval.`);
+              loadItems();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to submit request');
+            } finally {
+              setRedeeming(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClaim = (request: any) => {
+    Alert.alert(
+      'Claim Item',
+      `Confirm you have picked up "${request.itemTitle}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Claim',
+          onPress: async () => {
+            try {
+              await ecobudApi.claimRedeemRequest(token, request.id);
+              Alert.alert('Claimed!', 'Item marked as claimed.');
+              loadItems();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to claim');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case 'pending': return '#F59E0B';
+      case 'approved': return '#3B82F6';
+      case 'ready_to_claim': return '#10B981';
+      case 'rejected': return '#EF4444';
+      case 'claimed': return '#6B7280';
+      default: return '#9CA3AF';
+    }
+  };
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case 'pending': return 'Pending Review';
+      case 'approved': return 'Approved';
+      case 'ready_to_claim': return 'Ready to Claim';
+      case 'rejected': return 'Rejected';
+      case 'claimed': return 'Claimed';
+      default: return s;
+    }
+  };
+
+  return (
+    <View style={styles.fullscreenOverlay}>
+      <TopNavbar model={model} showBack={true} />
+      <ScrollView contentContainerStyle={styles.homeContent}>
+        <Text style={styles.welcomeLabel}>REDEEM</Text>
+        <Text style={styles.pageTitle}>Redeem Coins</Text>
+
+        {/* Balance Card */}
+        <LinearGradient
+          colors={['#059669', '#10B981', '#047857']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            width: '100%',
+            borderRadius: 24,
+            padding: 20,
+            marginTop: 16,
+            position: 'relative',
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.25)',
+            shadowColor: '#059669',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.25,
+            shadowRadius: 16,
+            elevation: 6,
+          }}
+        >
+          <View style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
+          <View style={{ position: 'absolute', bottom: -30, left: -10, width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(255, 255, 255, 0.05)' }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Image source={require('../../../assets/coin.png')} style={{ width: 34, height: 34 }} resizeMode="contain" />
+              <View>
+                <Text style={{ color: '#D1FAE5', fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                  Available Balance
+                </Text>
+                <Text style={{ fontSize: 28, fontWeight: '900', color: '#FFF', letterSpacing: -0.5 }}>
+                  {displayCoins} <Text style={{ fontSize: 18, fontWeight: '700', color: '#ECFDF5' }}>Coins</Text>
+                </Text>
+              </View>
+            </View>
+            <View style={{ backgroundColor: 'rgba(0, 0, 0, 0.15)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' }}>
+              <Ionicons name="sparkles" size={12} color="#FDE68A" />
+              <Text style={{ color: '#ECFDF5', fontSize: 11, fontWeight: '600' }}>Available</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* Tabs */}
+        <View style={{ flexDirection: 'row', marginTop: 20, gap: 8 }}>
+          {(['shop', 'requests'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: activeTab === tab ? '#126027' : '#F3F4F6',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: activeTab === tab ? '#FFF' : '#6B7280', fontWeight: '700', fontSize: 13 }}>
+                {tab === 'shop' ? 'Shop' : `My Requests${myRequests.length > 0 ? ` (${myRequests.length})` : ''}`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {loading ? (
+          <View style={{ padding: 40, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#126027" />
+          </View>
+        ) : activeTab === 'shop' ? (
+          /* ─── Shop Tab ─── */
+          items.length === 0 ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Ionicons name="gift-outline" size={48} color="#A7D5BA" />
+              <Text style={{ fontSize: 15, color: '#9CA3AF', marginTop: 12 }}>No items available yet</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 12, marginTop: 12 }}>
+              {items.map((item) => {
+                const canAfford = displayCoins >= item.coinCost;
+                const isRedeeming = redeeming === item.id;
+                return (
+                  <View key={item.id} style={{ backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+                    {item.imageUrl ? (
+                      <Image
+                        source={{ uri: item.imageUrl.startsWith('http') ? item.imageUrl : `${ecobudApiOrigin}${item.imageUrl}` }}
+                        style={{ width: '100%', height: 160 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={{ width: '100%', height: 140, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center' }}>
+                        <Ionicons name="gift-outline" size={48} color="#126027" />
+                      </View>
+                    )}
+                    <View style={{ padding: 16 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A2E28' }}>{item.title}</Text>
+                      {item.description ? (
+                        <Text style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }} numberOfLines={2}>{item.description}</Text>
+                      ) : null}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                        <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#D97706' }}>{item.coinCost} Coins</Text>
+                        {item.stock > 0 && (
+                          <Text style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 8 }}>Stock: {item.stock}</Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleRedeem(item)}
+                        disabled={!canAfford || isRedeeming}
+                        style={{
+                          backgroundColor: canAfford ? '#126027' : '#E5E7EB',
+                          borderRadius: 20,
+                          paddingVertical: 12,
+                          alignItems: 'center',
+                          marginTop: 12,
+                        }}
+                      >
+                        {isRedeeming ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <Text style={{ color: canAfford ? '#FFF' : '#9CA3AF', fontWeight: '700', fontSize: 14 }}>
+                            {canAfford ? 'Redeem' : 'Not Enough Coins'}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )
+        ) : (
+          /* ─── My Requests Tab ─── */
+          myRequests.length === 0 ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Ionicons name="receipt-outline" size={48} color="#A7D5BA" />
+              <Text style={{ fontSize: 15, color: '#9CA3AF', marginTop: 12 }}>No requests yet</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 10, marginTop: 12 }}>
+              {myRequests.map((req) => (
+                <View key={req.id} style={{ backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+                  {/* Item Header */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, paddingBottom: req.status === 'ready_to_claim' ? 12 : 16 }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                      {req.itemImage ? (
+                        <Image source={{ uri: req.itemImage.startsWith('http') ? req.itemImage : `${ecobudApiOrigin}${req.itemImage}` }} style={{ width: 48, height: 48, borderRadius: 12 }} resizeMode="cover" />
+                      ) : (
+                        <Ionicons name="gift-outline" size={24} color="#126027" />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A2E28' }}>{req.itemTitle}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#D97706' }}>{req.coinCost} Coins</Text>
+                      </View>
+                    </View>
+                    <View style={{ backgroundColor: statusColor(req.status) + '18', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 }}>
+                      <Text style={{ color: statusColor(req.status), fontSize: 11, fontWeight: '700' }}>{statusLabel(req.status)}</Text>
+                    </View>
+                  </View>
+
+                  {/* Ready to Claim / Claimed Card */}
+                  {(req.status === 'ready_to_claim' || req.status === 'claimed') && req.claimCode && (
+                    <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: req.status === 'claimed' ? '#F9FAFB' : '#F0FDF4', borderRadius: 14, borderWidth: 1, borderColor: req.status === 'claimed' ? '#E5E7EB' : '#D1FAE5', padding: 16 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: req.status === 'claimed' ? '#6B7280' : '#059669', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          {req.status === 'claimed' ? 'Claimed' : 'Ready to Claim'}
+                        </Text>
+                        {req.status === 'claimed' && (
+                          <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                        )}
+                      </View>
+
+                      {/* Claim Code */}
+                      <View style={{ backgroundColor: '#FFF', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1.5, borderColor: '#126027', borderStyle: 'dashed', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 1 }}>Claim Code</Text>
+                        <Text style={{ fontSize: 22, fontWeight: '900', color: '#126027', marginTop: 4, letterSpacing: 2 }}>{req.claimCode}</Text>
+                      </View>
+
+                      {/* Claim Details */}
+                      <View style={{ gap: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                          <Ionicons name="location" size={14} color="#126027" style={{ marginTop: 1 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' }}>Claim Location</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A2E28', marginTop: 1 }}>{req.claimLocation}</Text>
+                          </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                          <Ionicons name="calendar" size={14} color="#126027" style={{ marginTop: 1 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' }}>Claim Until</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A2E28', marginTop: 1 }}>
+                              {req.claimUntil ? new Date(req.claimUntil).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Instructions */}
+                      {req.claimInstructions && (
+                        <View style={{ marginTop: 10, backgroundColor: '#FFF', borderRadius: 8, padding: 10 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', marginBottom: 4 }}>Instructions</Text>
+                          {req.claimInstructions.split('\n').map((line: string, i: number) => (
+                            <Text key={i} style={{ fontSize: 12, color: '#374151', lineHeight: 18 }}>
+                              {'• '}{line.replace(/^[•]\s*/, '')}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Claim Button - only for ready_to_claim */}
+                      {req.status === 'ready_to_claim' && (
+                        <TouchableOpacity
+                          onPress={() => handleClaim(req)}
+                          style={{ backgroundColor: '#126027', borderRadius: 20, paddingVertical: 12, alignItems: 'center', marginTop: 12 }}
+                        >
+                          <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Claim Now</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Rejected Reason */}
+                  {req.status === 'rejected' && req.rejectReason && (
+                    <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+                      <Text style={{ fontSize: 12, color: '#EF4444' }}>Reason: {req.rejectReason}</Text>
+                    </View>
+                  )}
+
+                  {/* Date */}
+                  <Text style={{ fontSize: 10, color: '#D1D5DB', paddingHorizontal: 16, paddingBottom: 12 }}>
+                    {new Date(req.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )
+        )}
         <View style={{ height: 100 }} />
       </ScrollView>
     </View>

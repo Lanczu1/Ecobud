@@ -54,7 +54,9 @@ eventRoutes.get(
           
           if (userReg) {
             userStatus =
-              userReg.status === 'ATTENDED'
+              userReg.status === 'REWARD_CLAIMED'
+                ? 'reward_claimed'
+                : userReg.status === 'ATTENDED'
                 ? 'attended'
                 : userReg.status === 'PENDING_APPROVAL'
                 ? 'pending_approval'
@@ -119,6 +121,30 @@ eventRoutes.post(
 );
 
 eventRoutes.post(
+  '/:eventId/claim',
+  authenticateRequest,
+  requireUserAccess,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const { eventId } = req.params;
+    const userId = req.auth!.userId;
+
+    const registration = await prisma.eventRegistration.findUnique({
+      where: { userId_eventId: { userId, eventId } }
+    });
+    if (!registration) {
+      throw new HttpError(404, 'Registration not found.');
+    }
+    const result = await gamificationService.markEventAttendance(eventId, registration.id);
+    
+    if (result.alreadyCompleted) {
+      throw new HttpError(400, 'Reward already claimed.');
+    }
+
+    return res.status(200).json(result);
+  })
+);
+
+eventRoutes.post(
   '/:eventId/submissions',
   authenticateRequest,
   requireUserAccess,
@@ -127,6 +153,10 @@ eventRoutes.post(
     const { eventId } = req.params;
     const { qrData } = req.body;
     const userId = req.auth!.userId;
+    console.log('--- EVENT SUBMISSION API ---');
+    console.log('eventId:', eventId);
+    console.log('req.body:', req.body);
+    console.log('qrData from body:', qrData);
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
@@ -154,11 +184,15 @@ eventRoutes.post(
     let qrCodeValid = false;
     if (qrData) {
       const qrCode = await prisma.eventQrCode.findFirst({
-        where: { eventId, qrData },
+        where: { qrData },
       });
 
       if (!qrCode) {
         throw new HttpError(400, 'Invalid QR code.');
+      }
+
+      if (qrCode.eventId !== eventId) {
+        throw new HttpError(400, 'This QR code belongs to a different event.');
       }
 
       if (now > new Date(qrCode.expiresAt)) {
@@ -190,8 +224,6 @@ eventRoutes.post(
     });
 
     return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
-
-    throw new HttpError(400, 'Please provide an image or scan a QR code.');
   })
 );
 

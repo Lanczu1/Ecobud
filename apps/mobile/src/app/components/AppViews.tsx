@@ -743,7 +743,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           <View style={{ marginTop: 24, marginBottom: 8 }}>
             <Text style={[styles.welcomeLabel, { marginBottom: 8 }]}>RECENT ACTIVITY</Text>
             <Text style={[styles.sectionHeadline, { marginTop: 0, color: '#4ADE80' }]}>Recently Viewed</Text>
-            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: model.recentViewedMission.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, model.recentViewedMission.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }]} onPress={() => {
+            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: model.recentViewedMission!.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, model.recentViewedMission!.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }]} onPress={() => {
               const currentStatus = model.recentViewedMission!.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
@@ -1215,7 +1215,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
   return (
     <>
-      <TopNavbar model={model} showBack={true} title="Tracker" />
+      <TopNavbar model={model} showBack={false} title="Tracker" />
 
       <View style={styles.homeContent}>
         {/* ── 🔥 Current Streak Card ─────────────────────────────────────────── */}
@@ -1576,15 +1576,26 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
 export function ProfileView({ model }: { model: EcoBudMobileModel }) {
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permissions to change your profile picture.');
+        return;
+      }
 
-    if (!result.canceled) {
-      model.handleUpdateProfileImage(result.assets[0].uri);
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await model.handleUpdateProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   };
 
@@ -1724,6 +1735,22 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
         <View style={profileStyles.sectionContainer}>
           <Text style={profileStyles.sectionHeadline}>Eco Hub</Text>
           <View style={profileStyles.actionListCard}>
+            <TouchableOpacity 
+              style={profileStyles.actionItem}
+              onPress={() => model.setActiveOverlay('redeemPoints')}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
+                <Image source={require('../../../assets/coin.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: '#D97706' }]}>Redeem Coins</Text>
+                <Text style={profileStyles.actionSub}>Exchange your eco coins for rewards</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+            </TouchableOpacity>
+
+            <View style={profileStyles.divider} />
+
             <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('coinsHistory')}

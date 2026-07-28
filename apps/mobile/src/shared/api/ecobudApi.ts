@@ -115,6 +115,7 @@ export interface RealtimeChannelMap {
   userChallenges: string;
   userLearn: string;
   userNotice: string;
+  userSwap?: string;
   userTracker: string;
 }
 
@@ -286,11 +287,12 @@ export interface EcoEvent {
   endDatetime: string;
   capacity: number;
   expReward: number;
+  ecoCoinsReward?: number;
   imageUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   spotsLeft?: number;
-  userStatus?: 'joined' | 'attended' | 'pending_approval' | 'rejected' | null;
+  userStatus?: 'joined' | 'attended' | 'pending_approval' | 'rejected' | 'reward_claimed' | null;
   rejectionReason?: string;
 }
 
@@ -404,13 +406,14 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
         const response = await fetch(uri);
         const blob = await response.blob();
         const formData = new FormData();
-        formData.append('image', blob, 'upload.jpg');
         
         if (extraFields) {
           Object.entries(extraFields).forEach(([key, value]) => {
             formData.append(key, value);
           });
         }
+        
+        formData.append('image', blob, 'upload.jpg');
         
         const res = await fetch(uploadUrl, {
           method: 'POST',
@@ -609,6 +612,11 @@ export const ecobudApi = {
       { qrData }
     );
   },
+  claimEventReward: (token: string, eventId: string) =>
+    request<{ pointsAwarded: number; ecoCoinsAwarded: number; alreadyCompleted?: boolean }>(
+      `/events/${eventId}/claim`,
+      { method: 'POST', token, body: {} }
+    ),
   fetchTransparency: async (token: string) => {
     const [metrics, logs] = await Promise.all([
       request<TransparencyFeed['metrics']>('/transparency/metrics'),
@@ -633,6 +641,66 @@ export const ecobudApi = {
       token,
       body: { message, history },
     }),
+
+  // ─── Give & Get Hub (Swap) ───────────────────────────────────────────────
+  fetchSwapListings: (token: string, params?: {
+    search?: string;
+    category?: string;
+    meetupMethod?: string;
+    sortBy?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.category) query.set('category', params.category);
+    if (params?.meetupMethod) query.set('meetupMethod', params.meetupMethod);
+    if (params?.sortBy) query.set('sortBy', params.sortBy);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return request<any[]>(`/swap/listings${qs ? `?${qs}` : ''}`, { token });
+  },
+  fetchSwapListingById: (token: string, id: string) =>
+    request<any>(`/swap/listings/${id}`, { token }),
+  createSwapListing: (token: string, body: any) =>
+    request<any>('/swap/listings', { method: 'POST', token, body }),
+  updateSwapListing: (token: string, id: string, body: any) =>
+    request<any>(`/swap/listings/${id}`, { method: 'PATCH', token, body }),
+  deleteSwapListing: (token: string, id: string) =>
+    request<void>(`/swap/listings/${id}`, { method: 'DELETE', token }),
+  uploadSwapImage: async (token: string, uri: string) => {
+    const res = await uploadFileAsync<{ url: string }>('/swap/upload-image', token, uri);
+    return res.url;
+  },
+  sendSwapRequest: (token: string, body: { listingId: string; message?: string }) =>
+    request<any>('/swap/requests', { method: 'POST', token, body }),
+  updateSwapRequestStatus: (token: string, requestId: string, status: string) =>
+    request<any>(`/swap/requests/${requestId}/status`, { method: 'PATCH', token, body: { status } }),
+  fetchSwapConversations: (token: string) =>
+    request<any[]>('/swap/conversations', { token }),
+  fetchSwapMessages: (token: string, swapRequestId: string) =>
+    request<any[]>(`/swap/conversations/${swapRequestId}/messages`, { token }),
+  sendSwapMessage: (token: string, swapRequestId: string, text: string, imageUrl?: string) =>
+    request<any>(`/swap/conversations/${swapRequestId}/messages`, {
+      method: 'POST',
+      token,
+      body: { text, imageUrl },
+    }),
+  markSwapMessagesRead: (token: string, swapRequestId: string) =>
+    request<void>(`/swap/conversations/${swapRequestId}/read`, { method: 'PATCH', token }),
+  fetchMySwapListings: (token: string) =>
+    request<any[]>('/swap/my-listings', { token }),
+
+  // Redeem
+  fetchRedeemItems: (token: string) =>
+    request<any[]>('/redeem/items', { token }),
+  redeemItem: (token: string, itemId: string) =>
+    request<any>('/redeem/redeem', { method: 'POST', token, body: { itemId } }),
+  fetchMyRedeemRequests: (token: string) =>
+    request<any[]>('/redeem/my-requests', { token }),
+  claimRedeemRequest: (token: string, requestId: string) =>
+    request<any>(`/redeem/requests/${requestId}/claim`, { method: 'PATCH', token }),
 };
 
 export const ecobudApiOrigin = apiOrigin;

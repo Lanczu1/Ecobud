@@ -2,9 +2,19 @@ import { createHmac } from 'crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AccessRole } from '../security/tokenService';
 
-export type RealtimeSection = 'learn' | 'challenges' | 'tracker';
+export type RealtimeSection = 'learn' | 'challenges' | 'tracker' | 'swap';
 export type AdminRealtimeSection = 'dashboard' | 'users';
 type RealtimeActorRole = AccessRole | 'system';
+
+type SwapEventType = 'request' | 'message' | 'status';
+
+interface SwapEventInput {
+  actorUserId: string;
+  targetUserId: string;
+  eventType: SwapEventType;
+  listingId?: string;
+  swapRequestId?: string;
+}
 
 interface RealtimeSignalInput {
   actorRole?: RealtimeActorRole;
@@ -30,6 +40,7 @@ interface RealtimeChannelMap {
   userChallenges: string;
   userLearn: string;
   userNotice: string;
+  userSwap: string;
   userTracker: string;
 }
 
@@ -137,6 +148,7 @@ class SupabaseRealtimeService {
       userChallenges: this.buildUserChannel(userId, 'challenges'),
       userLearn: this.buildUserChannel(userId, 'learn'),
       userNotice: this.buildUserChannel(userId, 'notice'),
+      userSwap: this.buildUserChannel(userId, 'swap'),
       userTracker: this.buildUserChannel(userId, 'tracker'),
     };
 
@@ -239,6 +251,16 @@ class SupabaseRealtimeService {
       .slice(0, 24);
 
     return `ecobud:user:${section}:${digest}`;
+  }
+
+  async publishSwapEvent(input: SwapEventInput) {
+    const channel = this.buildUserChannel(input.targetUserId, 'swap');
+    return this.publish(channel, 'swap', {
+      actorUserId: input.actorUserId,
+      eventType: input.eventType,
+      listingId: input.listingId ?? null,
+      swapRequestId: input.swapRequestId ?? null,
+    });
   }
 
   private async publish(channelName: string, event: string, payload: Record<string, unknown>) {

@@ -10,7 +10,8 @@ import { Challenges } from './components/admin/pages/Challenges';
 
 import { Events } from './components/admin/pages/Events';
 
-import { SwapGoods } from './components/admin/pages/SwapGoods';
+import { GiveAndGetHub } from './components/admin/pages/GiveAndGetHub';
+import { Redeem } from './components/admin/pages/Redeem';
 import { Reports } from './components/admin/pages/Reports';
 import { Submissions } from './components/admin/pages/Submissions';
 import { AuditLogs } from './components/admin/pages/AuditLogs';
@@ -24,7 +25,8 @@ function renderSection(section: AdminSection) {
 
     case 'Events':           return <Events />;
 
-    case 'Swap Goods':       return <SwapGoods />;
+    case 'Give and Get Hub': return <GiveAndGetHub />;
+    case 'Redeem':          return <Redeem />;
     case 'Reports':          return <Reports />;
     case 'Submissions':      return <Submissions />;
     case 'Audit Logs':       return <AuditLogs />;

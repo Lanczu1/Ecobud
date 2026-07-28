@@ -137,3 +137,25 @@ export const eventSubmissionUploadMiddleware = multer({
     fileSize: 10 * 1024 * 1024, // 10MB limit for images
   }
 });
+
+const redeemUploadDirectory = path.join(uploadDirectory, 'Redeem');
+if (!fs.existsSync(redeemUploadDirectory)) {
+  fs.mkdirSync(redeemUploadDirectory, { recursive: true });
+}
+
+const redeemStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, redeemUploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, 'redeem-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const redeemUploadMiddleware = multer({
+  storage: redeemStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit for redeem images
+  }
+});
