@@ -357,6 +357,17 @@ router.patch('/:id/toggle', authenticateRequest, requireModeratorAccess, async (
   }
 });
 
+// Delete a redemption request
+router.delete('/requests/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
+  try {
+    await prisma.redeemRequest.delete({ where: { id: req.params.id } });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting redeem request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Delete a redeem item
 router.delete('/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {

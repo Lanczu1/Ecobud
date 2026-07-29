@@ -62,8 +62,12 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
     btnText = 'MARK AS COMPLETE';
   }
 
-  const handlePress = () => {
+  const handlePress = (e: any) => {
     if (isPending || isCompleted) return;
+    
+    // Capture the click coordinates to emit particles from the exact location
+    const { pageX, pageY } = e.nativeEvent;
+    
     setIsPressing(true);
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 0.85, duration: 100, useNativeDriver: true }),
@@ -72,7 +76,7 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
     ]).start(() => {
       setIsPressing(false);
       if (isApproved) {
-        if (onClaim) onClaim();
+        if (onClaim) onClaim({ x: pageX, y: pageY });
       } else {
         if (onComplete) onComplete();
       }
@@ -157,7 +161,7 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
           <Animated.View style={shouldPulse ? { transform: [{ scale: Animated.multiply(pulseAnim, scaleAnim) }] } : { transform: [{ scale: scaleAnim }] }}>
             <TouchableOpacity 
               activeOpacity={0.8}
-              onPress={handlePress}
+              onPress={(e) => handlePress(e)}
               disabled={isPressing || isPending || isCompleted}
               style={isApproved ? [styles.featuredProgramBtn, { backgroundColor: '#F59E0B', borderColor: '#D97706' }] : (shouldPulse ? localStyles.pulseBtn : styles.featuredProgramBtn)}
             >

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapListing } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 
@@ -84,10 +85,12 @@ export function SwapListingCard({
   onSwap?: () => void;
   isOwnListing?: boolean;
 }) {
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const mainImage = listing.images.length > 0 ? getValidImageUrl(listing.images[0].url) : undefined;
   const user = listing.user;
 
   return (
+    <>
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
@@ -157,27 +160,37 @@ export function SwapListingCard({
         </View>
 
         <View style={localStyles.userRow}>
-          <View style={localStyles.userAvatar}>
-            {user.avatarUrl ? (
-              <Image
-                source={{ uri: getValidImageUrl(user.avatarUrl) }}
-                style={localStyles.userAvatarImage}
-              />
-            ) : (
-              <Text style={localStyles.userAvatarText}>{getInitials(user.displayName)}</Text>
-            )}
-          </View>
-          <View style={localStyles.userInfo}>
-            <Text style={localStyles.userName} numberOfLines={1}>{user.displayName}</Text>
-            <View style={localStyles.userStatsRow}>
-              <Ionicons name="star" size={11} color="#F59E0B" />
-              <Text style={localStyles.userRating}>{user.rating.toFixed(1)}</Text>
-              <Text style={localStyles.userSwaps}>{user.successfulSwaps} swaps</Text>
+          <TouchableOpacity 
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }} 
+            onPress={(e) => {
+              e.stopPropagation();
+              setShowProfileModal(true);
+            }}
+          >
+            <View style={localStyles.userAvatar}>
+              {user.avatarUrl ? (
+                <Image
+                  source={{ uri: getValidImageUrl(user.avatarUrl) }}
+                  style={localStyles.userAvatarImage}
+                />
+              ) : (
+                <Text style={localStyles.userAvatarText}>{getInitials(user.displayName)}</Text>
+              )}
             </View>
-          </View>
+            <View style={localStyles.userInfo}>
+              <Text style={localStyles.userName} numberOfLines={1}>{user.displayName}</Text>
+              <View style={localStyles.userStatsRow}>
+                <Ionicons name="star" size={11} color="#F59E0B" />
+                <Text style={localStyles.userRating}>{user.rating.toFixed(1)}</Text>
+                <Text style={localStyles.userSwaps}>{user.successfulSwaps} swaps</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
           {!isOwnListing && onSwap && (
-            <TouchableOpacity onPress={onSwap} style={localStyles.swapButton}>
-              <Text style={localStyles.swapButtonText}>Swap Now</Text>
+            <TouchableOpacity style={localStyles.swapButton} onPress={onSwap}>
+              <Text style={localStyles.swapButtonText}>
+                {listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Request' : 'Swap Now'}
+              </Text>
             </TouchableOpacity>
           )}
           {isOwnListing && (
@@ -203,7 +216,13 @@ export function SwapListingCard({
           )}
         </View>
       </View>
-    </Pressable>
+      </Pressable>
+      <PublicProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={user}
+      />
+    </>
   );
 }
 

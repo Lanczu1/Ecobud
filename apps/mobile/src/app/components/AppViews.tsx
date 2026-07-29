@@ -1575,6 +1575,8 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ProfileView({ model }: { model: EcoBudMobileModel }) {
+  const [isViewingAvatar, setIsViewingAvatar] = useState(false);
+
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1653,7 +1655,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
           </View>
 
           <View style={profileStyles.profileMainInfo}>
-            <TouchableOpacity onPress={() => void pickImage()} style={profileStyles.avatarContainer}>
+            <TouchableOpacity onPress={() => avatarUrl ? setIsViewingAvatar(true) : void pickImage()} style={profileStyles.avatarContainer}>
               {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={profileStyles.avatarImg} />
               ) : (
@@ -1664,9 +1666,9 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                   textStyle={{ fontSize: 36 }}
                 />
               )}
-              <View style={profileStyles.avatarEditBadge}>
+              <TouchableOpacity onPress={() => void pickImage()} style={profileStyles.avatarEditBadge}>
                 <Ionicons name="camera" size={12} color="#FFF" />
-              </View>
+              </TouchableOpacity>
             </TouchableOpacity>
             
             <View style={profileStyles.profileMeta}>
@@ -1953,11 +1955,18 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                     </View>
                     <Text style={isUnlocked ? profileStyles.badgeTitle : profileStyles.badgeTitleLocked}>{badge.name}</Text>
                     <Text style={profileStyles.badgeDescription}>{badge.description}</Text>
-                    {!isUnlocked && (
+                    {!isUnlocked && badge.targetProgress ? (
+                      <View style={{ marginTop: 8, width: '100%', paddingHorizontal: 4 }}>
+                        <ProgressBar progress={(badge.currentProgress ?? 0) / badge.targetProgress} />
+                        <Text style={[profileStyles.badgeDescription, { marginTop: 4, textAlign: 'center', fontSize: 10 }]}>
+                          {badge.currentProgress} / {badge.targetProgress} completed
+                        </Text>
+                      </View>
+                    ) : !isUnlocked ? (
                       <Text style={[profileStyles.badgeDescription, { marginTop: 4, fontWeight: 'bold' }]}>
                         Unlocks at {badge.requiredPoints} pts
                       </Text>
-                    )}
+                    ) : null}
                   </View>
                 );
               })
@@ -1969,6 +1978,34 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
         <View style={{ height: 100 }} />
       </View>
+      {isViewingAvatar && (
+        <Modal visible={isViewingAvatar} transparent={true} animationType="fade" onRequestClose={() => setIsViewingAvatar(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
+            <TouchableOpacity style={{ position: 'absolute', top: 60, right: 30, zIndex: 10 }} onPress={() => setIsViewingAvatar(false)}>
+              <Ionicons name="close" size={32} color="#FFF" />
+            </TouchableOpacity>
+            
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '70%', resizeMode: 'contain' }} />
+            ) : (
+              <AvatarBubble
+                label={model.userDisplayName}
+                size={200}
+                style={{ borderRadius: 100 }}
+                textStyle={{ fontSize: 80 }}
+              />
+            )}
+            
+            <TouchableOpacity 
+              style={{ marginTop: 40, backgroundColor: '#126027', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 8 }} 
+              onPress={() => { setIsViewingAvatar(false); void pickImage(); }}
+            >
+              <Ionicons name="camera" size={20} color="#FFF" />
+              <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Change Picture</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
+      )}
     </>
   );
 }

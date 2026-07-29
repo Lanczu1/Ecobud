@@ -222,7 +222,7 @@ experienceRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
-    const [user, badges, userBadges, challengeCount, eventCount] = await Promise.all([
+    const [user, badges, userBadges, challengeCount, eventCount, giveawayCount] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { points: true },
@@ -243,16 +243,38 @@ experienceRoutes.get(
           status: 'ATTENDED',
         },
       }),
+      prisma.swapRequest.count({
+        where: {
+          toUserId: userId,
+          status: 'completed',
+          listing: {
+            lookingFor: {
+              equals: 'giveaway',
+              mode: 'insensitive',
+            },
+          },
+        },
+      }),
     ]);
 
     const unlockedBadgeIds = new Set(userBadges.map((item) => item.badgeId));
 
     return res.json({
       points: user?.points ?? 0,
-      badges: badges.map((badge) => ({
-        ...badge,
-        unlocked: unlockedBadgeIds.has(badge.id),
-      })),
+      badges: badges.map((badge) => {
+        if (badge.name === 'Giveaway Master') {
+          return {
+            ...badge,
+            unlocked: giveawayCount >= 10 || unlockedBadgeIds.has(badge.id),
+            currentProgress: giveawayCount,
+            targetProgress: 10,
+          };
+        }
+        return {
+          ...badge,
+          unlocked: unlockedBadgeIds.has(badge.id),
+        };
+      }),
       achievements: [
         {
           id: 'challenge-master',

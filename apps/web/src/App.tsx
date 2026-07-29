@@ -14,7 +14,6 @@ import { GiveAndGetHub } from './components/admin/pages/GiveAndGetHub';
 import { Redeem } from './components/admin/pages/Redeem';
 import { Reports } from './components/admin/pages/Reports';
 import { Submissions } from './components/admin/pages/Submissions';
-import { AuditLogs } from './components/admin/pages/AuditLogs';
 
 function renderSection(section: AdminSection) {
   switch (section) {
@@ -29,7 +28,6 @@ function renderSection(section: AdminSection) {
     case 'Redeem':          return <Redeem />;
     case 'Reports':          return <Reports />;
     case 'Submissions':      return <Submissions />;
-    case 'Audit Logs':       return <AuditLogs />;
     default:                 return <Dashboard />;
   }
 }

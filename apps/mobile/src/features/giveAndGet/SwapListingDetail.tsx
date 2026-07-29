@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
+import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapListing } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 
@@ -71,6 +72,7 @@ export function SwapListingDetail({
 }) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showActions, setShowActions] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const isOwnListing = listing.user.id === currentUserId;
   const scrollRef = useRef<ScrollView>(null);
 
@@ -280,7 +282,7 @@ export function SwapListingDetail({
           ) : null}
 
           <Text style={localStyles.sectionTitle}>Posted By</Text>
-          <View style={localStyles.userCard}>
+          <TouchableOpacity style={localStyles.userCard} onPress={() => setShowProfileModal(true)}>
             <View style={localStyles.userAvatar}>
               {listing.user.avatarUrl ? (
                 <Image
@@ -311,7 +313,8 @@ export function SwapListingDetail({
                 </View>
               </View>
             </View>
-          </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -324,8 +327,10 @@ export function SwapListingDetail({
               end={{ x: 1, y: 1 }}
               style={localStyles.swapBtnGradient}
             >
-              <Ionicons name="swap-horizontal" size={20} color="#FFF" />
-              <Text style={localStyles.swapBtnText}>Request Swap</Text>
+              <Ionicons name={listing.lookingFor?.toLowerCase() === 'giveaway' ? 'gift' : 'swap-horizontal'} size={20} color="#FFF" />
+              <Text style={localStyles.swapBtnText}>
+                {listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Request Item' : 'Request Swap'}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -389,6 +394,12 @@ export function SwapListingDetail({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <PublicProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={listing.user}
+      />
     </SafeAreaView>
   );
 }

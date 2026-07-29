@@ -255,6 +255,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               ) : mockResult.passed && step === 'result' && capturedImage ? (
                 <View style={{ alignItems: 'center', marginBottom: 32 }}>
+                  <View style={{ backgroundColor: '#FFFBEB', padding: 12, borderRadius: 12, marginBottom: 16, width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#FDE68A' }}>
+                    <Ionicons name="warning" size={24} color="#D97706" />
+                    <Text style={{ flex: 1, color: '#92400E', fontSize: 14, fontWeight: '600', lineHeight: 20 }}>
+                      Your submission will be approved once you deliver the recyclable item to the Municipal Waste Collection Center.
+                    </Text>
+                  </View>
                   <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Submission Complete!</Text>
                   <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
                     Your submission has been sent to the admin for review. Once approved, you will receive:
@@ -648,15 +654,15 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
           </ScrollView>
         </View>
 
-        <View style={styles.assistantComposer}>
+        <View style={[styles.assistantComposer, { paddingBottom: Platform.OS === 'android' ? 90 : 60 }]}>
           <TextInput
             value={model.assistantInput}
             onChangeText={model.setAssistantInput}
             placeholder="Message ECOBUD..."
             placeholderTextColor="#6B7A75"
-            style={styles.chatInput}
+            style={styles.assistantInput}
           />
-          <TouchableOpacity onPress={() => void model.handleAssistantSend()} style={styles.circularAddBtn}>
+          <TouchableOpacity onPress={() => void model.handleAssistantSend()} style={styles.sendButton}>
             <Ionicons name="send" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
