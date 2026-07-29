@@ -576,6 +576,8 @@ const localStyles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sortPillActive: {
     backgroundColor: ecoTheme.colors.surfaceMuted,
@@ -585,6 +587,7 @@ const localStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: ecoTheme.colors.textSoft,
+    textAlign: 'center',
   },
   sortPillTextActive: {
     color: ecoTheme.colors.primaryDark,
@@ -605,6 +608,8 @@ const localStyles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   categoryPillActive: {
     backgroundColor: ecoTheme.colors.primaryDark,
@@ -614,6 +619,7 @@ const localStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: ecoTheme.colors.textSoft,
+    textAlign: 'center',
   },
   categoryPillTextActive: {
     color: '#FFFFFF',

@@ -18,7 +18,6 @@ const sectionDescriptions: Record<AdminSection, string> = {
   Redeem: 'Manage the reward catalog for eco coin redemption',
   Reports: 'Platform-wide performance metrics and insights',
   Submissions: 'Review and moderate user challenge proofs',
-  'Audit Logs': 'System action and security tracing logs',
 };
 
 export function AdminHeader({ activeSection, isDark, onToggleDark }: AdminHeaderProps) {

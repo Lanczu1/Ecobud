@@ -34,6 +34,9 @@ interface RedeemRequest {
   itemImage: string | null;
   createdAt: string;
   updatedAt: string;
+  claimCode?: string;
+  claimLocation?: string;
+  claimUntil?: string;
 }
 
 interface RequestStats {
@@ -259,6 +262,15 @@ export function Redeem() {
     finally { setProcessingId(null); }
   };
 
+  const handleRemoveRequest = async (id: string) => {
+    if (window.confirm('Are you sure you want to remove this request?')) {
+      try {
+        await adminDelete(`/redeem/requests/${id}`);
+        fetchRequests();
+      } catch (error) { console.error('Failed to remove request', error); }
+    }
+  };
+
   const filteredRequests = requests.filter(r => {
     if (requestFilter !== 'all' && r.status !== requestFilter) return false;
     if (search) {
@@ -477,19 +489,25 @@ export function Redeem() {
                     </div>
 
                     {/* Actions */}
-                    {req.status === 'pending' && (
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button onClick={() => openApproveModal(req.id)} disabled={processingId === req.id}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50">
-                          {processingId === req.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> : <CheckCircle className="w-3.5 h-3.5" />}
-                          Approve
-                        </button>
-                        <button onClick={() => openRejectModal(req.id)} disabled={processingId === req.id}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-50">
-                          <XCircle className="w-3.5 h-3.5" /> Reject
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex gap-2 flex-shrink-0 items-center">
+                      {req.status === 'pending' && (
+                        <>
+                          <button onClick={() => openApproveModal(req.id)} disabled={processingId === req.id}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50">
+                            {processingId === req.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> : <CheckCircle className="w-3.5 h-3.5" />}
+                            Approve
+                          </button>
+                          <button onClick={() => openRejectModal(req.id)} disabled={processingId === req.id}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-50">
+                            <XCircle className="w-3.5 h-3.5" /> Reject
+                          </button>
+                        </>
+                      )}
+                      <button onClick={() => handleRemoveRequest(req.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors" title="Remove Request">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

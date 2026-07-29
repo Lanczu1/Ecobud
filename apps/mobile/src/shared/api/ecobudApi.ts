@@ -250,6 +250,8 @@ export interface EcoBadge {
   requiredPoints: number;
   accentColor?: string | null;
   unlocked?: boolean;
+  currentProgress?: number;
+  targetProgress?: number;
 }
 
 export interface RewardsData {

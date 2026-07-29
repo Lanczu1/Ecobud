@@ -1,11 +1,12 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  Modal,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -66,64 +67,84 @@ export function Header({
   };
 
   const avatarSource = getAvatarSource();
+  const [isViewingAvatar, setIsViewingAvatar] = useState(false);
 
   return (
-    <View style={[styles.topNavbar, { paddingTop: topPadding }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        {showBack ? (
-          <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
-            <Feather name="arrow-left" size={24} color="#1A211D" />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.avatarWrap}>
-            {avatarSource ? (
-              <Image
-                source={avatarSource}
-                style={[styles.topNavAvatar, { width: 44, height: 44, borderRadius: 22 }]}
+    <>
+      <View style={[styles.topNavbar, { paddingTop: topPadding }]}>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' }}>
+          {showBack ? (
+            <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
+              <Feather name="arrow-left" size={24} color="#1A211D" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.avatarWrap} onPress={() => { if (avatarSource) setIsViewingAvatar(true); }}>
+              {avatarSource ? (
+                <Image
+                  source={avatarSource}
+                  style={[styles.topNavAvatar, { width: 44, height: 44, borderRadius: 22 }]}
+                />
+              ) : (
+                <AvatarBubble
+                  label={userDisplayName}
+                  size={44}
+                  style={styles.topNavAvatar}
+                  textStyle={styles.topNavAvatarText}
+                />
+              )}
+              <ConnectionStatusIndicator
+                hasUsableInternet={hasUsableInternet}
+                size={11}
+                style={styles.connectionIndicator}
               />
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={{ width: 140, height: 45, resizeMode: 'contain' }}
+          />
+        </View>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+          {onTrackerPress && (
+            <TouchableOpacity onPress={onTrackerPress}>
+              <Ionicons name="bar-chart-outline" size={24} color="#126027" />
+            </TouchableOpacity>
+          )}
+          {onEventsPress && (
+            <TouchableOpacity onPress={onEventsPress}>
+              <Ionicons name="calendar-outline" size={24} color="#126027" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={onNotificationsPress}>
+            <Ionicons name="notifications" size={24} color="#126027" />
+            {notificationCount > 0 && <View style={styles.topNavBadge} />}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {isViewingAvatar && (
+        <Modal visible={isViewingAvatar} transparent={true} animationType="fade" onRequestClose={() => setIsViewingAvatar(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
+            <TouchableOpacity style={{ position: 'absolute', top: 60, right: 30, zIndex: 10 }} onPress={() => setIsViewingAvatar(false)}>
+              <Ionicons name="close" size={32} color="#FFF" />
+            </TouchableOpacity>
+
+            {avatarSource ? (
+              <Image source={avatarSource} style={{ width: '100%', height: '70%', resizeMode: 'contain' }} />
             ) : (
               <AvatarBubble
                 label={userDisplayName}
-                size={44}
-                style={styles.topNavAvatar}
-                textStyle={styles.topNavAvatarText}
+                size={200}
+                style={{ borderRadius: 100 }}
+                textStyle={{ fontSize: 80 }}
               />
             )}
-            <ConnectionStatusIndicator
-              hasUsableInternet={hasUsableInternet}
-              size={11}
-              style={styles.connectionIndicator}
-            />
           </View>
-        )}
-      </View>
-      {title ? (
-        <Text style={[styles.topNavTitle, styles.topNavTitleDark]}>{title}</Text>
-      ) : (
-        <View style={styles.brandTitleContainer}>
-          <Image
-            source={require('../../../assets/logo.png')}
-            style={{ width: 160, height: 50, resizeMode: 'contain' }}
-          />
-        </View>
+        </Modal>
       )}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        {onTrackerPress && (
-          <TouchableOpacity onPress={onTrackerPress}>
-            <Ionicons name="bar-chart-outline" size={24} color="#126027" />
-          </TouchableOpacity>
-        )}
-        {onEventsPress && (
-          <TouchableOpacity onPress={onEventsPress}>
-            <Ionicons name="calendar-outline" size={24} color="#126027" />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity onPress={onNotificationsPress}>
-          <Ionicons name="notifications" size={24} color="#126027" />
-          {notificationCount > 0 && <View style={styles.topNavBadge} />}
-        </TouchableOpacity>
-      </View>
-    </View>
+    </>
   );
 }
 

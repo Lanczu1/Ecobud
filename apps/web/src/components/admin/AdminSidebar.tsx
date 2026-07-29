@@ -8,14 +8,13 @@ import {
   FileText, 
   LogOut,
   Send,
-  ShieldCheck,
   Gift
 } from 'lucide-react';
 
 import logoImg from '../../assets/logo.png';
 
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Audit Logs' | 'Reports';
+export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -34,7 +33,6 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
 
   { name: 'Give and Get Hub', icon: ArrowLeftRight },
   { name: 'Redeem', icon: Gift },
-  { name: 'Audit Logs', icon: ShieldCheck },
   { name: 'Reports', icon: FileText },
 ];
 
@@ -44,7 +42,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   const isModerator = user?.role === 'moderator';
 
   const visibleMenuItems = menuItems.filter((item) => {
-    if (isModerator && ['Dashboard', 'Users', 'Audit Logs', 'Reports'].includes(item.name)) {
+    if (isModerator && ['Dashboard', 'Users', 'Reports'].includes(item.name)) {
       return false;
     }
     return true;

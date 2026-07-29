@@ -50,9 +50,7 @@ adminRoutes.get("/submissions", AdminController.getSubmissions);
 adminRoutes.post("/submissions/:id/review", AdminController.reviewSubmission);
 adminRoutes.delete("/submissions/:id", AdminController.deleteSubmission);
 
-// Audit Logs
-adminRoutes.get("/audit", AdminController.getAuditLogs);
-adminRoutes.delete("/audit", requireAdminAccess, AdminController.clearAuditLogs);
+
 
 // Events Management
 adminRoutes.get("/events", AdminController.getEvents);

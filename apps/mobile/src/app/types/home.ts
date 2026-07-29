@@ -86,7 +86,7 @@ export interface SummaryCardsProps {
 export interface ActiveChallengeCardProps {
   dailyChallenge: ChallengeWithProgress;
   onComplete: () => void;
-  onClaim?: () => void;
+  onClaim?: (origin?: { x: number; y: number }) => void;
   isViewed?: boolean;
 }
 

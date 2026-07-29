@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PasswordService } from '../src/security/passwordService';
@@ -177,6 +178,8 @@ async function main() {
     ['Tree Hugger', 'Reach the next impact tier.', 'https://cdn-icons-png.flaticon.com/512/628/628324.png', 300, '#84CC16'],
     ['Recycle Pro', 'Show long-term recycling consistency.', 'https://cdn-icons-png.flaticon.com/512/5014/5014050.png', 350, '#22C55E'],
     ['Sustainability Star', 'Earn top-tier eco credibility.', 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 400, '#EAB308'],
+    ['Green Plate', 'Adopt plant-based meals 5 times', 'https://cdn-icons-png.flaticon.com/512/3229/3229061.png', 750, '#10B981'],
+    ['Giveaway Master', 'Host 10 giveaways to earn this badge', 'https://cdn-icons-png.flaticon.com/512/3229/3229053.png', 999999, '#F59E0B'],
   ] as const;
 
   const badges = await Promise.all(

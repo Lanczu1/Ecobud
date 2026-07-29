@@ -74,7 +74,28 @@ export function CreateSwapListing({
       selectionLimit: 5 - images.length,
     });
     if (!result.canceled) {
-      setImages([...images, ...result.assets.map((a) => a.uri)]);
+      const newImages = [...images, ...result.assets.map((a) => a.uri)];
+      setImages(newImages.slice(0, 5));
+    }
+  };
+
+  const takePicture = async () => {
+    if (images.length >= 5) {
+      Alert.alert('Maximum 5 photos allowed');
+      return;
+    }
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera permissions to take a picture.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      const newImages = [...images, ...result.assets.map((a) => a.uri)];
+      setImages(newImages.slice(0, 5));
     }
   };
 
@@ -171,7 +192,7 @@ export function CreateSwapListing({
         >
           {step === 1 && (
             <>
-              <TouchableOpacity onPress={pickImages} style={localStyles.imagePicker}>
+              <View style={localStyles.imagePicker}>
                 {images.length > 0 ? (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={localStyles.imageList}>
                     {images.map((uri, i) => (
@@ -183,19 +204,31 @@ export function CreateSwapListing({
                       </View>
                     ))}
                     {images.length < 5 && (
-                      <TouchableOpacity onPress={pickImages} style={localStyles.addMoreImage}>
-                        <Ionicons name="camera-outline" size={28} color={ecoTheme.colors.primaryDark} />
-                        <Text style={localStyles.addMoreText}>Add</Text>
-                      </TouchableOpacity>
+                      <>
+                        <TouchableOpacity onPress={pickImages} style={localStyles.addMoreImage}>
+                          <Ionicons name="images-outline" size={24} color={ecoTheme.colors.primaryDark} />
+                          <Text style={localStyles.addMoreText}>Gallery</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={takePicture} style={[localStyles.addMoreImage, { marginLeft: 8 }]}>
+                          <Ionicons name="camera-outline" size={24} color={ecoTheme.colors.primaryDark} />
+                          <Text style={localStyles.addMoreText}>Camera</Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                   </ScrollView>
                 ) : (
-                  <View style={localStyles.imagePlaceholder}>
-                    <Ionicons name="camera-outline" size={40} color="#A7D5BA" />
-                    <Text style={localStyles.imagePlaceholderText}>Tap to add photos (up to 5)</Text>
+                  <View style={[localStyles.imagePlaceholder, { flexDirection: 'row', justifyContent: 'center', gap: 40 }]}>
+                    <TouchableOpacity onPress={pickImages} style={{ alignItems: 'center' }}>
+                      <Ionicons name="images-outline" size={40} color="#A7D5BA" />
+                      <Text style={[localStyles.imagePlaceholderText, { marginTop: 8 }]}>Gallery</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={takePicture} style={{ alignItems: 'center' }}>
+                      <Ionicons name="camera-outline" size={40} color="#A7D5BA" />
+                      <Text style={[localStyles.imagePlaceholderText, { marginTop: 8 }]}>Camera</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
-              </TouchableOpacity>
+              </View>
 
               <Text style={localStyles.fieldLabel}>Item Title *</Text>
               <TextInput
@@ -224,10 +257,11 @@ export function CreateSwapListing({
               <Text style={localStyles.fieldLabel}>Quantity *</Text>
               <TextInput
                 style={localStyles.input}
-                placeholder="e.g., 50 pieces, 5 kg, 2 boxes"
+                placeholder="e.g., 50"
                 placeholderTextColor="#9CA3AF"
                 value={quantity}
-                onChangeText={setQuantity}
+                onChangeText={(text) => setQuantity(text.replace(/[^0-9]/g, ''))}
+                keyboardType="numeric"
               />
 
               <Text style={localStyles.fieldLabel}>Condition *</Text>

@@ -195,9 +195,9 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                   void model.handleChallengeProgress(primaryChallenge, 100);
                 }
               }}
-              onClaim={() => {
+              onClaim={(origin) => {
                 if (primaryChallenge.id) {
-                  void model.handleClaimChallengeReward(primaryChallenge.id);
+                  void model.handleClaimChallengeReward(primaryChallenge.id, origin);
                 }
               }}
             />

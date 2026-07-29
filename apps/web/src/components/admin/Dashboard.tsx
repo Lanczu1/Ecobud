@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Trophy, BookOpen, Coins, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Users, Trophy, BookOpen, Coins, AlertCircle } from 'lucide-react';
 import { adminGet } from '../../utils/adminApi';
 
 interface DashboardStats {
@@ -21,13 +21,6 @@ interface DashboardStats {
   }[];
 }
 
-interface AuditLog {
-  id: string;
-  action: string;
-  details: string | null;
-  timestamp: string;
-  user: { name: string; email: string } | null;
-}
 
 function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
   return <div className={`animate-pulse bg-gray-200 rounded-lg ${className}`} style={style} />;
@@ -35,19 +28,14 @@ function Skeleton({ className = '', style }: { className?: string; style?: React
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const [statsData, logsData] = await Promise.all([
-          adminGet<DashboardStats>('/admin/stats'),
-          adminGet<AuditLog[]>('/admin/audit'),
-        ]);
+        const statsData = await adminGet<DashboardStats>('/admin/stats');
         setStats(statsData);
-        setAuditLogs(logsData);
       } catch (err: any) {
         setError(err.message || 'Failed to load dashboard data.');
       } finally {
@@ -144,7 +132,7 @@ export function Dashboard() {
             })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-reveal delay-160">
+      <div className="grid grid-cols-1 gap-8 animate-reveal delay-160">
         {/* Activity Trend Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-6">
@@ -184,53 +172,6 @@ export function Dashboard() {
           ) : null}
         </div>
 
-        {/* Recent Audit Activity */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition-shadow duration-300">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-serif font-bold text-gray-900">Recent Admin Activity</h3>
-            <button className="text-green-600 text-sm font-medium flex items-center gap-1 hover:text-green-700 transition-colors">
-              View All <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-          {loading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex gap-3">
-                  <Skeleton className="w-9 h-9 rounded-full flex-shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-3 w-full" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : auditLogs.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-gray-400">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" /> No activity yet
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {auditLogs.slice(0, 6).map((log) => (
-                <div key={log.id} className="flex gap-4 p-2 rounded-xl hover:bg-gray-50/50 transition-colors duration-200">
-                  <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs font-bold text-green-700">
-                      {log.user?.name?.charAt(0)?.toUpperCase() ?? 'S'}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-900 truncate">
-                      <span className="font-semibold">{log.user?.name ?? 'System'}</span>{' '}
-                      <span className="text-gray-500">{log.action.replace(/_/g, ' ').toLowerCase()}</span>
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

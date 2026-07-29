@@ -18,6 +18,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
+import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapChatMessage, SwapConversation, SwapRequestStatus } from './types';
 import { MEETUP_LABELS } from './types';
 
@@ -166,6 +167,7 @@ export function SwapChatView({
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const loadMessages = useCallback(async () => {
@@ -249,7 +251,7 @@ export function SwapChatView({
             {getStatusLabel(status)}
           </Text>
         </View>
-        <View style={localStyles.headerAvatar}>
+        <TouchableOpacity style={localStyles.headerAvatar} onPress={() => setShowProfileModal(true)}>
           {conversation.otherUser.avatarUrl ? (
             <Image
               source={{ uri: getValidImageUrl(conversation.otherUser.avatarUrl) }}
@@ -260,7 +262,7 @@ export function SwapChatView({
               {getInitials(conversation.otherUser.displayName)}
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
 
       <View style={localStyles.swapInfoBar}>
@@ -285,7 +287,9 @@ export function SwapChatView({
             <Text style={localStyles.declineBtnText}>Decline</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onAcceptSwap} style={localStyles.acceptBtn}>
-            <Text style={localStyles.acceptBtnText}>Accept Swap</Text>
+            <Text style={localStyles.acceptBtnText}>
+              {conversation.listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Accept' : 'Accept Swap'}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -362,6 +366,12 @@ export function SwapChatView({
           </TouchableOpacity>
         </View>
       )}
+
+      <PublicProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={conversation.otherUser}
+      />
     </SafeAreaView>
   );
 }

@@ -128,8 +128,11 @@ export function MarketplaceHubView({
       await swapService.updateSwapRequestStatus(selectedConversation.swapRequestId, 'accepted');
       setShowAcceptedDialog(true);
       await loadConversations();
-    } catch {
-      console.error('Failed to accept swap');
+    } catch (err: any) {
+      console.error('Failed to accept swap:', err);
+      if (typeof globalThis !== 'undefined' && (globalThis as any).Alert) {
+        (globalThis as any).Alert.alert('Error', err?.message || 'Failed to accept swap');
+      }
     }
   };
 
@@ -232,8 +235,8 @@ export function MarketplaceHubView({
 
       <SwapAcceptedDialog
         visible={showAcceptedDialog}
-        listing={selectedListing}
-        meetupMethod={selectedListing?.meetupMethod || 'public'}
+        listing={selectedListing || selectedConversation?.listing || null}
+        meetupMethod={selectedListing?.meetupMethod || selectedConversation?.listing?.meetupMethod || 'public'}
         onClose={() => setShowAcceptedDialog(false)}
         onChat={() => {
           setShowAcceptedDialog(false);
