@@ -206,7 +206,7 @@ export interface EcoBudMobileModel {
   analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>;
   uploadChallengeProofImage: (challengeId: string, uri: string) => Promise<{ proofUrl: string }>;
   handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string) => Promise<void>;
-  handleClaimChallengeReward: (challengeId: string) => Promise<void>;
+  handleClaimChallengeReward: (challengeId: string, origin?: { x: number; y: number }) => Promise<void>;
   handleUpdateProfileImage: (uri: string) => Promise<any>;
   handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => Promise<void>;
 }

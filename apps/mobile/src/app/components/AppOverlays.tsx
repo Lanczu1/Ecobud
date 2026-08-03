@@ -403,8 +403,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   // Calculate how many of each particle type to spawn
   const hasCoins = model.claimRewardData ? model.claimRewardData.coins > 0 : true;
   const hasPoints = model.claimRewardData ? model.claimRewardData.points > 0 : true;
-
-  // Total particles to spawn
+  // Total particles to spawn
   const numParticles = hasCoins && hasPoints ? 24 : 16;
 
   // Determine particle type array
@@ -419,9 +418,12 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }
 
+  const originX = model.claimRewardData?.origin?.x ?? (width / 2 - 15);
+  const originY = model.claimRewardData?.origin?.y ?? (height / 2 - 80);
+
   const particleAnims = React.useRef(
     Array.from({ length: particleTypes.length }, () => ({
-      pos: new Animated.ValueXY({ x: width / 2 - 15, y: height / 2 - 80 }),
+      pos: new Animated.ValueXY({ x: originX, y: originY }),
       scale: new Animated.Value(0),
       opacity: new Animated.Value(0),
     }))
@@ -438,10 +440,10 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
       const type = particleTypes[index];
       const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
       const radius = 70 + Math.random() * 50;
-      const burstX = width / 2 - 15 + Math.cos(angle) * radius;
-      const burstY = height / 2 - 80 + Math.sin(angle) * radius;
+      const burstX = originX + Math.cos(angle) * radius;
+      const burstY = originY + Math.sin(angle) * radius;
 
-      particle.pos.setValue({ x: width / 2 - 15, y: height / 2 - 80 });
+      particle.pos.setValue({ x: originX, y: originY });
       particle.scale.setValue(0);
       particle.opacity.setValue(0);
 
@@ -471,8 +473,8 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
         Animated.parallel([
           Animated.timing(particle.pos, {
             toValue: type === 'leaf'
-              ? { x: width / 2 - 15 + (Math.random() * 40 - 20), y: 130 + (Math.random() * 30 - 15) }
-              : { x: width + 100, y: 150 },
+              ? { x: -50, y: 130 + (Math.random() * 60 - 30) }
+              : { x: width + 50, y: 150 + (Math.random() * 60 - 30) },
             duration: 650,
             easing: Easing.bezier(0.25, 1, 0.5, 1),
             useNativeDriver: true,

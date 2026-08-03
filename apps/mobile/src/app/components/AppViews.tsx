@@ -558,7 +558,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const [isPressing, setIsPressing] = useState(false);
 
-  const handlePress = () => {
+  const handlePress = (e: any) => {
     const currentStatus = challenge.progress?.status?.toLowerCase();
     if (currentStatus === 'pending' || currentStatus === 'completed') {
       return;
@@ -571,7 +571,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
     ]).start(() => {
       setIsPressing(false);
       if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
-        void model.handleClaimChallengeReward(challenge.id);
+        void model.handleClaimChallengeReward(challenge.id, { x: e?.nativeEvent?.pageX || 0, y: e?.nativeEvent?.pageY || 0 });
       } else if (challenge.type === 'AI Image Recognition Challenge') {
         model.openChallengeMission(challenge);
       } else {
@@ -743,7 +743,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           <View style={{ marginTop: 24, marginBottom: 8 }}>
             <Text style={[styles.welcomeLabel, { marginBottom: 8 }]}>RECENT ACTIVITY</Text>
             <Text style={[styles.sectionHeadline, { marginTop: 0, color: '#4ADE80' }]}>Recently Viewed</Text>
-            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: model.recentViewedMission!.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, model.recentViewedMission!.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }]} onPress={() => {
+            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: model.recentViewedMission!.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, model.recentViewedMission!.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }]} onPress={(e) => {
               const currentStatus = model.recentViewedMission!.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
@@ -758,7 +758,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 return;
               }
               if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
-                void model.handleClaimChallengeReward(model.recentViewedMission!.id);
+                void model.handleClaimChallengeReward(model.recentViewedMission!.id, { x: e?.nativeEvent?.pageX || 0, y: e?.nativeEvent?.pageY || 0 });
               } else if (model.recentViewedMission!.type === 'AI Image Recognition Challenge') {
                 model.openChallengeMission(model.recentViewedMission!);
               } else {
@@ -793,7 +793,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   {model.recentViewedMission.progress?.status?.toLowerCase() === 'approved' || model.recentViewedMission.progress?.status?.toLowerCase() === 'unclaimed' ? (
                     <TouchableOpacity 
                       style={{ backgroundColor: '#F59E0B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                      onPress={() => void model.handleClaimChallengeReward(model.recentViewedMission!.id)}
+                      onPress={(e) => void model.handleClaimChallengeReward(model.recentViewedMission!.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     >
                       <Ionicons name="gift" size={14} color="#FFF" />
                       <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFF' }}>CLAIM REWARD</Text>
@@ -927,7 +927,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         )}
         <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
           {currentActiveList.map((challenge, index) => (
-              <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, challenge.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }, isTablet && { width: '48%' }]} onPress={() => {
+              <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, challenge.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }, isTablet && { width: '48%' }]} onPress={(e) => {
               const currentStatus = challenge.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
                 return;
@@ -942,7 +942,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 return;
               }
               if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
-                void model.handleClaimChallengeReward(challenge.id);
+                void model.handleClaimChallengeReward(challenge.id, { x: e?.nativeEvent?.pageX || 0, y: e?.nativeEvent?.pageY || 0 });
               } else if (challenge.type === 'AI Image Recognition Challenge') {
                 model.openChallengeMission(challenge);
               } else {
@@ -1006,7 +1006,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   {challenge.progress?.status?.toLowerCase() === 'approved' || challenge.progress?.status?.toLowerCase() === 'unclaimed' ? (
                     <TouchableOpacity 
                       style={{ backgroundColor: '#F59E0B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                      onPress={() => void model.handleClaimChallengeReward(challenge.id)}
+                      onPress={(e) => void model.handleClaimChallengeReward(challenge.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
                     >
                       <Ionicons name="gift" size={14} color="#FFF" />
                       <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFF' }}>CLAIM REWARD</Text>
