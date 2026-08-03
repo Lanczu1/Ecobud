@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield, Trash2, Tag, Package, Search, CheckCircle, Clock, XCircle, AlertTriangle, Ban, User } from 'lucide-react';
-import { adminGet, adminDelete, adminPatch } from '../../../utils/adminApi';
+import { adminGet, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
 
 interface SwapListingItem {
   id: string;
@@ -199,11 +199,26 @@ export function GiveAndGetHub() {
             const approval = approvalConfig[listing.approvalStatus] || approvalConfig.pending;
             return (
               <div key={listing.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group">
-                <div className="bg-gradient-to-br from-emerald-50 to-green-100 p-6 flex items-center justify-center relative">
+                <div className="bg-gray-100 h-48 w-full relative">
                   {listing.images && Array.isArray(listing.images) && listing.images.length > 0 ? (
-                    <img src={listing.images[0]} alt={listing.title} className="w-16 h-16 object-cover rounded-xl" />
+                    <img 
+                      src={(() => {
+                        let img = listing.images[0];
+                        if (typeof img === 'object' && img !== null) {
+                          img = img.url || img.path || Object.values(img)[0];
+                        }
+                        if (typeof img !== 'string') return '';
+                        if (img.startsWith('http')) return img;
+                        if (img.startsWith('/')) return `${API_HOST}${img}`;
+                        return `${API_HOST}/uploads/swap-images/${listing.userId}/${img}`;
+                      })()}
+                      alt={listing.title || 'Listing image'} 
+                      className="w-full h-full object-cover" 
+                    />
                   ) : (
-                    <Package className="w-12 h-12 text-emerald-300" />
+                    <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                      <Package className="w-12 h-12 text-gray-300" />
+                    </div>
                   )}
                   {listing.isReported && (
                     <div className="absolute top-3 right-3 flex items-center gap-1 bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
