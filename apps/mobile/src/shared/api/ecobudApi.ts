@@ -198,7 +198,7 @@ export interface ChallengeWithProgress {
   description: string;
   difficulty: string;
   category: string | null;
-  durationDays: number;
+  endDate?: string | null;
   expReward: number;
   ecoCoinReward: number;
   active: boolean;
