@@ -24,7 +24,7 @@ function formatLongDate(isoDate: string) {
 export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecordAttendance, onClaimReward }: UpcomingEventCardProps) {
   const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string }>({ visible: false, reason: '' });
   
-  const defaultImage = 'https://images.unsplash.com/photo-1618477461853-cf6ed80fabe5?q=80&w=800&auto=format&fit=crop';
+  const defaultImage = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop';
   const imageUrl = event.imageUrl 
     ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`)
     : defaultImage;
