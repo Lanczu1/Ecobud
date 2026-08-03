@@ -34,8 +34,15 @@ challengeRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
+    const now = new Date();
     const challenges = await prisma.challenge.findMany({
-      where: { active: true },
+      where: {
+        active: true,
+        OR: [
+          { endDate: null },
+          { endDate: { gt: now } }
+        ]
+      },
       include: {
         userChallenges: {
           where: { userId },

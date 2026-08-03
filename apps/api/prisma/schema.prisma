@@ -163,7 +163,7 @@ model Challenge {
   description         String
   difficulty          String
   category            String?
-  durationDays        Int
+  endDate             DateTime?
   imageUrl            String?
   badgeLabel          String?
   active              Boolean               @default(true)

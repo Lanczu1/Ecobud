@@ -230,7 +230,7 @@ async function main() {
         description: 'Segregate waste daily and upload proof or tick the daily checklist.',
         difficulty: 'EASY',
         category: 'Waste',
-        durationDays: 7,
+        endDate: null,
         expReward: 20,
         ecoCoinReward: 20,
         imageUrl:
@@ -242,7 +242,7 @@ async function main() {
         description: 'Track your energy use and reduce it by 10 percent over two weeks.',
         difficulty: 'MEDIUM',
         category: 'Energy',
-        durationDays: 14,
+        endDate: null,
         expReward: 50,
         ecoCoinReward: 50,
         imageUrl:

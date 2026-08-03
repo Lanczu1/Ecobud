@@ -320,7 +320,7 @@ export class AdminService {
     title: string;
     description: string;
     difficulty: string;
-    durationDays: number;
+    endDate?: string | null;
     expReward: number;
     ecoCoinReward?: number;
     category?: string;
@@ -337,7 +337,7 @@ export class AdminService {
         title: data.title,
         description: data.description,
         difficulty: data.difficulty,
-        durationDays: data.durationDays,
+        endDate: data.endDate ? new Date(data.endDate) : null,
         expReward: data.expReward,
         ecoCoinReward: data.ecoCoinReward || 0,
         category: data.category || "General",

@@ -117,7 +117,7 @@ export class GamificationService {
         };
       }
 
-      const expirationDate = existingProgress?.expirationDate ?? this.createExpirationDate(challenge.durationDays);
+      const expirationDate = existingProgress?.expirationDate ?? challenge.endDate;
 
       const currentProgress = await tx.userChallenge.upsert({
         where: {
@@ -345,11 +345,7 @@ export class GamificationService {
     return result;
   }
 
-  private createExpirationDate(durationDays: number) {
-    const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + durationDays);
-    return expirationDate;
-  }
+
 
   private async awardAction(tx: DatabaseSession, action: AwardActionInput) {
     const user = await tx.user.findUnique({

@@ -12,6 +12,9 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  Animated,
+  Easing,
+  Dimensions,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +23,8 @@ import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { swapService } from './swapService';
 import type { SwapCategory, ItemCondition, MeetupMethod } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const CATEGORIES: SwapCategory[] = [
   'plastic', 'glass', 'metal', 'paper', 'cardboard',
@@ -59,6 +64,27 @@ export function CreateSwapListing({
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(1);
+  const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  React.useEffect(() => {
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 350,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [slideAnim]);
+
+  const handleBack = () => {
+    Animated.timing(slideAnim, {
+      toValue: SCREEN_WIDTH,
+      duration: 250,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      onBack();
+    });
+  };
 
   const totalSteps = 3;
 
@@ -148,6 +174,7 @@ export function CreateSwapListing({
   };
 
   return (
+    <Animated.View style={[localStyles.container, { transform: [{ translateX: slideAnim }] }]}>
     <View style={localStyles.safeArea}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -155,7 +182,7 @@ export function CreateSwapListing({
       >
         <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={localStyles.header}>
           <View style={localStyles.headerRow}>
-            <TouchableOpacity onPress={onBack} style={localStyles.backBtn}>
+            <TouchableOpacity onPress={handleBack} style={localStyles.backBtn}>
               <Feather name="arrow-left" size={22} color="#FFF" />
               <Text style={localStyles.backLabel}>Back</Text>
             </TouchableOpacity>
@@ -481,10 +508,15 @@ export function CreateSwapListing({
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+    </Animated.View>
   );
 }
 
 const localStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: ecoTheme.colors.background,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: ecoTheme.colors.background,

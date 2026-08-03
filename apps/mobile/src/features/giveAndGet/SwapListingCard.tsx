@@ -6,6 +6,7 @@ import {
   Image,
   StyleSheet,
   Pressable,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
@@ -88,16 +89,34 @@ export function SwapListingCard({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const mainImage = listing.images.length > 0 ? getValidImageUrl(listing.images[0].url) : undefined;
   const user = listing.user;
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleValue, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 5,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 5,
+    }).start();
+  };
 
   return (
     <>
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        localStyles.card,
-        pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 },
-      ]}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
     >
+      <Animated.View style={[localStyles.card, { transform: [{ scale: scaleValue }] }]}>
       {mainImage ? (
         <Image source={{ uri: mainImage }} style={localStyles.cardImage} resizeMode="cover" />
       ) : (
@@ -216,6 +235,7 @@ export function SwapListingCard({
           )}
         </View>
       </View>
+      </Animated.View>
       </Pressable>
       <PublicProfileModal
         visible={showProfileModal}

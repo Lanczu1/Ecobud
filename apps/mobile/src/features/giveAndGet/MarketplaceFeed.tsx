@@ -11,6 +11,7 @@ import {
   Easing,
   ActivityIndicator,
   Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
@@ -55,6 +56,25 @@ export function MarketplaceFeed({
   const [myListings, setMyListings] = useState<SwapListing[]>([]);
   const [myListingsLoading, setMyListingsLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const createBtnScale = useRef(new Animated.Value(1)).current;
+
+  const handleCreatePressIn = () => {
+    Animated.spring(createBtnScale, {
+      toValue: 0.9,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 5,
+    }).start();
+  };
+
+  const handleCreatePressOut = () => {
+    Animated.spring(createBtnScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 5,
+    }).start();
+  };
 
   const categories: Array<{ key: SwapCategory | 'all'; label: string }> = [
     { key: 'all', label: 'All' },
@@ -157,9 +177,15 @@ export function MarketplaceFeed({
             <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
             <Text style={localStyles.headerSubtitle}>Swap, trade, and reuse together</Text>
           </View>
-          <TouchableOpacity onPress={onCreateListing} style={localStyles.createButton}>
-            <Ionicons name="add" size={24} color={ecoTheme.colors.primaryDark} />
-          </TouchableOpacity>
+          <Pressable
+            onPress={onCreateListing}
+            onPressIn={handleCreatePressIn}
+            onPressOut={handleCreatePressOut}
+          >
+            <Animated.View style={[localStyles.createButton, { transform: [{ scale: createBtnScale }] }]}>
+              <Ionicons name="add" size={24} color={ecoTheme.colors.primaryDark} />
+            </Animated.View>
+          </Pressable>
         </View>
 
         {/* Search bar */}
