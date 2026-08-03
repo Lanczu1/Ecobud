@@ -64,6 +64,7 @@ export function CreateSwapListing({
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(1);
+  const [showImageError, setShowImageError] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   React.useEffect(() => {
@@ -487,6 +488,10 @@ export function CreateSwapListing({
             )}
             <TouchableOpacity
               onPress={() => {
+                if (step === 1 && images.length < 3) {
+                  setShowImageError(true);
+                  return;
+                }
                 if (step < totalSteps) {
                   setStep(step + 1);
                 } else {
@@ -508,6 +513,32 @@ export function CreateSwapListing({
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+
+        <Modal
+          visible={showImageError}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowImageError(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+            <View style={{ backgroundColor: '#FEF2F2', padding: 24, borderRadius: 16, width: '100%', alignItems: 'center', borderWidth: 2, borderColor: '#EF4444' }}>
+              <View style={{ backgroundColor: '#FEE2E2', padding: 12, borderRadius: 40, marginBottom: 16 }}>
+                <Ionicons name="images-outline" size={40} color="#EF4444" />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '900', color: '#B91C1C', marginBottom: 8 }}>Photos Required</Text>
+              <Text style={{ fontSize: 15, color: '#991B1B', textAlign: 'center', marginBottom: 24, lineHeight: 22 }}>
+                Please upload at least 3 photos of your item to continue.
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: '#EF4444', width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
+                onPress={() => setShowImageError(false)}
+              >
+                <Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
     </Animated.View>
   );
 }
