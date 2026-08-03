@@ -130,272 +130,275 @@ export function MarketplaceFeed({
   }, []);
 
   return (
-    <View style={localStyles.container}>
-      {/* Compact page header — TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
-      <View style={localStyles.pageHeader}>
-        <View>
-          <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
-          <Text style={localStyles.headerSubtitle}>Swap, trade, and reuse together</Text>
-        </View>
-        <TouchableOpacity onPress={onCreateListing} style={localStyles.createButton}>
-          <Ionicons name="add" size={24} color={ecoTheme.colors.primaryDark} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Search bar */}
-      <View style={localStyles.searchBar}>
-        <Ionicons name="search-outline" size={18} color="#9CA3AF" />
-        <TextInput
-          style={localStyles.searchInput}
-          placeholder="Search items to swap..."
-          placeholderTextColor="#9CA3AF"
-          value={searchQuery}
-          onChangeText={handleSearch}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          onPress={() => setShowFilters(true)}
-          style={localStyles.filterButton}
-        >
-          <Ionicons name="filter" size={16} color="#FFF" />
-          {(selectedCategory !== 'all' || selectedMeetup !== 'all') && (
-            <View style={localStyles.filterDot} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={localStyles.sortRow}>
-        <Text style={localStyles.sortLabel}>Sort by:</Text>
-        {(['newest', 'nearest', 'active'] as SortOption[]).map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            onPress={() => setSortBy(opt)}
-            style={[
-              localStyles.sortPill,
-              sortBy === opt && localStyles.sortPillActive,
-            ]}
-          >
-            <Text
-              style={[
-                localStyles.sortPillText,
-                sortBy === opt && localStyles.sortPillTextActive,
-              ]}
-            >
-              {opt === 'newest' ? 'Newest' : opt === 'nearest' ? 'Nearest' : 'Most Active'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={localStyles.categoryScroll}
-        contentContainerStyle={localStyles.categoryScrollContent}
-      >
-        {categories.map((cat) => (
-          <TouchableOpacity
-            key={cat.key}
-            onPress={() => setSelectedCategory(cat.key)}
-            style={[
-              localStyles.categoryPill,
-              selectedCategory === cat.key && localStyles.categoryPillActive,
-            ]}
-          >
-            <Text
-              style={[
-                localStyles.categoryPillText,
-                selectedCategory === cat.key && localStyles.categoryPillTextActive,
-              ]}
-            >
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={localStyles.tabScroll}
-        contentContainerStyle={localStyles.tabScrollContent}
-      >
-        <TouchableOpacity
-          style={[localStyles.tabPill, activeTab === 'browse' && localStyles.tabPillActive]}
-          onPress={() => onTabChange('browse')}
-        >
-          <Ionicons
-            name={activeTab === 'browse' ? 'storefront' : 'storefront-outline'}
-            size={16}
-            color={activeTab === 'browse' ? '#FFF' : '#6B7A75'}
+    <ScrollView 
+      style={localStyles.container}
+      stickyHeaderIndices={[1]}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        activeTab === 'browse' ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={ecoTheme.colors.primaryDark}
           />
-          <Text style={[localStyles.tabPillText, activeTab === 'browse' && localStyles.tabPillTextActive]}>
-            Browse
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[localStyles.tabPill, activeTab === 'chats' && localStyles.tabPillActive]}
-          onPress={() => {
-            onTabChange('chats');
-            onRefreshConversations?.();
-          }}
-        >
-          <View style={localStyles.tabPillIconWrap}>
-            <Ionicons
-              name={activeTab === 'chats' ? 'chatbubbles' : 'chatbubbles-outline'}
-              size={16}
-              color={activeTab === 'chats' ? '#FFF' : '#6B7A75'}
-            />
-            {conversations.length > 0 && (
-              <View style={localStyles.tabBadge}>
-                <Text style={localStyles.tabBadgeText}>
-                  {conversations.length > 99 ? '99+' : conversations.length}
-                </Text>
-              </View>
-            )}
+        ) : activeTab === 'mylistings' ? (
+          <RefreshControl
+            refreshing={myListingsLoading}
+            onRefresh={loadMyListings}
+            tintColor={ecoTheme.colors.primaryDark}
+          />
+        ) : undefined
+      }
+    >
+      <View>
+        {/* Compact page header — TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
+        <View style={localStyles.pageHeader}>
+          <View>
+            <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
+            <Text style={localStyles.headerSubtitle}>Swap, trade, and reuse together</Text>
           </View>
-          <Text style={[localStyles.tabPillText, activeTab === 'chats' && localStyles.tabPillTextActive]}>
-            Chats ({conversations.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[localStyles.tabPill, activeTab === 'mylistings' && localStyles.tabPillActive]}
-          onPress={() => {
-            onTabChange('mylistings');
-            loadMyListings();
-          }}
-        >
-          <Ionicons
-            name={activeTab === 'mylistings' ? 'clipboard' : 'clipboard-outline'}
-            size={16}
-            color={activeTab === 'mylistings' ? '#FFF' : '#6B7A75'}
-          />
-          <Text style={[localStyles.tabPillText, activeTab === 'mylistings' && localStyles.tabPillTextActive]}>
-            My Listings
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity onPress={onCreateListing} style={localStyles.createButton}>
+            <Ionicons name="add" size={24} color={ecoTheme.colors.primaryDark} />
+          </TouchableOpacity>
+        </View>
 
-      {activeTab === 'browse' ? (
-        <Animated.ScrollView
-          style={[localStyles.feedScroll, { opacity: fadeAnim }]}
-          contentContainerStyle={localStyles.feedContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={ecoTheme.colors.primaryDark}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-        >
-          {loading ? (
-            <>
-              <SwapListingSkeleton />
-              <SwapListingSkeleton />
-              <SwapListingSkeleton />
-            </>
-          ) : listings.length === 0 ? (
-            <View style={localStyles.emptyState}>
-              <Ionicons name="leaf-outline" size={64} color="#A7D5BA" />
-              <Text style={localStyles.emptyTitle}>No listings found</Text>
-              <Text style={localStyles.emptySubtitle}>
-                {searchQuery || selectedCategory !== 'all' || selectedMeetup !== 'all'
-                  ? 'Try adjusting your filters or search terms.'
-                  : 'Be the first to create a swap listing!'}
+        {/* Search bar */}
+        <View style={localStyles.searchBar}>
+          <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+          <TextInput
+            style={localStyles.searchInput}
+            placeholder="Search items to swap..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={handleSearch}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => setShowFilters(true)}
+            style={localStyles.filterButton}
+          >
+            <Ionicons name="filter" size={16} color="#FFF" />
+            {(selectedCategory !== 'all' || selectedMeetup !== 'all') && (
+              <View style={localStyles.filterDot} />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={localStyles.sortRow}>
+          <Text style={localStyles.sortLabel}>Sort by:</Text>
+          {(['newest', 'nearest', 'active'] as SortOption[]).map((opt) => (
+            <TouchableOpacity
+              key={opt}
+              onPress={() => setSortBy(opt)}
+              style={[
+                localStyles.sortPill,
+                sortBy === opt && localStyles.sortPillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  localStyles.sortPillText,
+                  sortBy === opt && localStyles.sortPillTextActive,
+                ]}
+              >
+                {opt === 'newest' ? 'Newest' : opt === 'nearest' ? 'Nearest' : 'Most Active'}
               </Text>
-              {!searchQuery && selectedCategory === 'all' && selectedMeetup === 'all' && (
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={localStyles.categoryScroll}
+          contentContainerStyle={localStyles.categoryScrollContent}
+        >
+          {categories.map((cat) => (
+            <TouchableOpacity
+              key={cat.key}
+              onPress={() => setSelectedCategory(cat.key)}
+              style={[
+                localStyles.categoryPill,
+                selectedCategory === cat.key && localStyles.categoryPillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  localStyles.categoryPillText,
+                  selectedCategory === cat.key && localStyles.categoryPillTextActive,
+                ]}
+              >
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={{ backgroundColor: ecoTheme.colors.background, zIndex: 10, paddingVertical: 4 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={localStyles.tabScroll}
+          contentContainerStyle={localStyles.tabScrollContent}
+        >
+          <TouchableOpacity
+            style={[localStyles.tabPill, activeTab === 'browse' && localStyles.tabPillActive]}
+            onPress={() => onTabChange('browse')}
+          >
+            <Ionicons
+              name={activeTab === 'browse' ? 'storefront' : 'storefront-outline'}
+              size={16}
+              color={activeTab === 'browse' ? '#FFF' : '#6B7A75'}
+            />
+            <Text style={[localStyles.tabPillText, activeTab === 'browse' && localStyles.tabPillTextActive]}>
+              Browse
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[localStyles.tabPill, activeTab === 'chats' && localStyles.tabPillActive]}
+            onPress={() => {
+              onTabChange('chats');
+              onRefreshConversations?.();
+            }}
+          >
+            <View style={localStyles.tabPillIconWrap}>
+              <Ionicons
+                name={activeTab === 'chats' ? 'chatbubbles' : 'chatbubbles-outline'}
+                size={16}
+                color={activeTab === 'chats' ? '#FFF' : '#6B7A75'}
+              />
+              {conversations.length > 0 && (
+                <View style={localStyles.tabBadge}>
+                  <Text style={localStyles.tabBadgeText}>
+                    {conversations.length > 99 ? '99+' : conversations.length}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[localStyles.tabPillText, activeTab === 'chats' && localStyles.tabPillTextActive]}>
+              Chats ({conversations.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[localStyles.tabPill, activeTab === 'mylistings' && localStyles.tabPillActive]}
+            onPress={() => {
+              onTabChange('mylistings');
+              loadMyListings();
+            }}
+          >
+            <Ionicons
+              name={activeTab === 'mylistings' ? 'clipboard' : 'clipboard-outline'}
+              size={16}
+              color={activeTab === 'mylistings' ? '#FFF' : '#6B7A75'}
+            />
+            <Text style={[localStyles.tabPillText, activeTab === 'mylistings' && localStyles.tabPillTextActive]}>
+              My Listings
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      <Animated.View style={[localStyles.feedContent, { opacity: fadeAnim }]}>
+        {activeTab === 'browse' ? (
+          <>
+            {loading ? (
+              <>
+                <SwapListingSkeleton />
+                <SwapListingSkeleton />
+                <SwapListingSkeleton />
+              </>
+            ) : listings.length === 0 ? (
+              <View style={localStyles.emptyState}>
+                <Ionicons name="leaf-outline" size={64} color="#A7D5BA" />
+                <Text style={localStyles.emptyTitle}>No listings found</Text>
+                <Text style={localStyles.emptySubtitle}>
+                  {searchQuery || selectedCategory !== 'all' || selectedMeetup !== 'all'
+                    ? 'Try adjusting your filters or search terms.'
+                    : 'Be the first to create a swap listing!'}
+                </Text>
+                {!searchQuery && selectedCategory === 'all' && selectedMeetup === 'all' && (
+                  <TouchableOpacity onPress={onCreateListing} style={localStyles.emptyButton}>
+                    <Text style={localStyles.emptyButtonText}>Create Listing</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              listings.map((listing) => (
+                <SwapListingCard
+                  key={listing.id}
+                  listing={listing}
+                  isOwnListing={listing.user.id === currentUserId}
+                  onPress={() => onSelectListing(listing)}
+                  onSwap={
+                    listing.user.id !== currentUserId
+                      ? () => onRequestSwap(listing)
+                      : undefined
+                  }
+                />
+              ))
+            )}
+          </>
+        ) : activeTab === 'chats' ? (
+          <SwapChatList
+            conversations={conversations}
+            currentUserId={currentUserId || ''}
+            onSelectConversation={onSelectConversation}
+          />
+        ) : (
+          <>
+            {myListingsLoading ? (
+              <>
+                <SwapListingSkeleton />
+                <SwapListingSkeleton />
+              </>
+            ) : myListings.length === 0 ? (
+              <View style={localStyles.emptyState}>
+                <Ionicons name="clipboard-outline" size={64} color="#A7D5BA" />
+                <Text style={localStyles.emptyTitle}>No listings yet</Text>
+                <Text style={localStyles.emptySubtitle}>
+                  Create a listing to see it here with its approval status.
+                </Text>
                 <TouchableOpacity onPress={onCreateListing} style={localStyles.emptyButton}>
                   <Text style={localStyles.emptyButtonText}>Create Listing</Text>
                 </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            listings.map((listing) => (
-              <SwapListingCard
-                key={listing.id}
-                listing={listing}
-                isOwnListing={listing.user.id === currentUserId}
-                onPress={() => onSelectListing(listing)}
-                onSwap={
-                  listing.user.id !== currentUserId
-                    ? () => onRequestSwap(listing)
-                    : undefined
-                }
-              />
-            ))
-          )}
-        </Animated.ScrollView>
-      ) : activeTab === 'chats' ? (
-        <SwapChatList
-          conversations={conversations}
-          currentUserId={currentUserId || ''}
-          onSelectConversation={onSelectConversation}
-        />
-      ) : (
-        <Animated.ScrollView
-          style={[localStyles.feedScroll, { opacity: fadeAnim }]}
-          contentContainerStyle={localStyles.feedContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={myListingsLoading}
-              onRefresh={loadMyListings}
-              tintColor={ecoTheme.colors.primaryDark}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-        >
-          {myListingsLoading ? (
-            <>
-              <SwapListingSkeleton />
-              <SwapListingSkeleton />
-            </>
-          ) : myListings.length === 0 ? (
-            <View style={localStyles.emptyState}>
-              <Ionicons name="clipboard-outline" size={64} color="#A7D5BA" />
-              <Text style={localStyles.emptyTitle}>No listings yet</Text>
-              <Text style={localStyles.emptySubtitle}>
-                Create a listing to see it here with its approval status.
-              </Text>
-              <TouchableOpacity onPress={onCreateListing} style={localStyles.emptyButton}>
-                <Text style={localStyles.emptyButtonText}>Create Listing</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            myListings.map((listing) => {
-              const status = listing.approvalStatus || 'pending';
-              const statusColor = status === 'approved' ? '#10B981' : status === 'rejected' ? '#EF4444' : '#F59E0B';
-              const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending Review';
-              return (
-                <View key={listing.id}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
+              </View>
+            ) : (
+              myListings.map((listing) => {
+                const status = listing.approvalStatus || 'pending';
+                const statusColor = status === 'approved' ? '#10B981' : status === 'rejected' ? '#EF4444' : '#F59E0B';
+                const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending Review';
+                return (
+                  <View key={listing.id}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
+                      </View>
+                      {status === 'pending' && (
+                        <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Waiting for admin approval</Text>
+                      )}
+                      {status === 'rejected' && listing.description && (
+                        <Text style={{ fontSize: 11, color: '#EF4444' }} numberOfLines={1}>Reason: {listing.description}</Text>
+                      )}
                     </View>
-                    {status === 'pending' && (
-                      <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Waiting for admin approval</Text>
-                    )}
-                    {status === 'rejected' && listing.description && (
-                      <Text style={{ fontSize: 11, color: '#EF4444' }} numberOfLines={1}>Reason: {listing.description}</Text>
-                    )}
+                    <SwapListingCard
+                      listing={listing}
+                      isOwnListing={true}
+                      onPress={() => onSelectListing(listing)}
+                    />
                   </View>
-                  <SwapListingCard
-                    listing={listing}
-                    isOwnListing={true}
-                    onPress={() => onSelectListing(listing)}
-                  />
-                </View>
-              );
-            })
-          )}
-        </Animated.ScrollView>
-      )}
+                );
+              })
+            )}
+          </>
+        )}
+      </Animated.View>
 
       <Modal
         visible={showFilters}
@@ -479,7 +482,7 @@ export function MarketplaceFeed({
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 

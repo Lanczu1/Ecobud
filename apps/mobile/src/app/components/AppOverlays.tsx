@@ -905,6 +905,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 
 export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
+  const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past'>('browse');
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [attendanceEvent, setAttendanceEvent] = React.useState<string | null>(null);
   const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string; eventId: string | null }>({
@@ -912,6 +913,11 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     reason: '',
     eventId: null,
   });
+
+  React.useEffect(() => {
+    // Auto-sync / auto-update when the page is opened
+    void model.refreshEverything();
+  }, []);
 
   React.useEffect(() => {
     if (viewMode === 'map') {
@@ -927,6 +933,24 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const featuredEvent = model.events[0] ?? null;
   const otherEvents = featuredEvent ? model.events.slice(1) : model.events;
+  const allEvents = featuredEvent ? [featuredEvent, ...otherEvents] : otherEvents;
+  
+  const displayedEvents = allEvents.filter((event) => {
+    const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
+    const hasJoined = event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
+    
+    if (activeTab === 'joined') return hasJoined;
+    if (activeTab === 'browse') return lc !== 'ended' && !hasJoined;
+    return lc === 'ended';
+  }).slice().sort((a, b) => {
+    const lcA = getEventLifecycleStatus(a.startDatetime, a.endDatetime);
+    const lcB = getEventLifecycleStatus(b.startDatetime, b.endDatetime);
+    const isAOpen = lcA === 'upcoming';
+    const isBOpen = lcB === 'upcoming';
+    if (isAOpen && !isBOpen) return -1;
+    if (!isAOpen && isBOpen) return 1;
+    return new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime();
+  });
 
   return (
     <View style={styles.fullscreenOverlay}>
@@ -956,7 +980,17 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
 
-
+        <View style={{ flexDirection: 'row', gap: 16, marginTop: 12, marginBottom: 16 }}>
+          <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
+            <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? '#126027' : '#6B7A75' }}>Browse</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('joined')} style={{ borderBottomWidth: activeTab === 'joined' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
+            <Text style={{ fontSize: 16, fontWeight: activeTab === 'joined' ? '700' : '500', color: activeTab === 'joined' ? '#126027' : '#6B7A75' }}>My Events</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('past')} style={{ borderBottomWidth: activeTab === 'past' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
+            <Text style={{ fontSize: 16, fontWeight: activeTab === 'past' ? '700' : '500', color: activeTab === 'past' ? '#126027' : '#6B7A75' }}>Past</Text>
+          </TouchableOpacity>
+        </View>
 
         {viewMode === 'map' ? (
           <View style={{ height: 500, width: '100%', marginTop: 8 }}>
@@ -964,26 +998,21 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         ) : (
           <>
-            {featuredEvent ? (
-              <UpcomingEventCard
-                      event={featuredEvent}
-                      isReadOnly={model.isReadOnlyExperience}
-                      onJoin={() => model.handleJoinEvent(featuredEvent.id)}
-                      onSignIn={() => model.leaveReadOnlyAccess()}
-                      onRecordAttendance={() => setAttendanceEvent(featuredEvent.id)}
-                      onClaimReward={() => void model.handleClaimEventReward(featuredEvent.id)}
-                    />
-            ) : (
+            {displayedEvents.length === 0 && (
               <SurfaceCard style={styles.publicInfoCard}>
-                <Text style={styles.sectionHeadline}>No public events yet</Text>
-                <Text style={styles.metaTextSmallDark}>Check back soon for new clean-ups, workshops, and community eco campaigns.</Text>
+                <Text style={styles.sectionHeadline}>
+                  {activeTab === 'joined' ? "You haven't joined any events" : `No ${activeTab === 'past' ? 'past' : 'public'} events yet`}
+                </Text>
+                <Text style={styles.metaTextSmallDark}>
+                  {activeTab === 'joined' ? 'Events you join or await approval for will appear here.' : 'Check back soon for new clean-ups, workshops, and community eco campaigns.'}
+                </Text>
               </SurfaceCard>
             )}
 
-            {otherEvents.map((event) => (
+            {displayedEvents.map((event) => (
               <View key={event.id} style={styles.eventListCard}>
                 <ImageBackground
-                  source={{ uri: event.imageUrl ?? 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
+                  source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
                   style={styles.eventListImg}
                   imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
                 >
@@ -997,10 +1026,16 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                     <Ionicons name="location" size={14} color="#6B7A75" />
                     <Text style={styles.metaTextSmallDark}> {event.location}</Text>
                   </View>
-                  <View style={[styles.rowMeta, { marginBottom: 16 }]}>
-                    <Ionicons name="leaf" size={14} color="#6B7A75" />
+                  <View style={[styles.rowMeta, { marginBottom: event.ecoCoinsReward ? 4 : 16 }]}>
+                    <Ionicons name="leaf-outline" size={14} color="#10B981" />
                     <Text style={styles.metaTextSmallDark}> {event.expReward} ECO points reward</Text>
                   </View>
+                  {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
+                    <View style={[styles.rowMeta, { marginBottom: 16 }]}>
+                      <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
+                      <Text style={styles.metaTextSmallDark}> {event.ecoCoinsReward} ECO coins reward</Text>
+                    </View>
+                  )}
                   {(() => {
                     const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
                     if (lc === 'ended' && !event.userStatus) {
@@ -1086,7 +1121,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
                     return (
                       <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.handleJoinEvent(event.id)}>
-                        <Text style={styles.quickJoinBtnText}>Quick Join</Text>
+                        <Text style={styles.quickJoinBtnText}>Join Event</Text>
                       </TouchableOpacity>
                     );
                   })()}

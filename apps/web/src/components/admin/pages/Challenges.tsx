@@ -161,7 +161,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
               <div className="flex items-center gap-4">
                 {form.imageUrl ? (
                   <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-200 flex-shrink-0">
-                    <img src={form.imageUrl} alt="Challenge" className="w-full h-full object-cover" />
+                    <img src={form.imageUrl.startsWith('http') ? form.imageUrl : `${API_HOST}${form.imageUrl}`} alt="Challenge" className="w-full h-full object-cover" />
                     <button type="button" onClick={async () => {
                         if (form.imageUrl) {
                           try { await adminPost('/admin/upload/delete', { url: form.imageUrl }); } catch (e) { console.error('Failed to delete image', e); }

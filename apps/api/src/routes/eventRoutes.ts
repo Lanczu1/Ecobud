@@ -33,19 +33,8 @@ eventRoutes.get(
       orderBy: { startDatetime: 'asc' },
     });
 
-    const now = new Date();
-    const filteredEvents = events.filter((event) => {
-      const isEnded = now > new Date(event.endDatetime);
-      if (isEnded) {
-        if (!userId) return false;
-        const userReg = event.registrations.find(r => r.userId === userId);
-        if (!userReg) return false;
-      }
-      return true;
-    });
-
     return res.json({
-      items: filteredEvents.map((event) => {
+      items: events.map((event) => {
         let userStatus = null;
         let rejectionReason = undefined;
         if (userId) {
