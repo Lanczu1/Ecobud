@@ -35,6 +35,7 @@ import {
 import { HomeView, LearnView } from './components/HomeLearnViews';
 import { styles } from './styles/appStyles';
 import { useHomeDashboard } from './hooks/useHomeDashboard';
+import { ScreenTransition } from '../shared/ui/ScreenTransition';
 
 /**
  * EcoBud App - Main Shell
@@ -93,31 +94,33 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         <StatusBar style="dark" />
         {model.activeTab === 'marketplace' ? (
           <>
-            <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
+            <ScreenTransition key="marketplace">
+              <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
+            </ScreenTransition>
             {!hideMarketplaceChrome && (
               <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
             )}
           </>
         ) : (
-          <ScrollView
-            ref={scrollRef}
-            refreshControl={
-              <RefreshControl
-                refreshing={model.refreshing}
-                onRefresh={() => void model.refreshEverything()}
-                tintColor={ecoTheme.colors.primaryDark}
-              />
-            }
-            contentContainerStyle={styles.mainScrollContent}
-          >
-            <>
+          <ScreenTransition key={model.activeTab}>
+            <ScrollView
+              ref={scrollRef}
+              refreshControl={
+                <RefreshControl
+                  refreshing={model.refreshing}
+                  onRefresh={() => void model.refreshEverything()}
+                  tintColor={ecoTheme.colors.primaryDark}
+                />
+              }
+              contentContainerStyle={styles.mainScrollContent}
+            >
               {model.activeTab === 'home' && <HomeView model={model} />}
               {model.activeTab === 'learn' && <LearnView model={model} />}
               {model.activeTab === 'challenges' && <ChallengesView model={model} />}
               {model.activeTab === 'tracker' && <TrackerView model={model} />}
               {model.activeTab === 'profile' && <ProfileView model={model} />}
-            </>
-          </ScrollView>
+            </ScrollView>
+          </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
           <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
@@ -134,7 +137,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       {content}
       {model.activeOverlay && (
         <View style={StyleSheet.absoluteFill}>
-          <OverlayRouter model={model} />
+          <ScreenTransition key={model.activeOverlay}>
+            <OverlayRouter model={model} />
+          </ScreenTransition>
         </View>
       )}
       <ActionOverlayWrapper visible={model.actionOverlayVisible} label={model.actionOverlayLabel} />

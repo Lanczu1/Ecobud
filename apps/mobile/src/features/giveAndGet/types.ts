@@ -118,7 +118,7 @@ export const MEETUP_LABELS: Record<MeetupMethod, string> = {
 export const CATEGORY_ICON: Record<SwapCategory, string> = {
   plastic: 'water',
   glass: 'wine',
-  metal: 'hardware-sharp',
+  metal: 'construct-outline',
   paper: 'document-text',
   cardboard: 'cube',
   electronics: 'hardware-chip',

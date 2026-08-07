@@ -14,6 +14,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { SwapListingCard, SwapListingSkeleton } from './SwapListingCard';
 import { SwapChatList } from './SwapChatView';
@@ -172,21 +173,28 @@ export function MarketplaceFeed({
     >
       <View>
         {/* Compact page header — TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
-        <View style={localStyles.pageHeader}>
-          <View>
-            <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
-            <Text style={localStyles.headerSubtitle}>Swap, trade, and reuse together</Text>
+        <LinearGradient colors={['#0D5B2A', '#198A48']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.hubHero}>
+          <View style={localStyles.heroGlow} />
+          <View style={localStyles.heroIcon}>
+            <Ionicons name="swap-horizontal" size={25} color="#D9F99D" />
           </View>
+          <Text style={localStyles.heroEyebrow}>COMMUNITY REUSE MARKET</Text>
+          <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
+          <Text style={localStyles.headerSubtitle}>Find useful items, offer what you no longer need, and keep good things in circulation.</Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Create a new listing"
             onPress={onCreateListing}
             onPressIn={handleCreatePressIn}
             onPressOut={handleCreatePressOut}
           >
             <Animated.View style={[localStyles.createButton, { transform: [{ scale: createBtnScale }] }]}>
-              <Ionicons name="add" size={24} color={ecoTheme.colors.primaryDark} />
+              <Ionicons name="add-circle" size={19} color="#126027" />
+              <Text style={localStyles.createButtonText}>Create a listing</Text>
+              <Ionicons name="arrow-forward" size={16} color="#126027" />
             </Animated.View>
           </Pressable>
-        </View>
+        </LinearGradient>
 
         {/* Search bar */}
         <View style={localStyles.searchBar}>
@@ -253,6 +261,11 @@ export function MarketplaceFeed({
                 selectedCategory === cat.key && localStyles.categoryPillActive,
               ]}
             >
+              <Ionicons
+                name={(cat.key === 'all' ? 'apps-outline' : CATEGORY_ICON[cat.key]) as any}
+                size={14}
+                color={selectedCategory === cat.key ? '#FFFFFF' : '#547060'}
+              />
               <Text
                 style={[
                   localStyles.categoryPillText,
@@ -333,6 +346,17 @@ export function MarketplaceFeed({
       <Animated.View style={[localStyles.feedContent, { opacity: fadeAnim }]}>
         {activeTab === 'browse' ? (
           <>
+            {!loading && listings.length > 0 && (
+              <View style={localStyles.resultsHeader}>
+                <View>
+                  <Text style={localStyles.resultsTitle}>{searchQuery ? 'Matches for your search' : 'Fresh from the community'}</Text>
+                  <Text style={localStyles.resultsSubtitle}>Browse items ready for a second life.</Text>
+                </View>
+                <View style={localStyles.resultsCount}>
+                  <Text style={localStyles.resultsCountText}>{listings.length}</Text>
+                </View>
+              </View>
+            )}
             {loading ? (
               <>
                 <SwapListingSkeleton />
@@ -517,35 +541,50 @@ const localStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: ecoTheme.colors.background,
   },
-  pageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 10,
-    backgroundColor: ecoTheme.colors.background,
+  hubHero: {
+    marginHorizontal: 18,
+    marginTop: 12,
+    marginBottom: 16,
+    borderRadius: 24,
+    padding: 20,
+    overflow: 'hidden',
+    shadowColor: '#126027',
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 5,
   },
+  heroGlow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(217,249,157,0.12)', right: -72, top: -76 },
+  heroIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  heroEyebrow: { color: '#D9F99D', fontSize: 10, fontWeight: '900', letterSpacing: 1.15, marginBottom: 5 },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 29,
     fontWeight: '900',
-    color: ecoTheme.colors.text,
+    color: '#FFFFFF',
+    letterSpacing: -0.6,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: ecoTheme.colors.textSoft,
-    marginTop: 2,
+    color: '#DCFCE7',
+    marginTop: 6,
+    lineHeight: 19,
+    maxWidth: '92%',
   },
   createButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#E8F5EE',
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: ecoTheme.colors.outline,
-    alignItems: 'center',
+    borderColor: 'rgba(255,255,255,0.75)',
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 14,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 17,
   },
+  createButtonText: { color: '#126027', fontSize: 13, fontWeight: '900' },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -606,7 +645,6 @@ const localStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   sortPillActive: {
     backgroundColor: ecoTheme.colors.surfaceMuted,
@@ -631,6 +669,9 @@ const localStyles = StyleSheet.create({
     gap: 8,
   },
   categoryPill: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 18,
@@ -638,7 +679,6 @@ const localStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   categoryPillActive: {
     backgroundColor: ecoTheme.colors.primaryDark,
@@ -660,6 +700,11 @@ const localStyles = StyleSheet.create({
     padding: 18,
     paddingBottom: 120,
   },
+  resultsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  resultsTitle: { color: ecoTheme.colors.text, fontSize: 18, fontWeight: '900', letterSpacing: -0.25 },
+  resultsSubtitle: { color: ecoTheme.colors.textSoft, fontSize: 12, marginTop: 3 },
+  resultsCount: { backgroundColor: '#E8F5E9', minWidth: 31, height: 31, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  resultsCountText: { color: '#126027', fontSize: 13, fontWeight: '900' },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
