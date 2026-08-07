@@ -13,6 +13,7 @@ import { ecobudApi } from '../../shared/api/ecobudApi';
 import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import type { SwapListing, SwapConversation } from './types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { ScreenTransition } from '../../shared/ui/ScreenTransition';
 
 type HubScreen = 'feed' | 'create' | 'detail' | 'chat';
 type FeedTab = 'browse' | 'chats' | 'mylistings';
@@ -168,6 +169,7 @@ export function MarketplaceHubView({
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (
+        <ScreenTransition key={`feed-${feedTab}`}>
         <MarketplaceFeed
           currentUserId={currentUserId}
           onSelectListing={handleSelectListing}
@@ -185,9 +187,11 @@ export function MarketplaceHubView({
           }}
           onRefreshConversations={loadConversations}
         />
+        </ScreenTransition>
       )}
 
       {screen === 'create' && (
+        <ScreenTransition key="create">
         <CreateSwapListing
           userId={currentUserId}
           onBack={() => setScreen('feed')}
@@ -195,9 +199,11 @@ export function MarketplaceHubView({
             setScreen('feed');
           }}
         />
+        </ScreenTransition>
       )}
 
       {screen === 'detail' && selectedListing && (
+        <ScreenTransition key={`detail-${selectedListing.id}`}>
         <SwapListingDetail
           listing={selectedListing}
           currentUserId={currentUserId}
@@ -208,9 +214,11 @@ export function MarketplaceHubView({
           onRequestSwap={() => setShowSwapDialog(true)}
           onDelete={handleDeleteListing}
         />
+        </ScreenTransition>
       )}
 
       {screen === 'chat' && selectedConversation && (
+        <ScreenTransition key={`chat-${selectedConversation.id}`}>
         <SwapChatView
           conversation={selectedConversation}
           currentUserId={currentUserId}
@@ -224,6 +232,7 @@ export function MarketplaceHubView({
           onDeclineSwap={handleDeclineSwap}
           onMarkCompleted={handleMarkCompleted}
         />
+        </ScreenTransition>
       )}
 
       <SwapRequestDialog

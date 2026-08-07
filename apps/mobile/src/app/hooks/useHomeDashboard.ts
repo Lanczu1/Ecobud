@@ -1333,25 +1333,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      if (silent) {
-        setActiveTabState(tab);
-        return;
-      }
-
-      const labels: Record<AppTab, string> = {
-        home: 'Opening Home',
-        learn: 'Opening Learn',
-        challenges: 'Opening Challenges',
-        tracker: 'Opening Tracker',
-        profile: 'Opening Profile',
-        marketplace: 'Opening Marketplace',
-      };
-
-      flashActionLoader(`${labels[tab]}...`, () => {
-        setActiveTabState(tab);
-      });
+      setActiveTabState(tab);
     },
-    [flashActionLoader, isReadOnlyExperience],
+    [isReadOnlyExperience],
   );
 
   const setActiveOverlay = useCallback(
@@ -1366,33 +1350,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      if (screen === 'claimParticles' || screen === 'streakRewards' || screen === 'streakUnlocked' || screen === 'eventApproved') {
-        setActiveOverlayState(screen);
-        return;
-      }
-
-      const labels: Record<Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | 'eventApproved' | null>, string> = {
-        assistant: 'Opening EcoBud Assistant',
-        events: 'Opening Eco Events',
-        lesson: 'Opening lesson details',
-        quiz: 'Opening quiz',
-        lessonCompleted: 'Lesson completed',
-        leaderboard: 'Opening leaderboard',
-        rewards: 'Opening rewards',
-        transparency: 'Opening transparency feed',
-        ai_mission: 'Opening mission',
-        settings: 'Opening settings',
-        coinsHistory: 'Opening Coins History',
-        redeemPoints: 'Opening Redeem Points',
-        notifications: 'Opening notifications',
-      };
-
-      // We explicitly excluded claimParticles, streakRewards, and streakUnlocked above, so we must cast screen to the narrowed type
-      flashActionLoader(`${labels[screen as Exclude<OverlayScreen, 'claimParticles' | 'streakRewards' | 'streakUnlocked' | 'eventApproved' | null>]}...`, () => {
-        setActiveOverlayState(screen);
-      });
+      setActiveOverlayState(screen);
     },
-    [flashActionLoader, isReadOnlyExperience],
+    [isReadOnlyExperience],
   );
 
   const analyzeChallengeImage = useCallback(async (challengeId: string, uri: string) => {

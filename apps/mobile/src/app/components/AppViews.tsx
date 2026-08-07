@@ -672,8 +672,9 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
-        <Text style={localStyles.headerTitle}>Challenge Eco Missions</Text>
-        <Text style={localStyles.headerSubtitle}>Level up your impact. Complete tasks to earn rewards and heal the planet.</Text>
+        <Text style={localStyles.headerEyebrow}>YOUR ECO JOURNEY</Text>
+        <Text style={localStyles.headerTitle}>Choose your next impact</Text>
+        <Text style={localStyles.headerSubtitle}>Small actions add up. Pick a mission that fits your day and start making a difference.</Text>
 
         {/* View Mode Tabs */}
         <View style={{ flexDirection: 'row', backgroundColor: '#F0F5F2', borderRadius: 12, padding: 4, marginTop: 20, marginBottom: 10 }}>
@@ -689,8 +690,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         </View>
 
         {/* Discovery & Filtering Section */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 15, marginTop: 20, marginBottom: 15, height: 48, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#F0F5F2' }}>
-          <Ionicons name="search-outline" size={20} color="#6B7A75" style={{ marginRight: 10 }} />
+        <View style={localStyles.challengeSearch}>
+          <Ionicons name="search-outline" size={20} color="#52715D" style={{ marginRight: 10 }} />
           <TextInput
             style={{ flex: 1, fontSize: 16, color: '#1A211D' }}
             placeholder="Search challenges..."
@@ -698,6 +699,11 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear challenge search" onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={20} color="#8AA092" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, maxHeight: 40, minHeight: 40 }} contentContainerStyle={{ paddingRight: 20 }}>
@@ -737,6 +743,22 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               ))}
             </ScrollView>
           </View>
+        )}
+
+        {viewMode === 'Discover' && !isFiltering && (
+          <LinearGradient colors={['#126027', '#1D7A3A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.discoverOverview}>
+            <View style={localStyles.discoverOverviewIcon}>
+              <Ionicons name="sparkles" size={22} color="#D9F99D" />
+            </View>
+            <View style={localStyles.discoverOverviewCopy}>
+              <Text style={localStyles.discoverOverviewTitle}>Ready when you are</Text>
+              <Text style={localStyles.discoverOverviewText}>{discoverChallenges.length} new mission{discoverChallenges.length === 1 ? '' : 's'} waiting for you</Text>
+            </View>
+            <View style={localStyles.discoverOverviewCount}>
+              <Text style={localStyles.discoverOverviewNumber}>{discoverChallenges.length}</Text>
+              <Text style={localStyles.discoverOverviewLabel}>TO TRY</Text>
+            </View>
+          </LinearGradient>
         )}
 
         {!isFiltering && model.recentViewedMission && viewMode === 'Discover' && (
@@ -910,9 +932,13 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         )}
 
         {currentActiveList.length > 0 && (
-          <Text style={[styles.welcomeLabel, { marginTop: filteredFeatured.length > 0 && (!isFiltering && model.recentViewedMission) ? 16 : ((!isFiltering && model.recentViewedMission) ? 16 : 24), marginBottom: 8 }]}>
-            {isFiltering ? 'SEARCH RESULTS' : viewMode === 'Discover' ? 'DISCOVER CHALLENGES' : viewMode === 'My Tasks' ? 'IN PROGRESS' : 'COMPLETED CHALLENGES'}
-          </Text>
+          <View style={localStyles.challengeListHeading}>
+            <View>
+              <Text style={localStyles.challengeListTitle}>{isFiltering ? 'Search results' : viewMode === 'Discover' ? 'New missions for you' : viewMode === 'My Tasks' ? 'In progress' : 'Completed challenges'}</Text>
+              {viewMode === 'Discover' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap a mission to see how you can help.</Text>}
+            </View>
+            <Text style={localStyles.challengeListCount}>{currentActiveList.length}</Text>
+          </View>
         )}
         {currentActiveList.length === 0 && filteredFeatured.length === 0 && (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, marginTop: 20 }}>
@@ -926,7 +952,71 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           </View>
         )}
         <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
-          {currentActiveList.map((challenge, index) => (
+          {currentActiveList.map((challenge, index) => {
+            if (viewMode === 'Discover') {
+              const category = ((challenge as any).category || 'General').toUpperCase();
+              const isImageMission = challenge.type === 'AI Image Recognition Challenge';
+
+              return (
+                <Pressable
+                  key={challenge.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Start ${challenge.title}`}
+                  style={({ pressed }) => [
+                    localStyles.discoverCard,
+                    pressed && localStyles.discoverCardPressed,
+                    isTablet && { width: '48%' },
+                  ]}
+                  onPress={() => {
+                    if (isImageMission) {
+                      model.openChallengeMission(challenge);
+                    } else {
+                      void model.handleChallengeProgress(challenge, 100);
+                    }
+                  }}
+                >
+                  <View style={localStyles.discoverImageWrap}>
+                    {challenge.imageUrl ? (
+                      <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={localStyles.discoverImage} />
+                    ) : (
+                      <View style={[localStyles.discoverImage, localStyles.discoverImageFallback]}>
+                        <Ionicons name={isImageMission ? "camera-outline" : "leaf-outline"} size={28} color="#126027" />
+                      </View>
+                    )}
+                    <View style={localStyles.discoverImageShade} />
+                    <View style={localStyles.discoverNewBadge}>
+                      <Text style={localStyles.discoverNewBadgeText}>NEW</Text>
+                    </View>
+                  </View>
+
+                  <View style={localStyles.discoverBody}>
+                    <View style={localStyles.discoverMetaRow}>
+                      <View style={localStyles.discoverCategoryBadge}>
+                        <Text style={localStyles.discoverCategoryText}>{category}</Text>
+                      </View>
+                      <Text style={localStyles.discoverDifficulty}>{challenge.difficulty.toUpperCase()}</Text>
+                    </View>
+                    <Text style={localStyles.discoverTitle} numberOfLines={2}>{challenge.title}</Text>
+                    <Text style={localStyles.discoverDescription} numberOfLines={2}>{challenge.description}</Text>
+                    <View style={localStyles.discoverFooter}>
+                      <View>
+                        <Text style={localStyles.discoverRewardLabel}>REWARD</Text>
+                        <View style={localStyles.discoverRewardRow}>
+                          <Ionicons name="leaf" size={14} color="#15803D" />
+                          <Text style={localStyles.discoverReward}>{challenge.expReward} points</Text>
+                        </View>
+                      </View>
+                      <View style={localStyles.discoverStartButton}>
+                        <Text style={localStyles.discoverStartText}>{isImageMission ? 'OPEN' : 'START'}</Text>
+                        <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            }
+
+            return (
               <Pressable key={challenge.id} style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }, { opacity: challenge.progress?.status?.toLowerCase() === 'completed' ? 0.7 : 1 }, challenge.progress?.status?.toLowerCase() === 'rejected' && { borderColor: '#FCA5A5', borderWidth: 2, backgroundColor: '#FFF0F0' }, isTablet && { width: '48%' }]} onPress={(e) => {
               const currentStatus = challenge.progress?.status?.toLowerCase();
               if (currentStatus === 'pending' || currentStatus === 'completed') {
@@ -1036,7 +1126,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 </View>
               </View>
             </Pressable>
-          ))}
+            );
+          })}
         </View>
 
         {model.challenges.length === 0 && (
@@ -2011,8 +2102,30 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 }
 
 const localStyles = StyleSheet.create({
-  headerTitle: { fontSize: 38, fontWeight: '900', color: '#126027', letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 16, color: '#6B7A75', marginTop: 6, lineHeight: 24 },
+  headerEyebrow: { color: '#4B8A5C', fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginBottom: 6 },
+  headerTitle: { fontSize: 30, fontWeight: '900', color: '#153B22', letterSpacing: -0.7, lineHeight: 36 },
+  headerSubtitle: { fontSize: 15, color: '#5F7367', marginTop: 7, lineHeight: 22 },
+  challengeSearch: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 15,
+    paddingHorizontal: 15, marginTop: 20, marginBottom: 15, minHeight: 52,
+    shadowColor: '#126027', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 2, borderWidth: 1, borderColor: '#E5EEE8',
+  },
+  discoverOverview: {
+    flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 16, marginBottom: 8,
+    shadowColor: '#126027', shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4,
+  },
+  discoverOverviewIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  discoverOverviewCopy: { flex: 1 },
+  discoverOverviewTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  discoverOverviewText: { color: '#D1FAE5', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  discoverOverviewCount: { alignItems: 'center', minWidth: 38 },
+  discoverOverviewNumber: { color: '#D9F99D', fontSize: 22, fontWeight: '900', lineHeight: 25 },
+  discoverOverviewLabel: { color: '#D1FAE5', fontSize: 8, fontWeight: '900', letterSpacing: 0.6 },
+  challengeListHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12 },
+  challengeListTitle: { color: '#153B22', fontSize: 18, fontWeight: '900', letterSpacing: -0.25 },
+  challengeListSubtitle: { color: '#688074', fontSize: 12, marginTop: 3 },
+  challengeListCount: { color: '#126027', backgroundColor: '#E8F5E9', fontSize: 13, fontWeight: '900', minWidth: 28, textAlign: 'center', paddingVertical: 5, paddingHorizontal: 8, borderRadius: 12 },
   
   featuredCard: {
     borderRadius: 32,
@@ -2063,7 +2176,48 @@ const localStyles = StyleSheet.create({
   premiumTaskImg: { width: '100%', height: '100%' },
   premiumTaskBody: { flex: 1 },
   premiumTaskTitle: { fontSize: 18, fontWeight: '800', color: '#1A211D', marginBottom: 4, lineHeight: 24 },
-  
+
+  // Discover cards prioritize a clear visual cue, short scan-friendly content, and one large action.
+  discoverCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E4EEE6',
+    shadowColor: '#126027',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  discoverCardPressed: { opacity: 0.94, transform: [{ scale: 0.99 }] },
+  discoverImageWrap: { height: 144, backgroundColor: '#DCFCE7', position: 'relative' },
+  discoverImage: { width: '100%', height: '100%' },
+  discoverImageFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' },
+  discoverImageShade: { ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(18, 96, 39, 0.12)' },
+  discoverNewBadge: {
+    position: 'absolute', top: 12, left: 12, backgroundColor: '#FFFFFF', borderRadius: 10,
+    paddingHorizontal: 9, paddingVertical: 5,
+  },
+  discoverNewBadgeText: { color: '#126027', fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  discoverBody: { padding: 16, paddingTop: 14 },
+  discoverMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
+  discoverCategoryBadge: { backgroundColor: '#E8F5E9', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  discoverCategoryText: { color: '#166534', fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+  discoverDifficulty: { color: '#6B7A75', fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+  discoverTitle: { color: '#17231B', fontSize: 19, fontWeight: '900', lineHeight: 24, letterSpacing: -0.25 },
+  discoverDescription: { color: '#65736C', fontSize: 13, lineHeight: 19, marginTop: 5 },
+  discoverFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
+  discoverRewardLabel: { color: '#89968F', fontSize: 9, fontWeight: '800', letterSpacing: 0.7, marginBottom: 3 },
+  discoverRewardRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  discoverReward: { color: '#126027', fontSize: 13, fontWeight: '800' },
+  discoverStartButton: {
+    minHeight: 44, backgroundColor: '#126027', borderRadius: 13, paddingHorizontal: 15,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  discoverStartText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
+
   circularProgressWrap: {
     width: 40, height: 40,
     borderRadius: 20,
