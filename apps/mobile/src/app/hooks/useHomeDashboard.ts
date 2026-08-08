@@ -21,13 +21,6 @@ import {
   type TransparencyFeed,
   type OverlayScreen,
 } from '../types/home';
-import {
-  createReadOnlySession,
-  isReadOnlyRestrictedOverlay,
-  isReadOnlyRestrictedTab,
-  isReadOnlySession,
-  showReadOnlyAccessAlert,
-} from '../ReadOnlyExperience';
 import { usePresence } from '../../shared/presence/usePresence';
 import { offlineSyncService } from '../../shared/offline/offlineSyncService';
 import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMutationQueue.types';
@@ -133,8 +126,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [pendingStreakUnlock, setPendingStreakUnlock] = useState(false);
   const [newlyUnlockedBadges, setNewlyUnlockedBadges] = useState<EcoBadge[]>([]);
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
-  const isReadOnlyExperience = useMemo(() => isReadOnlySession(session), [session]);
-  const presence = usePresence(session, isReadOnlyExperience);
+  const presence = usePresence(session);
 
   const selectedLesson = useMemo(
     () => lessons.find((lesson) => lesson.id === selectedLessonId) ?? null,
@@ -413,13 +405,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
 
       try {
-        if (isReadOnlySession(existingSession)) {
-          const data = await homeService.getReadOnlyHydrationData();
-          clearAppData();
-          setEvents(data.events);
-          setTransparency(data.transparency);
-          return;
-        }
 
         const data = await homeService.getFullHydrationData(existingSession.token);
 
@@ -579,7 +564,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   useEffect(() => {
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') {
-        const token = session && !isReadOnlySession(session) ? session.token : undefined;
+        const token = session ? session.token : undefined;
         homeService.getEvents(token)
           .then((newEvents) => {
             setEvents(newEvents);
@@ -594,7 +579,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [session]);
 
   useEffect(() => {
-    if (!session || isReadOnlySession(session) || !presence.hasUsableInternet) {
+    if (!session || !presence.hasUsableInternet) {
       return;
     }
 
@@ -619,10 +604,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
       throw new Error('Your session expired. Please sign in again.');
     }
 
-    if (isReadOnlySession(session)) {
-      throw new Error('This public viewer can only access public pages. Sign in to continue.');
-    }
-
     return session;
   }, [session]);
 
@@ -645,14 +626,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const continueWithReadOnlyAccess = useCallback(async () => {
     await runWithActionLoader('Opening public viewer...', async () => {
       await presence.disconnectPresence({ clearSessionId: true });
-      const readOnlySession = createReadOnlySession();
+      
       setAuthError(null);
-      setSession(readOnlySession);
+      
       clearAppData();
       setActiveOverlayState(null);
       setActiveTabState('home');
       await persistSession(null);
-      await hydrateApp(readOnlySession);
+      
     }, 760);
   }, [clearAppData, hydrateApp, persistSession, runWithActionLoader]);
 
@@ -749,14 +730,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
       return;
     }
 
-    await runWithActionLoader(isReadOnlyExperience ? 'Refreshing public viewer...' : 'Refreshing your dashboard...', async () => {
+    await runWithActionLoader('Refreshing your dashboard...', async () => {
       await hydrateApp(session);
     });
-  }, [hydrateApp, isReadOnlyExperience, runWithActionLoader, session]);
+  }, [hydrateApp, runWithActionLoader, session]);
 
   const queueRealtimeRefresh = useCallback(
     (reason: string) => {
-      if (!session || isReadOnlySession(session)) {
+      if (!session) {
         return;
       }
 
@@ -774,7 +755,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   useEffect(() => {
-    if (!session || isReadOnlySession(session) || !presence.shouldMaintainRealtimeConnection) {
+    if (!session || !presence.shouldMaintainRealtimeConnection) {
       setRealtimeConnected(false);
       return;
     }
@@ -840,7 +821,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   React.useEffect(() => {
     const sub = DeviceEventEmitter.addListener('ECO_POINTS_DROP_ANIMATION', () => {
       const activeSession = session;
-      if (activeSession && !isReadOnlySession(activeSession)) {
+      if (activeSession) {
         void hydrateApp(activeSession, true);
       }
     });
@@ -1328,14 +1309,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const setActiveTab = useCallback(
     (tab: AppTab, silent: boolean = false) => {
-      if (isReadOnlyExperience && isReadOnlyRestrictedTab(tab)) {
-        showReadOnlyAccessAlert();
-        return;
-      }
-
       setActiveTabState(tab);
     },
-    [isReadOnlyExperience],
+    [],
   );
 
   const setActiveOverlay = useCallback(
@@ -1345,14 +1321,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      if (isReadOnlyExperience && isReadOnlyRestrictedOverlay(screen)) {
-        showReadOnlyAccessAlert();
-        return;
-      }
-
       setActiveOverlayState(screen);
     },
-    [isReadOnlyExperience],
+    [],
   );
 
   const analyzeChallengeImage = useCallback(async (challengeId: string, uri: string) => {
@@ -1514,7 +1485,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
     'EcoBud Member';
   const isUserOnline = Boolean(
     session &&
-    !isReadOnlyExperience &&
     presence.isPresenceOnline &&
     realtimeConnected,
   );
@@ -1524,7 +1494,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
     booting,
     hasOnboarded,
     session,
-    isReadOnlyExperience,
     actionOverlayVisible,
     actionOverlayLabel,
     activeTab,
@@ -1573,7 +1542,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     userDisplayName,
     hasUsableInternet: presence.hasUsableInternet,
     isUserOnline,
-    notificationCount: isReadOnlyExperience ? 0 : Math.min(9, events.length),
+    notificationCount: Math.min(9, events.length),
     setActiveTab,
     setActiveOverlay,
     setLearnSearch,

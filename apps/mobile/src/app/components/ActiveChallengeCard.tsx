@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { type ActiveChallengeCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { styles } from '../styles/appStyles';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
 const getValidImageUrl = (url: string | null | undefined) => {
   if (!url) return undefined;
@@ -99,7 +100,7 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.9)']} style={localStyles.featuredGradient} />
         
         <View style={localStyles.featuredContent}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, alignItems: 'flex-start' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: verticalScale(14), alignItems: 'flex-start' }}>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', flex: 1 }}>
               <View style={[localStyles.glassTag, { backgroundColor: 'rgba(74,222,128,0.3)', borderColor: 'rgba(74,222,128,0.5)' }]}>
                 <Text style={[localStyles.glassTagText, { color: '#ECFDF5' }]}>TODAY'S CHALLENGE</Text>
@@ -132,15 +133,15 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
             )}
           </View>
           
-          <Text style={{ fontSize: 34, fontWeight: '900', color: '#FFF', marginBottom: 10, letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }}>{dailyChallenge.title}</Text>
-          <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.9)', marginBottom: 24, lineHeight: 24, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{dailyChallenge.description}</Text>
+          <Text style={{ fontSize: responsiveFontSize(30), fontWeight: '900', color: '#FFF', marginBottom: verticalScale(8), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4, flexShrink: 1 }}>{dailyChallenge.title}</Text>
+          <Text style={{ fontSize: responsiveFontSize(15), color: 'rgba(255,255,255,0.9)', marginBottom: verticalScale(20), lineHeight: responsiveFontSize(22), textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{dailyChallenge.description}</Text>
 
           {isAI && dailyChallenge.aiDetectionTargets && dailyChallenge.aiDetectionTargets.length > 0 && (
             <LinearGradient colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']} style={localStyles.aiGradientBox}>
-              <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '800', marginBottom: 6, letterSpacing: 1 }}>
+              <Text style={{ color: '#A7F3D0', fontSize: responsiveFontSize(12), fontWeight: '800', marginBottom: verticalScale(6), letterSpacing: 1 }}>
                 <Ionicons name="camera" size={14} color="#A7F3D0" /> AI RECOGNITION MISSION
               </Text>
-              <Text style={{ color: '#FFF', fontSize: 14, lineHeight: 22 }}>
+              <Text style={{ color: '#FFF', fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(22) }}>
                 Find & capture: <Text style={{ fontWeight: '800', color: '#4ADE80' }}>{dailyChallenge.aiDetectionTargets.join(', ')}</Text>
               </Text>
             </LinearGradient>
@@ -178,42 +179,43 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
 
 const localStyles = StyleSheet.create({
   featuredCard: {
-    borderRadius: 32,
+    borderRadius: moderateScale(32),
     overflow: 'hidden',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 16 },
+    shadowOffset: { width: 0, height: verticalScale(16) },
     shadowOpacity: 0.15,
     shadowRadius: 32,
     elevation: 10,
     backgroundColor: '#126027',
   },
-  featuredImage: { minHeight: 420, justifyContent: 'flex-end' },
+  featuredImage: { minHeight: verticalScale(380), justifyContent: 'flex-end' },
   featuredOverlay: { ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(0, 0, 0, 0.3)' },
   featuredGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '100%' },
-  featuredContent: { padding: 24, paddingTop: 40 },
+  featuredContent: { padding: moderateScale(20), paddingTop: verticalScale(36) },
   glassTag: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: scale(14), paddingVertical: verticalScale(7),
+    borderRadius: moderateScale(20),
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
   },
-  glassTagText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+  glassTagText: { color: '#FFF', fontSize: responsiveFontSize(12), fontWeight: '800', letterSpacing: 0.5 },
   aiGradientBox: {
-    padding: 16, borderRadius: 20, marginTop: 8, marginBottom: 12,
+    padding: moderateScale(14), borderRadius: moderateScale(20), marginTop: verticalScale(8), marginBottom: verticalScale(10),
     borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   pulseBtn: {
     backgroundColor: '#4ADE80',
-    paddingVertical: 16,
-    borderRadius: 20,
+    paddingVertical: verticalScale(15),
+    borderRadius: moderateScale(20),
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: verticalScale(18),
     shadowColor: '#4ADE80',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: verticalScale(8) },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 8,
   },
-  pulseBtnText: { color: '#126027', fontSize: 15, fontWeight: '900', letterSpacing: 1 },
+  pulseBtnText: { color: '#126027', fontSize: responsiveFontSize(14), fontWeight: '900', letterSpacing: 1 },
 });
+

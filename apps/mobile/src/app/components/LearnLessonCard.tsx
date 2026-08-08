@@ -9,6 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
@@ -62,57 +63,57 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={styles.card}>
       {lesson.featured && (
-        <View style={{ position: 'absolute', top: 32, left: 32, backgroundColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, zIndex: 10, shadowColor: '#F59E0B', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
-          <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>⭐ Featured</Text>
+        <View style={{ position: 'absolute', top: verticalScale(20), left: scale(20), backgroundColor: '#F59E0B', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(10), zIndex: 10, shadowColor: '#F59E0B', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
+          <Text style={{ color: '#FFF', fontSize: responsiveFontSize(11), fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>⭐ Featured</Text>
         </View>
       )}
 
       {lesson.imageUrl && lesson.imageUrl !== 'null' && lesson.imageUrl !== 'undefined' ? (
         <Image 
           source={{ uri: `${ecobudApiOrigin}${lesson.imageUrl}` }}
-          style={{ width: '100%', height: 160, borderRadius: 16, marginBottom: 16 }}
+          style={{ width: '100%', height: verticalScale(150), borderRadius: moderateScale(16), marginBottom: verticalScale(14) }}
           resizeMode="cover"
         />
       ) : (
-        <View style={{ width: '100%', height: 160, borderRadius: 16, marginBottom: 16, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 64, opacity: 0.7 }}>📖</Text>
+        <View style={{ width: '100%', height: verticalScale(150), borderRadius: moderateScale(16), marginBottom: verticalScale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: responsiveFontSize(48), opacity: 0.7 }}>📖</Text>
         </View>
       )}
 
       <Text style={styles.title}>{lesson.title}</Text>
       
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-        <Text style={{ fontSize: 13, color: '#6B7A75', fontWeight: '700' }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: verticalScale(10) }}>
+        <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
           🔖 {lesson.category || 'General'}  •  {lesson.difficulty?.toLowerCase() === 'advanced' ? '🔴' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '🟠' : '🟢'} {lesson.difficulty || 'Beginner'}{lesson.durationMinutes && lesson.durationMinutes > 0 ? `  •  ⏱ ${lesson.durationMinutes} min` : ''}
         </Text>
       </View>
 
-      <Text style={[styles.description, { marginBottom: 16, lineHeight: 20 }]} numberOfLines={3}>
+      <Text style={[styles.description, { marginBottom: verticalScale(14), lineHeight: responsiveFontSize(20) }]} numberOfLines={3}>
         {lesson.description}
       </Text>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-        <Text style={{ fontSize: 14, color: '#126027', fontWeight: '900', backgroundColor: '#E6F4EC', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, overflow: 'hidden' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(16) }}>
+        <Text style={{ fontSize: responsiveFontSize(13), color: '#126027', fontWeight: '900', backgroundColor: '#E6F4EC', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(8), overflow: 'hidden' }}>
           🍃 +{lesson.pointsReward || 10} Eco points
         </Text>
       </View>
 
       <View style={{ 
-        marginTop: 4, 
-        paddingTop: 16, 
-        paddingBottom: 16,
+        marginTop: verticalScale(4), 
+        paddingTop: verticalScale(12), 
+        paddingBottom: verticalScale(12),
         borderTopWidth: 1, 
         borderTopColor: '#F0F5F2', 
         alignItems: 'center', 
         justifyContent: 'center' 
       }}>
-        <Text style={{ color: '#126027', fontSize: 16, fontWeight: '800' }}>
+        <Text style={{ color: '#126027', fontSize: responsiveFontSize(15), fontWeight: '800' }}>
           {getActionLabel(lesson.status)}
         </Text>
       </View>
 
       {/* Sleek Progress Bar */}
-      <View style={{ height: 4, backgroundColor: '#F0F5F2', width: '100%', position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+      <View style={{ height: verticalScale(4), backgroundColor: '#F0F5F2', width: '100%', position: 'absolute', bottom: 0, left: 0, right: 0 }}>
         <Animated.View style={{
           height: '100%',
           backgroundColor: '#126027',
@@ -129,9 +130,9 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: moderateScale(22),
+    padding: moderateScale(16),
+    marginBottom: verticalScale(14),
     shadowColor: '#126027',
     shadowOpacity: 0.08,
     shadowRadius: 16,
@@ -143,12 +144,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(12),
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scale(34),
+    height: scale(34),
+    borderRadius: scale(17),
     backgroundColor: '#F0F5F2',
     alignItems: 'center',
     justifyContent: 'center',
@@ -156,80 +157,81 @@ const styles = StyleSheet.create({
   statusPill: {
     backgroundColor: '#E6F4EC',
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(5),
   },
   statusText: {
     color: '#126027',
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '700',
     letterSpacing: 0.4,
   },
   title: {
-    fontSize: 20,
+    fontSize: responsiveFontSize(18),
     fontWeight: '800',
     color: '#1A211D',
-    marginBottom: 8,
+    marginBottom: verticalScale(6),
   },
   description: {
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: responsiveFontSize(13),
+    lineHeight: responsiveFontSize(20),
     color: '#6B7A75',
-    marginBottom: 18,
+    marginBottom: verticalScale(14),
   },
   metaRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: scale(8),
+    marginBottom: verticalScale(14),
   },
   metaBadgeTime: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(5),
     backgroundColor: '#F3F4F6',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(5),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   metaBadgePoints: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(5),
     backgroundColor: '#ECFDF5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(5),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     borderColor: '#D1FAE5',
   },
   metaBadgeDifficulty: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(5),
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(5),
+    borderRadius: moderateScale(8),
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   metaEmoji: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
   },
   metaBadgeTextTime: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '700',
     color: '#4B5563',
   },
   metaBadgeTextPoints: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '800',
     color: '#065F46',
   },
   metaBadgeTextDifficulty: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '700',
     color: '#92400E',
   },
@@ -237,21 +239,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: verticalScale(8),
   },
   progressLabel: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(12),
     fontWeight: '700',
     color: '#6B7A75',
     letterSpacing: 0.6,
   },
   progressValue: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     fontWeight: '700',
     color: '#126027',
   },
   progressTrack: {
-    height: 10,
+    height: verticalScale(8),
     borderRadius: 999,
     backgroundColor: '#E4E9E6',
     overflow: 'hidden',
@@ -262,26 +264,27 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   footer: {
-    marginTop: 18,
+    marginTop: verticalScale(14),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   actionText: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     fontWeight: '800',
     color: '#126027',
   },
   authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 16,
+    gap: scale(5),
+    marginBottom: verticalScale(14),
     opacity: 0.8,
   },
   authorText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '600',
     color: '#6B7A75',
   },
 });
+

@@ -6,6 +6,8 @@ import {
   View,
   StyleSheet,
   LogBox,
+  Text,
+  TextInput,
 } from 'react-native';
 
 // Suppress the Expo/React Native DevTools client connection warnings
@@ -13,6 +15,17 @@ LogBox.ignoreLogs([
   'devtools client',
   'Failed to initialize devtools client',
 ]);
+
+// Disable font scaling globally so the app doesn't break when phone screen zoom/font size is increased
+// @ts-expect-error
+Text.defaultProps = Text.defaultProps || {};
+// @ts-expect-error
+Text.defaultProps.allowFontScaling = false;
+// @ts-expect-error
+TextInput.defaultProps = TextInput.defaultProps || {};
+// @ts-expect-error
+TextInput.defaultProps.allowFontScaling = false;
+
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   type EcoBudMobileModel,
@@ -93,14 +106,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
         {model.activeTab === 'marketplace' ? (
-          <>
-            <ScreenTransition key="marketplace">
-              <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
-            </ScreenTransition>
-            {!hideMarketplaceChrome && (
-              <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
-            )}
-          </>
+          <ScreenTransition key="marketplace">
+            <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
+          </ScreenTransition>
         ) : (
           <ScreenTransition key={model.activeTab}>
             <ScrollView
@@ -123,10 +131,10 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
-          <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
-        )}
-        {model.activeTab !== 'marketplace' && (
-          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+          <>
+            <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
+            <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+          </>
         )}
       </SafeAreaView>
     );

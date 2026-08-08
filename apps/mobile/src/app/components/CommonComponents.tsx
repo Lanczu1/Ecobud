@@ -527,7 +527,7 @@ export function BottomTabBar({
   const items: { key: AppTab; label: string; shortLabel: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { key: 'home', label: 'Home', shortLabel: 'Home', icon: 'home-outline' },
     { key: 'learn', label: 'Learn', shortLabel: 'Learn', icon: 'book-outline' },
-    { key: 'challenges', label: 'Challenges', shortLabel: 'Tasks', icon: 'trophy-outline' },
+    { key: 'challenges', label: 'Tasks', shortLabel: 'Tasks', icon: 'trophy-outline' },
     { key: 'marketplace', label: 'G&G', shortLabel: 'G&G', icon: 'cart-outline' },
     { key: 'profile', label: 'Profile', shortLabel: 'Profile', icon: 'person-outline' },
   ];
@@ -540,8 +540,8 @@ export function BottomTabBar({
     Animated.spring(slideAnim, {
       toValue: activeIndex,
       useNativeDriver: true,
-      tension: 120,
-      friction: 12,
+      tension: 90,
+      friction: 11,
     }).start();
   }, [activeIndex, slideAnim]);
 
@@ -557,8 +557,10 @@ export function BottomTabBar({
     outputRange: [0, tabWidth, 2 * tabWidth, 3 * tabWidth, 4 * tabWidth],
   });
 
-  // Pill inner margin shrinks on narrow screens so it doesn't clip
-  const pillInset = isNarrow ? 4 : 8;
+  // Ensure the active pill fits inside the bar on small screens and zoom modes
+  const pillWidth = Math.min(64, tabWidth - 10);
+  const pillHeight = 54; // Increase padding at the bottom by reducing height and increasing top margin
+  const pillLeft = (tabWidth - pillWidth) / 2;
 
   return (
     <View style={styles.bottomBar} onLayout={onLayout}>
@@ -567,9 +569,11 @@ export function BottomTabBar({
           style={[
             styles.tabActivePill,
             {
-              width: tabWidth - pillInset * 2,
-              top: pillInset,
-              bottom: pillInset,
+              width: pillWidth,
+              height: pillHeight,
+              top: 8,
+              left: pillLeft,
+              borderRadius: 16,
               transform: [{ translateX }],
             },
           ]}

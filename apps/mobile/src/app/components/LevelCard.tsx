@@ -2,6 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 export interface LevelCardProps {
   ecoPoints: number;
@@ -137,23 +138,23 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: moderateScale(16),
+    padding: moderateScale(16),
     position: 'relative',
     overflow: 'hidden',
     shadowColor: '#064E3B',
     shadowOpacity: 0.3,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: verticalScale(4) },
     elevation: 4,
   },
   cardGlow: {
     position: 'absolute',
-    top: -30,
-    right: -30,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    top: verticalScale(-30),
+    right: scale(-30),
+    width: '30%',
+    aspectRatio: 1,
+    borderRadius: 9999,
     backgroundColor: '#34D399',
     opacity: 0.2,
     transform: [{ scale: 1.5 }],
@@ -179,49 +180,50 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
     zIndex: 2,
   },
   iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: scale(12),
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   levelLabel: {
-    fontSize: 10,
+    fontSize: responsiveFontSize(10),
     fontWeight: '800',
     color: '#A7F3D0',
     letterSpacing: 1.2,
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   levelTitle: {
-    fontSize: 18,
+    fontSize: responsiveFontSize(17),
     color: '#FFFFFF',
     fontWeight: '700',
+    flexShrink: 1,
   },
   pointsRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 16,
+    marginBottom: verticalScale(14),
     zIndex: 2,
   },
   pointsNumber: {
-    fontSize: 36,
+    fontSize: responsiveFontSize(34),
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -1,
   },
   pointsUnit: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(14),
     fontWeight: '600',
     color: '#6EE7B7',
-    marginLeft: 6,
+    marginLeft: scale(6),
     opacity: 0.9,
   },
   progressContainer: {
@@ -230,28 +232,31 @@ const styles = StyleSheet.create({
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: verticalScale(6),
+    flexWrap: 'wrap',
+    gap: 4,
   },
   progressText: {
-    fontSize: 11,
+    fontSize: responsiveFontSize(11),
     fontWeight: '600',
     color: '#D1FAE5',
     opacity: 0.9,
+    flexShrink: 1,
   },
   progressBarBackground: {
-    height: 8,
-    borderRadius: 4,
+    height: verticalScale(8),
+    borderRadius: moderateScale(4),
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#34D399',
-    borderRadius: 4,
+    borderRadius: moderateScale(4),
   },
   pointsToNextText: {
-    fontSize: 11,
+    fontSize: responsiveFontSize(11),
     color: '#A7F3D0',
     fontWeight: '500',
     textAlign: 'right',

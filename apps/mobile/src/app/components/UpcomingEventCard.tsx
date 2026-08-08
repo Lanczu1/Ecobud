@@ -11,6 +11,7 @@ import { RejectionModal } from './RejectionModal';
 import { type UpcomingEventCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { getEventLifecycleStatus } from '../utils/appUtils';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
 function formatLongDate(isoDate: string) {
   const date = new Date(isoDate);
@@ -130,23 +131,23 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
     <ImageBackground
       source={{ uri: imageUrl }}
       style={styles.eventFeaturedCard}
-      imageStyle={{ borderRadius: 24 }}
+      imageStyle={{ borderRadius: moderateScale(24) }}
     >
       <View style={styles.eventFeaturedOverlay} />
       <View style={styles.featuredProgramContent}>
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 'auto' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: 'auto' }}>
           <View style={lifecycle === 'ongoing' ? styles.tagRed : (lifecycle === 'ended' ? styles.tagGray : styles.tagLight)}><Text style={styles.tagLightText}>{statusText}</Text></View>
           <View style={styles.tagDark}><Text style={styles.tagDarkText}>PUBLIC EVENT</Text></View>
         </View>
 
-        <View style={{flexDirection: 'row', gap: 16, marginBottom: 8, marginTop: 40}}>
-          <View style={styles.rowMeta}><Ionicons name="calendar" size={14} color="#FFF"/><Text style={styles.metaTextWhite}> {formatLongDate(event.startDatetime)}</Text></View>
-          <View style={styles.rowMeta}><Ionicons name="location" size={14} color="#FFF"/><Text style={styles.metaTextWhite}> {event.location}</Text></View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(12), marginBottom: verticalScale(6), marginTop: verticalScale(28) }}>
+          <View style={styles.rowMeta}><Ionicons name="calendar" size={scale(14)} color="#FFF"/><Text style={styles.metaTextWhite}> {formatLongDate(event.startDatetime)}</Text></View>
+          <View style={styles.rowMeta}><Ionicons name="location" size={scale(14)} color="#FFF"/><Text style={styles.metaTextWhite}> {event.location}</Text></View>
         </View>
         <Text style={styles.featuredProgramTitle}>{event.title}</Text>
         <Text style={styles.featuredProgramDesc}>{event.description}</Text>
 
-        <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: scale(8) }}>
           <Text style={styles.metaTextWhite}>
             {event.spotsLeft != null ? `${event.spotsLeft} spots left` : `${event.expReward} ECO points reward`}
           </Text>
@@ -170,33 +171,34 @@ export function UpcomingEventCard({ event, isReadOnly, onJoin, onSignIn, onRecor
 const styles = StyleSheet.create({
   eventFeaturedCard: {
     width: '100%',
-    height: 350,
-    borderRadius: 24,
+    minHeight: verticalScale(320),
+    borderRadius: moderateScale(24),
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    marginBottom: 24,
+    marginBottom: verticalScale(20),
   },
   eventFeaturedOverlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(26, 33, 29, 0.4)',
   },
   featuredProgramContent: {
-    padding: 24,
+    padding: scale(20),
   },
-  tagDark: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  tagDarkText: { color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  tagLight: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  tagRed: { backgroundColor: 'rgba(200,50,50,0.8)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  tagGray: { backgroundColor: 'rgba(100,100,100,0.8)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  tagLightText: { color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  featuredProgramTitle: { fontSize: 24, fontWeight: '800', color: '#FFF', marginBottom: 8, lineHeight: 30 },
-  featuredProgramDesc: { fontSize: 15, color: 'rgba(255,255,255,0.8)', marginBottom: 20, lineHeight: 22 },
+  tagDark: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(10) },
+  tagDarkText: { color: '#FFF', fontSize: responsiveFontSize(10), fontWeight: '800', letterSpacing: 1 },
+  tagLight: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(10) },
+  tagRed: { backgroundColor: 'rgba(200,50,50,0.8)', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(10) },
+  tagGray: { backgroundColor: 'rgba(100,100,100,0.8)', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(10) },
+  tagLightText: { color: '#FFF', fontSize: responsiveFontSize(10), fontWeight: '800', letterSpacing: 1 },
+  featuredProgramTitle: { fontSize: responsiveFontSize(20), fontWeight: '800', color: '#FFF', marginBottom: verticalScale(6), lineHeight: responsiveFontSize(26) },
+  featuredProgramDesc: { fontSize: responsiveFontSize(13), color: 'rgba(255,255,255,0.8)', marginBottom: verticalScale(14), lineHeight: responsiveFontSize(19) },
   rowMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(4),
   },
-  metaTextWhite: { fontSize: 12, color: '#FFF', fontWeight: '600' },
-  eventJoinBtnInfo: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16 },
-  eventJoinBtnInfoText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+  metaTextWhite: { fontSize: responsiveFontSize(12), color: '#FFF', fontWeight: '600' },
+  eventJoinBtnInfo: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: scale(14), paddingVertical: verticalScale(10), borderRadius: moderateScale(14) },
+  eventJoinBtnInfoText: { color: '#FFF', fontSize: responsiveFontSize(13), fontWeight: '800' },
 });
+

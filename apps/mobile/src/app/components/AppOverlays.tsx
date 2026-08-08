@@ -347,7 +347,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
           <Animated.View style={{ opacity: fadeAnim }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>{challenge.title}</Text>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Difficulty:</Text>
                 <Text style={{ fontSize: 16, color: '#6B7A75' }}>{challenge.difficulty}</Text>
@@ -364,7 +364,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Targets:</Text>
                 {challenge.aiDetectionTargets?.map(target => (
@@ -892,9 +892,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           try {
             const data = JSON.parse(event.nativeEvent.data);
             if (data.type === 'join' && data.id) {
-              if (!model.isReadOnlyExperience) {
-                void model.handleJoinEvent(data.id);
-              }
+              void model.handleJoinEvent(data.id);
             }
           } catch (e) {
             console.error('WebView message error:', e);
@@ -982,7 +980,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 16, marginTop: 12, marginBottom: 16 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 12, marginBottom: 16 }}>
           <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
             <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? '#126027' : '#6B7A75' }}>Browse</Text>
           </TouchableOpacity>
@@ -1043,13 +1041,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                     if (lc === 'ended' && !event.userStatus) {
                       return null;
                     }
-                    if (model.isReadOnlyExperience) {
-                      return (
-                        <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.leaveReadOnlyAccess()}>
-                          <Text style={styles.quickJoinBtnText}>Sign In to Join</Text>
-                        </TouchableOpacity>
-                      );
-                    }
+
                     if (event.userStatus === 'rejected') {
                       return (
                         <TouchableOpacity style={[styles.quickJoinBtn, { backgroundColor: '#DC2626' }]} onPress={() => {
@@ -2536,8 +2528,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
                 flex: 1,
                 justifyContent: 'center',
                 alignItems: 'center',
-                flexDirection: 'row',
-                gap: 8,
+                flexDirection: 'row', flexWrap: 'wrap', gap: 8,
               }}
             >
               <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
@@ -2966,8 +2957,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
                 flex: 1,
                 justifyContent: 'center',
                 alignItems: 'center',
-                flexDirection: 'row',
-                gap: 8,
+                flexDirection: 'row', flexWrap: 'wrap', gap: 8,
               }}
             >
               <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
@@ -3147,7 +3137,7 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
         </Animated.View>
 
         {/* Pagination Controls */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderColor: '#EDF6F1', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderColor: '#EDF6F1', alignItems: 'center' }}>
           <TouchableOpacity 
             disabled={page === 1} 
             onPress={() => setPage(page - 1)}

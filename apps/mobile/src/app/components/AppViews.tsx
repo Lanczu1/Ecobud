@@ -35,6 +35,7 @@ import {
   usePressScale,
   getVisibleStreak,
 } from '../utils/appUtils';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import {
   TopNavbar,
   ProgressBar,
@@ -107,7 +108,7 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
   const { width, height } = useWindowDimensions();
   const [step, setStep] = useState(0);
   const isLandscape = width > height;
-  const isCompact = height < 740;
+  const isCompact = height < 740 || width < 360; // also catch Display Zoom / small phones
   const { scale, onPressIn, onPressOut } = usePressScale();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -220,9 +221,13 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
           <Animated.View style={[styles.newOnboardingTextContainer, isLandscape && { marginBottom: 20, paddingHorizontal: 0, alignItems: 'flex-start' }, { opacity: fadeAnim }]}>
             <Text style={[
               styles.newOnboardingTitle,
-              isCompact && { fontSize: 28, lineHeight: 32 },
+              isCompact && { fontSize: responsiveFontSize(24), lineHeight: moderateScale(28) },
               isLandscape && { textAlign: 'left' }
-            ]}>
+            ]}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              numberOfLines={3}
+            >
               {currentStepData.title}
             </Text>
             <Text style={[
@@ -1351,6 +1356,8 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 activeOpacity={0.8}
               >
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     trackerStyles.segmentText,
                     segment === key && trackerStyles.segmentTextActive,
@@ -1366,9 +1373,9 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
         {/* ── Activity Calendar View ───────────────────────────────────────── */}
         {segment === 'calendar' && (
           <View style={trackerStyles.surfaceCard}>
-            <View style={styles.rowBetween}>
-              <Text style={trackerStyles.surfaceTitle}>Activity Calendar</Text>
-              <Text style={trackerStyles.surfaceSubtitle}>{formatMonthLabel(trackerMonth)}</Text>
+            <View style={[styles.rowBetween, { gap: 8 }]}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceTitle, { flexShrink: 1 }]}>Activity Calendar</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { flexShrink: 1 }]}>{formatMonthLabel(trackerMonth)}</Text>
             </View>
 
             <View style={trackerStyles.calNavRow}>
@@ -1469,9 +1476,9 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
         {/* ── Leaderboard View ─────────────────────────────────────────────── */}
         {segment === 'leaderboard' && (
           <View style={trackerStyles.surfaceCard}>
-            <View style={styles.rowBetween}>
-              <Text style={trackerStyles.surfaceTitle}>Community Leaderboard</Text>
-              <Text style={trackerStyles.surfaceSubtitle}>By Eco Points</Text>
+            <View style={[styles.rowBetween, { gap: 8 }]}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceTitle, { flexShrink: 1 }]}>Community Leaderboard</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { flexShrink: 1 }]}>By Eco Points</Text>
             </View>
 
             {leaderboardItems.length === 0 ? (
@@ -1733,6 +1740,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
           end={{ x: 1, y: 1 }}
           style={profileStyles.headerCard}
         >
+          {/* Top Row: Level Badge + Settings Button */}
           <View style={profileStyles.headerTopRow}>
             <View style={profileStyles.headerBadge}>
               <Text style={profileStyles.headerBadgeText}>LEVEL {currentLevelObj.level}</Text>
@@ -1741,10 +1749,11 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               style={profileStyles.headerSettingsBtn}
               onPress={() => model.setActiveOverlay('settings')}
             >
-              <Ionicons name="settings-sharp" size={20} color="#FFF" />
+              <Ionicons name="settings-sharp" size={scale(18)} color="#FFF" />
             </TouchableOpacity>
           </View>
 
+          {/* Profile Main Info (Avatar + User Name/Email/Title) */}
           <View style={profileStyles.profileMainInfo}>
             <TouchableOpacity onPress={() => avatarUrl ? setIsViewingAvatar(true) : void pickImage()} style={profileStyles.avatarContainer}>
               {avatarUrl ? (
@@ -1752,42 +1761,50 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               ) : (
                 <AvatarBubble
                   label={model.userDisplayName}
-                  size={80}
+                  size={scale(68)}
                   style={profileStyles.avatarImg}
-                  textStyle={{ fontSize: 36 }}
+                  textStyle={{ fontSize: responsiveFontSize(28) }}
                 />
               )}
               <TouchableOpacity onPress={() => void pickImage()} style={profileStyles.avatarEditBadge}>
-                <Ionicons name="camera" size={12} color="#FFF" />
+                <Ionicons name="camera" size={scale(11)} color="#FFF" />
               </TouchableOpacity>
             </TouchableOpacity>
             
             <View style={profileStyles.profileMeta}>
-              <Text style={profileStyles.profileName} numberOfLines={1}>
+              <Text style={profileStyles.profileName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                 {model.userDisplayName}
               </Text>
-              <Text style={profileStyles.profileEmail} numberOfLines={1}>
+              <Text style={profileStyles.profileEmail} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                 {model.session?.user.email}
               </Text>
               <View style={profileStyles.titleBadge}>
-                <MaterialCommunityIcons name="shield-crown" size={14} color="#F59E0B" />
-                <Text style={profileStyles.titleBadgeText}>{currentLevelObj.name}</Text>
+                <MaterialCommunityIcons name="shield-crown" size={scale(14)} color="#F59E0B" />
+                <Text style={profileStyles.titleBadgeText} numberOfLines={1}>{currentLevelObj.name}</Text>
               </View>
             </View>
-
-            {/* Horizontal Coin Card Aligned on Right Side */}
-            <TouchableOpacity 
-              style={profileStyles.coinCardHorizontalRight}
-              onPress={() => model.setActiveOverlay('coinsHistory')}
-              activeOpacity={0.85}
-            >
-              <Image source={require('../../../assets/coin.png')} style={profileStyles.coinBalanceIconHoriz} resizeMode="contain" />
-              <View style={{ alignItems: 'flex-start' }}>
-                <Text style={profileStyles.coinBalanceAmountHoriz}>{model.dashboard?.ecoCoins ?? 0}</Text>
-                <Text style={profileStyles.coinBalanceLabelHoriz}>Coins</Text>
-              </View>
-            </TouchableOpacity>
           </View>
+
+          {/* Integrated Horizontal Coin Balance Glass Bar */}
+          <TouchableOpacity 
+            style={profileStyles.coinCardHorizontal}
+            onPress={() => model.setActiveOverlay('coinsHistory')}
+            activeOpacity={0.85}
+          >
+            <View style={profileStyles.coinCardLeft}>
+              <Image source={require('../../../assets/coin.png')} style={profileStyles.coinBalanceIconHoriz} resizeMode="contain" />
+              <View style={{ justifyContent: 'center' }}>
+                <Text style={profileStyles.coinBalanceLabelHoriz}>Eco Coins</Text>
+                <Text style={profileStyles.coinBalanceAmountHoriz} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {model.dashboard?.ecoCoins ?? 0}
+                </Text>
+              </View>
+            </View>
+            <View style={profileStyles.coinHistoryChip}>
+              <Text style={profileStyles.coinHistoryChipText}>Coins History</Text>
+              <Ionicons name="chevron-forward" size={scale(14)} color="#FDE68A" />
+            </View>
+          </TouchableOpacity>
         </LinearGradient>
 
         {/* Progress Bar Info */}
@@ -2385,11 +2402,12 @@ const trackerStyles = StyleSheet.create({
   segmentButton: {
     flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
-  segmentText: { color: '#6B7A75', fontSize: 13, fontWeight: '700' },
+  segmentText: { color: '#6B7A75', fontSize: 13, fontWeight: '700', textAlign: 'center' },
   segmentTextActive: { color: '#126027', fontWeight: '800' },
 
   // ── Surface Card (shared for Calendar & Leaderboard) ──────────────────────
@@ -2432,7 +2450,7 @@ const trackerStyles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   calWeekLabel: {
-    width: 44,
+    width: '14.28%',
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '700',
@@ -2451,8 +2469,10 @@ const trackerStyles = StyleSheet.create({
 
   // Heatmap cells
   heatmapCell: {
-    width: 40,
-    height: 40,
+    width: '100%',
+    aspectRatio: 1,
+    maxWidth: 40,
+    maxHeight: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2657,29 +2677,29 @@ const trackerStyles = StyleSheet.create({
 const profileStyles = StyleSheet.create({
   backgroundOrbOne: {
     position: 'absolute',
-    top: 150,
-    left: -40,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    top: verticalScale(150),
+    left: scale(-40),
+    width: scale(200),
+    height: scale(200),
+    borderRadius: scale(100),
     backgroundColor: 'rgba(74, 222, 128, 0.05)',
   },
   backgroundOrbTwo: {
     position: 'absolute',
-    top: 400,
-    right: -40,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
+    top: verticalScale(400),
+    right: scale(-40),
+    width: scale(250),
+    height: scale(250),
+    borderRadius: scale(125),
     backgroundColor: 'rgba(52, 211, 153, 0.05)',
   },
   headerCard: {
-    borderRadius: 28,
-    padding: 20,
-    marginTop: 12,
-    marginBottom: 20,
+    borderRadius: moderateScale(26),
+    padding: moderateScale(18),
+    marginTop: verticalScale(10),
+    marginBottom: verticalScale(16),
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 12 },
+    shadowOffset: { width: 0, height: verticalScale(10) },
     shadowOpacity: 0.25,
     shadowRadius: 18,
     elevation: 8,
@@ -2688,26 +2708,26 @@ const profileStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(12),
   },
   headerBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(4),
+    borderRadius: moderateScale(10),
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   headerBadgeText: {
     color: '#FFF',
-    fontSize: 10,
+    fontSize: responsiveFontSize(10),
     fontWeight: '900',
     letterSpacing: 1,
   },
   headerSettingsBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(16),
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2715,23 +2735,25 @@ const profileStyles = StyleSheet.create({
   profileMainInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: scale(14),
+    marginBottom: verticalScale(14),
   },
   avatarContainer: {
     position: 'relative',
+    flexShrink: 0,
   },
   avatarImg: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: scale(68),
+    height: scale(68),
+    borderRadius: scale(34),
     borderWidth: 3,
     borderColor: '#FFF',
     backgroundColor: '#E6F4EC',
   },
   avatarPlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: scale(68),
+    height: scale(68),
+    borderRadius: scale(34),
     borderWidth: 3,
     borderColor: '#FFF',
     backgroundColor: '#FFF',
@@ -2743,9 +2765,9 @@ const profileStyles = StyleSheet.create({
     bottom: 0,
     right: 0,
     backgroundColor: '#F59E0B',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
+    borderRadius: scale(10),
+    width: scale(20),
+    height: scale(20),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -2754,73 +2776,101 @@ const profileStyles = StyleSheet.create({
   profileMeta: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
   },
   profileName: {
-    fontSize: 20,
+    fontSize: responsiveFontSize(18),
     fontWeight: '800',
     color: '#FFF',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
+    flexShrink: 1,
   },
   profileEmail: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(12),
     color: 'rgba(255, 255, 255, 0.75)',
-    marginBottom: 6,
+    marginBottom: verticalScale(6),
+    flexShrink: 1,
   },
   titleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 4,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(3),
+    borderRadius: moderateScale(8),
+    gap: scale(4),
   },
   titleBadgeText: {
     color: '#FFF',
-    fontSize: 11,
+    fontSize: responsiveFontSize(11),
     fontWeight: '700',
+    flexShrink: 1,
   },
-  coinCardHorizontalRight: {
+  coinCardHorizontal: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: moderateScale(16),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(10),
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.28)',
-    gap: 8,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  coinCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(10),
+    flex: 1,
+    minWidth: 0,
   },
   coinBalanceIconHoriz: {
-    width: 26,
-    height: 26,
+    width: scale(28),
+    height: scale(28),
+    flexShrink: 0,
+  },
+  coinBalanceLabelHoriz: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: responsiveFontSize(10),
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   coinBalanceAmountHoriz: {
     color: '#FDE68A',
-    fontSize: 19,
+    fontSize: responsiveFontSize(18),
     fontWeight: '900',
-    lineHeight: 22,
+    lineHeight: responsiveFontSize(22),
   },
-  coinBalanceLabelHoriz: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 11,
+  coinHistoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(5),
+    borderRadius: moderateScale(10),
+    gap: scale(4),
+  },
+  coinHistoryChipText: {
+    color: '#FDE68A',
+    fontSize: responsiveFontSize(11),
     fontWeight: '700',
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 20,
+    gap: scale(12),
+    marginBottom: verticalScale(20),
   },
   statCard: {
     flex: 1,
     backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 12,
+    borderRadius: moderateScale(20),
+    padding: moderateScale(12),
     alignItems: 'center',
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: verticalScale(6) },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 3,
@@ -2828,38 +2878,38 @@ const profileStyles = StyleSheet.create({
     borderColor: '#F0F5F2',
   },
   statIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   coinIcon: {
-    width: 18,
-    height: 18,
+    width: scale(18),
+    height: scale(18),
   },
   statValue: {
-    fontSize: 15,
+    fontSize: responsiveFontSize(15),
     fontWeight: '900',
     color: '#1A211D',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: responsiveFontSize(10),
     color: '#6B7A75',
     fontWeight: '600',
     textAlign: 'center',
   },
   progressSection: {
     backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 24,
+    borderRadius: moderateScale(20),
+    padding: moderateScale(16),
+    marginBottom: verticalScale(20),
     borderWidth: 1,
     borderColor: '#F0F5F2',
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: verticalScale(6) },
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
@@ -2868,33 +2918,33 @@ const profileStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   progressInfoText: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(13),
     fontWeight: '700',
     color: '#1A211D',
   },
   progressInfoValue: {
-    fontSize: 11,
+    fontSize: responsiveFontSize(11),
     fontWeight: '700',
     color: '#126027',
   },
   sectionContainer: {
-    marginBottom: 24,
+    marginBottom: verticalScale(20),
   },
   sectionHeadline: {
-    fontSize: 16,
+    fontSize: responsiveFontSize(16),
     fontWeight: '800',
     color: '#1A211D',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
     letterSpacing: 0.3,
   },
   eventBanner: {
-    borderRadius: 24,
+    borderRadius: moderateScale(24),
     overflow: 'hidden',
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: verticalScale(8) },
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
@@ -2905,45 +2955,47 @@ const profileStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    gap: 16,
+    padding: moderateScale(16),
+    gap: scale(14),
   },
   eventBannerTextCol: {
     flex: 1,
+    minWidth: 0,
   },
   eventBannerTitle: {
-    fontSize: 15,
+    fontSize: responsiveFontSize(15),
     fontWeight: '800',
     color: '#126027',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   eventBannerDesc: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(12),
     color: '#6B7A75',
-    lineHeight: 16,
+    lineHeight: responsiveFontSize(16),
   },
   eventBannerBtn: {
     backgroundColor: '#126027',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(12),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: scale(4),
+    flexShrink: 0,
   },
   eventBannerBtnText: {
     color: '#FFF',
-    fontSize: 12,
+    fontSize: responsiveFontSize(12),
     fontWeight: '800',
   },
   actionListCard: {
     backgroundColor: '#FFF',
-    borderRadius: 24,
-    padding: 8,
+    borderRadius: moderateScale(24),
+    padding: moderateScale(8),
     borderWidth: 1,
     borderColor: '#F0F5F2',
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: verticalScale(8) },
     shadowOpacity: 0.05,
     shadowRadius: 12,
     elevation: 3,
@@ -2951,50 +3003,52 @@ const profileStyles = StyleSheet.create({
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    gap: 12,
+    padding: moderateScale(12),
+    gap: scale(12),
   },
   actionIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: scale(40),
+    height: scale(40),
+    borderRadius: moderateScale(12),
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   actionTextCol: {
     flex: 1,
+    minWidth: 0,
   },
   actionLabel: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(14),
     fontWeight: '800',
     color: '#1A211D',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   actionSub: {
-    fontSize: 11,
+    fontSize: responsiveFontSize(11),
     color: '#6B7A75',
   },
   divider: {
     height: 1,
     backgroundColor: '#F0F5F2',
-    marginHorizontal: 12,
+    marginHorizontal: scale(12),
   },
   badgesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: scale(12),
   },
   achievementCard: {
     width: '100%',
     backgroundColor: '#FFF',
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: moderateScale(24),
+    padding: moderateScale(16),
     alignItems: 'stretch',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
     borderWidth: 1,
     borderColor: '#F0F5F2',
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: verticalScale(6) },
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
@@ -3002,84 +3056,83 @@ const profileStyles = StyleSheet.create({
   badgeCard: {
     width: '48%',
     backgroundColor: '#FFF',
-    borderRadius: 24,
-    padding: 14,
+    borderRadius: moderateScale(24),
+    padding: moderateScale(14),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#F0F5F2',
     shadowColor: '#126027',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: verticalScale(6) },
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 2,
   },
   badgeIconRing: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: scale(64),
+    height: scale(64),
+    borderRadius: scale(32),
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: verticalScale(10),
     position: 'relative',
   },
   badgeIconBg: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: scale(54),
+    height: scale(54),
+    borderRadius: scale(27),
     alignItems: 'center',
     justifyContent: 'center',
   },
   goldBadgeTag: {
     position: 'absolute',
-    bottom: -6,
+    bottom: verticalScale(-6),
     backgroundColor: '#F59E0B',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: moderateScale(6),
     borderWidth: 1,
     borderColor: '#FFF',
   },
   goldBadgeTagText: {
     color: '#FFF',
-    fontSize: 7,
+    fontSize: responsiveFontSize(7),
     fontWeight: '900',
   },
   lockBadgeTag: {
     position: 'absolute',
-    bottom: -4,
+    bottom: verticalScale(-4),
     backgroundColor: '#9CA3AF',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: scale(16),
+    height: scale(16),
+    borderRadius: scale(8),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#FFF',
   },
   badgeTitle: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(13),
     fontWeight: '800',
     color: '#1A211D',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   badgeTitleLocked: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(13),
     fontWeight: '800',
     color: '#6B7A75',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   badgeDescription: {
-    fontSize: 10,
+    fontSize: responsiveFontSize(10),
     color: '#6B7A75',
     textAlign: 'center',
-    lineHeight: 13,
+    lineHeight: responsiveFontSize(13),
   },
   badgeProgressWrap: {
     width: '100%',
-    marginTop: 8,
+    marginTop: verticalScale(8),
   },
 });
-

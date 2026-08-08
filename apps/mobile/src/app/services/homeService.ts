@@ -151,20 +151,5 @@ export const homeService = {
       events,
       transparency,
     };
-  },
-
-  /**
-   * Fetches limited data for a read-only guest session.
-   */
-  async getReadOnlyHydrationData() {
-    const [events, transparency] = await Promise.all([
-      this.getEvents(),
-      this.getPublicTransparency(),
-    ]);
-
-    return {
-      events,
-      transparency,
-    };
   }
 };

@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { type SummaryCardsProps } from '../types/home';
 import { FireStreak } from './FireStreak';
 import { getVisibleStreak } from '../utils/appUtils';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
 export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSevenDays, completedDays }: SummaryCardsProps) {
 
@@ -27,7 +28,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
       }));
 
   return (
-    <View style={{ marginBottom: 24, paddingHorizontal: 0 }}>
+    <View style={{ marginBottom: verticalScale(20), paddingHorizontal: 0 }}>
       <LinearGradient
         colors={['#0B5F58', '#169070', '#22A77B']}
         start={{ x: 0, y: 0 }}
@@ -46,24 +47,35 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.streakLabel}>YOUR ECO STREAK</Text>
-            <Text style={styles.streakTagline}>
-              {currentStreak < 3 ? (currentStreak === 0 ? 'Log a habit to start your streak!' : `${3 - currentStreak} more days to unlock your streak!`) : 'Keep your eco habits growing!'}
+            <Text style={styles.streakTagline} numberOfLines={2}>
+              {currentStreak < 3
+                ? currentStreak === 0
+                  ? 'Log a habit to start your streak!'
+                  : `${3 - currentStreak} more days to unlock your streak!`
+                : 'Keep your eco habits growing!'}
             </Text>
           </View>
         </View>
 
         <View style={[styles.streakNumberRow, { justifyContent: 'space-between', alignItems: 'flex-end' }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-            <Text style={styles.streakNumber}>{visibleStreak}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, flexShrink: 1 }}>
+            <Text
+              style={styles.streakNumber}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              numberOfLines={1}
+            >
+              {visibleStreak}
+            </Text>
             <Text style={styles.streakUnit}>{visibleStreak === 1 ? 'Streak' : 'Streaks'}</Text>
           </View>
           {onPressRewards && (
-            <TouchableOpacity 
-              onPress={onPressRewards} 
-              style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            <TouchableOpacity
+              onPress={onPressRewards}
+              style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: moderateScale(16), flexDirection: 'row', alignItems: 'center', gap: 6 }}
             >
-              <Text style={{ fontSize: 14 }}>🎁</Text>
-              <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>Rewards</Text>
+              <Text style={{ fontSize: responsiveFontSize(14) }}>🎁</Text>
+              <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: responsiveFontSize(13) }}>Rewards</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -87,23 +99,23 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
 
 const styles = StyleSheet.create({
   streakCard: {
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: moderateScale(24),
+    padding: moderateScale(20),
     position: 'relative',
     overflow: 'hidden',
     shadowColor: '#0B5F58',
     shadowOpacity: 0.25,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: verticalScale(8) },
     elevation: 6,
   },
   streakGlow: {
     position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    top: verticalScale(-40),
+    right: scale(-40),
+    width: '45%',
+    aspectRatio: 1,
+    borderRadius: 9999,
     backgroundColor: '#34D399',
     opacity: 0.2,
     transform: [{ scale: 1.5 }],
@@ -111,57 +123,50 @@ const styles = StyleSheet.create({
   streakHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(16),
     zIndex: 2,
   },
   flameCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: scale(52),
+    height: scale(52),
+    borderRadius: scale(26),
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: scale(14),
     position: 'relative',
   },
-  flameGlow: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#FBBF24',
-    opacity: 0.4,
-  },
   streakLabel: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(12),
     fontWeight: '800',
     color: '#A7F3D0',
     letterSpacing: 1.2,
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   streakTagline: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     color: '#FFFFFF',
     fontWeight: '500',
     opacity: 0.9,
+    flexShrink: 1,
   },
   streakNumberRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 20,
+    marginBottom: verticalScale(16),
     zIndex: 2,
   },
   streakNumber: {
-    fontSize: 48,
+    fontSize: responsiveFontSize(44),
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -1,
   },
   streakUnit: {
-    fontSize: 18,
+    fontSize: responsiveFontSize(16),
     fontWeight: '700',
     color: '#A7F3D0',
-    marginLeft: 8,
+    marginLeft: scale(6),
     opacity: 0.9,
   },
   streakDotsRow: {
@@ -169,12 +174,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     zIndex: 2,
-    paddingHorizontal: 4,
+    paddingHorizontal: scale(4),
+    gap: scale(4),
   },
   streakDot: {
-    width: 36,
-    height: 8,
-    borderRadius: 4,
+    flex: 1,
+    height: verticalScale(8),
+    borderRadius: moderateScale(4),
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   streakDotDone: {
@@ -188,7 +194,7 @@ const styles = StyleSheet.create({
   streakDotToday: {
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    height: 10,
+    height: verticalScale(10),
     backgroundColor: 'rgba(255, 255, 255, 0.4)',
   },
 });
