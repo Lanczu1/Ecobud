@@ -1,3 +1,5 @@
+import { typography, spacing } from '../../app/utils/responsive';
+
 export const ecoTheme = {
   colors: {
     background: '#F7F9F7',
@@ -19,4 +21,6 @@ export const ecoTheme = {
     md: 16,
     sm: 12,
   },
+  typography,
+  spacing,
 };

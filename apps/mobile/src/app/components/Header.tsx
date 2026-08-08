@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { responsiveFontSize, moderateScale, scale } from '../utils/responsive';
 
 import { type HeaderProps } from '../types/home';
 import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndicator';
@@ -103,7 +104,7 @@ export function Header({
         <View style={{ alignItems: 'center' }}>
           <Image
             source={require('../../../assets/logo.png')}
-            style={{ width: 140, height: 45, resizeMode: 'contain' }}
+            style={{ width: scale(130), height: scale(130) * (45 / 140), resizeMode: 'contain' }}
           />
         </View>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
@@ -151,8 +152,8 @@ export function Header({
 const styles = StyleSheet.create({
   topNavbar: {
     // paddingTop is now applied dynamically via useSafeAreaInsets() in the component
-    paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingHorizontal: scale(20),
+    paddingBottom: scale(14),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -163,19 +164,20 @@ const styles = StyleSheet.create({
     borderColor: '#4ADE80',
   },
   topNavAvatarText: {
-    fontSize: 18,
+    fontSize: responsiveFontSize(18),
   },
   avatarWrap: {
     position: 'relative',
-    width: 44,
-    height: 44,
+    width: scale(44),
+    height: scale(44),
   },
   topNavTitle: {
-    fontSize: 22,
+    fontSize: responsiveFontSize(20),
     fontWeight: '900',
     color: '#126027',
-    letterSpacing: 2,
+    letterSpacing: 1.5,
     flex: 1,
+    flexShrink: 1,
     textAlign: 'center',
   },
   topNavTitleDark: {
@@ -185,9 +187,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: scale(10),
+    height: scale(10),
+    borderRadius: scale(5),
     backgroundColor: '#F59E0B',
   },
   connectionIndicator: {
@@ -201,7 +203,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarInitials: {
-    fontSize: 22,
+    fontSize: responsiveFontSize(20),
     fontWeight: '900',
     color: '#126027',
   },
@@ -213,12 +215,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   brandLogo: {
-    width: 26,
-    height: 26,
+    width: scale(24),
+    height: scale(24),
     resizeMode: 'contain',
   },
   brandText: {
-    fontSize: 22,
+    fontSize: responsiveFontSize(20),
     fontWeight: '900',
     letterSpacing: 1.5,
     textShadowColor: 'rgba(20, 83, 45, 0.18)',
@@ -226,3 +228,4 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
 });
+

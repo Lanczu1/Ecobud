@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 type AuthModeType = 'signin' | 'signup' | 'verify';
 type FieldName = 'username' | 'email' | 'password' | 'verificationCode';
@@ -60,7 +61,6 @@ const palette = {
   textMuted: '#6B7280',
   separator: '#E5E7EB',
   googleBorder: '#E5E7EB',
-  guestBorder: '#F0F4EC',
   glowTop: 'transparent',
   glowBottom: 'transparent',
 };
@@ -989,18 +989,19 @@ const styles = StyleSheet.create({
   },
   welcomeTitle: {
     fontFamily: 'serif',
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: responsiveFontSize(30),
+    lineHeight: responsiveFontSize(38),
     fontWeight: '600',
     color: palette.textStrong,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
     textAlign: 'center',
+    flexShrink: 1,
   },
   welcomeSubtitle: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: responsiveFontSize(14),
+    lineHeight: responsiveFontSize(22),
     color: palette.subtitle,
-    marginBottom: 26,
+    marginBottom: verticalScale(22),
     textAlign: 'center',
   },
   authCard: {
@@ -1030,16 +1031,16 @@ const styles = StyleSheet.create({
     backgroundColor: palette.dangerSoft,
     borderColor: 'rgba(220, 38, 38, 0.15)',
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 18,
+    borderRadius: moderateScale(16),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(12),
+    marginBottom: verticalScale(18),
   },
   errorBannerText: {
     flex: 1,
     color: palette.danger,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: responsiveFontSize(13),
+    lineHeight: responsiveFontSize(19),
     fontWeight: '600',
   },
   inputGroup: {
@@ -1053,8 +1054,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   inputLabel: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: responsiveFontSize(13),
+    lineHeight: responsiveFontSize(18),
     fontWeight: '700',
     color: palette.textStrong,
     letterSpacing: 0.3,
@@ -1064,10 +1065,10 @@ const styles = StyleSheet.create({
     color: palette.primary,
   },
   inputActionButton: {
-    minHeight: 32,
-    minWidth: 68,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    minHeight: scale(32),
+    minWidth: scale(68),
+    paddingHorizontal: scale(12),
+    borderRadius: moderateScale(12),
     borderWidth: 1,
     borderColor: '#D7E8DC',
     backgroundColor: '#F6FBF8',
@@ -1081,7 +1082,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF6F1',
   },
   inputActionButtonText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(12),
     fontWeight: '800',
     color: palette.primary,
     letterSpacing: 0.2,
@@ -1089,7 +1090,7 @@ const styles = StyleSheet.create({
   inputOuter: {
     borderWidth: 1,
     borderColor: palette.border,
-    borderRadius: 12,
+    borderRadius: moderateScale(12),
     backgroundColor: '#FFFFFF',
   },
   inputOuterFallback: {
@@ -1122,32 +1123,32 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    minHeight: 54,
-    fontSize: 15,
-    lineHeight: 20,
+    minHeight: verticalScale(48),
+    fontSize: responsiveFontSize(15),
+    lineHeight: responsiveFontSize(20),
     fontWeight: '600',
     color: palette.textStrong,
     paddingVertical: 0,
-    paddingLeft: 8,
+    paddingLeft: scale(8),
   },
   textInputSecure: {
-    fontSize: 20,
+    fontSize: responsiveFontSize(18),
     letterSpacing: 3,
   },
   inlineErrorText: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(18),
     color: palette.danger,
-    marginTop: 7,
-    marginLeft: 2,
+    marginTop: verticalScale(7),
+    marginLeft: scale(2),
     fontWeight: '600',
   },
   helperText: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(18),
     color: palette.textMuted,
-    marginTop: 7,
-    marginLeft: 2,
+    marginTop: verticalScale(7),
+    marginLeft: scale(2),
     fontWeight: '600',
   },
   helperTextSuccess: {
@@ -1168,32 +1169,33 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     width: '100%',
-    minHeight: 54,
-    borderRadius: 28,
+    minHeight: verticalScale(54),
+    borderRadius: moderateScale(28),
     overflow: 'hidden',
-    marginTop: 10,
+    marginTop: verticalScale(10),
   },
   primaryButtonDisabled: {
     opacity: 0.62,
   },
   primaryButtonGradient: {
     flex: 1,
-    minHeight: 54,
+    minHeight: verticalScale(54),
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
+    paddingHorizontal: scale(16),
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: responsiveFontSize(15),
     fontWeight: '800',
     letterSpacing: 0.4,
   },
   separatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: verticalScale(22),
   },
   separatorLine: {
     flex: 1,
@@ -1201,20 +1203,20 @@ const styles = StyleSheet.create({
     backgroundColor: palette.separator,
   },
   separatorText: {
-    marginHorizontal: 14,
-    fontSize: 12,
+    marginHorizontal: scale(14),
+    fontSize: responsiveFontSize(12),
     fontWeight: '700',
     letterSpacing: 1.4,
     color: palette.textMuted,
   },
   secondaryButton: {
-    minHeight: 54,
-    borderRadius: 28,
+    minHeight: verticalScale(52),
+    borderRadius: moderateScale(28),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: scale(18),
   },
   googleButton: {
     borderWidth: 1,
@@ -1223,7 +1225,7 @@ const styles = StyleSheet.create({
   },
   outlineButton: {
     borderWidth: 1,
-    borderColor: palette.guestBorder,
+    borderColor: palette.border,
     backgroundColor: '#FFFFFF',
   },
   softButton: {
@@ -1235,42 +1237,36 @@ const styles = StyleSheet.create({
     opacity: 0.56,
   },
   secondaryButtonText: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(14),
     fontWeight: '700',
     color: palette.textStrong,
   },
-  guestViewerHint: {
-    marginTop: 10,
-    color: palette.textMuted,
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
   footerSwitchRow: {
-    marginTop: 32,
+    marginTop: verticalScale(28),
     alignItems: 'center',
     justifyContent: 'center',
   },
   footerSwitchText: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: responsiveFontSize(14),
+    lineHeight: responsiveFontSize(20),
     color: palette.textStrong,
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   footerSwitchLink: {
-    minHeight: 32,
+    minHeight: scale(32),
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: scale(12),
   },
   footerSwitchLinkPressed: {
     opacity: 0.68,
   },
   footerSwitchLinkText: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: responsiveFontSize(15),
+    lineHeight: responsiveFontSize(20),
     color: palette.primary,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
 });
+

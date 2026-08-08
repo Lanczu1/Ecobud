@@ -40,7 +40,6 @@ const hasUsableInternetAccess = (
 
 export function usePresence(
   session: SessionPayload | null,
-  isReadOnlyExperience: boolean,
 ): UsePresenceResult {
   const netInfo = useNetInfo();
   const rawHasUsableInternet = hasUsableInternetAccess(
@@ -63,7 +62,7 @@ export function usePresence(
   const [lastPresenceError, setLastPresenceError] = React.useState<string | null>(null);
 
   const shouldMaintainRealtimeConnection = Boolean(
-    session && !isReadOnlyExperience && hasUsableInternet && appState === 'active',
+    session && hasUsableInternet && appState === 'active',
   );
 
   const appStateRef = React.useRef(appState);
@@ -135,7 +134,7 @@ export function usePresence(
   React.useEffect(() => {
     let isActive = true;
 
-    if (!session || isReadOnlyExperience || !userId) {
+    if (!session || !userId) {
       setPresenceSyncState('idle');
       setLastPresenceError(null);
       setLastPresenceSyncAt(null);
@@ -171,10 +170,10 @@ export function usePresence(
     return () => {
       isActive = false;
     };
-  }, [isReadOnlyExperience, session, userId]);
+  }, [session, userId]);
 
   const connectPresence = React.useCallback(async () => {
-    if (!session || isReadOnlyExperience || !userId) {
+    if (!session || !userId) {
       return;
     }
 
@@ -223,12 +222,12 @@ export function usePresence(
         error instanceof Error ? error.message : 'Unable to sync presence right now.',
       );
     }
-  }, [isReadOnlyExperience, session, userId]);
+  }, [session, userId]);
 
   const heartbeatPresence = React.useCallback(async () => {
     if (
       !session ||
-      isReadOnlyExperience ||
+      false ||
       !userId ||
       !presenceSessionIdRef.current
     ) {
@@ -276,7 +275,7 @@ export function usePresence(
         error instanceof Error ? error.message : 'Presence heartbeat failed.',
       );
     }
-  }, [isReadOnlyExperience, session, userId]);
+  }, [session, userId]);
 
   const disconnectPresence = React.useCallback<
     UsePresenceResult['disconnectPresence']
@@ -289,7 +288,7 @@ export function usePresence(
 
       setPresenceSyncState('offline');
 
-      if (!session || isReadOnlyExperience || !userId || !activeSessionId) {
+      if (!session || !userId || !activeSessionId) {
         if (clearSessionId) {
           setPresenceSessionId(null);
         }
@@ -345,11 +344,11 @@ export function usePresence(
         }
       }
     },
-    [isReadOnlyExperience, lastPresenceSyncAt, session, userId],
+    [lastPresenceSyncAt, session, userId],
   );
 
   React.useEffect(() => {
-    if (!presenceReady || !session || isReadOnlyExperience) {
+    if (!presenceReady || !session || false) {
       return;
     }
 
@@ -373,7 +372,7 @@ export function usePresence(
     connectPresence,
     disconnectPresence,
     hasUsableInternet,
-    isReadOnlyExperience,
+    false,
     presenceReady,
     session,
     shouldMaintainRealtimeConnection,
@@ -394,14 +393,14 @@ export function usePresence(
   }, [heartbeatPresence, presenceReady, presenceSessionId, shouldMaintainRealtimeConnection]);
 
   React.useEffect(() => {
-    if (!session || isReadOnlyExperience) {
+    if (!session || false) {
       return;
     }
 
     if (!hasUsableInternet) {
       setPresenceSyncState('offline');
     }
-  }, [hasUsableInternet, isReadOnlyExperience, session]);
+  }, [hasUsableInternet, session]);
 
   return {
     appState,

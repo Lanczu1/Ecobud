@@ -23,6 +23,7 @@ import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { swapService } from './swapService';
 import type { SwapCategory, ItemCondition, MeetupMethod } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -402,10 +403,12 @@ export function CreateSwapListing({
                     <View style={[localStyles.meetupIcon, meetupMethod === m.key && localStyles.meetupIconActive]}>
                       <Ionicons name={m.icon as any} size={22} color={meetupMethod === m.key ? '#FFF' : ecoTheme.colors.primaryDark} />
                     </View>
-                    <Text style={[localStyles.meetupTitle, meetupMethod === m.key && localStyles.meetupTitleActive]}>
-                      {MEETUP_LABELS[m.key]}
-                    </Text>
-                    <Text style={localStyles.meetupDesc}>{m.desc}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[localStyles.meetupTitle, meetupMethod === m.key && localStyles.meetupTitleActive]}>
+                        {MEETUP_LABELS[m.key]}
+                      </Text>
+                      <Text style={localStyles.meetupDesc}>{m.desc}</Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -520,20 +523,20 @@ export function CreateSwapListing({
           animationType="fade"
           onRequestClose={() => setShowImageError(false)}
         >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-            <View style={{ backgroundColor: '#FEF2F2', padding: 24, borderRadius: 16, width: '100%', alignItems: 'center', borderWidth: 2, borderColor: '#EF4444' }}>
-              <View style={{ backgroundColor: '#FEE2E2', padding: 12, borderRadius: 40, marginBottom: 16 }}>
-                <Ionicons name="images-outline" size={40} color="#EF4444" />
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: scale(20) }}>
+            <View style={{ backgroundColor: '#FEF2F2', padding: moderateScale(20), borderRadius: moderateScale(16), width: '100%', maxWidth: scale(360), alignItems: 'center', borderWidth: 2, borderColor: '#EF4444' }}>
+              <View style={{ backgroundColor: '#FEE2E2', padding: moderateScale(10), borderRadius: moderateScale(30), marginBottom: verticalScale(12) }}>
+                <Ionicons name="images-outline" size={scale(36)} color="#EF4444" />
               </View>
-              <Text style={{ fontSize: 20, fontWeight: '900', color: '#B91C1C', marginBottom: 8 }}>Photos Required</Text>
-              <Text style={{ fontSize: 15, color: '#991B1B', textAlign: 'center', marginBottom: 24, lineHeight: 22 }}>
+              <Text style={{ fontSize: responsiveFontSize(18), fontWeight: '900', color: '#B91C1C', marginBottom: verticalScale(6) }}>Photos Required</Text>
+              <Text style={{ fontSize: responsiveFontSize(14), color: '#991B1B', textAlign: 'center', marginBottom: verticalScale(18), lineHeight: responsiveFontSize(20) }}>
                 Please upload at least 3 photos of your item to continue.
               </Text>
               <TouchableOpacity
-                style={{ backgroundColor: '#EF4444', width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}
+                style={{ backgroundColor: '#EF4444', width: '100%', minHeight: verticalScale(44), paddingVertical: verticalScale(10), borderRadius: moderateScale(12), alignItems: 'center', justifyContent: 'center' }}
                 onPress={() => setShowImageError(false)}
               >
-                <Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>Got it</Text>
+                <Text style={{ color: '#FFF', fontSize: responsiveFontSize(15), fontWeight: 'bold' }}>Got it</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -553,45 +556,46 @@ const localStyles = StyleSheet.create({
     backgroundColor: ecoTheme.colors.background,
   },
   header: {
-    paddingTop: 8,
-    paddingBottom: 18,
-    paddingHorizontal: 18,
+    paddingTop: verticalScale(6),
+    paddingBottom: verticalScale(14),
+    paddingHorizontal: scale(16),
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: verticalScale(12),
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(4),
   },
   backLabel: {
-    fontSize: 16,
+    fontSize: responsiveFontSize(15),
     fontWeight: '600',
     color: '#FFF',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: responsiveFontSize(18),
     fontWeight: '900',
     color: '#FFF',
+    flexShrink: 1,
   },
   progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: verticalScale(6),
   },
   progressStep: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   progressDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: scale(26),
+    height: scale(26),
+    borderRadius: scale(13),
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -600,7 +604,7 @@ const localStyles = StyleSheet.create({
     backgroundColor: '#4ADE80',
   },
   progressDotText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '800',
     color: 'rgba(255,255,255,0.6)',
   },
@@ -608,17 +612,17 @@ const localStyles = StyleSheet.create({
     color: '#FFF',
   },
   progressLine: {
-    width: 50,
+    width: scale(40),
     height: 2,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    marginHorizontal: 6,
+    marginHorizontal: scale(4),
   },
   progressLineActive: {
     backgroundColor: '#4ADE80',
   },
   stepLabel: {
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     fontWeight: '700',
     color: 'rgba(255,255,255,0.85)',
   },
@@ -626,44 +630,44 @@ const localStyles = StyleSheet.create({
     flex: 1,
   },
   bodyContent: {
-    padding: 18,
-    paddingBottom: 100,
+    padding: scale(16),
+    paddingBottom: verticalScale(100),
   },
   fieldLabel: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     fontWeight: '700',
     color: ecoTheme.colors.text,
-    marginBottom: 8,
-    marginTop: 16,
+    marginBottom: verticalScale(6),
+    marginTop: verticalScale(14),
   },
   input: {
-    minHeight: 52,
-    borderRadius: 16,
+    minHeight: verticalScale(48),
+    borderRadius: moderateScale(14),
     backgroundColor: '#F7FBF8',
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
-    paddingHorizontal: 16,
-    fontSize: 15,
+    paddingHorizontal: scale(14),
+    fontSize: responsiveFontSize(14),
     color: ecoTheme.colors.text,
   },
   textArea: {
-    minHeight: 100,
-    paddingTop: 14,
+    minHeight: verticalScale(90),
+    paddingTop: verticalScale(12),
   },
   chipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: scale(8),
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: scale(8),
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(7),
+    borderRadius: moderateScale(14),
     backgroundColor: '#F5FBF8',
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
@@ -673,7 +677,7 @@ const localStyles = StyleSheet.create({
     borderColor: ecoTheme.colors.primaryDark,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(12),
     fontWeight: '600',
     color: ecoTheme.colors.textSoft,
   },
@@ -681,8 +685,8 @@ const localStyles = StyleSheet.create({
     color: '#FFFFFF',
   },
   imagePicker: {
-    minHeight: 140,
-    borderRadius: 20,
+    minHeight: verticalScale(130),
+    borderRadius: moderateScale(18),
     backgroundColor: '#F5FBF8',
     borderWidth: 2,
     borderColor: '#E0EFE3',
@@ -693,25 +697,25 @@ const localStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 30,
-    gap: 8,
+    paddingVertical: verticalScale(24),
+    gap: verticalScale(6),
   },
   imagePlaceholderText: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     color: ecoTheme.colors.textSoft,
   },
   imageList: {
     flexDirection: 'row',
-    padding: 8,
-    gap: 8,
+    padding: scale(8),
+    gap: scale(8),
   },
   imageThumbWrap: {
     position: 'relative',
   },
   imageThumb: {
-    width: 100,
-    height: 100,
-    borderRadius: 14,
+    width: scale(90),
+    height: scale(90),
+    borderRadius: moderateScale(12),
   },
   removeImageBtn: {
     position: 'absolute',
@@ -719,9 +723,9 @@ const localStyles = StyleSheet.create({
     right: -6,
   },
   addMoreImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 14,
+    width: scale(90),
+    height: scale(90),
+    borderRadius: moderateScale(12),
     borderWidth: 2,
     borderColor: '#D1E8D8',
     borderStyle: 'dashed',
@@ -730,44 +734,44 @@ const localStyles = StyleSheet.create({
     backgroundColor: '#F5FBF8',
   },
   addMoreText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '600',
     color: ecoTheme.colors.primaryDark,
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   infoCard: {
     flexDirection: 'row',
-    gap: 10,
+    gap: scale(10),
     backgroundColor: '#FEF9EE',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: moderateScale(14),
+    padding: moderateScale(12),
     borderWidth: 1,
     borderColor: '#FDECC8',
-    marginTop: 16,
+    marginTop: verticalScale(14),
   },
   infoText: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(18),
     color: '#92400E',
   },
   suggestionLabel: {
-    fontSize: 13,
+    fontSize: responsiveFontSize(12),
     fontWeight: '600',
     color: ecoTheme.colors.textSoft,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: verticalScale(14),
+    marginBottom: verticalScale(6),
   },
   suggestionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(12),
     backgroundColor: '#EEFBF2',
     borderWidth: 1,
     borderColor: '#D1F5DC',
   },
   suggestionText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: '600',
     color: ecoTheme.colors.primaryDark,
   },
@@ -779,14 +783,14 @@ const localStyles = StyleSheet.create({
     color: '#FFFFFF',
   },
   meetupOptions: {
-    gap: 10,
+    gap: verticalScale(8),
   },
   meetupCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
+    gap: scale(10),
+    padding: moderateScale(12),
+    borderRadius: moderateScale(14),
     backgroundColor: '#F7FBF8',
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
@@ -796,9 +800,9 @@ const localStyles = StyleSheet.create({
     borderColor: ecoTheme.colors.primaryDark,
   },
   meetupIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: scale(38),
+    height: scale(38),
+    borderRadius: scale(19),
     backgroundColor: '#E4F0E8',
     alignItems: 'center',
     justifyContent: 'center',
@@ -807,52 +811,55 @@ const localStyles = StyleSheet.create({
     backgroundColor: ecoTheme.colors.primaryDark,
   },
   meetupTitle: {
-    flex: 1,
-    fontSize: 15,
+    fontSize: responsiveFontSize(14),
     fontWeight: '700',
     color: ecoTheme.colors.text,
+    flexShrink: 1,
   },
   meetupTitleActive: {
     color: ecoTheme.colors.primaryDark,
   },
   meetupDesc: {
-    position: 'absolute',
-    left: 66,
-    bottom: 10,
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     color: ecoTheme.colors.textSoft,
+    marginTop: 2,
+    flexShrink: 1,
   },
   bottomBar: {
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    gap: scale(10),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F5F2',
   },
   prevBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 16,
+    minHeight: verticalScale(48),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(14),
     borderWidth: 1,
     borderColor: ecoTheme.colors.outline,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   prevBtnText: {
-    fontSize: 15,
+    fontSize: responsiveFontSize(14),
     fontWeight: '700',
     color: ecoTheme.colors.textSoft,
   },
   nextBtn: {
     flex: 2,
-    paddingVertical: 14,
-    borderRadius: 16,
+    minHeight: verticalScale(48),
+    paddingVertical: verticalScale(10),
+    borderRadius: moderateScale(14),
     backgroundColor: ecoTheme.colors.primaryDark,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   nextBtnText: {
-    fontSize: 15,
+    fontSize: responsiveFontSize(14),
     fontWeight: '700',
     color: '#FFFFFF',
   },

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Modal, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
@@ -79,7 +80,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: scale(20),
   },
   backdrop: {
     position: 'absolute',
@@ -90,10 +91,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFF',
-    borderRadius: 20,
+    borderRadius: moderateScale(20),
     width: '100%',
-    maxWidth: 340,
-    padding: 32,
+    maxWidth: scale(340),
+    padding: moderateScale(24),
     alignItems: 'center',
     position: 'relative',
     shadowColor: '#000',
@@ -104,18 +105,18 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    padding: 8,
+    top: verticalScale(12),
+    right: scale(12),
+    padding: scale(6),
   },
   avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: scale(88),
+    height: scale(88),
+    borderRadius: scale(44),
     backgroundColor: '#F0F5F2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(14),
     overflow: 'hidden',
   },
   avatarImage: {
@@ -130,29 +131,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#E4E9E6',
   },
   avatarInitials: {
-    fontSize: 36,
+    fontSize: responsiveFontSize(32),
     fontWeight: '700',
     color: '#6B7A75',
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
+    gap: scale(6),
+    marginBottom: verticalScale(6),
   },
   userName: {
-    fontSize: 22,
+    fontSize: responsiveFontSize(20),
     fontWeight: '700',
     color: '#131F19',
     textAlign: 'center',
+    flexShrink: 1,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(6),
   },
   infoText: {
-    fontSize: 14,
+    fontSize: responsiveFontSize(13),
     color: '#6B7A75',
   },
 });
+

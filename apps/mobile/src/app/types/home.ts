@@ -119,7 +119,6 @@ export interface EcoBudMobileModel {
   booting: boolean;
   hasOnboarded: boolean;
   session: SessionPayload | null;
-  isReadOnlyExperience: boolean;
   actionOverlayVisible: boolean;
   actionOverlayLabel: string;
   activeTab: AppTab;

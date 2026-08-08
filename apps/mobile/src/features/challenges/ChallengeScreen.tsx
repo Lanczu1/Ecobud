@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 // NOTE: This represents a React Native (Expo) Component utilizing a modern
 // "Eco" design language inspired by Google Material You and Duolingo.
@@ -34,7 +35,7 @@ const DiscoverCard = ({ title, category, reward, participants }: { title: string
       </View>
       <Text style={styles.discoverCardTitle}>{title}</Text>
       <View style={styles.discoverCardFooter}>
-        <Ionicons name="people-outline" size={16} color="#666" />
+        <Ionicons name="people-outline" size={scale(16)} color="#666" />
         <Text style={styles.participantsText}>{participants} joined</Text>
       </View>
     </TouchableOpacity>
@@ -65,7 +66,7 @@ export const ChallengeScreen = () => {
 
       {/* Discovery & Filtering Section */}
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+        <Ionicons name="search-outline" size={scale(20)} color="#666" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search challenges..."
@@ -111,7 +112,7 @@ export const ChallengeScreen = () => {
         <DiscoverCard title="Zero Waste Week" category="Recycling" reward={150} participants={432} />
       </ScrollView>
       
-      <View style={{ height: 40 }} /> {/* Bottom padding */}
+      <View style={{ height: verticalScale(40) }} /> {/* Bottom padding */}
     </ScrollView>
   );
 };
@@ -120,64 +121,66 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7F6', // Neutral eco background
-    paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(50),
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(16),
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: responsiveFontSize(24),
     fontWeight: '700',
     color: '#2E7D32', // Primary Dark Green
+    flexShrink: 1,
   },
   pointsPill: {
     backgroundColor: '#E8F5E9',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(14),
+    borderRadius: moderateScale(20),
   },
   pointsText: {
     color: '#2E7D32',
     fontWeight: 'bold',
+    fontSize: responsiveFontSize(13),
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    height: 48,
+    borderRadius: moderateScale(12),
+    paddingHorizontal: scale(12),
+    marginBottom: verticalScale(12),
+    minHeight: verticalScale(44),
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 5,
     elevation: 2,
   },
   searchIcon: {
-    marginRight: 10,
+    marginRight: scale(8),
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: responsiveFontSize(14),
     color: '#333',
   },
   categoryList: {
-    marginBottom: 25,
-    maxHeight: 40,
+    marginBottom: verticalScale(20),
+    maxHeight: verticalScale(42),
   },
   categoryListContent: {
-    paddingRight: 20,
+    paddingRight: scale(16),
   },
   categoryChip: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 10,
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(18),
+    marginRight: scale(8),
     borderWidth: 1,
     borderColor: '#E0E0E0',
     alignSelf: 'center',
@@ -189,6 +192,7 @@ const styles = StyleSheet.create({
   categoryChipText: {
     color: '#666',
     fontWeight: '600',
+    fontSize: responsiveFontSize(12),
   },
   categoryChipTextSelected: {
     color: '#FFFFFF',
@@ -197,25 +201,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 30,
-    marginBottom: 15,
+    marginTop: verticalScale(24),
+    marginBottom: verticalScale(12),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: responsiveFontSize(16),
     fontWeight: '600',
     color: '#333',
-    marginBottom: 15, // For sections without header right side
+    marginBottom: verticalScale(12),
   },
   seeAllText: {
     color: '#2E7D32',
     fontWeight: '600',
-    marginBottom: 15, // Match section title margin
+    fontSize: responsiveFontSize(13),
+    marginBottom: verticalScale(12),
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 15,
+    borderRadius: moderateScale(16),
+    padding: moderateScale(16),
+    marginBottom: verticalScale(12),
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 10,
@@ -228,21 +233,21 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15,
+    marginBottom: verticalScale(12),
     alignItems: 'flex-start',
   },
   titleContainer: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: scale(8),
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: responsiveFontSize(14),
     fontWeight: '600',
     color: '#1A1A1A',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   categoryTag: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     color: '#66BB6A',
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -250,29 +255,33 @@ const styles = StyleSheet.create({
   completedBadge: {
     color: '#2E7D32',
     fontWeight: 'bold',
+    fontSize: responsiveFontSize(12),
   },
   progressBarContainer: {
-    height: 8,
+    height: verticalScale(7),
     backgroundColor: '#E0E0E0',
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: verticalScale(6),
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#66BB6A', // Secondary Green
   },
   progressText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     color: '#666',
     textAlign: 'right',
   },
   actionButton: {
     backgroundColor: '#2E7D32',
-    padding: 18,
-    borderRadius: 16,
+    minHeight: verticalScale(48),
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(16),
+    borderRadius: moderateScale(16),
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    marginTop: verticalScale(8),
     shadowColor: '#2E7D32',
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -280,22 +289,22 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: responsiveFontSize(14),
     fontWeight: 'bold',
   },
   discoverList: {
-    marginHorizontal: -20, // Negative margin to allow full-width scroll
+    marginHorizontal: -scale(16),
   },
   discoverListContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingHorizontal: scale(16),
+    paddingBottom: verticalScale(8),
   },
   discoverCard: {
     backgroundColor: '#FFFFFF',
-    width: 220,
-    borderRadius: 16,
-    padding: 15,
-    marginRight: 15,
+    width: scale(200),
+    borderRadius: moderateScale(16),
+    padding: moderateScale(14),
+    marginRight: scale(12),
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 10,
@@ -305,34 +314,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: verticalScale(10),
   },
   rewardPill: {
     backgroundColor: '#FFF3E0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: scale(7),
+    paddingVertical: verticalScale(3),
+    borderRadius: moderateScale(10),
   },
   rewardText: {
     color: '#E65100',
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     fontWeight: 'bold',
   },
   discoverCardTitle: {
-    fontSize: 16,
+    fontSize: responsiveFontSize(14),
     fontWeight: '700',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: verticalScale(12),
+    flexShrink: 1,
   },
   discoverCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   participantsText: {
-    fontSize: 12,
+    fontSize: responsiveFontSize(11),
     color: '#666',
-    marginLeft: 6,
+    marginLeft: scale(4),
   }
 });
 
 export default ChallengeScreen;
+
