@@ -1,17 +1,38 @@
 const fs = require('fs');
-let code = fs.readFileSync('c:/xampz/htdocs/Ecobud/apps/mobile/src/app/components/AppViews.tsx', 'utf8');
+const file = 'c:/xampz/htdocs/Ecobud/apps/mobile/src/app/components/AppOverlays.tsx';
+let content = fs.readFileSync(file, 'utf8');
 
-// The problematic lines from earlier edits
-let lines = code.split('\n');
+const target = `    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent', zIndex: 10000 }]} pointerEvents="none">
+              left: 0,
+              top: 0,
+              transform: [
+                { translateX: particle.pos.x },
+                { translateY: particle.pos.y },
+                { scale: particle.scale },
+              ],
+              opacity: particle.opacity,`;
 
-for (let i = 0; i < lines.length; i++) {
-  if (lines[i].includes('avatarUrl = cleanUrl.startsWith')) {
-    lines[i] = "    avatarUrl = cleanUrl.startsWith('http') ? cleanUrl : `${ecobudApiOrigin}${cleanUrl}`;";
-  }
-  if (lines[i].includes('Max Level Reached!')) {
-    lines[i] = "              {isMaxLevel ? 'Max Level Reached!' : `${pointsToNext} XP to Lv. ${nextLevelObj.level}`}";
-  }
+const replacement = `    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent', zIndex: 10000 }]} pointerEvents="none">
+      {particleAnims.map((particle, index) => {
+        const type = particleTypes[index];
+        return (
+          <Animated.View
+            key={index}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              transform: [
+                { translateX: particle.pos.x },
+                { translateY: particle.pos.y },
+                { scale: particle.scale },
+              ],
+              opacity: particle.opacity,`;
+
+if (content.includes(target)) {
+  content = content.replace(target, replacement);
+  fs.writeFileSync(file, content);
+  console.log('Fixed syntax correctly');
+} else {
+  console.log('Target not found');
 }
-
-fs.writeFileSync('c:/xampz/htdocs/Ecobud/apps/mobile/src/app/components/AppViews.tsx', lines.join('\n'));
-console.log('Fixed the literal backslashes correctly!');

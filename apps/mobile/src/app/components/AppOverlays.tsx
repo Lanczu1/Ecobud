@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAudioPlayer } from 'expo-audio';
 import {
   View,
   Text,
@@ -2124,6 +2125,13 @@ function ExpCounter({ targetPoints }: { targetPoints: number }) {
 }
 
 export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
+  const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
+
+  const playPopSound = () => {
+    player.seekTo(0);
+    player.play();
+  };
+
   const { width, height } = Dimensions.get('window');
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
@@ -2223,6 +2231,12 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
           ]),
         ]);
       });
+
+      setTimeout(() => playPopSound(), 100);
+      setTimeout(() => playPopSound(), 350);
+      setTimeout(() => playPopSound(), 600);
+      setTimeout(() => playPopSound(), 850);
+      setTimeout(() => playPopSound(), 1100);
 
       Animated.parallel(animations).start(() => {
         model.resetQuiz();
@@ -2582,6 +2596,13 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
+  const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
+
+  const playPopSound = () => {
+    player.seekTo(0);
+    player.play();
+  };
+
   const { width, height } = Dimensions.get('window');
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
@@ -2594,7 +2615,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const bgOpacity = React.useRef(new Animated.Value(1)).current;
 
   const [isAnimatingPoints, setIsAnimatingPoints] = React.useState(false);
-  const numParticles = 20;
+  const numParticles = 32;
   const particleAnims = React.useRef(
     Array.from({ length: numParticles }, () => ({
       pos: new Animated.ValueXY({ x: width / 2 - 15, y: height / 2 - 80 }),
