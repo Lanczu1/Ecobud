@@ -2,12 +2,18 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../http/authentication";
 import { AdminService } from "../services/adminService";
 import { TranscriptionService } from "../services/transcriptionService";
+import { supabaseStorageService } from "../services/supabaseStorageService";
 import { prisma } from "../prismaClient";
 import fs from "fs";
 import path from "path";
 
-const safelyDeleteUpload = (url?: string | null) => {
+const safelyDeleteUpload = async (url?: string | null) => {
   if (!url) return;
+  // If it's a Supabase storage URL
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    await supabaseStorageService.deleteFile(url);
+    return;
+  }
   const relativePath = url.replace(/^\/uploads\//, '');
   const filePath = path.join(__dirname, '..', '..', 'uploads', ...relativePath.split('/'));
   if (fs.existsSync(filePath)) {
@@ -42,13 +48,28 @@ export class AdminController {
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     if (files && files['video'] && files['video'][0]) {
-      videoUrl = `/uploads/${files['video'][0].filename}`;
-      // Trigger transcription only if not already provided
+      const videoFile = files['video'][0];
+      // Trigger transcription only if not already provided (using local temp file)
       if (!transcript) {
         try {
-          transcript = await TranscriptionService.transcribeVideo(files['video'][0].path);
+          transcript = await TranscriptionService.transcribeVideo(videoFile.path);
         } catch (err) {
           console.error('Transcription failed, saving without transcript', err);
+        }
+      }
+
+      try {
+        const ext = path.extname(videoFile.originalname) || '.mp4';
+        videoUrl = await supabaseStorageService.uploadFile(
+          `lessons/videos/lesson-${Date.now()}${ext}`,
+          videoFile.path,
+          videoFile.mimetype
+        );
+      } catch (err) {
+        console.error('Failed to upload lesson video to Supabase:', err);
+      } finally {
+        if (fs.existsSync(videoFile.path)) {
+          try { fs.unlinkSync(videoFile.path); } catch {}
         }
       }
     } else if (req.body.uploadedVideoUrl) {
@@ -56,7 +77,21 @@ export class AdminController {
     }
     
     if (files && files['thumbnail'] && files['thumbnail'][0]) {
-      imageUrl = `/uploads/${files['thumbnail'][0].filename}`;
+      const thumbFile = files['thumbnail'][0];
+      try {
+        const ext = path.extname(thumbFile.originalname) || '.jpg';
+        imageUrl = await supabaseStorageService.uploadFile(
+          `lessons/thumbnails/lesson-thumb-${Date.now()}${ext}`,
+          thumbFile.path,
+          thumbFile.mimetype
+        );
+      } catch (err) {
+        console.error('Failed to upload lesson thumbnail to Supabase:', err);
+      } finally {
+        if (fs.existsSync(thumbFile.path)) {
+          try { fs.unlinkSync(thumbFile.path); } catch {}
+        }
+      }
     }
 
     let parsedQuestions = [];
@@ -127,14 +162,30 @@ export class AdminController {
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     if (files && files['video'] && files['video'][0]) {
-      updateData.videoUrl = `/uploads/${files['video'][0].filename}`;
-      if (existingLesson?.videoUrl && existingLesson.videoUrl !== updateData.videoUrl) {
-        safelyDeleteUpload(existingLesson.videoUrl);
-      }
+      const videoFile = files['video'][0];
       if (!updateData.transcript) {
         try {
-          updateData.transcript = await TranscriptionService.transcribeVideo(files['video'][0].path);
+          updateData.transcript = await TranscriptionService.transcribeVideo(videoFile.path);
         } catch (err) {}
+      }
+
+      try {
+        const ext = path.extname(videoFile.originalname) || '.mp4';
+        const newVideoUrl = await supabaseStorageService.uploadFile(
+          `lessons/videos/lesson-${Date.now()}${ext}`,
+          videoFile.path,
+          videoFile.mimetype
+        );
+        updateData.videoUrl = newVideoUrl;
+        if (existingLesson?.videoUrl && existingLesson.videoUrl !== newVideoUrl) {
+          safelyDeleteUpload(existingLesson.videoUrl);
+        }
+      } catch (err) {
+        console.error('Failed to upload updated video to Supabase:', err);
+      } finally {
+        if (fs.existsSync(videoFile.path)) {
+          try { fs.unlinkSync(videoFile.path); } catch {}
+        }
       }
     } else if (updateData.uploadedVideoUrl) {
       updateData.videoUrl = updateData.uploadedVideoUrl;
@@ -145,9 +196,24 @@ export class AdminController {
     delete updateData.uploadedVideoUrl;
     
     if (files && files['thumbnail'] && files['thumbnail'][0]) {
-      updateData.imageUrl = `/uploads/${files['thumbnail'][0].filename}`;
-      if (existingLesson?.imageUrl && existingLesson.imageUrl !== updateData.imageUrl) {
-        safelyDeleteUpload(existingLesson.imageUrl);
+      const thumbFile = files['thumbnail'][0];
+      try {
+        const ext = path.extname(thumbFile.originalname) || '.jpg';
+        const newImageUrl = await supabaseStorageService.uploadFile(
+          `lessons/thumbnails/lesson-thumb-${Date.now()}${ext}`,
+          thumbFile.path,
+          thumbFile.mimetype
+        );
+        updateData.imageUrl = newImageUrl;
+        if (existingLesson?.imageUrl && existingLesson.imageUrl !== newImageUrl) {
+          safelyDeleteUpload(existingLesson.imageUrl);
+        }
+      } catch (err) {
+        console.error('Failed to upload updated thumbnail to Supabase:', err);
+      } finally {
+        if (fs.existsSync(thumbFile.path)) {
+          try { fs.unlinkSync(thumbFile.path); } catch {}
+        }
       }
     }
 
@@ -206,9 +272,19 @@ export class AdminController {
     
     try {
       const transcript = await TranscriptionService.transcribeVideo(file.path);
-      return res.status(200).json({ transcript, videoUrl: `/uploads/${file.filename}` });
+      const ext = path.extname(file.originalname) || '.mp4';
+      const videoUrl = await supabaseStorageService.uploadFile(
+        `lessons/videos/transcribed-${Date.now()}${ext}`,
+        file.path,
+        file.mimetype
+      );
+      return res.status(200).json({ transcript, videoUrl });
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to transcribe video.", error: error.message });
+    } finally {
+      if (file && fs.existsSync(file.path)) {
+        try { fs.unlinkSync(file.path); } catch {}
+      }
     }
   }
 
@@ -341,9 +417,28 @@ export class AdminController {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded." });
       }
-      const fileUrl = `/uploads/Challenges/${req.file.filename}`;
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const destinationPath = `challenges/general/challenge-${Date.now()}${ext}`;
+      const fileUrl = await supabaseStorageService.uploadFile(
+        destinationPath,
+        req.file.path,
+        req.file.mimetype
+      );
+
+      // Clean up local temp file
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (e) {
+        console.error('Failed to remove temp uploaded challenge file:', e);
+      }
+
       return res.status(201).json({ url: fileUrl });
     } catch (error: any) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
       return res.status(500).json({ message: "Failed to upload image.", error: error.message });
     }
   }
@@ -353,22 +448,8 @@ export class AdminController {
       const { url } = req.body;
       if (!url) return res.status(400).json({ message: 'URL is required' });
 
-      // Parse the filename from the URL (e.g. http://localhost:3000/uploads/Challenges/filename.jpg)
-      const urlParts = url.split('/');
-      const filename = urlParts[urlParts.length - 1];
-      
-      if (!filename) return res.status(400).json({ message: 'Invalid URL' });
-
-      const fs = require('fs');
-      const path = require('path');
-      const filePath = path.join(__dirname, '..', '..', 'uploads', 'Challenges', filename);
-
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        return res.json({ message: 'Image deleted successfully' });
-      } else {
-        return res.status(404).json({ message: 'Image not found on server' });
-      }
+      await safelyDeleteUpload(url);
+      return res.json({ message: 'Image deleted successfully' });
     } catch (error: any) {
       return res.status(500).json({ message: 'Failed to delete image', error: error.message });
     }
@@ -396,8 +477,8 @@ export class AdminController {
     const { id } = req.params;
     const { status, notes } = req.body;
 
-    if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({ message: "Status must be approved or rejected." });
+    if (!['approved', 'rejected', 'approved_collection'].includes(status)) {
+      return res.status(400).json({ message: "Status must be approved, approved_collection, or rejected." });
     }
 
     try {
@@ -414,19 +495,10 @@ export class AdminController {
     try {
       const submission = await prisma.challengeSubmission.findUnique({ where: { id } });
       if (submission?.proofUrl) {
-        const filename = submission.proofUrl.split('/').pop();
-        if (filename) {
-          const fs = require('fs');
-          const path = require('path');
-          const filePath = path.join(__dirname, '..', '..', 'uploads', 'Challenges', 'AnalyzingImg', filename);
-          if (fs.existsSync(filePath)) {
-            try {
-              fs.unlinkSync(filePath);
-            } catch (e) {
-              console.error('Failed to delete submission image', filePath, e);
-            }
-          }
-        }
+        await safelyDeleteUpload(submission.proofUrl);
+      }
+      if (submission?.afterProofUrl) {
+        await safelyDeleteUpload(submission.afterProofUrl);
       }
 
       if (submission) {
@@ -434,19 +506,7 @@ export class AdminController {
       } else {
         const eventSubmission = await prisma.eventSubmission.findUnique({ where: { id } });
         if (eventSubmission?.attendanceImageUrl) {
-          const filename = eventSubmission.attendanceImageUrl.split('/').pop();
-          if (filename) {
-            const fs = require('fs');
-            const path = require('path');
-            const filePath = path.join(__dirname, '..', '..', 'uploads', 'EventSubmissions', filename);
-            if (fs.existsSync(filePath)) {
-              try {
-                fs.unlinkSync(filePath);
-              } catch (e) {
-                console.error('Failed to delete event submission image', filePath, e);
-              }
-            }
-          }
+          await safelyDeleteUpload(eventSubmission.attendanceImageUrl);
         }
         if (eventSubmission) {
           await AdminService.deleteEventSubmission(id);
@@ -497,14 +557,31 @@ export class AdminController {
       if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
       if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
       if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
+      if (payload.isFeatured !== undefined) {
+        payload.isFeatured = payload.isFeatured === true || payload.isFeatured === 'true';
+      }
 
       if (req.file) {
-        payload.imageUrl = `/uploads/Events/${req.file.filename}`;
+        try {
+          const ext = path.extname(req.file.originalname) || '.jpg';
+          payload.imageUrl = await supabaseStorageService.uploadFile(
+            `events/covers/event-${Date.now()}${ext}`,
+            req.file.path,
+            req.file.mimetype
+          );
+        } finally {
+          if (fs.existsSync(req.file.path)) {
+            try { fs.unlinkSync(req.file.path); } catch {}
+          }
+        }
       }
 
       const item = await AdminService.createEvent({ ...payload, managedById: req.auth!.userId });
       return res.status(201).json(item);
     } catch (error: any) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
       return res.status(500).json({ message: "Failed to create event.", error: error.message });
     }
   }
@@ -517,6 +594,9 @@ export class AdminController {
       if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
       if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
       if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
+      if (payload.isFeatured !== undefined) {
+        payload.isFeatured = payload.isFeatured === true || payload.isFeatured === 'true';
+      }
 
       let existingEvent;
       try {
@@ -524,18 +604,32 @@ export class AdminController {
       } catch (e) {}
 
       if (req.file) {
-        payload.imageUrl = `/uploads/Events/${req.file.filename}`;
-        if (existingEvent?.imageUrl && existingEvent.imageUrl !== payload.imageUrl) {
-          safelyDeleteUpload(existingEvent.imageUrl);
+        try {
+          const ext = path.extname(req.file.originalname) || '.jpg';
+          payload.imageUrl = await supabaseStorageService.uploadFile(
+            `events/covers/event-${Date.now()}${ext}`,
+            req.file.path,
+            req.file.mimetype
+          );
+          if (existingEvent?.imageUrl && existingEvent.imageUrl !== payload.imageUrl) {
+            await safelyDeleteUpload(existingEvent.imageUrl);
+          }
+        } finally {
+          if (fs.existsSync(req.file.path)) {
+            try { fs.unlinkSync(req.file.path); } catch {}
+          }
         }
       } else if (payload.imageUrl === '') {
         payload.imageUrl = null;
-        if (existingEvent?.imageUrl) safelyDeleteUpload(existingEvent.imageUrl);
+        if (existingEvent?.imageUrl) await safelyDeleteUpload(existingEvent.imageUrl);
       }
 
       const item = await AdminService.updateEvent(req.params.id, payload);
       return res.status(200).json(item);
     } catch (error: any) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
       return res.status(500).json({ message: "Failed to update event.", error: error.message });
     }
   }
@@ -543,7 +637,7 @@ export class AdminController {
   static async deleteEvent(req: AuthenticatedRequest, res: Response) {
     try {
       const existingEvent = await prisma.event.findUnique({ where: { id: req.params.id } });
-      if (existingEvent?.imageUrl) safelyDeleteUpload(existingEvent.imageUrl);
+      if (existingEvent?.imageUrl) await safelyDeleteUpload(existingEvent.imageUrl);
 
       await AdminService.deleteEvent(req.params.id);
       return res.status(204).send();

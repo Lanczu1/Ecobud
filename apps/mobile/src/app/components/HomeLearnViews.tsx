@@ -12,6 +12,7 @@ import { LevelCard } from './LevelCard';
 import { UpcomingEventCard } from './UpcomingEventCard';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { resolveMediaUrl } from '../utils/appUtils';
 
 const getCategoryDetails = (category: string, isActive: boolean) => {
   const name = category === 'All Categories' ? 'All' : category;
@@ -110,7 +111,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
     ? Math.max(0, baseEcoPoints - (model.earnedPoints || 0)) 
     : baseEcoPoints;
   const weeklyGoal = model.dashboard?.weeklyGoal ?? 0;
-  const primaryChallenge = model.challenges[0] ?? null;
+  const primaryChallenge = model.challenges?.find((c) => c.isFeatured) || model.challenges[0] || null;
   const featuredLesson = model.lessons?.find((l: any) => l.featured) || (model.lessons && model.lessons.length > 0 ? model.lessons[0] : null);
 
   return (
@@ -185,8 +186,17 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
               </TouchableOpacity>
             </View>
             <ActiveChallengeCard
-              dailyChallenge={primaryChallenge}
+              dailyChallenge={{
+                ...primaryChallenge,
+                progress: {
+                  progressPercentage: 0,
+                  status: 'not_started',
+                  submission: undefined,
+                  submissions: [],
+                }
+              }}
               isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
+              isCycleActive={model.isCycleActive}
               onComplete={() => {
                 if (primaryChallenge.type === 'AI Image Recognition Challenge') {
                   model.openChallengeMission(primaryChallenge);
@@ -203,30 +213,38 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
           </View>
         ) : null}
 
-        {model.events[0] ? (
-          <View style={{ marginBottom: verticalScale(14) }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
-              <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>Event</Text>
-              <TouchableOpacity onPress={() => model.setActiveOverlay('events')}>
-                <Text style={{ color: '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
-              </TouchableOpacity>
+        {(() => {
+          const featuredEvent = model.events.find((e) => e.isFeatured) || model.events[0];
+          if (!featuredEvent) return null;
+
+          return (
+            <View style={{ marginBottom: verticalScale(14) }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
+                <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>
+                  {featuredEvent.isFeatured ? '⭐ Featured Event' : 'Event'}
+                </Text>
+                <TouchableOpacity onPress={() => model.setActiveOverlay('events')}>
+                  <Text style={{ color: '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
+                </TouchableOpacity>
+              </View>
+              <UpcomingEventCard
+                event={featuredEvent}
+                onJoin={() => {
+                  if (featuredEvent?.id) {
+                    void model.handleJoinEvent(featuredEvent.id);
+                  }
+                }}
+                onSignIn={() => model.leaveReadOnlyAccess()}
+                onRecordAttendance={() => model.setActiveOverlay('events')}
+                onClaimReward={() => {
+                  if (featuredEvent?.id) {
+                    void model.handleClaimEventReward(featuredEvent.id);
+                  }
+                }}
+              />
             </View>
-            <UpcomingEventCard
-              event={model.events[0]}
-              onJoin={() => {
-                if (model.events[0]?.id) {
-                  void model.handleJoinEvent(model.events[0].id);
-                }
-              }}
-              onSignIn={() => model.leaveReadOnlyAccess()}
-              onClaimReward={() => {
-                if (model.events[0]?.id) {
-                  void model.handleClaimEventReward(model.events[0].id);
-                }
-              }}
-            />
-          </View>
-        ) : null}
+          );
+        })()}
 
         <View style={{ height: verticalScale(80) }} />
       </View>
@@ -290,47 +308,50 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
           </View>
         )}
 
-        {continueLesson && (
-          <View style={{ marginTop: verticalScale(14), marginBottom: verticalScale(6) }}>
-            <Text style={[styles.cardTitle, { marginBottom: verticalScale(10), fontSize: responsiveFontSize(15) }]}>Jump Back In</Text>
-            <TouchableOpacity 
-              onPress={() => void model.openLesson(continueLesson.id)}
-              activeOpacity={0.9}
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: moderateScale(16),
-                padding: moderateScale(12),
-                flexDirection: 'row',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                shadowColor: '#126027',
-                shadowOpacity: 0.06,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: 2,
-              }}
-            >
-              {continueLesson.imageUrl && continueLesson.imageUrl !== 'null' && continueLesson.imageUrl !== 'undefined' ? (
-                <Image 
-                  source={{ uri: `${ecobudApiOrigin}${continueLesson.imageUrl}` }}
-                  style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), flexShrink: 0 }}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Text style={{ fontSize: responsiveFontSize(28), opacity: 0.7 }}>📖</Text>
+        {continueLesson && (() => {
+          const continueImgUrl = resolveMediaUrl(continueLesson.imageUrl, ecobudApiOrigin);
+          return (
+            <View style={{ marginTop: verticalScale(14), marginBottom: verticalScale(6) }}>
+              <Text style={[styles.cardTitle, { marginBottom: verticalScale(10), fontSize: responsiveFontSize(15) }]}>Jump Back In</Text>
+              <TouchableOpacity 
+                onPress={() => void model.openLesson(continueLesson.id)}
+                activeOpacity={0.9}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: moderateScale(16),
+                  padding: moderateScale(12),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  shadowColor: '#126027',
+                  shadowOpacity: 0.06,
+                  shadowRadius: 10,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 2,
+                }}
+              >
+                {continueImgUrl ? (
+                  <Image 
+                    source={{ uri: continueImgUrl }}
+                    style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), flexShrink: 0 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Text style={{ fontSize: responsiveFontSize(28), opacity: 0.7 }}>📖</Text>
+                  </View>
+                )}
+                <View style={{ flex: 1, minWidth: scale(120) }}>
+                  <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(14), fontWeight: '800', marginBottom: verticalScale(2) }} numberOfLines={1}>{continueLesson.title}</Text>
+                  <Text style={{ color: '#6B7A75', fontSize: responsiveFontSize(12), fontWeight: '600' }}>{continueLesson.progress}% Completed</Text>
                 </View>
-              )}
-              <View style={{ flex: 1, minWidth: scale(120) }}>
-                <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(14), fontWeight: '800', marginBottom: verticalScale(2) }} numberOfLines={1}>{continueLesson.title}</Text>
-                <Text style={{ color: '#6B7A75', fontSize: responsiveFontSize(12), fontWeight: '600' }}>{continueLesson.progress}% Completed</Text>
-              </View>
-              <View style={{ width: scale(32), height: scale(32), borderRadius: scale(16), backgroundColor: '#E6F4EC', alignItems: 'center', justifyContent: 'center', marginLeft: scale(8) }}>
-                <Ionicons name="play" size={scale(15)} color="#126027" style={{ marginLeft: 2 }} />
-              </View>
-            </TouchableOpacity>
-          </View>
-        )}
+                <View style={{ width: scale(32), height: scale(32), borderRadius: scale(16), backgroundColor: '#E6F4EC', alignItems: 'center', justifyContent: 'center', marginLeft: scale(8) }}>
+                  <Ionicons name="play" size={scale(15)} color="#126027" style={{ marginLeft: 2 }} />
+                </View>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
 
         <View style={{
           flexDirection: 'row',

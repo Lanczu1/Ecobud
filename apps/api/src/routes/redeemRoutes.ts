@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateRequest, requireModeratorAccess, requireUserAccess, type AuthenticatedRequest } from '../http/authentication';
 import { redeemUploadMiddleware } from '../http/uploadMiddleware';
+import { supabaseStorageService } from '../services/supabaseStorageService';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -108,9 +111,28 @@ router.get('/my-requests', authenticateRequest, requireUserAccess, async (req: A
 router.post('/upload', authenticateRequest, requireModeratorAccess, redeemUploadMiddleware.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const url = `/uploads/Redeem/${req.file.filename}`;
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const destinationPath = `redeem/redeem-${Date.now()}${ext}`;
+    const url = await supabaseStorageService.uploadFile(
+      destinationPath,
+      req.file.path,
+      req.file.mimetype
+    );
+
+    // Clean up local temp file
+    try {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch (e) {
+      console.error('Failed to cleanup temp redeem image:', e);
+    }
+
     res.status(201).json({ url });
   } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+    }
     console.error('Error uploading redeem image:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

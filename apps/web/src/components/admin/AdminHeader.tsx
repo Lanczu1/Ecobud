@@ -17,7 +17,6 @@ const sectionDescriptions: Record<AdminSection, string> = {
   'Give and Get Hub': 'Monitor and moderate community swap listings',
   Redeem: 'Manage the reward catalog for eco coin redemption',
   Reports: 'Platform-wide performance metrics and insights',
-  Submissions: 'Review and moderate user challenge proofs',
 };
 
 export function AdminHeader({ activeSection, isDark, onToggleDark }: AdminHeaderProps) {

@@ -13,7 +13,6 @@ import { Events } from './components/admin/pages/Events';
 import { GiveAndGetHub } from './components/admin/pages/GiveAndGetHub';
 import { Redeem } from './components/admin/pages/Redeem';
 import { Reports } from './components/admin/pages/Reports';
-import { Submissions } from './components/admin/pages/Submissions';
 
 function renderSection(section: AdminSection) {
   switch (section) {
@@ -27,7 +26,6 @@ function renderSection(section: AdminSection) {
     case 'Give and Get Hub': return <GiveAndGetHub />;
     case 'Redeem':          return <Redeem />;
     case 'Reports':          return <Reports />;
-    case 'Submissions':      return <Submissions />;
     default:                 return <Dashboard />;
   }
 }
@@ -43,7 +41,7 @@ export default function App() {
       try {
         const user = JSON.parse(userJson);
         if (user.role === 'moderator') {
-          return 'Submissions';
+          return 'Challenges';
         }
       } catch (e) {}
     }
@@ -97,7 +95,7 @@ export default function App() {
     localStorage.setItem('ecobud_admin_user', JSON.stringify(data.user));
     localStorage.setItem('ecobud_admin_authenticated', 'true');
     setIsAuthenticated(true);
-    setActiveSection(data.user.role === 'moderator' ? 'Submissions' : 'Dashboard');
+    setActiveSection(data.user.role === 'moderator' ? 'Challenges' : 'Dashboard');
   };
 
   const handleLogout = () => {

@@ -46,9 +46,10 @@ async function main() {
   await prisma.presenceSession.deleteMany();
   await prisma.habitCheckIn.deleteMany();
   await prisma.challengeSubmission.deleteMany();
-  await prisma.userBadge.deleteMany();
-  await prisma.eventRegistration.deleteMany();
   await prisma.userChallenge.deleteMany();
+  await prisma.challengeInstance.deleteMany();
+  await prisma.challenge.deleteMany();
+  await prisma.eventRegistration.deleteMany();
   await prisma.userLessonProgress.deleteMany();
   await prisma.userWeeklyGoal.deleteMany();
   await prisma.userStats.deleteMany();
@@ -59,7 +60,6 @@ async function main() {
   await prisma.habit.deleteMany();
   await prisma.badge.deleteMany();
   await prisma.lesson.deleteMany();
-  await prisma.challenge.deleteMany();
   await prisma.event.deleteMany();
   await prisma.user.deleteMany();
 
@@ -227,41 +227,42 @@ async function main() {
     [
       {
         title: '7-Day Waste Segregation Challenge',
-        description: 'Segregate waste daily and upload proof or tick the daily checklist.',
+        description: 'Properly segregate household waste for an entire week.',
         difficulty: 'EASY',
         category: 'Waste',
-        endDate: null,
-        expReward: 20,
+        expReward: 100,
         ecoCoinReward: 20,
-        imageUrl:
-          'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80',
-        badgeLabel: 'Clean Start',
       },
       {
         title: 'Energy Saver Challenge',
-        description: 'Track your energy use and reduce it by 10 percent over two weeks.',
+        description: 'Reduce household electricity usage by 10% over two weeks.',
         difficulty: 'MEDIUM',
         category: 'Energy',
-        endDate: null,
-        expReward: 50,
+        expReward: 250,
         ecoCoinReward: 50,
-        imageUrl:
-          'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80',
-        badgeLabel: 'Power Down',
       },
       {
         title: 'Plant-Based Meal Week',
         description: 'Eat plant-based meals for seven days and reflect on your footprint.',
         difficulty: 'HARD',
         category: 'Food',
-        durationDays: 7,
         expReward: 30,
         ecoCoinReward: 30,
         imageUrl:
           'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=80',
         badgeLabel: 'Green Plate',
       },
-    ].map((challenge) => prisma.challenge.create({ data: challenge })),
+    ].map((challenge) => prisma.challenge.create({ data: challenge as any })),
+  );
+  const challengeInstances = await Promise.all(
+    challenges.map((challenge) => prisma.challengeInstance.create({
+      data: {
+        challengeId: challenge.id,
+        startDate: new Date(),
+        endDate: addDays(7),
+        status: 'OPEN',
+      }
+    }))
   );
 
   const habitData = [
@@ -349,21 +350,21 @@ async function main() {
     data: [
       {
         userId: member.id,
-        challengeId: challenges[0].id,
+        challengeInstanceId: challengeInstances[0].id,
         progressPercentage: 43,
         status: 'IN_PROGRESS',
         expirationDate: addDays(2),
       },
       {
         userId: member.id,
-        challengeId: challenges[1].id,
+        challengeInstanceId: challengeInstances[1].id,
         progressPercentage: 20,
         status: 'IN_PROGRESS',
         expirationDate: addDays(10),
       },
       {
         userId: member.id,
-        challengeId: challenges[2].id,
+        challengeInstanceId: challengeInstances[2].id,
         progressPercentage: 100,
         status: 'COMPLETED',
         completedAt: addDays(-3),
@@ -392,7 +393,7 @@ async function main() {
     data: [
       {
         userId: member.id,
-        challengeId: challenges[0].id,
+        challengeInstanceId: challengeInstances[0].id,
         proofText:
           'Uploaded a daily waste segregation tracker with labeled bins and end-of-day photos.',
         proofUrl: 'https://example.com/proofs/waste-segregation-week.jpg',
@@ -400,7 +401,7 @@ async function main() {
       },
       {
         userId: member.id,
-        challengeId: challenges[1].id,
+        challengeInstanceId: challengeInstances[1].id,
         proofText:
           'Submitted meter snapshots and a two-week reduction summary for the energy saver challenge.',
         proofUrl: 'https://example.com/proofs/energy-saver-report.pdf',

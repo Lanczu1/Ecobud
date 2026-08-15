@@ -83,6 +83,7 @@ export class PresenceQueryService {
         id: {
           in: onlineSummaryRows.map((row) => row.userId),
         },
+        role: 'user',
       },
       orderBy: {
         createdAt: 'desc',
@@ -190,8 +191,10 @@ export class PresenceQueryService {
     const rows = await this.database.$queryRaw<Array<{ activeToday: number }>>(Prisma.sql`
       SELECT COUNT(DISTINCT ps.user_id)::int AS "activeToday"
       FROM presence_sessions ps
+      INNER JOIN users u ON ps.user_id = u.id
       WHERE ps.is_online = TRUE
         AND ps.expires_at > ${snapshotDate}
+        AND u.role::text = 'user'
     `);
 
     return Number(rows[0]?.activeToday ?? 0);

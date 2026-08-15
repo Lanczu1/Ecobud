@@ -36,7 +36,7 @@ export const homeService = {
     ecobudApi.fetchLessons(token).then((res: any) => res.items || res),
 
   getChallenges: (token: string) =>
-    ecobudApi.fetchChallenges(token).then(res => res.items),
+    ecobudApi.fetchChallenges(token),
 
   getHabitsToday: (token: string) =>
     ecobudApi.fetchHabitsToday(token),
@@ -88,11 +88,17 @@ export const homeService = {
   uploadChallengeProofImage: (token: string, challengeId: string, uri: string) =>
     ecobudApi.uploadChallengeProofImage(token, challengeId, uri),
 
-  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string) =>
-    ecobudApi.submitChallengeProof(token, challengeId, proofUrl, afterProofUrl),
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) =>
+    ecobudApi.submitChallengeProof(token, challengeId, proofUrl, afterProofUrl, detectedQuantity),
 
-  claimChallengeReward: (token: string, challengeId: string) =>
-    ecobudApi.claimChallengeReward(token, challengeId),
+  verifyChallengeQr: (token: string, challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) =>
+    ecobudApi.verifyChallengeQr(token, challengeId, qrData, latitude, longitude, submissionId),
+
+  submitChallengeAfterPhoto: (token: string, challengeId: string, afterProofUrl: string, submissionId?: string) =>
+    ecobudApi.submitChallengeAfterPhoto(token, challengeId, afterProofUrl, submissionId),
+
+  claimChallengeReward: (token: string, challengeId: string, submissionId?: string) =>
+    ecobudApi.claimChallengeReward(token, challengeId, submissionId),
 
   checkInHabit: (token: string, habitId: string) =>
     ecobudApi.checkInHabit(token, habitId),
@@ -142,7 +148,8 @@ export const homeService = {
     return {
       dashboard,
       lessons,
-      challenges,
+      challenges: challenges.items,
+      isCycleActive: challenges.isCycleActive,
       habitsToday,
       tracker,
       profile,

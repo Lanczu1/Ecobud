@@ -106,6 +106,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
   const [challenges, setChallenges] = useState<ChallengeWithProgress[]>([]);
+  const [isCycleActive, setIsCycleActive] = useState<boolean>(true);
   const [habitsToday, setHabitsToday] = useState<HabitTodayData | null>(null);
   const [tracker, setTracker] = useState<TrackerData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -178,6 +179,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setDashboard(null);
     setLessons([]);
     setChallenges([]);
+    setIsCycleActive(true);
     setHabitsToday(null);
     setTracker(null);
     setProfile(null);
@@ -419,6 +421,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setDashboard(data.dashboard);
         setLessons(data.lessons);
         setChallenges(data.challenges);
+        setIsCycleActive(data.isCycleActive ?? true);
         setHabitsToday(data.habitsToday);
         setTracker(data.tracker);
         setProfile(data.profile);
@@ -440,6 +443,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             ],
         );
       } catch (error) {
+        console.error('ECOBUD hydrateApp error:', error);
         if (error instanceof Error && (error as any).status === 401) {
           setSession(null);
           clearAppData();
@@ -1346,26 +1350,43 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [ensureSession]);
 
-  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string, afterProofUrl?: string) => {
-    await runWithActionLoader('Submitting to admin...', async () => {
+  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) => {
+    await runWithActionLoader('Submitting before photo...', async () => {
       try {
         const activeSession = ensureSession();
         setRefreshing(true);
-        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl, afterProofUrl);
+        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl, afterProofUrl, detectedQuantity);
         // Optimistically update the challenge state to pending
         setChallenges((currentChallenges) =>
           currentChallenges.map((challenge) =>
             challenge.id === challengeId
               ? {
                 ...challenge,
+                availableQuantity: challenge.availableQuantity !== undefined ? Math.max(0, challenge.availableQuantity - (detectedQuantity || 1)) : challenge.availableQuantity,
                 progress: {
                   progressPercentage: challenge.progress?.progressPercentage || 0,
                   status: 'pending',
+                  submission: {
+                    id: 'temp',
+                    status: 'pending',
+                    proofUrl,
+                    afterProofUrl: null,
+                    detectedQuantity: detectedQuantity || 1,
+                    reservedQuantity: detectedQuantity || 1,
+                    qrToken: null,
+                    qrVerified: false,
+                    adminPreliminaryApproved: false,
+                    adminFinalApproved: false,
+                    rewardAwarded: false,
+                    ecoCoinsAwarded: 0,
+                    expAwarded: 0,
+                  }
                 },
               }
               : challenge
           )
         );
+        await hydrateApp(activeSession, true);
       } catch (error) {
         Alert.alert('Submission failed', error instanceof Error ? error.message : 'Please try again.');
         throw error;
@@ -1373,14 +1394,46 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, runWithActionLoader]);
+  }, [ensureSession, hydrateApp, runWithActionLoader]);
+
+  const handleVerifyChallengeQr = useCallback(async (challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) => {
+    await runWithActionLoader('Verifying Municipal QR code...', async () => {
+      try {
+        const activeSession = ensureSession();
+        setRefreshing(true);
+        await homeService.verifyChallengeQr(activeSession.token, challengeId, qrData, latitude, longitude, submissionId);
+        await hydrateApp(activeSession, true);
+      } catch (error) {
+        Alert.alert('QR Verification failed', error instanceof Error ? error.message : 'Please try again.');
+        throw error;
+      } finally {
+        setRefreshing(false);
+      }
+    });
+  }, [ensureSession, hydrateApp, runWithActionLoader]);
+
+  const handleSubmitChallengeAfterPhoto = useCallback(async (challengeId: string, afterProofUrl: string, submissionId?: string) => {
+    await runWithActionLoader('Submitting after photo for final review...', async () => {
+      try {
+        const activeSession = ensureSession();
+        setRefreshing(true);
+        await homeService.submitChallengeAfterPhoto(activeSession.token, challengeId, afterProofUrl, submissionId);
+        await hydrateApp(activeSession, true);
+      } catch (error) {
+        Alert.alert('After photo submission failed', error instanceof Error ? error.message : 'Please try again.');
+        throw error;
+      } finally {
+        setRefreshing(false);
+      }
+    });
+  }, [ensureSession, hydrateApp, runWithActionLoader]);
 
   const triggerTestReward = useCallback((origin?: { x: number; y: number }) => {
     setClaimRewardData({ points: 10, coins: 10, origin });
     setActiveOverlayState('claimParticles');
   }, []);
 
-  const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }) => {
+  const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => {
     const challenge = challenges.find((c) => c.id === challengeId);
     if (!challenge) {
       return;
@@ -1414,7 +1467,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         )
       );
 
-      const res = await homeService.claimChallengeReward(activeSession.token, challengeId);
+      const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
       if (res?.awardedBadges) {
         setNewlyUnlockedBadges(res.awardedBadges);
       }
@@ -1529,6 +1582,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     lessons,
     filteredLessons,
     challenges,
+    isCycleActive,
     habitsToday,
     tracker,
     profile,
@@ -1582,6 +1636,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     analyzeChallengeImage,
     uploadChallengeProofImage,
     handleSubmitChallengeProof,
+    handleVerifyChallengeQr,
+    handleSubmitChallengeAfterPhoto,
     handleClaimChallengeReward,
     handleUpdateProfileImage,
     handleUpdateSecuritySettings,

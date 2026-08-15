@@ -134,6 +134,12 @@ export function MarketplaceFeed({
   }, [loadListings]);
 
   useEffect(() => {
+    if (activeTab === 'mylistings') {
+      loadMyListings();
+    }
+  }, [activeTab, loadMyListings]);
+
+  useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
@@ -143,9 +149,13 @@ export function MarketplaceFeed({
   }, []);
 
   const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadListings();
-  }, [loadListings]);
+    if (activeTab === 'mylistings') {
+      loadMyListings();
+    } else {
+      setRefreshing(true);
+      loadListings();
+    }
+  }, [activeTab, loadMyListings, loadListings]);
 
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
@@ -380,19 +390,31 @@ export function MarketplaceFeed({
                 )}
               </View>
             ) : (
-              listings.map((listing) => (
-                <SwapListingCard
-                  key={listing.id}
-                  listing={listing}
-                  isOwnListing={listing.user.id === currentUserId}
-                  onPress={() => onSelectListing(listing)}
-                  onSwap={
-                    listing.user.id !== currentUserId
-                      ? () => onRequestSwap(listing)
-                      : undefined
-                  }
-                />
-              ))
+              listings.map((listing) => {
+                return (
+                  <View key={listing.id}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' }} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#10B981' }}>Available</Text>
+                      </View>
+                      <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
+                        {listing.meetupMethod === 'public' ? 'Public Meetup' : listing.meetupMethod === 'pickup' ? 'Door Pickup' : 'Door Drop-off'}
+                      </Text>
+                    </View>
+                    <SwapListingCard
+                      listing={listing}
+                      isOwnListing={listing.user.id === currentUserId}
+                      onPress={() => onSelectListing(listing)}
+                      onSwap={
+                        listing.user.id !== currentUserId
+                          ? () => onRequestSwap(listing)
+                          : undefined
+                      }
+                    />
+                  </View>
+                );
+              })
             )}
           </>
         ) : activeTab === 'chats' ? (

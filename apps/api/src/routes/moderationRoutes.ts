@@ -62,7 +62,7 @@ const updateSubmissionStatus = async (
       reviewedAt: new Date(),
     },
     include: {
-      challenge: true,
+          challengeInstance: { include: { challenge: true } },
       user: {
         include: {
           profile: true,
@@ -207,7 +207,7 @@ moderationRoutes.get(
         status,
       },
       include: {
-        challenge: true,
+          challengeInstance: { include: { challenge: true } },
         user: {
           include: {
             profile: true,
@@ -245,14 +245,14 @@ moderationRoutes.post(
       {
         actorRole: req.auth!.role,
         actorUserId: req.auth!.userId,
-        entityId: item.challengeId,
+        entityId: item.challengeInstanceId,
         reason: 'submission-approved',
       },
     );
 
     await supabaseRealtimeService.publishUserNotice(item.userId, {
       level: 'success',
-      message: `Your proof for "${item.challenge.title}" has been approved.`,
+      message: `Your proof for "${item.challengeInstance?.challenge.title}" has been approved.`,
       scope: 'moderation',
       title: 'Challenge approved',
     });
@@ -280,14 +280,14 @@ moderationRoutes.post(
       {
         actorRole: req.auth!.role,
         actorUserId: req.auth!.userId,
-        entityId: item.challengeId,
+        entityId: item.challengeInstanceId,
         reason: 'submission-rejected',
       },
     );
 
     await supabaseRealtimeService.publishUserNotice(item.userId, {
       level: 'warning',
-      message: `Your proof for "${item.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+      message: `Your proof for "${item.challengeInstance?.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
       scope: 'moderation',
       title: 'Challenge review update',
     });
@@ -316,14 +316,14 @@ moderationRoutes.post(
       {
         actorRole: req.auth!.role,
         actorUserId: req.auth!.userId,
-        entityId: item.challengeId,
+        entityId: item.challengeInstanceId,
         reason: 'submission-flagged',
       },
     );
 
     await supabaseRealtimeService.publishUserNotice(item.userId, {
       level: 'warning',
-      message: `Your proof for "${item.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+      message: `Your proof for "${item.challengeInstance?.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
       scope: 'moderation',
       title: 'Challenge flagged',
     });

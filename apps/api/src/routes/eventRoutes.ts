@@ -3,7 +3,10 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import { eventSubmissionUploadMiddleware } from '../http/uploadMiddleware';
+import { supabaseStorageService } from '../services/supabaseStorageService';
 import { GamificationService } from '../services/GamificationService';
+import path from 'path';
+import fs from 'fs';
 
 const eventRoutes = Router();
 const gamificationService = new GamificationService();
@@ -30,7 +33,10 @@ eventRoutes.get(
         registrations: true,
         ...(userId ? { submissions: { where: { userId }, orderBy: { submittedAt: 'desc' }, take: 1 } } : {})
       },
-      orderBy: { startDatetime: 'asc' },
+      orderBy: [
+        { isFeatured: 'desc' },
+        { startDatetime: 'asc' },
+      ],
     });
 
     return res.json({
@@ -194,25 +200,50 @@ eventRoutes.post(
       throw new HttpError(400, 'Please provide an image for attendance proof.');
     }
 
-    const imageUrl = `/uploads/EventSubmissions/${req.file.filename}`;
-    const submission = await prisma.eventSubmission.upsert({
-      where: { userId_eventId: { userId, eventId } },
-      update: { attendanceImageUrl: imageUrl, status: 'pending' },
-      create: {
-        userId,
-        eventId,
-        attendanceImageUrl: imageUrl,
-        status: 'pending',
-      },
-    });
+    try {
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const destinationPath = `events/submissions/event-${eventId}-${userId}-${Date.now()}${ext}`;
+      const imageUrl = await supabaseStorageService.uploadFile(
+        destinationPath,
+        req.file.path,
+        req.file.mimetype
+      );
 
-    // We also set the registration status to PENDING_APPROVAL so the app knows it's waiting
-    await prisma.eventRegistration.update({
-      where: { id: registration.id },
-      data: { status: 'PENDING_APPROVAL' },
-    });
+      // Clean up local temp file
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (e) {
+        console.error('Failed to cleanup temp event submission image:', e);
+      }
 
-    return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
+      const submission = await prisma.eventSubmission.upsert({
+        where: { userId_eventId: { userId, eventId } },
+        update: { attendanceImageUrl: imageUrl, status: 'pending' },
+        create: {
+          userId,
+          eventId,
+          attendanceImageUrl: imageUrl,
+          status: 'pending',
+        },
+      });
+
+      // We also set the registration status to PENDING_APPROVAL so the app knows it's waiting
+      await prisma.eventRegistration.update({
+        where: { id: registration.id },
+        data: { status: 'PENDING_APPROVAL' },
+      });
+
+      return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
+    } catch (error: any) {
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch {}
+      throw new HttpError(500, `Failed to upload event attendance proof: ${error.message}`);
+    }
   })
 );
 
