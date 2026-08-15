@@ -158,61 +158,98 @@ model UserWeeklyGoal {
 }
 
 model Challenge {
+  id                      String                @id @default(cuid())
+  title                   String
+  description             String
+  difficulty              String
+  category                String?
+  startDate               DateTime?
+  endDate                 DateTime?
+  imageUrl                String?
+  badgeLabel              String?
+  active                  Boolean               @default(true)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  ecoCoinReward           Int                   @default(0)
+  expReward               Int                   @default(0)
+  aiDetectionTargets      String[]
+  aiMinimumConfidence     Int?                  @default(80)
+  type                    String                @default("GENERAL")
+  isFeatured              Boolean               @default(false)
+  availableQuantity       Int                   @default(50) @map("available_quantity")
+  weeklyIncrementQuantity Int                   @default(50) @map("weekly_increment_quantity")
+  quantityUnit            String                @default("bottles") @map("quantity_unit")
+  lastCycleKey            String?               @map("last_cycle_key")
+  collectionPointName     String?               @default("Municipal Waste Collection Center") @map("collection_point_name")
+  collectionPointLat      Float?                @map("collection_point_lat")
+  collectionPointLng      Float?                @map("collection_point_lng")
+  requireLocation         Boolean               @default(false) @map("require_location")
+  instances               ChallengeInstance[]
+}
+
+model ChallengeInstance {
   id                  String                @id @default(cuid())
-  title               String
-  description         String
-  difficulty          String
-  category            String?
-  endDate             DateTime?
-  imageUrl            String?
-  badgeLabel          String?
-  active              Boolean               @default(true)
+  challengeId         String
+  startDate           DateTime
+  endDate             DateTime
+  status              String                @default("UPCOMING") // UPCOMING, OPEN, CLOSED
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
-  ecoCoinReward       Int                   @default(0)
-  expReward           Int                   @default(0)
-  aiDetectionTargets  String[]
-  aiMinimumConfidence Int?                  @default(80)
-  type                String                @default("GENERAL")
-  isFeatured          Boolean               @default(false)
-  submissions         ChallengeSubmission[]
+  challenge           Challenge             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   userChallenges      UserChallenge[]
+  submissions         ChallengeSubmission[]
+
+  @@unique([challengeId, startDate, endDate])
 }
 
 model UserChallenge {
-  id                 String    @id @default(cuid())
-  userId             String
-  challengeId        String
-  progressPercentage Int       @default(0)
-  status             String    @default("IN_PROGRESS")
-  startedAt          DateTime  @default(now())
-  completedAt        DateTime?
-  expirationDate     DateTime?
-  challenge          Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String            @id @default(cuid())
+  userId              String
+  challengeInstanceId String
+  progressPercentage  Int               @default(0)
+  status              String            @default("IN_PROGRESS")
+  startedAt           DateTime          @default(now())
+  completedAt         DateTime?
+  expirationDate      DateTime?
+  challengeInstance   ChallengeInstance @relation(fields: [challengeInstanceId], references: [id], onDelete: Cascade)
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, challengeId])
+  @@unique([userId, challengeInstanceId])
 }
 
 model ChallengeSubmission {
-  id             String                    @id @default(cuid())
-  userId         String
-  challengeId    String
-  proofText      String?
-  proofUrl       String?
-  afterProofUrl  String?
-  status         ChallengeSubmissionStatus @default(pending)
-  moderatorNotes String?
-  flaggedReason  String?
-  reviewedById   String?                   @map("reviewed_by_id")
-  reviewedAt     DateTime?                 @map("reviewed_at")
-  createdAt      DateTime                  @default(now()) @map("created_at")
-  updatedAt      DateTime                  @updatedAt @map("updated_at")
-  challenge      Challenge                 @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  reviewer       User?                     @relation("ModeratedChallengeSubmissions", fields: [reviewedById], references: [id])
-  user           User                      @relation("SubmittedChallengeProofs", fields: [userId], references: [id], onDelete: Cascade)
+  id                         String                    @id @default(cuid())
+  userId                     String
+  challengeInstanceId        String
+  proofText                  String?
+  proofUrl                   String?
+  afterProofUrl              String?
+  status                     ChallengeSubmissionStatus @default(pending)
+  moderatorNotes             String?
+  flaggedReason              String?
+  reviewedById               String?                   @map("reviewed_by_id")
+  reviewedAt                 DateTime?                 @map("reviewed_at")
+  detectedQuantity           Int                       @default(1) @map("detected_quantity")
+  reservedQuantity           Int                       @default(1) @map("reserved_quantity")
+  qrToken                    String?                   @map("qr_token")
+  qrVerified                 Boolean                   @default(false) @map("qr_verified")
+  qrVerifiedAt               DateTime?                 @map("qr_verified_at")
+  locationVerified           Boolean                   @default(false) @map("location_verified")
+  locationVerifiedAt         DateTime?                 @map("location_verified_at")
+  adminPreliminaryApproved   Boolean                   @default(false) @map("admin_preliminary_approved")
+  adminPreliminaryApprovedAt DateTime?                 @map("admin_preliminary_approved_at")
+  adminFinalApproved         Boolean                   @default(false) @map("admin_final_approved")
+  adminFinalApprovedAt       DateTime?                 @map("admin_final_approved_at")
+  ecoCoinsAwarded            Int                       @default(0) @map("eco_coins_awarded")
+  expAwarded                 Int                       @default(0) @map("exp_awarded")
+  rewardAwarded              Boolean                   @default(false) @map("reward_awarded")
+  createdAt                  DateTime                  @default(now()) @map("created_at")
+  updatedAt                  DateTime                  @updatedAt @map("updated_at")
+  challengeInstance          ChallengeInstance         @relation(fields: [challengeInstanceId], references: [id], onDelete: Cascade)
+  reviewer                   User?                     @relation("ModeratedChallengeSubmissions", fields: [reviewedById], references: [id])
+  user                       User                      @relation("SubmittedChallengeProofs", fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, challengeId])
+  @@index([userId, challengeInstanceId])
 }
 
 model Habit {
@@ -272,6 +309,7 @@ model Event {
   imageUrl        String?
   latitude        Float?
   longitude       Float?
+  isFeatured      Boolean             @default(false) @map("is_featured")
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   managedBy       User                @relation("ManagedEvents", fields: [managedById], references: [id], onDelete: Cascade)
@@ -432,9 +470,11 @@ enum UserStatus {
 
 enum ChallengeSubmissionStatus {
   pending
+  approved_collection
   approved
   rejected
   flagged
+  final_review
 }
 
 enum PresenceAppState {

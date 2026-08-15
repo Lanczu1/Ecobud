@@ -227,8 +227,8 @@ export function ManageUsers() {
             <tr className="bg-gray-50/70">
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-4">User</th>
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Role</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Status</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Last Active</th>
+              {viewTab === 'Members' && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Status</th>}
+              {viewTab === 'Members' && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Last Active</th>}
               {viewTab === 'Members' && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Points</th>}
               {viewTab === 'Members' && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Joined</th>}
               {viewTab === 'Members' && <th className="px-4 py-4"></th>}
@@ -248,8 +248,8 @@ export function ManageUsers() {
                       </div>
                     </td>
                     <td className="px-4 py-4"><Skeleton className="h-6 w-16 rounded-full" /></td>
-                    <td className="px-4 py-4"><Skeleton className="h-6 w-16 rounded-full" /></td>
-                    <td className="px-4 py-4"><Skeleton className="h-4 w-24" /></td>
+                    {viewTab === 'Members' && <td className="px-4 py-4"><Skeleton className="h-6 w-16 rounded-full" /></td>}
+                    {viewTab === 'Members' && <td className="px-4 py-4"><Skeleton className="h-4 w-24" /></td>}
                     {viewTab === 'Members' && <td className="px-4 py-4"><Skeleton className="h-4 w-12" /></td>}
                     {viewTab === 'Members' && <td className="px-4 py-4"><Skeleton className="h-4 w-20" /></td>}
                     {viewTab === 'Members' && <td className="px-4 py-4"></td>}
@@ -261,12 +261,11 @@ export function ManageUsers() {
                       <div className="flex items-center gap-3">
                         <div className="relative">
                           <UserAvatar user={user} />
-                          {user.isOnlineNow ? (
-                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
-                          ) : (
-                            (user.role === 'admin' || user.role === 'moderator') && (
-                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
-                            )
+                          {viewTab === 'Members' && user.isOnlineNow && (
+                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                          )}
+                          {viewTab === 'Members' && !user.isOnlineNow && (
+                            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-gray-400 rounded-full border-2 border-white" />
                           )}
                         </div>
                         <div>
@@ -281,28 +280,32 @@ export function ManageUsers() {
                         {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                       </span>
                     </td>
-                    <td className="px-4 py-4">
-                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${user.isOnlineNow ? statusColors.online : statusColors.offline}`}>
-                        {user.isOnlineNow ? 'Active' : 'Offline'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      {user.isOnlineNow ? (
-                        <span className="text-xs font-medium text-green-600">Right now</span>
-                      ) : user.lastSeenAt ? (
-                        <span className="text-xs text-gray-500">
-                          {new Date(user.lastSeenAt).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true
-                          })}
+                    {viewTab === 'Members' && (
+                      <td className="px-4 py-4">
+                        <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${user.isOnlineNow ? statusColors.online : statusColors.offline}`}>
+                          {user.isOnlineNow ? 'Active' : 'Offline'}
                         </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">Never</span>
-                      )}
-                    </td>
+                      </td>
+                    )}
+                    {viewTab === 'Members' && (
+                      <td className="px-4 py-4">
+                        {user.isOnlineNow ? (
+                          <span className="text-xs font-medium text-green-600">Right now</span>
+                        ) : user.lastSeenAt ? (
+                          <span className="text-xs text-gray-500">
+                            {new Date(user.lastSeenAt).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true
+                            })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">Never</span>
+                        )}
+                      </td>
+                    )}
                     {viewTab === 'Members' && (
                       <td className="px-4 py-4">
                         <span className="text-sm font-bold text-green-600">{user.points.toLocaleString()}</span>

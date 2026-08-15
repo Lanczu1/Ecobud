@@ -194,6 +194,7 @@ export interface LessonWithProgress {
 
 export interface ChallengeWithProgress {
   id: string;
+  uniqueId?: string;
   title: string;
   description: string;
   difficulty: string;
@@ -208,6 +209,10 @@ export interface ChallengeWithProgress {
   aiDetectionTargets: string[];
   aiMinimumConfidence: number;
   isFeatured?: boolean;
+  availableQuantity?: number;
+  weeklyIncrementQuantity?: number;
+  quantityUnit?: string;
+  collectionPointName?: string;
   createdAt: string;
   updatedAt: string;
   deadlineLabel?: string;
@@ -215,7 +220,30 @@ export interface ChallengeWithProgress {
     progressPercentage: number;
     status: string;
     rejectionReason?: string | null;
+    submissionId?: string;
+    submission?: {
+      id: string;
+      status: string;
+      proofUrl: string | null;
+      afterProofUrl: string | null;
+      detectedQuantity: number;
+      reservedQuantity: number;
+      qrToken: string | null;
+      qrVerified: boolean;
+      adminPreliminaryApproved: boolean;
+      adminFinalApproved: boolean;
+      rewardAwarded: boolean;
+      ecoCoinsAwarded: number;
+      expAwarded: number;
+    };
+    submissions?: any[];
   } | null;
+  cycle?: {
+    startDate: string;
+    endDate: string;
+    status: string;
+    instanceId: string;
+  };
 }
 
 export interface HabitItem {
@@ -294,6 +322,7 @@ export interface EcoEvent {
   latitude?: number | null;
   longitude?: number | null;
   spotsLeft?: number;
+  isFeatured?: boolean;
   userStatus?: 'joined' | 'attended' | 'pending_approval' | 'rejected' | 'reward_claimed' | null;
   rejectionReason?: string;
 }
@@ -547,7 +576,7 @@ export const ecobudApi = {
       body: userId ? { userId } : {},
     }),
   fetchChallenges: (token: string) =>
-    request<{ items: ChallengeWithProgress[] }>('/challenges/active', { token }),
+    request<{ items: ChallengeWithProgress[]; isCycleActive?: boolean }>('/challenges/active', { token }),
   analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
     uploadFileAsync<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>(
       `/challenges/${challengeId}/analyze`,
@@ -560,17 +589,29 @@ export const ecobudApi = {
       token,
       uri
     ),
-  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string) =>
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) =>
     request(`/challenges/${challengeId}/submissions`, {
       method: 'POST',
       token,
-      body: { proofUrl, afterProofUrl },
+      body: { proofUrl, afterProofUrl, detectedQuantity: detectedQuantity || 1 },
     }),
-  claimChallengeReward: (token: string, challengeId: string) =>
+  verifyChallengeQr: (token: string, challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) =>
+    request<{ message: string; submission: any }>(`/challenges/${challengeId}/verify-qr`, {
+      method: 'POST',
+      token,
+      body: { qrData, latitude, longitude, submissionId },
+    }),
+  submitChallengeAfterPhoto: (token: string, challengeId: string, afterProofUrl: string, submissionId?: string) =>
+    request<{ message: string; submission: any }>(`/challenges/${challengeId}/after-photo`, {
+      method: 'POST',
+      token,
+      body: { afterProofUrl, submissionId },
+    }),
+  claimChallengeReward: (token: string, challengeId: string, submissionId?: string) =>
     request<{ message: string; awardedBadges?: EcoBadge[] }>(`/challenges/${challengeId}/claim`, {
       method: 'POST',
       token,
-      body: {},
+      body: { submissionId },
     }),
   updateChallengeProgress: (token: string, challengeId: string, progressPercentage: number) =>
     request(`/challenges/${challengeId}/progress`, {

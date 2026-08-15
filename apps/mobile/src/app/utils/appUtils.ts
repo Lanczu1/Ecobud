@@ -203,3 +203,32 @@ export function usePressScale(pressedScale = 0.97) {
 
   return { scale, onPressIn, onPressOut };
 }
+
+/**
+ * Resolves an image/media URL ensuring that:
+ * 1. Absolute URLs (http/https) are preserved.
+ * 2. localhost:3000 is replaced with current ecobudApiOrigin.
+ * 3. Relative paths (/uploads/...) are prefixed with ecobudApiOrigin.
+ * 4. Empty/null/undefined returns null.
+ */
+export function resolveMediaUrl(url?: string | null, apiOrigin?: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+
+  let clean = trimmed.replace(/\\/g, '/');
+  if (apiOrigin && clean.includes('localhost:3000')) {
+    clean = clean.replace('http://localhost:3000', apiOrigin);
+  }
+
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    return clean;
+  }
+
+  if (apiOrigin) {
+    return `${apiOrigin}${clean.startsWith('/') ? '' : '/'}${clean}`;
+  }
+
+  return clean;
+}
+

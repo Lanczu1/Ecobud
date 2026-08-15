@@ -88,6 +88,7 @@ export interface ActiveChallengeCardProps {
   onComplete: () => void;
   onClaim?: (origin?: { x: number; y: number }) => void;
   isViewed?: boolean;
+  isCycleActive?: boolean;
 }
 
 export interface UpcomingEventCardProps {
@@ -153,6 +154,7 @@ export interface EcoBudMobileModel {
   lessons: LessonWithProgress[];
   filteredLessons: LessonWithProgress[];
   challenges: ChallengeWithProgress[];
+  isCycleActive: boolean;
   habitsToday: HabitTodayData | null;
   tracker: TrackerData | null;
   profile: ProfileData | null;
@@ -202,10 +204,22 @@ export interface EcoBudMobileModel {
   handleClaimEventReward: (eventId: string) => Promise<void>;
   handleAssistantSend: (seedMessage?: string) => Promise<void>;
   loadTrackerMonth: (offset: number) => Promise<void>;
-  analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>;
+  analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{
+    passed: boolean;
+    object: string;
+    confidence: number;
+    reason?: string;
+    proofUrl?: string;
+    detectedCount?: number;
+    targetQuantity?: number;
+    calculatedExpReward?: number;
+    calculatedEcoCoins?: number;
+  }>;
   uploadChallengeProofImage: (challengeId: string, uri: string) => Promise<{ proofUrl: string }>;
-  handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string) => Promise<void>;
-  handleClaimChallengeReward: (challengeId: string, origin?: { x: number; y: number }) => Promise<void>;
+  handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) => Promise<void>;
+  handleVerifyChallengeQr: (challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) => Promise<void>;
+  handleSubmitChallengeAfterPhoto: (challengeId: string, afterProofUrl: string, submissionId?: string) => Promise<void>;
+  handleClaimChallengeReward: (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => Promise<void>;
   handleUpdateProfileImage: (uri: string) => Promise<any>;
   handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => Promise<void>;
 }

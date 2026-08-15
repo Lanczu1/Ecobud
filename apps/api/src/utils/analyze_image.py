@@ -44,7 +44,7 @@ def main():
             name = result.names[cls_id]
             detected.append({"object": name, "confidence": conf})
             
-    print(json.dumps({"detected": detected}))
+    print(json.dumps({"detected": detected, "totalDetections": len(detected)}))
 
 if __name__ == '__main__':
     main()

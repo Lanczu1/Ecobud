@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, Leaf, FileText, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, Leaf, FileText, BarChart3, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
@@ -20,6 +20,7 @@ interface AdminEvent {
   imageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
+  isFeatured?: boolean;
   createdAt: string;
   updatedAt: string;
   registrations: { id: string }[];
@@ -82,6 +83,7 @@ interface FormData {
   coinReward: number;
   latitude: number | null;
   longitude: number | null;
+  isFeatured: boolean;
   imageFile?: File | null;
   imageUrl?: string | null;
 }
@@ -107,6 +109,7 @@ const emptyForm: FormData = {
   coinReward: 10,
   latitude: null,
   longitude: null,
+  isFeatured: false,
   imageFile: null,
   imageUrl: null,
 };
@@ -162,6 +165,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
         coinReward: initial.ecoCoinsReward ?? 0,
         latitude: initial.latitude,
         longitude: initial.longitude,
+        isFeatured: initial.isFeatured ?? false,
       }
         : { 
             ...emptyForm, 
@@ -170,7 +174,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
               const d = new Date();
               d.setHours(d.getHours() + 1);
               return formatDateForInput(d);
-            })() 
+            })(),
+            isFeatured: false,
           }
   );
   const [imagePreview, setImagePreview] = useState<string | null>(initial?.imageUrl ? `${API_HOST}${initial.imageUrl}` : null);
@@ -455,6 +460,25 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
               <input type="number" min={0} value={form.coinReward} onChange={e => setForm(f => ({ ...f, coinReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-200 focus:border-yellow-400" />
             </div>
           </div>
+
+          {/* Featured Event Switch */}
+          <div className="flex items-center justify-between p-3.5 bg-yellow-50/60 border border-yellow-100/80 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${form.isFeatured ? 'bg-yellow-400 text-yellow-950 shadow-sm' : 'bg-gray-200 text-gray-400'}`}>
+                <Star className={`w-4 h-4 ${form.isFeatured ? 'fill-current' : ''}`} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Feature this Event</p>
+                <p className="text-xs text-gray-500">Pin as the top highlight on user mobile dashboard</p>
+              </div>
+            </div>
+            <div
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${form.isFeatured ? 'bg-yellow-500' : 'bg-gray-300'}`}
+              onClick={() => setForm(f => ({ ...f, isFeatured: !f.isFeatured }))}
+            >
+              <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isFeatured ? 'translate-x-5' : ''}`} />
+            </div>
+          </div>
         </form>
         {/* Footer buttons */}
         <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3">
@@ -484,6 +508,7 @@ export function Events() {
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
+  const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -491,6 +516,21 @@ export function Events() {
       setEvents(data);
     } catch (err: any) { setError(err.message || 'Failed to load events.'); }
     finally { setLoading(false); }
+  };
+
+  const handleToggleFeatured = async (event: AdminEvent) => {
+    setTogglingFeatured(event.id);
+    const nextFeatured = !event.isFeatured;
+    setEvents(prev => prev.map(e => e.id === event.id ? { ...e, isFeatured: nextFeatured } : e));
+    try {
+      const updated = await adminPut<AdminEvent>(`/admin/events/${event.id}`, { isFeatured: nextFeatured });
+      setEvents(prev => prev.map(e => e.id === updated.id ? updated : e));
+    } catch (err: any) {
+      setEvents(prev => prev.map(e => e.id === event.id ? { ...e, isFeatured: event.isFeatured } : e));
+      alert(err.message || 'Failed to toggle featured status.');
+    } finally {
+      setTogglingFeatured(null);
+    }
   };
 
   useEffect(() => {
@@ -885,13 +925,19 @@ export function Events() {
             const fillPct = Math.min(100, Math.round((event.registrations.length / event.capacity) * 100));
             const status = getEventStatus(event);
             return (
-              <div key={event.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group flex flex-col">
+              <div key={event.id} className={`bg-white rounded-2xl border ${event.isFeatured ? 'border-yellow-200 shadow-yellow-500/5 ring-1 ring-yellow-300/60' : 'border-gray-100'} shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group flex flex-col`}>
                 <div className="h-32 w-full relative shrink-0">
                   <img 
                     src={event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${API_HOST}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop'} 
                     alt={event.title}
                     className="w-full h-full object-cover"
                   />
+                  {event.isFeatured && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full bg-yellow-400 text-yellow-950 shadow-md">
+                      <Star className="w-3.5 h-3.5 fill-current text-yellow-950" />
+                      <span>Featured</span>
+                    </div>
+                  )}
                   <div className="absolute top-3 right-3">
                     <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border bg-white/90 backdrop-blur-sm ${statusColors[status]}`}>{status}</span>
                   </div>
@@ -899,15 +945,31 @@ export function Events() {
                 
                 <div className="p-5 flex-1 flex flex-col">
                   <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
                       <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-xl shrink-0">
                         🌿
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <h3 className="font-serif font-bold text-gray-900 line-clamp-1" title={event.title}>{event.title}</h3>
                         <p className="text-xs text-gray-400">By {event.managedBy.name}</p>
                       </div>
                     </div>
+                    <button
+                      onClick={() => handleToggleFeatured(event)}
+                      disabled={togglingFeatured === event.id}
+                      title={event.isFeatured ? 'Unfeature event' : 'Feature event (Pin as highlight on mobile)'}
+                      className={`p-2 rounded-xl transition-all disabled:opacity-60 shrink-0 ${
+                        event.isFeatured
+                          ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100 ring-1 ring-yellow-200'
+                          : 'text-gray-300 hover:text-yellow-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      {togglingFeatured === event.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-yellow-600" />
+                      ) : (
+                        <Star className={`w-4 h-4 ${event.isFeatured ? 'fill-current text-yellow-500' : ''}`} />
+                      )}
+                    </button>
                   </div>
 
                   <div className="space-y-2 mb-4">
@@ -950,6 +1012,16 @@ export function Events() {
                 </div>
 
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <button
+                    onClick={() => handleToggleFeatured(event)}
+                    disabled={togglingFeatured === event.id}
+                    title={event.isFeatured ? 'Unfeature event' : 'Feature event'}
+                    className={`flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 ${
+                      event.isFeatured ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {togglingFeatured === event.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className={`w-3 h-3 ${event.isFeatured ? 'fill-current text-yellow-500' : ''}`} />}
+                  </button>
                   <button onClick={() => handleOpenQr(event.id)} className="flex items-center justify-center px-3 py-2 bg-purple-50 text-purple-700 text-xs font-semibold rounded-xl hover:bg-purple-100 transition-colors">
                     <QrCode className="w-3 h-3" />
                   </button>

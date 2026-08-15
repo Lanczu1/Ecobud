@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { resolveMediaUrl } from '../utils/appUtils';
 
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
@@ -41,8 +42,15 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
 };
 
 export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
+  const [imgError, setImgError] = React.useState(false);
   const animatedProgress = React.useRef(new Animated.Value(0)).current;
   const [displayProgress, setDisplayProgress] = React.useState(0);
+
+  const resolvedImageUrl = resolveMediaUrl(lesson.imageUrl, ecobudApiOrigin);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [lesson.imageUrl]);
 
   React.useEffect(() => {
     animatedProgress.addListener(({ value }) => {
@@ -68,11 +76,12 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
         </View>
       )}
 
-      {lesson.imageUrl && lesson.imageUrl !== 'null' && lesson.imageUrl !== 'undefined' ? (
+      {resolvedImageUrl && !imgError ? (
         <Image 
-          source={{ uri: `${ecobudApiOrigin}${lesson.imageUrl}` }}
+          source={{ uri: resolvedImageUrl }}
           style={{ width: '100%', height: verticalScale(150), borderRadius: moderateScale(16), marginBottom: verticalScale(14) }}
           resizeMode="cover"
+          onError={() => setImgError(true)}
         />
       ) : (
         <View style={{ width: '100%', height: verticalScale(150), borderRadius: moderateScale(16), marginBottom: verticalScale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center' }}>

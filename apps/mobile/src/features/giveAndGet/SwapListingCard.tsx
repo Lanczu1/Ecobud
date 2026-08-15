@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Pressable,
   Animated,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
@@ -88,7 +89,11 @@ export function SwapListingCard({
   isOwnListing?: boolean;
 }) {
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const mainImage = listing.images.length > 0 ? getValidImageUrl(listing.images[0].url) : undefined;
+  const [activeCardImage, setActiveCardImage] = useState(0);
+  const images = listing.images.length > 0
+    ? listing.images.map((img) => getValidImageUrl(img.url)).filter(Boolean) as string[]
+    : [];
+  const mainImage = images[0];
   const user = listing.user;
   const scaleValue = useRef(new Animated.Value(1)).current;
 
@@ -118,8 +123,53 @@ export function SwapListingCard({
       onPressOut={handlePressOut}
     >
       <Animated.View style={[localStyles.card, { transform: [{ scale: scaleValue }] }]}>
-      {mainImage ? (
-        <Image source={{ uri: mainImage }} style={localStyles.cardImage} resizeMode="cover" />
+      {images.length > 0 ? (
+        <View style={localStyles.cardImageWrapper}>
+          <Image
+            source={{ uri: images[activeCardImage] || mainImage }}
+            style={localStyles.cardImage}
+            resizeMode="cover"
+          />
+          {images.length > 1 && (
+            <View style={localStyles.cardImageCounter}>
+              <Ionicons name="images" size={11} color="#FFF" />
+              <Text style={localStyles.cardImageCounterText}>
+                {activeCardImage + 1}/{images.length}
+              </Text>
+            </View>
+          )}
+
+          {/* Mini Thumbnail Strip to preview other pictures */}
+          {images.length > 1 && (
+            <View style={localStyles.cardThumbStripContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={localStyles.cardThumbStrip}
+              >
+                {images.map((imgUri, idx) => {
+                  const isActive = idx === activeCardImage;
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      activeOpacity={0.8}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setActiveCardImage(idx);
+                      }}
+                      style={[
+                        localStyles.cardThumbItem,
+                        isActive && localStyles.cardThumbItemActive,
+                      ]}
+                    >
+                      <Image source={{ uri: imgUri }} style={localStyles.cardThumbImage} resizeMode="cover" />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+        </View>
       ) : (
         <View style={[localStyles.cardImage, localStyles.cardImageFallback]}>
           <Ionicons name="image-outline" size={40} color="#A7D5BA" />
@@ -278,10 +328,60 @@ const localStyles = StyleSheet.create({
     elevation: 4,
     marginBottom: 16,
   },
+  cardImageWrapper: {
+    position: 'relative',
+    width: '100%',
+    backgroundColor: '#E4E9E6',
+  },
   cardImage: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: '#E4E9E6',
+  },
+  cardImageCounter: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  cardImageCounterText: {
+    color: '#FFF',
+    fontSize: responsiveFontSize(11),
+    fontWeight: '700',
+  },
+  cardThumbStripContainer: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+  },
+  cardThumbStrip: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  cardThumbItem: {
+    width: scale(38),
+    height: scale(38),
+    borderRadius: moderateScale(8),
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  cardThumbItemActive: {
+    borderColor: '#4ADE80',
+    borderWidth: 2,
+  },
+  cardThumbImage: {
+    width: '100%',
+    height: '100%',
   },
   cardImageFallback: {
     alignItems: 'center',

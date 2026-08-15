@@ -93,17 +93,20 @@ export class GamificationService {
     return result;
   }
 
-  async updateChallengeProgress(userId: string, challengeId: string, progressPercentage: number) {
+  async updateChallengeProgress(userId: string, challengeInstanceId: string, progressPercentage: number) {
     const result = await this.database.$transaction(async (tx) => {
-      const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
+      const challengeInstance = await tx.challengeInstance.findUnique({
+        where: { id: challengeInstanceId },
+        include: { challenge: true }
+      });
 
-      if (!challenge) {
-        throw new HttpError(404, 'Challenge not found.');
+      if (!challengeInstance) {
+        throw new HttpError(404, 'Challenge instance not found.');
       }
 
       const existingProgress = await tx.userChallenge.findUnique({
         where: {
-          userId_challengeId: { userId, challengeId },
+          userId_challengeInstanceId: { userId, challengeInstanceId },
         },
       });
 
@@ -117,11 +120,11 @@ export class GamificationService {
         };
       }
 
-      const expirationDate = existingProgress?.expirationDate ?? challenge.endDate;
+      const expirationDate = existingProgress?.expirationDate ?? challengeInstance.endDate;
 
       const currentProgress = await tx.userChallenge.upsert({
         where: {
-          userId_challengeId: { userId, challengeId },
+          userId_challengeInstanceId: { userId, challengeInstanceId },
         },
         update: {
           progressPercentage,
@@ -129,7 +132,7 @@ export class GamificationService {
         },
         create: {
           userId,
-          challengeId,
+          challengeInstanceId,
           progressPercentage,
           status: progressPercentage >= 100 ? 'UNCLAIMED' : 'IN_PROGRESS',
           expirationDate,
@@ -148,31 +151,45 @@ export class GamificationService {
     await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
       actorRole: 'user',
       actorUserId: userId,
-      entityId: challengeId,
+      entityId: challengeInstanceId,
       reason: progressPercentage >= 100 ? 'challenge-unclaimed' : 'challenge-progress-updated',
     });
 
     return result;
   }
 
-  async claimChallenge(userId: string, challengeId: string) {
+  async claimChallenge(userId: string, challengeInstanceId: string) {
     const result = await this.database.$transaction(async (tx) => {
-      const challenge = await tx.challenge.findUnique({ where: { id: challengeId } });
-      if (!challenge) {
-        throw new HttpError(404, 'Challenge not found.');
+      const challengeInstance = await tx.challengeInstance.findUnique({
+        where: { id: challengeInstanceId },
+        include: { challenge: true }
+      });
+      if (!challengeInstance) {
+        throw new HttpError(404, 'Challenge instance not found.');
       }
 
+      const challenge = challengeInstance.challenge;
+
       const userChallenge = await tx.userChallenge.findUnique({
-        where: { userId_challengeId: { userId, challengeId } }
+        where: { userId_challengeInstanceId: { userId, challengeInstanceId } }
       });
 
-      const submission = await tx.challengeSubmission.findUnique({
-        where: { userId_challengeId: { userId, challengeId } }
+      const submission = await tx.challengeSubmission.findFirst({
+        where: {
+          userId,
+          challengeInstanceId,
+          status: 'approved',
+          rewardAwarded: false,
+        },
+        orderBy: { createdAt: 'desc' }
       });
 
       if (submission) {
         if (submission.status !== 'approved') {
           throw new HttpError(400, 'Submission is not approved yet.');
+        }
+        if (submission.rewardAwarded) {
+          throw new HttpError(400, 'Reward already claimed for this submission.');
         }
       } else {
         if (!userChallenge || userChallenge.status !== 'UNCLAIMED') {
@@ -180,30 +197,43 @@ export class GamificationService {
         }
       }
 
-      if (userChallenge && userChallenge.status === 'COMPLETED') {
-        throw new HttpError(400, 'Reward already claimed.');
-      }
-
       await tx.userChallenge.upsert({
-        where: { userId_challengeId: { userId, challengeId } },
+        where: { userId_challengeInstanceId: { userId, challengeInstanceId } },
         update: { status: 'COMPLETED', completedAt: new Date(), progressPercentage: 100 },
         create: {
           userId,
-          challengeId,
+          challengeInstanceId,
           status: 'COMPLETED',
           completedAt: new Date(),
           progressPercentage: 100,
         },
       });
 
+      // Linear scaling calculation: detectedQuantity * base reward
+      const quantityMultiplier = (submission?.detectedQuantity || submission?.reservedQuantity || 1);
+      const totalExpAwarded = challenge.expReward * quantityMultiplier;
+      const totalEcoCoinsAwarded = challenge.ecoCoinReward * quantityMultiplier;
+
+      if (submission) {
+        await tx.challengeSubmission.update({
+          where: { id: submission.id },
+          data: {
+            rewardAwarded: true,
+            ecoCoinsAwarded: totalEcoCoinsAwarded,
+            expAwarded: totalExpAwarded,
+          }
+        });
+      }
+
       return this.awardAction(tx, {
         userId,
-        actionType: `Challenge completed: ${challenge.title}`,
-        pointsAwarded: challenge.expReward,
-        ecoCoinsAwarded: challenge.ecoCoinReward,
+        actionType: `Challenge completed: ${challenge.title} (${quantityMultiplier} ${challenge.quantityUnit || 'items'})`,
+        pointsAwarded: totalExpAwarded,
+        ecoCoinsAwarded: totalEcoCoinsAwarded,
         metadata: {
           challengeId: challenge.id,
           difficulty: challenge.difficulty,
+          detectedQuantity: quantityMultiplier,
         },
       });
     });
@@ -211,7 +241,7 @@ export class GamificationService {
     await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
       actorRole: 'user',
       actorUserId: userId,
-      entityId: challengeId,
+      entityId: challengeInstanceId,
       reason: 'challenge-completed',
     });
 

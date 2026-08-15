@@ -196,6 +196,7 @@ export function MarketplaceHubView({
           userId={currentUserId}
           onBack={() => setScreen('feed')}
           onCreated={() => {
+            setFeedTab('mylistings');
             setScreen('feed');
           }}
         />
@@ -213,6 +214,9 @@ export function MarketplaceHubView({
           }}
           onRequestSwap={() => setShowSwapDialog(true)}
           onDelete={handleDeleteListing}
+          onUpdated={(updated) => {
+            setSelectedListing(updated);
+          }}
         />
         </ScreenTransition>
       )}

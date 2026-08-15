@@ -312,6 +312,7 @@ export class AdminService {
   // Challenge Management
   static async getAllChallenges() {
     return await prisma.challenge.findMany({
+      include: { instances: { orderBy: { startDate: 'desc' } } },
       orderBy: { createdAt: 'desc' }
     });
   }
@@ -320,6 +321,7 @@ export class AdminService {
     title: string;
     description: string;
     difficulty: string;
+    startDate?: string | null;
     endDate?: string | null;
     expReward: number;
     ecoCoinReward?: number;
@@ -331,12 +333,21 @@ export class AdminService {
     aiDetectionTargets?: string[];
     aiMinimumConfidence?: number;
     isFeatured?: boolean;
+    targetQuantity?: number;
+    availableQuantity?: number;
+    weeklyIncrementQuantity?: number;
+    quantityUnit?: string;
+    collectionPointName?: string;
+    collectionPointLat?: number;
+    collectionPointLng?: number;
+    requireLocation?: boolean;
   }) {
     const challenge = await prisma.challenge.create({
       data: {
         title: data.title,
         description: data.description,
         difficulty: data.difficulty,
+        startDate: data.startDate ? new Date(data.startDate) : null,
         endDate: data.endDate ? new Date(data.endDate) : null,
         expReward: data.expReward,
         ecoCoinReward: data.ecoCoinReward || 0,
@@ -347,7 +358,14 @@ export class AdminService {
         type: data.type || "GENERAL",
         aiDetectionTargets: data.aiDetectionTargets || [],
         aiMinimumConfidence: data.aiMinimumConfidence || 80,
-        isFeatured: data.isFeatured ?? false
+        isFeatured: data.isFeatured ?? false,
+        availableQuantity: data.availableQuantity ?? 50,
+        weeklyIncrementQuantity: data.weeklyIncrementQuantity ?? 50,
+        quantityUnit: data.quantityUnit || "bottles",
+        collectionPointName: data.collectionPointName || "Municipal Waste Collection Center",
+        collectionPointLat: data.collectionPointLat ?? null,
+        collectionPointLng: data.collectionPointLng ?? null,
+        requireLocation: data.requireLocation ?? false,
       }
     });
 
@@ -427,13 +445,16 @@ export class AdminService {
       lessonCompletions,
       pendingSubmissions,
     ] = await Promise.all([
-      prisma.user.count(),
+      prisma.user.count({
+        where: { role: 'user' }
+      }),
       prisma.user.count({
         where: {
           createdAt: {
             gte: startOfToday,
             lte: endOfToday,
           },
+          role: 'user',
         },
       }),
       prisma.lesson.count(),
@@ -469,6 +490,7 @@ export class AdminService {
                 gte: startOfDay,
                 lte: endOfDay,
               },
+              role: 'user',
             },
           }),
           prisma.user.count({
@@ -477,6 +499,7 @@ export class AdminService {
                 gte: startOfDay,
                 lte: endOfDay,
               },
+              role: 'user',
             },
           }),
         ]);
@@ -525,7 +548,7 @@ export class AdminService {
             profile: true
           }
         },
-        challenge: true
+        challengeInstance: { include: { challenge: true } }
       }
     });
 
@@ -546,6 +569,12 @@ export class AdminService {
     const unified = [
       ...challengeSubs.map(s => ({
         ...s,
+        challenge: s.challengeInstance?.challenge || {
+          id: s.challengeInstanceId,
+          title: 'Eco Challenge',
+          type: 'AI Image Recognition Challenge',
+          quantityUnit: 'items'
+        },
         submissionType: 'CHALLENGE'
       })),
       ...eventSubs.map(s => ({
@@ -573,70 +602,207 @@ export class AdminService {
     return unified;
   }
 
-  static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected', notes?: string) {
-    const challengeSub = await prisma.challengeSubmission.findUnique({ where: { id } });
+  static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string) {
+    const challengeSub = await prisma.challengeSubmission.findUnique({ 
+      where: { id },
+      include: {
+        challengeInstance: { include: { challenge: true } },
+        user: true
+      }
+    });
     
     if (challengeSub) {
+      const challenge = challengeSub.challengeInstance?.challenge;
+
+      // Handle preliminary approval (approved_collection)
+      if (status === 'approved_collection') {
+        const qrPayload = JSON.stringify({
+          subId: challengeSub.id,
+          userId: challengeSub.userId,
+          challengeId: challengeSub.challengeInstance?.challengeId,
+          instanceId: challengeSub.challengeInstanceId,
+          collectionPoint: challenge?.collectionPointName || 'Municipal Waste Collection Center',
+          token: `VRF-${challengeSub.id}-${Date.now().toString(36).toUpperCase()}`
+        });
+
+        const submission = await prisma.challengeSubmission.update({
+          where: { id },
+          data: {
+            status: 'approved_collection',
+            adminPreliminaryApproved: true,
+            adminPreliminaryApprovedAt: new Date(),
+            qrToken: qrPayload,
+            moderatorNotes: notes,
+            reviewedById: reviewerId,
+            reviewedAt: new Date(),
+          },
+          include: {
+            challengeInstance: { include: { challenge: true } },
+            user: true
+          }
+        });
+
+        await prisma.auditLog.create({
+          data: {
+            action: 'SUBMISSION_APPROVED_COLLECTION',
+            userId: submission.userId,
+            details: JSON.stringify({
+              submissionId: id,
+              challengeTitle: challenge?.title,
+              reviewerId,
+              reservedQuantity: submission.reservedQuantity,
+              notes
+            }),
+            timestamp: new Date()
+          }
+        });
+
+        await supabaseRealtimeService.publishUserSectionBundle(
+          submission.userId,
+          ['challenges', 'tracker'],
+          {
+            actorRole: 'admin',
+            actorUserId: reviewerId,
+            entityId: submission.challengeInstanceId,
+            reason: 'submission-approved_collection',
+          },
+        );
+
+        await supabaseRealtimeService.publishUserNotice(submission.userId, {
+          level: 'success',
+          message: `Your proof for "${challenge?.title}" was approved for collection! Please visit the collection point on the weekend to verify with QR.`,
+          scope: 'moderation',
+          title: 'Approved for Weekend Collection',
+        });
+
+        return submission;
+      }
+
+      // Handle Rejection -> If quantity was reserved, return/refund it back to availableQuantity
+      if (status === 'rejected') {
+        const reserved = challengeSub.reservedQuantity || 0;
+        
+        await prisma.$transaction(async (tx) => {
+          if (reserved > 0 && challenge?.id) {
+            await tx.challenge.update({
+              where: { id: challenge.id },
+              data: {
+                availableQuantity: { increment: reserved }
+              }
+            });
+          }
+
+          await tx.challengeSubmission.update({
+            where: { id },
+            data: {
+              status: 'rejected',
+              moderatorNotes: notes,
+              reviewedById: reviewerId,
+              reviewedAt: new Date(),
+              reservedQuantity: 0,
+            }
+          });
+        });
+
+        const updated = await prisma.challengeSubmission.findUnique({
+          where: { id },
+          include: {
+            challengeInstance: { include: { challenge: true } },
+            user: true
+          }
+        });
+
+        await prisma.auditLog.create({
+          data: {
+            action: 'SUBMISSION_REJECTED',
+            userId: challengeSub.userId,
+            details: JSON.stringify({
+              submissionId: id,
+              challengeTitle: challenge?.title,
+              reviewerId,
+              refundedQuantity: reserved,
+              notes
+            }),
+            timestamp: new Date()
+          }
+        });
+
+        await supabaseRealtimeService.publishUserSectionBundle(
+          challengeSub.userId,
+          ['challenges', 'tracker'],
+          {
+            actorRole: 'admin',
+            actorUserId: reviewerId,
+            entityId: challengeSub.challengeInstanceId,
+            reason: 'submission-rejected',
+          },
+        );
+
+        await supabaseRealtimeService.publishUserNotice(challengeSub.userId, {
+          level: 'warning',
+          message: `Your proof for "${challenge?.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
+          scope: 'moderation',
+          title: 'Challenge submission rejected',
+        });
+
+        return updated;
+      }
+
+      // Handle Final Approval (approved)
       const submission = await prisma.challengeSubmission.update({
         where: { id },
         data: {
-          status,
+          status: 'approved',
+          adminFinalApproved: true,
+          adminFinalApprovedAt: new Date(),
           moderatorNotes: notes,
           reviewedById: reviewerId,
           reviewedAt: new Date()
         },
         include: {
-          challenge: true,
+          challengeInstance: { include: { challenge: true } },
           user: true
         }
       });
 
-    if (status === 'approved') {
-      // Points and Coins will now be awarded when the user claims the reward in the mobile app.
-      // We no longer award them here automatically.
-    }
+      // Create Audit Log
+      await prisma.auditLog.create({
+        data: {
+          action: 'SUBMISSION_APPROVED',
+          userId: submission.userId,
+          details: JSON.stringify({
+            challengeId: submission.challengeInstanceId,
+            challengeTitle: submission.challengeInstance?.challenge?.title,
+            reviewerId,
+            notes
+          }),
+          timestamp: new Date()
+        }
+      });
 
-    // Create Audit Log
-    await prisma.auditLog.create({
-      data: {
-        action: `SUBMISSION_${status.toUpperCase()}`,
-        userId: submission.userId,
-        details: JSON.stringify({
-          challengeId: submission.challengeId,
-          challengeTitle: submission.challenge.title,
-          reviewerId,
-          notes
-        }),
-        timestamp: new Date()
-      }
-    });
+      await supabaseRealtimeService.publishUserSectionBundle(
+        submission.userId,
+        ['challenges', 'tracker'],
+        {
+          actorRole: 'admin',
+          actorUserId: reviewerId,
+          entityId: submission.challengeInstanceId,
+          reason: 'submission-approved',
+        },
+      );
 
-    await supabaseRealtimeService.publishUserSectionBundle(
-      submission.userId,
-      ['challenges', 'tracker'],
-      {
-        actorRole: 'admin',
-        actorUserId: reviewerId,
-        entityId: submission.challengeId,
-        reason: `submission-${status}`,
-      },
-    );
-
-    await supabaseRealtimeService.publishUserNotice(submission.userId, {
-      level: status === 'approved' ? 'success' : 'warning',
-      message:
-        status === 'approved'
-          ? `Your proof for "${submission.challenge.title}" has been approved.`
-          : `Your proof for "${submission.challenge.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
-      scope: 'moderation',
-      title: status === 'approved' ? 'Challenge approved' : 'Challenge review update',
-    });
+      await supabaseRealtimeService.publishUserNotice(submission.userId, {
+        level: 'success',
+        message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
+        scope: 'moderation',
+        title: 'Challenge fully approved',
+      });
 
       await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
         actorRole: 'admin',
         actorUserId: reviewerId,
         entityId: submission.userId,
-        reason: `submission-${status}`,
+        reason: 'submission-approved',
       });
 
       return submission;
@@ -644,10 +810,11 @@ export class AdminService {
 
     const eventSub = await prisma.eventSubmission.findUnique({ where: { id } });
     if (eventSub) {
+      const eventStatus = status === 'approved' ? 'approved' : 'rejected';
       const submission = await prisma.eventSubmission.update({
         where: { id },
         data: {
-          status,
+          status: eventStatus as any,
           rejectionReason: notes,
           reviewedAt: new Date()
         },
@@ -753,7 +920,10 @@ export class AdminService {
   // Event Management
   static async getAllEvents() {
     return await prisma.event.findMany({
-      orderBy: { startDatetime: 'asc' },
+      orderBy: [
+        { isFeatured: 'desc' },
+        { startDatetime: 'asc' },
+      ],
       include: {
         registrations: {
           select: { id: true }
@@ -777,6 +947,7 @@ export class AdminService {
     imageUrl?: string;
     latitude?: number;
     longitude?: number;
+    isFeatured?: boolean;
     managedById: string;
   }) {
     return await prisma.event.create({
@@ -793,6 +964,7 @@ export class AdminService {
         imageUrl: data.imageUrl,
         latitude: data.latitude,
         longitude: data.longitude,
+        isFeatured: data.isFeatured ?? false,
       },
       include: {
         registrations: { select: { id: true } },
@@ -813,6 +985,7 @@ export class AdminService {
     imageUrl: string;
     latitude: number;
     longitude: number;
+    isFeatured: boolean;
   }>) {
     const updateData: any = { ...data };
     if (data.startDatetime) {

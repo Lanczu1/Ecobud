@@ -1,4 +1,7 @@
 import { prisma } from '../prismaClient';
+import { supabaseStorageService } from './supabaseStorageService';
+import path from 'path';
+import fs from 'fs';
 
 interface CreateListingInput {
   userId: string;
@@ -102,8 +105,12 @@ export const swapService = {
         { description: { contains: search, mode: 'insensitive' } },
       ];
     }
-    if (category) where.category = category;
-    if (meetupMethod) where.meetupMethod = meetupMethod;
+    if (category && category !== 'all') {
+      where.category = { equals: category, mode: 'insensitive' };
+    }
+    if (meetupMethod && meetupMethod !== 'all') {
+      where.meetupMethod = { equals: meetupMethod, mode: 'insensitive' };
+    }
 
     const orderBy: any =
       sortBy === 'active'
@@ -280,15 +287,31 @@ export const swapService = {
   },
 
   async uploadImage(userId: string, file: Express.Multer.File) {
-    const ext = file.originalname.split('.').pop() || 'jpg';
-    const fs = await import('fs');
-    const path = await import('path');
-    const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'swap-images', userId);
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    const ext = path.extname(file.originalname) || '.jpg';
+    const destinationPath = `swap-images/${userId}/swap-${Date.now()}${ext}`;
+    
+    try {
+      const publicUrl = await supabaseStorageService.uploadFile(
+        destinationPath,
+        file.path,
+        file.mimetype
+      );
+
+      // Clean up local temp file
+      try {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      } catch (e) {
+        console.error('Failed to cleanup temp swap image:', e);
+      }
+
+      return publicUrl;
+    } catch (error: any) {
+      if (file && fs.existsSync(file.path)) {
+        try { fs.unlinkSync(file.path); } catch {}
+      }
+      throw error;
     }
-    const destPath = path.join(uploadDir, `${Date.now()}.${ext}`);
-    fs.copyFileSync(file.path, destPath);
-    return `/uploads/swap-images/${userId}/${path.basename(destPath)}`;
   },
 };

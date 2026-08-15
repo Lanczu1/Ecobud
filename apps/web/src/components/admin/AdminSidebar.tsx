@@ -7,25 +7,20 @@ import {
   ArrowLeftRight, 
   FileText, 
   LogOut,
-  Send,
   Gift
 } from 'lucide-react';
 
 import logoImg from '../../assets/logo.png';
 
-
-export type AdminSection = 'Dashboard' | 'Users' | 'Submissions' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports';
-
+export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports';
 interface SidebarProps {
   onLogout: () => void;
   activeSection: AdminSection;
   onNavigate: (section: AdminSection) => void;
 }
-
 const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Dashboard', icon: LayoutDashboard },
   { name: 'Users', icon: Users },
-  { name: 'Submissions', icon: Send },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },
 

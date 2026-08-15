@@ -5,7 +5,10 @@ import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '..
 import { errorBoundary, HttpError } from '../http/errorResponder';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { avatarUploadMiddleware } from '../http/uploadMiddleware';
+import { supabaseStorageService } from '../services/supabaseStorageService';
 import { PasswordService } from '../security/passwordService';
+import path from 'path';
+import fs from 'fs';
 
 const userRoutes = Router();
 
@@ -133,27 +136,50 @@ userRoutes.post(
   requireUserAccess,
   avatarUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    console.log('[API] /me/avatar hit, req.file:', req.file);
     if (!req.file) {
       throw new HttpError(400, 'Image file is required');
     }
 
-    const avatarUrl = `/uploads/Avatars/${req.file.filename}`;
+    try {
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const destinationPath = `avatars/avatar-${req.auth!.userId}-${Date.now()}${ext}`;
+      const avatarUrl = await supabaseStorageService.uploadFile(
+        destinationPath,
+        req.file.path,
+        req.file.mimetype
+      );
 
-    const profile = await prisma.profile.upsert({
-      where: { userId: req.auth!.userId },
-      update: { avatarUrl },
-      create: {
-        userId: req.auth!.userId,
-        displayName: req.auth!.name,
+      // Clean up local temp file
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (e) {
+        console.error('Failed to remove temp avatar file:', e);
+      }
+
+      await prisma.profile.upsert({
+        where: { userId: req.auth!.userId },
+        update: { avatarUrl },
+        create: {
+          userId: req.auth!.userId,
+          displayName: req.auth!.name,
+          avatarUrl,
+        },
+      });
+
+      return res.json({
+        success: true,
         avatarUrl,
-      },
-    });
-
-    return res.json({
-      success: true,
-      avatarUrl,
-    });
+      });
+    } catch (error: any) {
+      try {
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch {}
+      throw new HttpError(500, `Failed to upload avatar: ${error.message}`);
+    }
   }),
 );
 

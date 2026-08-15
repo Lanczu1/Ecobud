@@ -43,6 +43,7 @@ import {
   getVisibleStreak,
   shortHash,
   getEventLifecycleStatus,
+  resolveMediaUrl,
 } from '../utils/appUtils';
 import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
 import {
@@ -62,13 +63,51 @@ import { FireStreak } from './FireStreak';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const challenge = model.selectedChallenge;
-  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'capture_after'>('details');
+  const submission = challenge?.progress?.submission;
+  const isSubmissionCompleted = submission?.status === 'completed' || submission?.rewardAwarded;
+  const isPreliminaryApproved = !isSubmissionCompleted && (challenge?.progress?.status === 'approved_collection' || submission?.status === 'approved_collection' || submission?.adminPreliminaryApproved);
+  const isQrVerified = !isSubmissionCompleted && Boolean(submission?.qrVerified);
+
+  // Check if current day is weekend (Saturday = 6, Sunday = 0)
+  const currentDay = new Date().getDay();
+  const isWeekend = currentDay === 0 || currentDay === 6;
+
+  // Determine initial step
+  const getInitialStep = (): 'details' | 'capture' | 'result' | 'scan_qr' | 'capture_after' => {
+    if (isPreliminaryApproved && isWeekend) {
+      // Always show QR code scanning page first as requested
+      return 'scan_qr';
+    }
+    return 'details';
+  };
+
+  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'scan_qr' | 'capture_after'>(getInitialStep);
   const [processing, setProcessing] = React.useState(false);
-  const [mockResult, setMockResult] = React.useState<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string } | null>(null);
-  const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(null);
+  const [qrScanned, setQrScanned] = React.useState(false);
+  const [mockResult, setMockResult] = React.useState<{
+    passed: boolean;
+    object: string;
+    confidence: number;
+    reason?: string;
+    proofUrl?: string;
+    detectedCount?: number;
+    targetQuantity?: number;
+    calculatedExpReward?: number;
+    calculatedEcoCoins?: number;
+  } | null>(null);
+  const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(submission?.proofUrl || null);
 
   const entryFadeAnim = React.useRef(new Animated.Value(0)).current;
   const processFadeAnim = React.useRef(new Animated.Value(0)).current;
+
+  // Sync step whenever challenge or overlay reopens
+  React.useEffect(() => {
+    setQrScanned(false);
+    setCapturedImage(null);
+    setMockResult(null);
+    setBeforeProofUrl(submission?.proofUrl || null);
+    setStep(getInitialStep());
+  }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.qrVerified]);
 
   React.useEffect(() => {
     Animated.timing(entryFadeAnim, {
@@ -142,17 +181,54 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   };
 
+  const handleSubmitBeforeProof = async () => {
+    if (!beforeProofUrl || !mockResult) return;
+    setProcessing(true);
+    try {
+      const detectedCount = mockResult.detectedCount || 1;
+      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedCount);
+      Alert.alert(
+        'Before Photo Submitted!',
+        `Your mission with ${detectedCount} ${mockResult.object || 'items'} has been submitted. The admin will review it shortly.`,
+        [{ text: 'OK', onPress: handleClose }]
+      );
+    } catch (err: any) {
+      Alert.alert('Submission Error', err.message || 'Failed to submit challenge proof.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    if (qrScanned || processing) return;
+    setQrScanned(true);
+    setProcessing(true);
+    try {
+      await model.handleVerifyChallengeQr(challenge.id, data, undefined, undefined, challenge.progress?.submissionId);
+      Alert.alert('QR Verified! 🎉', 'You have successfully verified your presence at the collection point. Now take your After Photo!', [
+        { text: 'Take After Photo', onPress: () => setStep('capture_after') }
+      ]);
+    } catch (err: any) {
+      Alert.alert('QR Verification Error', err.message || 'Invalid or unmatched QR code.');
+      setQrScanned(false);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const processAfterImage = async (uri: string) => {
     setCapturedImage(uri);
     setProcessing(true);
     try {
-      if (beforeProofUrl) {
-        const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
-        await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, uploadResult.proofUrl);
-      }
-      setStep('result'); // We can reuse result screen for final success
+      const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
+      await model.handleSubmitChallengeAfterPhoto(challenge.id, uploadResult.proofUrl, challenge.progress?.submissionId);
+      Alert.alert(
+        'Mission Completed! 🌿',
+        'Your After photo was submitted and is now in Final Review. You will be awarded your Eco Points & Coins once finalized by the admin!',
+        [{ text: 'OK', onPress: handleClose }]
+      );
     } catch (err: any) {
-      console.error('Failed to submit proof', err);
+      console.error('Failed to submit after proof', err);
       Alert.alert('Submission Error', err.message || 'Failed to submit proof. Please try again.');
       setCapturedImage(null);
     } finally {
@@ -204,22 +280,63 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     });
   };
 
-  const handleBackToChallenge = () => {
-    handleClose();
-  };
-
-  const handleProceedToAfter = () => {
-    setCapturedImage(null);
-    setStep('capture_after');
-  };
-
   const handleTryAgain = () => {
     setMockResult(null);
     setCapturedImage(null);
     setStep('capture');
   };
 
+  if (step === 'scan_qr') {
+    return (
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
+        <OverlayScaffold title="Scan Municipal QR" subtitle="Weekend Collection Step" onBack={handleClose}>
+          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>
+              Verify Collection Point
+            </Text>
+            <Text style={{ fontSize: 14, color: '#6B7A75', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+              Please scan the QR code at <Text style={{ fontWeight: 'bold', color: '#047857' }}>{challenge.collectionPointName || 'Municipal Waste Collection Center'}</Text> to verify your drop-off.
+            </Text>
+
+            <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#000', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
+              {permission?.granted ? (
+                <CameraView
+                  style={{ width: '100%', height: '100%' }}
+                  facing="back"
+                  barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                />
+              ) : (
+                <Text style={{ color: '#FFF' }}>Camera permission required to scan QR.</Text>
+              )}
+
+              {processing && (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }]}>
+                  <ActivityIndicator size="large" color="#10B981" />
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', marginTop: 12 }}>Verifying QR Code...</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={{ backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, width: '100%', borderWidth: 1, borderColor: '#BBF7D0' }}>
+              <Text style={{ fontSize: 13, color: '#166534', fontWeight: '700', marginBottom: 4 }}>
+                📍 Collection Note:
+              </Text>
+              <Text style={{ fontSize: 13, color: '#15803D', lineHeight: 18 }}>
+                Once verified, the camera will automatically unlock for your "AFTER" proof photo.
+              </Text>
+            </View>
+          </ScrollView>
+        </OverlayScaffold>
+      </Animated.View>
+    );
+  }
+
   if (step === 'result' && mockResult) {
+    const count = mockResult.detectedCount ?? 1;
+    const expAward = mockResult.calculatedExpReward ?? (challenge.expReward * count);
+    const coinsAward = mockResult.calculatedEcoCoins ?? (challenge.ecoCoinReward * count);
+
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
         <OverlayScaffold title="Result Page" subtitle="Detection Result" onBack={handleClose}>
@@ -228,8 +345,17 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>Detection Result</Text>
 
               <View style={{ width: '100%', backgroundColor: '#F8FAF9', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#E8F0EA' }}>
-                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Object:</Text>
+                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Object Detected:</Text>
                 <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.object}</Text>
+
+                {mockResult.passed && (
+                  <>
+                    <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Quantity Detected by YOLO:</Text>
+                    <Text style={{ fontSize: 20, fontWeight: '900', color: '#10B981', marginBottom: 16 }}>
+                      {count} {count === 1 ? 'item' : 'items'}
+                    </Text>
+                  </>
+                )}
 
                 <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Confidence:</Text>
                 <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.confidence}%</Text>
@@ -247,41 +373,30 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 )}
               </View>
 
-              {mockResult.passed && step === 'result' && beforeProofUrl && !capturedImage ? (
-                <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Step 1 Complete!</Text>
-                  <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
-                    We have verified the trash. Now, please take an "AFTER" picture showing you throwing it in the proper bin.
+              {mockResult.passed && (
+                <View style={{ alignItems: 'center', marginBottom: 32, width: '100%' }}>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Step 1: Before Photo Ready</Text>
+                  <Text style={{ fontSize: 15, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 22 }}>
+                    We detected <Text style={{ fontWeight: 'bold', color: '#10B981' }}>{count} {mockResult.object}</Text>. Submitting this will reserve {count} units for your mission.
                   </Text>
-                </View>
-              ) : mockResult.passed && step === 'result' && capturedImage ? (
-                <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                  <View style={{ backgroundColor: '#FFFBEB', padding: 12, borderRadius: 12, marginBottom: 16, width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#FDE68A' }}>
-                    <Ionicons name="warning" size={24} color="#D97706" />
-                    <Text style={{ flex: 1, color: '#92400E', fontSize: 14, fontWeight: '600', lineHeight: 20 }}>
-                      Your submission will be approved once you deliver the recyclable item to the Municipal Waste Collection Center.
+                  <View style={{ backgroundColor: '#F0FDF4', padding: 14, borderRadius: 14, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#BBF7D0', marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, color: '#15803D', fontWeight: '700', marginBottom: 4 }}>Reward upon weekend completion:</Text>
+                    <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>🌱 +{expAward} Eco Points</Text>
+                    {coinsAward > 0 && (
+                      <Text style={{ fontSize: 16, color: '#F59E0B', fontWeight: 'bold', marginTop: 2 }}>🪙 +{coinsAward} Eco Coins</Text>
+                    )}
+                  </View>
+
+                  <View style={{ backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, width: '100%', borderWidth: 1, borderColor: '#FDE68A' }}>
+                    <Text style={{ fontSize: 12, color: '#92400E', lineHeight: 18, textAlign: 'center' }}>
+                      📋 After preliminary admin review, bring your items to the collection point on the weekend to scan the QR code and submit the final After photo!
                     </Text>
                   </View>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Submission Complete!</Text>
-                  <Text style={{ fontSize: 16, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 24 }}>
-                    Your submission has been sent to the admin for review. Once approved, you will receive:
-                  </Text>
-                  <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold', marginBottom: 4 }}>🌱 +{challenge.expReward} Eco Points</Text>
-                  {challenge.ecoCoinReward > 0 && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
-                      <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>+{challenge.ecoCoinReward} Eco Coins</Text>
-                    </View>
-                  )}
                 </View>
-              ) : null}
+              )}
 
               {mockResult.passed ? (
-                capturedImage ? (
-                  <PrimaryButton label="Back to Challenges" onPress={handleBackToChallenge} />
-                ) : (
-                  <PrimaryButton label="Proceed to After Picture" onPress={handleProceedToAfter} />
-                )
+                <PrimaryButton label={processing ? "Submitting..." : "Submit Before Photo"} onPress={handleSubmitBeforeProof} />
               ) : (
                 <PrimaryButton label="Try Again" onPress={handleTryAgain} />
               )}
@@ -295,7 +410,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   if (step === 'capture' || step === 'capture_after') {
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"} subtitle={step === 'capture_after' ? "Final Step" : "AI Recognition"} onBack={() => setStep(step === 'capture_after' ? 'result' : 'details')}>
+        <OverlayScaffold title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"} subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"} onBack={() => setStep(step === 'capture_after' ? 'scan_qr' : 'details')}>
           <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
             <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
               <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
@@ -314,7 +429,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.8)', justifyContent: 'center', alignItems: 'center', opacity: processFadeAnim }]}>
                     <ActivityIndicator size="large" color="#10B981" />
                     <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>
-                      {step === 'capture_after' ? 'Submitting...' : 'Analyzing Image...'}
+                      {step === 'capture_after' ? 'Uploading After Photo...' : 'Analyzing Image with YOLO...'}
                     </Text>
                   </Animated.View>
                 )}
@@ -324,7 +439,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 <View style={{ width: '100%', gap: 16 }}>
                   <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleCapture}>
                     <Ionicons name="camera" size={20} color="#FFF" />
-                    <Text style={styles.primaryButtonText}>Capture</Text>
+                    <Text style={styles.primaryButtonText}>{step === 'capture_after' ? 'Capture After Photo' : 'Capture Before Photo'}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#4ADE80', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleGallery}>
@@ -340,7 +455,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     );
   }
 
-  // Details step
+  // Details step (Default)
   return (
     <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
       <OverlayScaffold title="📷 AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
@@ -354,7 +469,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 <Text style={{ fontSize: 16, color: '#6B7A75' }}>{challenge.difficulty}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Rewards:</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Rewards / Item:</Text>
                 <Text style={{ fontSize: 16, color: '#10B981', marginBottom: 4, fontWeight: '600' }}>🌱 {challenge.expReward} Eco Points</Text>
                 {challenge.ecoCoinReward > 0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -362,6 +477,22 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.ecoCoinReward} Eco Coins</Text>
                   </View>
                 )}
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Available Quantity:</Text>
+                <Text style={{ fontSize: 16, color: '#15803D', fontWeight: '700' }}>
+                  {challenge.availableQuantity ?? 50} {challenge.quantityUnit || 'bottles'} left
+                </Text>
+              </View>
+
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Collection Point:</Text>
+                <Text style={{ fontSize: 14, color: '#6B7A75', maxWidth: 180, textAlign: 'right' }}>
+                  {challenge.collectionPointName || 'Municipal Waste Collection Center'}
+                </Text>
               </View>
             </View>
 
@@ -382,15 +513,35 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
 
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Instructions:</Text>
-            <Text style={{ fontSize: 16, color: '#6B7A75', marginBottom: 24, lineHeight: 24 }}>Take a clear photo of any target item.{'\n'}Blurred images may be rejected.</Text>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Schedule & Workflow:</Text>
+            <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 16, lineHeight: 22 }}>
+              1. 📅 <Text style={{ fontWeight: 'bold', color: '#166534' }}>Mon-Fri</Text>: Capture Before photo with YOLO detection.{'\n'}
+              2. ⏳ <Text style={{ fontWeight: 'bold', color: '#166534' }}>Admin Review</Text>: Preliminary approval for drop-off.{'\n'}
+              3. 📦 <Text style={{ fontWeight: 'bold', color: '#166534' }}>Weekend</Text>: Visit collection center, scan QR, & upload After photo to claim reward!
+            </Text>
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
             <View style={{ marginBottom: 32, marginHorizontal: -24 }}>
               <Image source={require('../../../assets/caw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
             </View>
 
-            <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
+            {isPreliminaryApproved ? (
+              isWeekend ? (
+                <PrimaryButton label="Scan Weekend Collection QR" onPress={() => setStep('scan_qr')} />
+              ) : (
+                <View style={{ backgroundColor: '#FEF3C7', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#FDE68A', alignItems: 'center' }}>
+                  <Ionicons name="calendar-outline" size={24} color="#B45309" style={{ marginBottom: 6 }} />
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#92400E', textAlign: 'center', marginBottom: 4 }}>
+                    Approved for Collection! 📦
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#78350F', textAlign: 'center', lineHeight: 18 }}>
+                    QR scanning and After photo upload will automatically unlock this coming <Text style={{ fontWeight: 'bold' }}>Saturday & Sunday</Text> at the collection point.
+                  </Text>
+                </View>
+              )
+            ) : (
+              <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
+            )}
           </Animated.View>
         </ScrollView>
       </OverlayScaffold>
@@ -404,7 +555,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   // Calculate how many of each particle type to spawn
   const hasCoins = model.claimRewardData ? model.claimRewardData.coins > 0 : true;
   const hasPoints = model.claimRewardData ? model.claimRewardData.points > 0 : true;
-  // Total particles to spawn
+  // Total particles to spawn
   const numParticles = hasCoins && hasPoints ? 24 : 16;
 
   // Determine particle type array
@@ -944,6 +1095,8 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     if (activeTab === 'browse') return lc !== 'ended' && !hasJoined;
     return lc === 'ended';
   }).slice().sort((a, b) => {
+    if (a.isFeatured && !b.isFeatured) return -1;
+    if (!a.isFeatured && b.isFeatured) return 1;
     const lcA = getEventLifecycleStatus(a.startDatetime, a.endDatetime);
     const lcB = getEventLifecycleStatus(b.startDatetime, b.endDatetime);
     const isAOpen = lcA === 'upcoming';
@@ -1010,119 +1163,238 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
               </SurfaceCard>
             )}
 
-            {displayedEvents.map((event) => (
-              <View key={event.id} style={styles.eventListCard}>
-                <ImageBackground
-                  source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
-                  style={styles.eventListImg}
-                  imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-                >
-                  <View style={styles.dateTagRight}><Text style={styles.dateTagRightText}>{formatEventDateTag(event.startDatetime)}</Text></View>
-                </ImageBackground>
-                <View style={styles.eventListBody}>
-                  <Text style={styles.welcomeLabel}>PUBLIC EVENT</Text>
-                  <Text style={styles.cardTitle}>{event.title}</Text>
-                  <Text style={styles.metaTextSmallDark}>{event.description}</Text>
-                  <View style={[styles.rowMeta, { marginTop: 12 }]}>
-                    <Ionicons name="location" size={14} color="#6B7A75" />
-                    <Text style={styles.metaTextSmallDark}> {event.location}</Text>
-                  </View>
-                  <View style={[styles.rowMeta, { marginBottom: event.ecoCoinsReward ? 4 : 16 }]}>
-                    <Ionicons name="leaf-outline" size={14} color="#10B981" />
-                    <Text style={styles.metaTextSmallDark}> {event.expReward} ECO points reward</Text>
-                  </View>
-                  {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
-                    <View style={[styles.rowMeta, { marginBottom: 16 }]}>
-                      <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
-                      <Text style={styles.metaTextSmallDark}> {event.ecoCoinsReward} ECO coins reward</Text>
-                    </View>
-                  )}
-                  {(() => {
-                    const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
-                    if (lc === 'ended' && !event.userStatus) {
-                      return null;
-                    }
+            {displayedEvents.map((event) => {
+              const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
+              const capacity = event.capacity || 0;
+              const spotsLeft = typeof event.spotsLeft === 'number' ? event.spotsLeft : capacity;
+              const joinedCount = Math.max(0, capacity - spotsLeft);
+              const progressPercent = capacity > 0 ? Math.min(100, Math.max(0, Math.round((joinedCount / capacity) * 100))) : 0;
+              const isFull = spotsLeft <= 0;
 
-                    if (event.userStatus === 'rejected') {
-                      return (
-                        <TouchableOpacity style={[styles.quickJoinBtn, { backgroundColor: '#DC2626' }]} onPress={() => {
-                          setRejectionModal({
-                            visible: true,
-                            reason: event.rejectionReason || 'No reason provided.',
-                            eventId: event.id,
-                          });
-                        }}>
-                          <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Rejected - Resubmit</Text>
-                        </TouchableOpacity>
-                      );
-                    }
-                    if (event.userStatus === 'reward_claimed') {
-                      return (
-                        <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)' }]}>
-                          <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>✓ Reward Claimed</Text>
-                        </View>
-                      );
-                    }
-                    if (event.userStatus === 'attended') {
-                      return (
-                        <TouchableOpacity
-                          style={[styles.quickJoinBtn, { backgroundColor: '#F59E0B' }]}
-                          onPress={() => void model.handleClaimEventReward(event.id)}
+              return (
+                <View
+                  key={event.id}
+                  style={[
+                    styles.eventListCard,
+                    event.isFeatured && {
+                      borderColor: '#FCD34D',
+                      borderWidth: 1.5,
+                      shadowColor: '#F59E0B',
+                      shadowOpacity: 0.15,
+                      shadowRadius: 10,
+                      elevation: 4,
+                    },
+                  ]}
+                >
+                  <ImageBackground
+                    source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
+                    style={styles.eventListImg}
+                    imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+                  >
+                    <View style={{ position: 'absolute', left: 14, top: 14, flexDirection: 'row', gap: 6, zIndex: 2 }}>
+                      {event.isFeatured && (
+                        <View
+                          style={{
+                            backgroundColor: '#F59E0B',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 10,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 2,
+                            elevation: 2,
+                          }}
                         >
-                          <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Claim Reward</Text>
-                        </TouchableOpacity>
-                      );
-                    }
-                    if (event.userStatus === 'pending_approval') {
-                      return (
-                        <View style={[styles.quickJoinBtn, { backgroundColor: '#FEF3C7' }]}>
-                          <Text style={[styles.quickJoinBtnText, { color: '#92400E' }]}>Waiting for Approval</Text>
+                          <Ionicons name="star" size={11} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 }}>FEATURED</Text>
                         </View>
-                      );
-                    }
-                    if (event.userStatus === 'joined') {
-                      if (lc === 'ongoing') {
-                        return (
-                          <TouchableOpacity 
-                            style={[styles.quickJoinBtn, { backgroundColor: '#126027' }]}
-                            onPress={() => setAttendanceEvent(event.id)}
+                      )}
+                      <View
+                        style={{
+                          backgroundColor: lc === 'ongoing' ? 'rgba(220,38,38,0.9)' : lc === 'ended' ? 'rgba(100,116,139,0.9)' : 'rgba(26,33,29,0.75)',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 10,
+                        }}
+                      >
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
+                          {lc === 'ongoing' ? 'ONGOING' : lc === 'ended' ? 'ENDED' : 'UPCOMING'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dateTagRight}>
+                      <Text style={styles.dateTagRightText}>{formatEventDateTag(event.startDatetime)}</Text>
+                    </View>
+                  </ImageBackground>
+                  <View style={styles.eventListBody}>
+                    <Text style={[styles.welcomeLabel, event.isFeatured && { color: '#D97706' }]}>
+                      {event.isFeatured ? '⭐ FEATURED EVENT' : 'PUBLIC EVENT'}
+                    </Text>
+                    <Text style={styles.cardTitle}>{event.title}</Text>
+                    <Text style={styles.metaTextSmallDark}>{event.description}</Text>
+                    <View style={[styles.rowMeta, { marginTop: 12 }]}>
+                      <Ionicons name="location" size={14} color="#6B7A75" />
+                      <Text style={styles.metaTextSmallDark}> {event.location}</Text>
+                    </View>
+                    <View style={[styles.rowMeta, { marginBottom: event.ecoCoinsReward ? 4 : 12 }]}>
+                      <Ionicons name="leaf-outline" size={14} color="#10B981" />
+                      <Text style={styles.metaTextSmallDark}> {event.expReward} ECO points reward</Text>
+                    </View>
+                    {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
+                      <View style={[styles.rowMeta, { marginBottom: 12 }]}>
+                        <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
+                        <Text style={styles.metaTextSmallDark}> {event.ecoCoinsReward} ECO coins reward</Text>
+                      </View>
+                    )}
+
+                    {capacity > 0 && (
+                      <View
+                        style={{
+                          marginTop: 10,
+                          marginBottom: 14,
+                          backgroundColor: '#F7FAF8',
+                          padding: 10,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: '#EAF0EC',
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="people-outline" size={14} color="#6B7A75" />
+                            <Text style={{ fontSize: 12, color: '#6B7A75', fontWeight: '500' }}>
+                              Capacity: <Text style={{ fontWeight: '700', color: '#1A211D' }}>{joinedCount}/{capacity}</Text>{' '}
+                              <Text style={{ fontSize: 11, color: '#6B7A75' }}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
+                            </Text>
+                          </View>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '800',
+                              color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : '#126027',
+                            }}
                           >
-                            <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Record Attendance</Text>
-                          </TouchableOpacity>
-                        );
-                      } else {
+                            {progressPercent}%
+                          </Text>
+                        </View>
+                        <View style={{ height: 6, width: '100%', backgroundColor: '#E2EAE5', borderRadius: 3, overflow: 'hidden' }}>
+                          <View
+                            style={{
+                              height: '100%',
+                              width: `${progressPercent}%`,
+                              backgroundColor: isFull ? '#DC2626' : progressPercent >= 80 ? '#F59E0B' : '#126027',
+                              borderRadius: 3,
+                            }}
+                          />
+                        </View>
+                      </View>
+                    )}
+
+                    {(() => {
+                      if (lc === 'ended' && !event.userStatus) {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: '#E0EBE4' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Joined - Starts Soon</Text>
+                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Ended</Text>
                           </View>
                         );
                       }
-                    }
 
-                    if (lc === 'ongoing') {
-                      return (
-                        <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
-                          <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Registration Closed</Text>
-                        </View>
-                      );
-                    }
-                    if (lc === 'ended') {
-                      return (
-                        <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
-                          <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Ended</Text>
-                        </View>
-                      );
-                    }
+                      if (event.userStatus === 'rejected') {
+                        return (
+                          <TouchableOpacity
+                            style={[styles.quickJoinBtn, { backgroundColor: '#DC2626' }]}
+                            onPress={() => {
+                              setRejectionModal({
+                                visible: true,
+                                reason: event.rejectionReason || 'No reason provided.',
+                                eventId: event.id,
+                              });
+                            }}
+                          >
+                            <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Rejected - Resubmit</Text>
+                          </TouchableOpacity>
+                        );
+                      }
+                      if (event.userStatus === 'reward_claimed') {
+                        return (
+                          <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>✓ Reward Claimed</Text>
+                          </View>
+                        );
+                      }
+                      if (event.userStatus === 'attended') {
+                        return (
+                          <TouchableOpacity
+                            style={[styles.quickJoinBtn, { backgroundColor: '#F59E0B' }]}
+                            onPress={() => void model.handleClaimEventReward(event.id)}
+                          >
+                            <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Claim Reward</Text>
+                          </TouchableOpacity>
+                        );
+                      }
+                      if (event.userStatus === 'pending_approval') {
+                        return (
+                          <View style={[styles.quickJoinBtn, { backgroundColor: '#FEF3C7' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#92400E' }]}>Waiting for Approval</Text>
+                          </View>
+                        );
+                      }
+                      if (event.userStatus === 'joined') {
+                        if (lc === 'ongoing') {
+                          return (
+                            <TouchableOpacity
+                              style={[styles.quickJoinBtn, { backgroundColor: '#126027' }]}
+                              onPress={() => setAttendanceEvent(event.id)}
+                            >
+                              <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Record Attendance</Text>
+                            </TouchableOpacity>
+                          );
+                        } else {
+                          return (
+                            <View style={[styles.quickJoinBtn, { backgroundColor: '#E0EBE4' }]}>
+                              <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Joined - Starts Soon</Text>
+                            </View>
+                          );
+                        }
+                      }
 
-                    return (
-                      <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.handleJoinEvent(event.id)}>
-                        <Text style={styles.quickJoinBtnText}>Join Event</Text>
-                      </TouchableOpacity>
-                    );
-                  })()}
+                      if (lc === 'ongoing') {
+                        return (
+                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Registration Closed</Text>
+                          </View>
+                        );
+                      }
+                      if (lc === 'ended') {
+                        return (
+                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Ended</Text>
+                          </View>
+                        );
+                      }
+
+                      if (isFull) {
+                        return (
+                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Full</Text>
+                          </View>
+                        );
+                      }
+
+                      return (
+                        <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.handleJoinEvent(event.id)}>
+                          <Text style={styles.quickJoinBtnText}>Join Event</Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </>
         )}
 
@@ -1136,7 +1408,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         />
       )}
       <RejectionModal
-        visible={rejectionModal.visible}
+visible={rejectionModal.visible}
         title="Attendance Rejected"
         reason={rejectionModal.reason}
         onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
@@ -1170,14 +1442,13 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const videoSource = model.selectedLesson?.videoUrl
-    ? `${ecobudApiOrigin}${model.selectedLesson.videoUrl}`
+    ? (resolveMediaUrl(model.selectedLesson.videoUrl, ecobudApiOrigin) || `${ecobudApiOrigin}${model.selectedLesson.videoUrl}`)
     : null;
-  const headerImg = model.selectedLesson?.imageUrl
-    ? `${ecobudApiOrigin}${model.selectedLesson.imageUrl}`
-    : "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop";
+  const headerImg = resolveMediaUrl(model.selectedLesson?.imageUrl, ecobudApiOrigin)
+    || "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop";
 
   const player = useVideoPlayer(videoSource, player => {
-    player.loop = true;
+    player.loop = false;
   });
 
   const maxAllowedProgress = model.selectedLesson?.hasQuiz ? 90 : 100;
@@ -1218,17 +1489,25 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     };
   }, [model.selectedLesson?.progress, model.selectedLesson?.videoUrl, model.selectedLesson?.hasQuiz, currentPageIndex, numPages, model.selectedLesson?.status, maxAllowedProgress]);
 
+  const maxWatchedTimeRef = React.useRef(0);
+  const lastKnownPlayerTimeRef = React.useRef(0);
+  const lastSaveTime = React.useRef(Date.now());
+  const initialSeekDoneForLessonRef = React.useRef<string | null>(null);
+  const progressDataRef = React.useRef({ time: 0, duration: 0 });
+  const hasSavedOnExit = React.useRef(false);
+
   const lessonRef = React.useRef(model.selectedLesson);
   React.useEffect(() => {
     lessonRef.current = model.selectedLesson;
-    setCurrentPageIndex(0);
+    if (model.selectedLesson?.id !== initialSeekDoneForLessonRef.current) {
+      setCurrentPageIndex(0);
+      maxWatchedTimeRef.current = 0;
+      lastKnownPlayerTimeRef.current = 0;
+    }
   }, [model.selectedLesson]);
 
   const handleUpdateRef = React.useRef(model.handleUpdateLessonProgress);
   React.useEffect(() => { handleUpdateRef.current = model.handleUpdateLessonProgress; }, [model.handleUpdateLessonProgress]);
-
-  const progressDataRef = React.useRef({ time: 0, duration: 0 });
-  const hasSavedOnExit = React.useRef(false);
 
   const doSave = React.useCallback(() => {
     const lesson = lessonRef.current;
@@ -1237,24 +1516,28 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       return;
     }
 
-    let time = progressDataRef.current.time;
     let duration = progressDataRef.current.duration;
 
     try {
-      if (player.currentTime > 0) time = player.currentTime;
       if (player.duration > 0) duration = player.duration;
     } catch {
     }
 
-    if (!duration || isNaN(duration) || duration <= 0 || !time || isNaN(time) || time <= 0) {
+    if (!duration || isNaN(duration) || duration <= 0) {
+      return;
+    }
+
+    // Use maxWatchedTimeRef so user cannot cheat by simply seeking to the end
+    const effectiveWatchedTime = Math.max(maxWatchedTimeRef.current, 0);
+    if (effectiveWatchedTime <= 0) {
       return;
     }
 
     const maxVideoProgress = lesson.hasQuiz ? 90 : 100;
-    const currentProgress = Math.min(maxVideoProgress, (time / duration) * maxVideoProgress);
+    const currentProgress = Math.min(maxVideoProgress, (effectiveWatchedTime / duration) * maxVideoProgress);
 
     try {
-      handleUpdateRef.current(lesson.id, currentProgress, time);
+      handleUpdateRef.current(lesson.id, currentProgress, effectiveWatchedTime);
     } catch (err) {
       // Ignore
     }
@@ -1275,40 +1558,109 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   });
 
-  const hasSeeked = React.useRef(false);
-  const lastSaveTime = React.useRef(Date.now());
-
   useEventListener(player, 'statusChange', ({ status }: { status: string }) => {
-    if (status === 'readyToPlay' && !hasSeeked.current && player.duration > 0 && model.selectedLesson) {
-      const targetTime = model.selectedLesson.videoTimestamp && model.selectedLesson.videoTimestamp > 0
-        ? model.selectedLesson.videoTimestamp
-        : ((model.selectedLesson.progress ?? 0) / 100) * player.duration;
+    if (status === 'readyToPlay' && player.duration > 0 && model.selectedLesson) {
+      if (initialSeekDoneForLessonRef.current !== model.selectedLesson.id) {
+        const targetTime = model.selectedLesson.videoTimestamp && model.selectedLesson.videoTimestamp > 0
+          ? model.selectedLesson.videoTimestamp
+          : ((model.selectedLesson.progress ?? 0) / 100) * player.duration;
 
-      if (targetTime > 0) {
-        player.currentTime = targetTime;
+        if (targetTime > 0) {
+          player.currentTime = targetTime;
+          maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, targetTime);
+          lastKnownPlayerTimeRef.current = targetTime;
+        }
+        initialSeekDoneForLessonRef.current = model.selectedLesson.id;
       }
-      hasSeeked.current = true;
     }
   });
 
-  useEventListener(player, 'timeUpdate', () => {
-    progressDataRef.current = { time: player.currentTime, duration: player.duration };
+  // High-frequency polling interval (150ms) to ensure video cannot be fast-forwarded / skipped ahead
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      try {
+        if (!player) return;
+        const curTime = player.currentTime;
+        const curDuration = player.duration;
 
-    if (!hasSeeked.current && player.status === 'readyToPlay' && player.duration > 0 && model.selectedLesson) {
-      const targetTime = model.selectedLesson.videoTimestamp && model.selectedLesson.videoTimestamp > 0
-        ? model.selectedLesson.videoTimestamp
-        : ((model.selectedLesson.progress ?? 0) / 100) * player.duration;
+        if (curDuration && curDuration > 0) {
+          // If the user tries to fast-forward beyond what they have already watched (+1.5s tolerance for normal play)
+          if (curTime > maxWatchedTimeRef.current + 1.5) {
+            // Immediately bounce back to where they actually reached
+            player.currentTime = maxWatchedTimeRef.current;
+            return;
+          }
 
-      if (targetTime > 0) {
-        player.currentTime = targetTime;
+          // Advance maxWatchedTime only on natural continuous playback
+          if (curTime > maxWatchedTimeRef.current) {
+            maxWatchedTimeRef.current = curTime;
+          }
+
+          progressDataRef.current = { time: maxWatchedTimeRef.current, duration: curDuration };
+
+          if (model.selectedLesson?.status !== 'completed') {
+            const effectiveWatchedTime = Math.max(maxWatchedTimeRef.current, 0);
+            const liveCalculatedPercent = Math.min(
+              maxAllowedProgress,
+              Math.max(0, Math.round((effectiveWatchedTime / curDuration) * maxAllowedProgress))
+            );
+
+            setDisplayProgress((prev) => {
+              if (liveCalculatedPercent > prev) {
+                animatedProgress.setValue(liveCalculatedPercent);
+                return liveCalculatedPercent;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (err) {
+        // Ignore background polling errors
       }
-      hasSeeked.current = true;
-    }
+    }, 150);
 
-    if (Date.now() - lastSaveTime.current > 5000) {
-      doSave();
-      lastSaveTime.current = Date.now();
-    }
+    return () => clearInterval(timer);
+  }, [player, maxAllowedProgress, model.selectedLesson?.status, animatedProgress]);
+
+  useEventListener(player, 'timeUpdate', () => {
+    try {
+      const curTime = player.currentTime;
+      const curDuration = player.duration;
+      if (!curDuration || curDuration <= 0) return;
+
+      // Prevent fast-forwarding ahead
+      if (curTime > maxWatchedTimeRef.current + 1.5) {
+        player.currentTime = maxWatchedTimeRef.current;
+        return;
+      }
+
+      if (curTime > maxWatchedTimeRef.current) {
+        maxWatchedTimeRef.current = curTime;
+      }
+
+      progressDataRef.current = { time: maxWatchedTimeRef.current, duration: curDuration };
+
+      if (model.selectedLesson?.status !== 'completed') {
+        const effectiveWatchedTime = Math.max(maxWatchedTimeRef.current, 0);
+        const liveCalculatedPercent = Math.min(
+          maxAllowedProgress,
+          Math.max(0, Math.round((effectiveWatchedTime / curDuration) * maxAllowedProgress))
+        );
+
+        setDisplayProgress((prev) => {
+          if (liveCalculatedPercent > prev) {
+            animatedProgress.setValue(liveCalculatedPercent);
+            return liveCalculatedPercent;
+          }
+          return prev;
+        });
+      }
+
+      if (Date.now() - lastSaveTime.current > 5000) {
+        doSave();
+        lastSaveTime.current = Date.now();
+      }
+    } catch (e) {}
   });
 
   const handleBack = () => {

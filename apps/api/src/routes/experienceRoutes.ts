@@ -39,10 +39,15 @@ experienceRoutes.get(
         prisma.challenge.findMany({
           where: { active: true },
           include: {
-            userChallenges: {
-              where: { userId },
-              orderBy: { startedAt: 'desc' },
-              take: 1,
+            instances: {
+              where: { status: 'OPEN' },
+              include: {
+                userChallenges: {
+                  where: { userId },
+                  orderBy: { startedAt: 'desc' },
+                  take: 1,
+                },
+              },
             },
           },
           orderBy: [{ difficulty: 'asc' }, { title: 'asc' }],
@@ -82,7 +87,8 @@ experienceRoutes.get(
     const weeklyPossible = Math.max(1, habits.length * 7);
     const weeklyProgress = Math.round((recentCheckIns.length / weeklyPossible) * 100);
     const primaryChallenge = activeChallenges[0];
-    const activeChallengeProgress = primaryChallenge?.userChallenges[0] ?? null;
+    const activeInstance = primaryChallenge?.instances?.[0];
+    const activeChallengeProgress = activeInstance?.userChallenges?.[0] ?? null;
 
     return res.json({
       user: {

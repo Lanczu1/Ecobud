@@ -2,160 +2,76 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-// Define the upload directory relative to the project root
-const uploadDirectory = path.join(__dirname, '..', '..', 'uploads');
+// Temporary directory for multer file parsing before cloud storage / processing
+const tmpUploadDirectory = path.join(__dirname, '..', '..', 'uploads', 'tmp');
 
-// Ensure directory exists
-if (!fs.existsSync(uploadDirectory)) {
-  fs.mkdirSync(uploadDirectory, { recursive: true });
+if (!fs.existsSync(tmpUploadDirectory)) {
+  fs.mkdirSync(tmpUploadDirectory, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDirectory);
+// Temporary disk storage for incoming uploads (cleanly deleted after upload to Supabase)
+const tempStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, tmpUploadDirectory);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
+    cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
 });
 
-// Configure multer to accept only expected types if needed, but for now we accept all and rely on field names
+// General upload middleware (e.g. for lessons with videos up to 100MB)
 export const uploadMiddleware = multer({
-  storage: storage,
+  storage: tempStorage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit for videos
-  }
-});
-
-const challengesUploadDirectory = path.join(uploadDirectory, 'Challenges');
-if (!fs.existsSync(challengesUploadDirectory)) {
-  fs.mkdirSync(challengesUploadDirectory, { recursive: true });
-}
-
-const challengeStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, challengesUploadDirectory);
+    fileSize: 100 * 1024 * 1024, // 100MB
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
+// Challenge proof images (10MB)
 export const challengeUploadMiddleware = multer({
-  storage: challengeStorage,
+  storage: tempStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for images
-  }
-});
-
-const analyzingUploadDirectory = path.join(challengesUploadDirectory, 'AnalyzingImg');
-if (!fs.existsSync(analyzingUploadDirectory)) {
-  fs.mkdirSync(analyzingUploadDirectory, { recursive: true });
-}
-
-const analyzingStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, analyzingUploadDirectory);
+    fileSize: 10 * 1024 * 1024, // 10MB
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'analyze-' + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
+// YOLO analysis images (10MB)
 export const analyzeUploadMiddleware = multer({
-  storage: analyzingStorage,
+  storage: tempStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  }
-});
-
-const avatarsUploadDirectory = path.join(uploadDirectory, 'Avatars');
-if (!fs.existsSync(avatarsUploadDirectory)) {
-  fs.mkdirSync(avatarsUploadDirectory, { recursive: true });
-}
-
-const avatarStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, avatarsUploadDirectory);
+    fileSize: 10 * 1024 * 1024, // 10MB
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'avatar-' + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
+// Avatar images (5MB)
 export const avatarUploadMiddleware = multer({
-  storage: avatarStorage,
+  storage: tempStorage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit for avatars
-  }
-});
-
-const eventsUploadDirectory = path.join(uploadDirectory, 'Events');
-if (!fs.existsSync(eventsUploadDirectory)) {
-  fs.mkdirSync(eventsUploadDirectory, { recursive: true });
-}
-
-const eventStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, eventsUploadDirectory);
+    fileSize: 5 * 1024 * 1024, // 5MB
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'event-' + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
+// Event cover / banner images (10MB)
 export const eventUploadMiddleware = multer({
-  storage: eventStorage,
+  storage: tempStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for event images
-  }
-});
-
-const eventSubmissionsUploadDirectory = path.join(uploadDirectory, 'EventSubmissions');
-if (!fs.existsSync(eventSubmissionsUploadDirectory)) {
-  fs.mkdirSync(eventSubmissionsUploadDirectory, { recursive: true });
-}
-
-const eventSubmissionsStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, eventSubmissionsUploadDirectory);
+    fileSize: 10 * 1024 * 1024, // 10MB
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
+// Event submission proof images (10MB)
 export const eventSubmissionUploadMiddleware = multer({
-  storage: eventSubmissionsStorage,
+  storage: tempStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for images
-  }
-});
-
-const redeemUploadDirectory = path.join(uploadDirectory, 'Redeem');
-if (!fs.existsSync(redeemUploadDirectory)) {
-  fs.mkdirSync(redeemUploadDirectory, { recursive: true });
-}
-
-const redeemStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, redeemUploadDirectory);
+    fileSize: 10 * 1024 * 1024, // 10MB
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'redeem-' + uniqueSuffix + path.extname(file.originalname));
-  }
 });
 
+// Redeem reward images (5MB)
 export const redeemUploadMiddleware = multer({
-  storage: redeemStorage,
+  storage: tempStorage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit for redeem images
-  }
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
 });
