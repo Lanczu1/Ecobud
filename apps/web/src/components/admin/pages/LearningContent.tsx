@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
 import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 
 interface Lesson {
   id: string;
@@ -107,30 +109,9 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
-  const modalWrapperRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const container = document.getElementById('admin-scroll-container');
-    if (!container) return;
-    let rafId: number;
-    const updatePosition = () => {
-      if (modalWrapperRef.current) {
-        modalWrapperRef.current.style.transform = `translateY(${container.scrollTop + 40}px)`;
-      }
-    };
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(updatePosition);
-    };
-    updatePosition();
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
-
-  // Removed scroll lock to prevent layout shift and keep scrollbar visible
+  // Lock background scroll while modal is open
+  useModalScrollLock(true);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -188,24 +169,24 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const handleAddQuestion = () => {
     setForm(f => ({
       ...f,
-      quizQuestions: [...f.quizQuestions, { question: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A' }]
+      quizQuestions: [
+        ...f.quizQuestions,
+        { question: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A' }
+      ]
     }));
   };
 
   const handleUpdateQuestion = (index: number, field: string, value: string) => {
-    setForm(f => {
-      const q = [...f.quizQuestions];
-      q[index] = { ...q[index], [field]: value };
-      return { ...f, quizQuestions: q };
-    });
+    const updated = [...form.quizQuestions];
+    updated[index] = { ...updated[index], [field]: value };
+    setForm(f => ({ ...f, quizQuestions: updated }));
   };
 
   const handleRemoveQuestion = (index: number) => {
-    setForm(f => {
-      const q = [...f.quizQuestions];
-      q.splice(index, 1);
-      return { ...f, quizQuestions: q };
-    });
+    setForm(f => ({
+      ...f,
+      quizQuestions: f.quizQuestions.filter((_, i) => i !== index)
+    }));
   };
 
   const handleAddPage = () => {
@@ -283,10 +264,10 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
     }
   };
 
-  return (
-    <div ref={modalWrapperRef} className="absolute inset-x-0 z-50 flex justify-center p-4 pointer-events-none" style={{ top: 0, willChange: 'transform' }}>
-      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] md:max-w-[800px] 2xl:max-w-[960px] flex flex-col overflow-hidden pointer-events-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 160px)' }}>
-        <div className="flex flex-shrink-0 items-center justify-between p-6 border-b border-gray-100">
+  return createPortal(
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={handleClose}>
+      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] md:max-w-200 2xl:max-w-240 flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 100px)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Lesson' : 'Add Lesson Content'}</h2>
           <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
@@ -319,7 +300,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
-                        <textarea value={p.content} onChange={(e) => handleUpdatePage(i, 'content', e.target.value)} rows={5} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all resize-none font-mono text-xs" placeholder="Full lesson content..." />
+                        <textarea value={p.content} onChange={(e) => handleUpdatePage(i, 'content', e.target.value)} rows={5} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all resize-none font-mono text-xs" placeholder="Full lesson content..." />
                       </div>
                     </div>
                   ))}
@@ -350,7 +331,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                 <div className="flex items-center gap-2">
                   <input key={thumbnailKey} type="file" accept="image/*" onChange={e => { setThumbnailFile(e.target.files?.[0] || null); setRemoveThumbnail(false); }} className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
                   {(thumbnailFile || (initial?.imageUrl && !removeThumbnail)) && (
-                    <button type="button" onClick={clearThumbnail} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors flex-shrink-0" title="Remove file">
+                    <button type="button" onClick={clearThumbnail} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors shrink-0" title="Remove file">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
@@ -376,7 +357,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                       <div className="flex items-center gap-2">
                         <input key={videoKey} type="file" accept="video/*" onChange={(e) => { handleVideoSelect(e); setRemoveVideo(false); }} className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
                         {(videoFile || (initial?.videoUrl && !removeVideo)) && (
-                          <button type="button" onClick={clearVideo} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors flex-shrink-0" title="Remove file">
+                          <button type="button" onClick={clearVideo} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors shrink-0" title="Remove file">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
@@ -414,10 +395,10 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                   </div>
                 )}
               </div>
-              <div className="h-2 w-full flex-shrink-0" />
+              <div className="h-2 w-full shrink-0" />
             </div>
 
-            <div className="w-full md:w-[400px] flex flex-col gap-6 overflow-y-auto challenge-modal-scroll p-6 border-l border-gray-100">
+            <div className="w-full md:w-100 flex flex-col gap-6 overflow-y-auto challenge-modal-scroll p-6 border-l border-gray-100">
               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableQuiz ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => {
@@ -436,7 +417,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-semibold text-gray-800">Quiz Configuration</h3>
-                      <button type="button" onClick={handleAddQuestion} className="text-xs text-green-600 font-semibold hover:text-green-700">+ Add Question</button>
+                      <button type="button" onClick={handleAddQuestion} className="text-xs text-green-600 font-semibold hover:text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">+ Add Question</button>
                     </div>
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label>
@@ -476,8 +457,8 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                   <OptimizedInput type="number" min="0" value={form.pointsReward} onChange={(val: string) => setForm(f => ({ ...f, pointsReward: parseInt(val) || 0 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
                 </div>
                 
-                <div className="pt-2 border-t border-gray-100">
-                  <label className="flex items-center gap-3 cursor-pointer mb-2">
+                <div className="pt-2 border-t border-gray-100 flex flex-col gap-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.featured ? 'bg-indigo-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, featured: !f.featured }))}>
                       <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.featured ? 'translate-x-4' : ''}`} />
                     </div>
@@ -498,7 +479,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
               </div>
             </div>
           </div>
-          <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
+          <div className="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
             <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
             <button type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -507,7 +488,8 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -592,13 +574,6 @@ export function LearningContent() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
-      {/* Backdrop overlay - covers full scroll content area */}
-      {modal && (
-        <div
-          className="absolute inset-0 z-40 backdrop-blur-sm pointer-events-auto"
-          onClick={() => { setModal(null); setEditing(null); }}
-        />
-      )}
       {/* Modals */}
       {modal === 'add' && <LessonModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <LessonModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
@@ -617,7 +592,7 @@ export function LearningContent() {
 
       {error && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
           <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
@@ -632,7 +607,7 @@ export function LearningContent() {
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
-            <div key={s.label} className={`flex-1 min-w-[200px] bg-white rounded-2xl border border-gray-100 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
+            <div key={s.label} className={`flex-1 min-w-50 bg-white rounded-2xl border border-gray-100 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
               <p className="text-sm text-gray-500 font-medium">{s.label}</p>
               <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>
               <p className="text-xs text-gray-400 mt-0.5">{s.extra}</p>
@@ -667,7 +642,7 @@ export function LearningContent() {
           ))
           : filtered.map(item => (
             <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group">
-              <div className="bg-gradient-to-br from-green-50 to-emerald-100 h-32 flex items-center justify-center text-4xl relative overflow-hidden">
+              <div className="bg-linear-to-br from-green-50 to-emerald-100 h-32 flex items-center justify-center text-4xl relative overflow-hidden">
                 {item.imageUrl && item.imageUrl !== 'null' && item.imageUrl !== 'undefined' ? (
                   <img src={item.imageUrl.startsWith('http') ? item.imageUrl : `${API_HOST}${item.imageUrl}`} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
                 ) : (

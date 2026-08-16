@@ -152,11 +152,10 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
           </View>
           
           <View style={{ gap: 12, marginTop: 'auto', marginBottom: 40 }}>
-            <PrimaryButton label="Next: Scan QR" onPress={() => {
+            <PrimaryButton label="Next: Scan QR" onPress={async () => {
               if (!permission?.granted) {
-                requestPermission().then(res => {
-                  if (res.granted) setMode('qr');
-                });
+                const res = await requestPermission();
+                if (res?.granted) setMode('qr');
               } else {
                 setMode('qr');
               }

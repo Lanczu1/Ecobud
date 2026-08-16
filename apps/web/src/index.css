@@ -2,6 +2,8 @@
 
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ─── EcoBud Design Tokens ─────────────────────────────────── */
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;

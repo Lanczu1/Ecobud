@@ -1473,7 +1473,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           if (rejectionModal.challengeObj!.type === 'AI Image Recognition Challenge') {
             model.openChallengeMission(rejectionModal.challengeObj!);
           } else {
-            void model.handleChallengeProgress(rejectionModal.challengeObj!, 100);
+            void model.handleChallengeProgress(rejectionModal.challengeObj!, 0);
           }
         } : undefined}
       />
