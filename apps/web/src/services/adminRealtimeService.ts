@@ -4,16 +4,15 @@ export interface PresenceData {
 
 export interface AdminRealtimeHandlers {
   onUsersRefresh: () => void;
-  onPresenceChange: (presence: PresenceData) => void;
+  onPresenceChange?: (presence: PresenceData) => void;
 }
 
 class AdminRealtimeService {
   async connect(handlers: AdminRealtimeHandlers): Promise<() => void> {
-    // Mock implementation for now
+    // Periodic refresh of user data every 30 seconds
     const interval = setInterval(() => {
-      // Simulate periodic updates or keep-alive
-      handlers.onPresenceChange({ onlineUserIds: [] });
-    }, 10000);
+      handlers.onUsersRefresh();
+    }, 30000);
 
     return () => {
       clearInterval(interval);
@@ -22,3 +21,4 @@ class AdminRealtimeService {
 }
 
 export const adminRealtimeService = new AdminRealtimeService();
+

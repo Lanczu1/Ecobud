@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useState, useCallback } from 'react';
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   View,
@@ -95,7 +96,12 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         authLoading={model.authLoading}
         authError={model.authError}
         onLogin={(email, pass) => void model.handleLoginArgs(email, pass)}
-        onGoogleSignIn={() => console.log('Google Sign In')}
+        onGoogleSignIn={() => {
+          Alert.alert(
+            'Google Sign-In',
+            'Google Sign-In is currently in development for mobile. Please sign in or register with your email.'
+          );
+        }}
         onSignUp={(username, email, pass, otpCode) => void model.handleSignUpArgs(username, email, pass, otpCode)}
         onSendOTP={(email) => model.handleSendOTP(email)}
         onCheckUsernameAvailability={(displayName) => model.handleCheckUsernameAvailability(displayName)}

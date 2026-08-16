@@ -95,7 +95,11 @@ const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
         <View style={{ flex: 1, minWidth: scale(120) }}>
           <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '700' }}>{currentUser.isCurrentUser ? 'You' : currentUser.displayName}</Text>
           <Text style={{ color: '#6B7A75', fontSize: responsiveFontSize(11) }}>
-            {leaderboard.items[0]?.rank === currentUser.rank ? "You are #1!" : `Keep going to reach #1!`}
+            {currentUser.isCurrentUser
+              ? currentUser.rank === 1
+                ? 'You are #1 on the leaderboard!'
+                : 'Keep going to reach #1!'
+              : 'Top weekly eco contributor'}
           </Text>
         </View>
         <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: 'bold' }}>{currentUser.points} pts</Text>
@@ -186,15 +190,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
               </TouchableOpacity>
             </View>
             <ActiveChallengeCard
-              dailyChallenge={{
-                ...primaryChallenge,
-                progress: {
-                  progressPercentage: 0,
-                  status: 'not_started',
-                  submission: undefined,
-                  submissions: [],
-                }
-              }}
+              dailyChallenge={primaryChallenge}
               isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
               isCycleActive={model.isCycleActive}
               onComplete={() => {

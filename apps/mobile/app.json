@@ -1,22 +1,25 @@
 {
-  "name": "ECO-BUD",
-  "slug": "eco-bud",
-  "icon": "./assets/logo.png",
-  "android": {
-    "package": "com.anonymous.ecobudmobile"
-  },
-  "web": {
+  "expo": {
     "name": "ECO-BUD",
-    "shortName": "ECO-BUD",
-    "favicon": "./assets/logo.png"
-  },
-  "plugins": [
-    "expo-font",
-    "expo-sqlite",
-    "expo-status-bar",
-    "expo-image",
-    "expo-video",
-    "expo-audio",
-    "expo-asset"
-  ]
+    "slug": "eco-bud",
+    "version": "1.0.0",
+    "icon": "./assets/logo.png",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.anonymous.ecobudmobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#126027"
+      }
+    },
+    "web": {
+      "name": "ECO-BUD",
+      "shortName": "ECO-BUD",
+      "favicon": "./assets/logo.png"
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
 }
+

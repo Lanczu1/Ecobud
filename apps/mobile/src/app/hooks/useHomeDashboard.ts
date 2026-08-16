@@ -27,6 +27,7 @@ import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMut
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 import { type EcoBadge } from '../../shared/api/ecobudApi';
+import { shiftMonth } from '../utils/appUtils';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -39,14 +40,6 @@ const RECENT_VIEWED_KEY = 'ecobud.mobile.recentViewedMission';
 
 function formatChatTime(isoDate: string) {
   return new Date(isoDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function shiftMonth(month: string, offset: number) {
-  const [year, monthIndex] = month.split('-').map(Number);
-  const shifted = new Date(year, monthIndex - 1 + offset, 1);
-  const nextYear = shifted.getFullYear();
-  const nextMonth = String(shifted.getMonth() + 1).padStart(2, '0');
-  return `${nextYear}-${nextMonth}`;
 }
 
 // EcoBud uses Philippines (Asia/Manila, UTC+8) calendar days. Intl keeps the

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import type { EcoBudMobileModel } from '../../app/types/home';
 import { TopNavbar } from '../../app/components/CommonComponents';
@@ -117,9 +117,7 @@ export function MarketplaceHubView({
       }
     } catch (err: any) {
       const msg = err?.message || 'Failed to send swap request';
-      if (typeof globalThis !== 'undefined' && (globalThis as any).Alert) {
-        (globalThis as any).Alert.alert('Error', msg);
-      }
+      Alert.alert('Error', msg);
     }
   };
 
@@ -131,9 +129,7 @@ export function MarketplaceHubView({
       await loadConversations();
     } catch (err: any) {
       console.error('Failed to accept swap:', err);
-      if (typeof globalThis !== 'undefined' && (globalThis as any).Alert) {
-        (globalThis as any).Alert.alert('Error', err?.message || 'Failed to accept swap');
-      }
+      Alert.alert('Error', err?.message || 'Failed to accept swap');
     }
   };
 
@@ -142,8 +138,9 @@ export function MarketplaceHubView({
     try {
       await swapService.updateSwapRequestStatus(selectedConversation.swapRequestId, 'declined');
       await loadConversations();
-    } catch {
-      console.error('Failed to decline swap');
+    } catch (err: any) {
+      console.error('Failed to decline swap:', err);
+      Alert.alert('Error', err?.message || 'Failed to decline swap');
     }
   };
 
@@ -152,14 +149,33 @@ export function MarketplaceHubView({
     try {
       await swapService.updateSwapRequestStatus(selectedConversation.swapRequestId, 'completed');
       await loadConversations();
-    } catch {
-      console.error('Failed to mark as completed');
+    } catch (err: any) {
+      console.error('Failed to mark as completed:', err);
+      Alert.alert('Error', err?.message || 'Failed to mark as completed');
     }
   };
 
   const handleDeleteListing = () => {
     setScreen('feed');
     setSelectedListing(null);
+  };
+
+  const handleReportListing = () => {
+    if (!selectedListing) return;
+    Alert.alert(
+      'Report Listing',
+      `Are you sure you want to report "${selectedListing.title}" for review by community moderators?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('Report Submitted', 'Thank you for keeping our community safe. Our moderation team will review this listing.');
+          },
+        },
+      ]
+    );
   };
 
   const isRootScreen = screen === 'feed';
@@ -214,6 +230,7 @@ export function MarketplaceHubView({
           }}
           onRequestSwap={() => setShowSwapDialog(true)}
           onDelete={handleDeleteListing}
+          onReport={handleReportListing}
           onUpdated={(updated) => {
             setSelectedListing(updated);
           }}

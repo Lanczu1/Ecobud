@@ -1,8 +1,10 @@
 import React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, Leaf, FileText, BarChart3, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
+import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -183,28 +185,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
 
-  const modalWrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = document.getElementById('admin-scroll-container');
-    if (!container) return;
-    let rafId: number;
-    const updatePosition = () => {
-      if (modalWrapperRef.current) {
-        modalWrapperRef.current.style.transform = `translateY(${container.scrollTop + 40}px)`;
-      }
-    };
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(updatePosition);
-    };
-    updatePosition();
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
+  // Lock background scroll while modal is open
+  useModalScrollLock(true);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -237,9 +219,9 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
     finally { setSaving(false); }
   };
 
-  return (
-    <div ref={modalWrapperRef} className="absolute inset-x-0 z-50 flex justify-center p-4 pointer-events-none" style={{ top: 0, willChange: 'transform' }}>
-      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden pointer-events-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 160px)' }}>
+  return createPortal(
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={handleClose}>
+      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 100px)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Event' : 'Create Event'}</h2>
           <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
@@ -303,8 +285,9 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                       setForm(f => ({ ...f, latitude: lat, longitude: lng }));
                       try {
                         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
-                        const data = await res.json();
-                        if (data) {
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data) {
                           const { address, name } = data;
                           let loc = '';
                           if (address) {
@@ -324,7 +307,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                             
                             loc = Array.from(new Set(parts)).filter(Boolean).join(', ');
                           }
-                          setForm(f => ({ ...f, location: loc || data.display_name }));
+                            setForm(f => ({ ...f, location: loc || data.display_name }));
+                          }
                         }
                       } catch (e) {
                         console.error('Reverse geocoding failed', e);
@@ -452,11 +436,11 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
               <input type="number" min={1} value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Leaf className="w-3.5 h-3.5 text-green-500" /> Points Reward</label>
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"><Leaf className="w-3.5 h-3.5 text-green-500" /> Points Reward</label>
               <input type="number" min={0} value={form.pointsReward} onChange={e => setForm(f => ({ ...f, pointsReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><img src="/coin.png" alt="eco coin" className="w-3.5 h-3.5 object-contain" /> Coin Reward</label>
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"><img src="/coin.png" alt="eco coin" className="w-3.5 h-3.5 object-contain" /> Coin Reward</label>
               <input type="number" min={0} value={form.coinReward} onChange={e => setForm(f => ({ ...f, coinReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-200 focus:border-yellow-400" />
             </div>
           </div>
@@ -481,7 +465,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
           </div>
         </form>
         {/* Footer buttons */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3">
+        <div className="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3">
           <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
           <button form="event-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -489,7 +473,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -682,19 +667,12 @@ export function Events() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
-      {/* Backdrop overlay - blur only, covers full scroll content area */}
-      {(modal || qrModal.open || reportModal.open) && (
-        <div
-          className="absolute inset-0 z-40 backdrop-blur-sm pointer-events-auto"
-          onClick={() => { setModal(null); setEditing(null); setQrModal({ open: false, eventId: null, qrData: null, loading: false }); setReportModal({ open: false, eventId: null, eventTitle: '' }); }}
-        />
-      )}
       {modal === 'add' && <EventModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <EventModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
       
-      {qrModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md pointer-events-auto flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.15)] overflow-hidden max-h-full">
+      {qrModal.open && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setQrModal({ open: false, eventId: null, qrData: null, loading: false })}>
+          <div className="bg-white rounded-3xl w-full max-w-md flex flex-col shadow-2xl overflow-hidden max-h-full animate-modal" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <div>
                 <h3 className="text-xl font-serif font-bold text-gray-900">Event QR Code</h3>
@@ -750,17 +728,18 @@ export function Events() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Report Format Modal */}
-      {reportModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm pointer-events-auto flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.15)] overflow-hidden">
+      {reportModal.open && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setReportModal({ open: false, eventId: null, eventTitle: '' })}>
+          <div className="bg-white rounded-3xl w-full max-w-sm flex flex-col shadow-2xl overflow-hidden animate-modal" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <div>
                 <h3 className="text-xl font-serif font-bold text-gray-900">Generate Report</h3>
-                <p className="text-sm text-gray-500 mt-1 truncate max-w-[240px]">{reportModal.eventTitle}</p>
+                <p className="text-sm text-gray-500 mt-1 truncate max-w-60">{reportModal.eventTitle}</p>
               </div>
               <button onClick={() => setReportModal({ open: false, eventId: null, eventTitle: '' })} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
                 <X className="w-5 h-5" />
@@ -799,9 +778,9 @@ export function Events() {
                     className="w-full flex items-center gap-3 px-5 py-4 bg-red-50 text-red-700 font-semibold rounded-xl hover:bg-red-100 transition-colors text-left disabled:opacity-50"
                   >
                     {reportLoading === reportModal.eventId ? (
-                      <Loader2 className="w-5 h-5 flex-shrink-0 animate-spin" />
+                      <Loader2 className="w-5 h-5 shrink-0 animate-spin" />
                     ) : (
-                      <Download className="w-5 h-5 flex-shrink-0" />
+                      <Download className="w-5 h-5 shrink-0" />
                     )}
                     <div>
                       <p className="font-bold">PDF Report</p>
@@ -814,9 +793,9 @@ export function Events() {
                     className="w-full flex items-center gap-3 px-5 py-4 bg-green-50 text-green-700 font-semibold rounded-xl hover:bg-green-100 transition-colors text-left disabled:opacity-50"
                   >
                     {reportLoading === reportModal.eventId ? (
-                      <Loader2 className="w-5 h-5 flex-shrink-0 animate-spin" />
+                      <Loader2 className="w-5 h-5 shrink-0 animate-spin" />
                     ) : (
-                      <Download className="w-5 h-5 flex-shrink-0" />
+                      <Download className="w-5 h-5 shrink-0" />
                     )}
                     <div>
                       <p className="font-bold">Excel Report</p>
@@ -827,7 +806,8 @@ export function Events() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <div className="flex items-center justify-between">
@@ -843,13 +823,13 @@ export function Events() {
       </div>
 
       {/* Tab Toggle */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-1.5 flex gap-1.5 animate-reveal">
+      <div className="flex bg-gray-100 dark:bg-gray-800/60 dark:border dark:border-gray-700/60 rounded-xl p-1 gap-1 w-fit animate-reveal">
         <button
           onClick={() => setActiveTab('events')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
             activeTab === 'events'
-              ? 'bg-green-600 text-white shadow-md'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white dark:border dark:border-gray-700'
+              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           <Calendar className="w-4 h-4" />
@@ -857,10 +837,10 @@ export function Events() {
         </button>
         <button
           onClick={() => setActiveTab('reports')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
             activeTab === 'reports'
-              ? 'bg-green-600 text-white shadow-md'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white dark:border dark:border-gray-700'
+              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -974,7 +954,7 @@ export function Events() {
 
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <MapPin className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />{event.location}
+                      <MapPin className="w-3.5 h-3.5 text-gray-300 shrink-0" />{event.location}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500">
                       <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-gray-300" />{new Date(event.startDatetime).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}</span>
@@ -1056,15 +1036,15 @@ export function Events() {
           {/* Reports Stats */}
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: 'Total Events', value: events.length, color: 'text-gray-900' },
-              { label: 'With Reports', value: Object.keys(reportDataCache).length, color: 'text-green-600' },
-              { label: 'Total Participants', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalRegistered, 0), color: 'text-blue-600' },
-              { label: 'Total Rewards Given', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalCoinsAwarded + d.stats.totalExpAwarded, 0), color: 'text-purple-600' },
+              { label: 'Total Events', value: events.length, color: 'text-gray-900 dark:text-white' },
+              { label: 'With Reports', value: Object.keys(reportDataCache).length, color: 'text-green-600 dark:text-green-400' },
+              { label: 'Total Participants', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalRegistered, 0), color: 'text-blue-600 dark:text-blue-400' },
+              { label: 'Total Rewards Given', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalCoinsAwarded + d.stats.totalExpAwarded, 0), color: 'text-purple-600 dark:text-purple-400' },
             ].map((s, idx) => {
               const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
               return (
-                <div key={s.label} className={`bg-white rounded-2xl border border-gray-100 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
-                  <p className="text-sm text-gray-500 font-medium">{s.label}</p>
+                <div key={s.label} className={`bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm animate-reveal ${delayClass} hover:-translate-y-1 hover:shadow-md transition-all duration-300`}>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
                   <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>
                 </div>
               );
@@ -1072,80 +1052,80 @@ export function Events() {
           </div>
 
           {/* Reports Table */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-reveal delay-160">
-            <div className="p-6 border-b border-gray-100">
-              <h3 className="text-lg font-serif font-bold text-gray-900 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-green-600" />
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden animate-reveal delay-160">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-green-600 dark:text-green-400" />
                 Automated Event Reports
               </h3>
-              <p className="text-sm text-gray-500 mt-1">Download PDF and Excel reports for each event</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Download PDF and Excel reports for each event</p>
             </div>
 
             {loading ? (
               <div className="p-12 text-center">
                 <Loader2 className="w-8 h-8 text-green-600 animate-spin mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">Loading events...</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Loading events...</p>
               </div>
             ) : events.length === 0 ? (
               <div className="p-12 text-center">
-                <FileText className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-                <p className="text-gray-400">No events to generate reports for.</p>
+                <FileText className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" />
+                <p className="text-gray-400 dark:text-gray-500">No events to generate reports for.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Event</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Registered</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Attended</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">QR Verified</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Approved</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rejected</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Coins</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">EXP</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                    <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-800">
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Event</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Registered</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attended</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">QR Verified</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Approved</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Rejected</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Coins</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">EXP</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {events.map((event) => {
                       const reportData = reportDataCache[event.id];
                       const stats = reportData?.stats;
                       const isExpanded = expandedReport === event.id;
                       return (
                         <React.Fragment key={event.id}>
-                        <tr className="hover:bg-gray-50/50 transition-colors">
+                        <tr className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-lg">
+                              <div className="w-10 h-10 bg-green-50 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-lg">
                                 🌿
                               </div>
                               <div>
-                                <p className="font-semibold text-gray-900 text-sm">{event.title}</p>
-                                <p className="text-xs text-gray-400">{new Date(event.startDatetime).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}</p>
+                                <p className="font-semibold text-gray-900 dark:text-white text-sm">{event.title}</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">{new Date(event.startDatetime).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })}</p>
                               </div>
                             </div>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-gray-900">{stats ? stats.totalRegistered : '—'}</span>
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{stats ? stats.totalRegistered : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-green-600">{stats ? stats.attended : '—'}</span>
+                            <span className="text-sm font-semibold text-green-600 dark:text-green-400">{stats ? stats.attended : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-blue-600">{stats ? stats.qrVerified : '—'}</span>
+                            <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">{stats ? stats.qrVerified : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-emerald-600">{stats ? stats.approved : '—'}</span>
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{stats ? stats.approved : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-red-500">{stats ? stats.rejected : '—'}</span>
+                            <span className="text-sm font-semibold text-red-500 dark:text-red-400">{stats ? stats.rejected : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-yellow-600">{stats ? stats.totalCoinsAwarded : '—'}</span>
+                            <span className="text-sm font-semibold text-yellow-600 dark:text-yellow-400">{stats ? stats.totalCoinsAwarded : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
-                            <span className="text-sm font-semibold text-purple-600">{stats ? stats.totalExpAwarded : '—'}</span>
+                            <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">{stats ? stats.totalExpAwarded : '—'}</span>
                           </td>
                           <td className="text-center px-4 py-4">
                             <div className="flex items-center justify-center gap-2">
@@ -1158,7 +1138,7 @@ export function Events() {
                               </button>
                               <button
                                 onClick={() => setExpandedReport(isExpanded ? null : event.id)}
-                                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                                 title="View details"
                               >
                                 {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -1170,51 +1150,51 @@ export function Events() {
                         {/* Expanded Details Row */}
                         {isExpanded && reportData && (
                           <tr>
-                            <td colSpan={9} className="px-6 py-0 bg-gray-50/80">
+                            <td colSpan={9} className="px-6 py-0 bg-gray-50/80 dark:bg-gray-950/70 border-y border-gray-100 dark:border-gray-800">
                               <div className="py-5 space-y-6">
                                 {/* Event Info Summary */}
-                                <div className="bg-white rounded-xl border border-gray-100 p-4">
-                                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                    <Calendar className="w-4 h-4 text-green-600" />
+                                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4 shadow-sm">
+                                  <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                    <Calendar className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     Event Information
                                   </h4>
                                   <div className="grid grid-cols-4 gap-4 text-sm">
                                     <div>
-                                      <p className="text-gray-500">Location</p>
-                                      <p className="font-semibold text-gray-900">{event.location}</p>
+                                      <p className="text-gray-500 dark:text-gray-400">Location</p>
+                                      <p className="font-semibold text-gray-900 dark:text-white">{event.location}</p>
                                     </div>
                                     <div>
-                                      <p className="text-gray-500">Organizer</p>
-                                      <p className="font-semibold text-gray-900">{event.managedBy.name}</p>
+                                      <p className="text-gray-500 dark:text-gray-400">Organizer</p>
+                                      <p className="font-semibold text-gray-900 dark:text-white">{event.managedBy.name}</p>
                                     </div>
                                     <div>
-                                      <p className="text-gray-500">Capacity</p>
-                                      <p className="font-semibold text-gray-900">{event.capacity}</p>
+                                      <p className="text-gray-500 dark:text-gray-400">Capacity</p>
+                                      <p className="font-semibold text-gray-900 dark:text-white">{event.capacity}</p>
                                     </div>
                                     <div>
-                                      <p className="text-gray-500">Rewards</p>
-                                      <p className="font-semibold text-gray-900">{event.ecoCoinsReward} coins / {event.expReward} EXP</p>
+                                      <p className="text-gray-500 dark:text-gray-400">Rewards</p>
+                                      <p className="font-semibold text-gray-900 dark:text-white">{event.ecoCoinsReward} coins / {event.expReward} EXP</p>
                                     </div>
                                   </div>
                                 </div>
 
                                 {/* Approved Submission Photos */}
-                                <div className="bg-white rounded-xl border border-gray-100 p-4">
-                                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                    <ImageIcon className="w-4 h-4 text-green-600" />
+                                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4 shadow-sm">
+                                  <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                    <ImageIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     Approved Attendance Photos
                                     {reportData.photos.length > 0 && (
-                                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                                      <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 text-xs font-semibold rounded-full">
                                         {reportData.photos.length}
                                       </span>
                                     )}
                                   </h4>
                                   {reportData.photos.length === 0 ? (
-                                    <p className="text-sm text-gray-400 py-4 text-center">No approved photos yet.</p>
+                                    <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">No approved photos yet.</p>
                                   ) : (
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                                       {reportData.photos.map((photoUrl, idx) => (
-                                        <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200 bg-gray-100">
+                                        <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
                                           <img
                                             src={`${API_HOST}${photoUrl}`}
                                             alt={`Attendance ${idx + 1}`}
@@ -1224,7 +1204,7 @@ export function Events() {
                                               const parent = (e.target as HTMLImageElement).parentElement;
                                               if (parent) {
                                                 const placeholder = document.createElement('div');
-                                                placeholder.className = 'absolute inset-0 flex items-center justify-center text-gray-400 text-xs';
+                                                placeholder.className = 'absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs';
                                                 placeholder.textContent = 'Photo unavailable';
                                                 parent.appendChild(placeholder);
                                               }
@@ -1238,60 +1218,60 @@ export function Events() {
                                 </div>
 
                                 {/* Participant Submissions */}
-                                <div className="bg-white rounded-xl border border-gray-100 p-4">
-                                  <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                    <Users className="w-4 h-4 text-green-600" />
+                                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4 shadow-sm">
+                                  <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     Participant Submissions
                                   </h4>
                                   {reportData.participants.length === 0 ? (
-                                    <p className="text-sm text-gray-400 py-4 text-center">No participants yet.</p>
+                                    <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">No participants yet.</p>
                                   ) : (
                                     <div className="overflow-x-auto">
                                       <table className="w-full text-sm">
                                         <thead>
-                                          <tr className="border-b border-gray-100">
-                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Name</th>
-                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Status</th>
-                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">QR</th>
-                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Reward</th>
-                                            <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Coins</th>
-                                            <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">EXP</th>
+                                          <tr className="border-b border-gray-100 dark:border-gray-800">
+                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Name</th>
+                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Status</th>
+                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">QR</th>
+                                            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Reward</th>
+                                            <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Coins</th>
+                                            <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">EXP</th>
                                           </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-50">
+                                        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                                           {reportData.participants.map((p, idx) => (
-                                            <tr key={idx} className="hover:bg-gray-50/50">
+                                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
                                               <td className="py-2 px-3">
                                                 <div>
-                                                  <p className="font-medium text-gray-900">{p.name}</p>
-                                                  <p className="text-xs text-gray-400">{p.email}</p>
+                                                  <p className="font-medium text-gray-900 dark:text-white">{p.name}</p>
+                                                  <p className="text-xs text-gray-400 dark:text-gray-500">{p.email}</p>
                                                 </div>
                                               </td>
                                               <td className="py-2 px-3">
                                                 <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-                                                  p.attendanceStatus === 'Attended' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                                  p.attendanceStatus === 'Attended' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                                                 }`}>
                                                   {p.attendanceStatus}
                                                 </span>
                                               </td>
                                               <td className="py-2 px-3">
                                                 <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-                                                  p.qrVerification === 'Verified' ? 'bg-blue-100 text-blue-700' :
-                                                  p.qrVerification === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                  'bg-gray-100 text-gray-600'
+                                                  p.qrVerification === 'Verified' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
+                                                  p.qrVerification === 'pending' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                                                  'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                                                 }`}>
                                                   {p.qrVerification}
                                                 </span>
                                               </td>
                                               <td className="py-2 px-3">
                                                 <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-                                                  p.rewardStatus === 'Awarded' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                                                  p.rewardStatus === 'Awarded' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                                                 }`}>
                                                   {p.rewardStatus}
                                                 </span>
                                               </td>
-                                              <td className="py-2 px-3 text-right font-semibold text-yellow-600">{p.coinsAwarded}</td>
-                                              <td className="py-2 px-3 text-right font-semibold text-purple-600">{p.expAwarded}</td>
+                                              <td className="py-2 px-3 text-right font-semibold text-yellow-600 dark:text-yellow-400">{p.coinsAwarded}</td>
+                                              <td className="py-2 px-3 text-right font-semibold text-purple-600 dark:text-purple-400">{p.expAwarded}</td>
                                             </tr>
                                           ))}
                                         </tbody>

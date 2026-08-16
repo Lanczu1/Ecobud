@@ -143,11 +143,15 @@ export function CreateSwapListing({
     try {
       const uploadedUrls: string[] = [];
       for (const uri of images) {
-        try {
-          const url = await swapService.uploadImage(uri, userId);
-          uploadedUrls.push(url);
-        } catch {
+        if (uri.startsWith('http')) {
           uploadedUrls.push(uri);
+        } else {
+          try {
+            const url = await swapService.uploadImage(uri, userId);
+            uploadedUrls.push(url);
+          } catch (uploadErr: any) {
+            throw new Error(uploadErr?.message || 'Failed to upload one or more listing photos. Please check your connection and try again.');
+          }
         }
       }
 

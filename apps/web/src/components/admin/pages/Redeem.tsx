@@ -296,13 +296,17 @@ export function Redeem() {
       </div>
 
       {/* Main Tabs */}
-      <div className="flex gap-2 bg-gray-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1.5 bg-gray-100 dark:bg-gray-800/60 dark:border dark:border-gray-700/60 rounded-xl p-1 w-fit">
         {[
           { key: 'items', label: 'Manage Items', icon: <Gift className="w-4 h-4" /> },
           { key: 'requests', label: 'Redemption Requests', icon: <Clock className="w-4 h-4" /> },
         ].map(t => (
           <button key={t.key} onClick={() => setMainTab(t.key as any)}
-            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg transition-all ${mainTab === t.key ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+              mainTab === t.key
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-emerald-400 dark:border dark:border-gray-700'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}>
             {t.icon}{t.label}
             {t.key === 'requests' && requestStats && requestStats.pending > 0 && (
               <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{requestStats.pending}</span>
@@ -317,24 +321,24 @@ export function Redeem() {
           {stats && (
             <div className="grid grid-cols-4 gap-4">
               {[
-                { label: 'Total Items', value: stats.total, color: 'text-gray-900' },
-                { label: 'Active', value: stats.active, color: 'text-green-600' },
-                { label: 'Inactive', value: stats.inactive, color: 'text-red-600' },
-                { label: 'Out of Stock', value: stats.outOfStock, color: 'text-orange-600' },
+                { label: 'Total Items', value: stats.total, color: 'text-gray-900 dark:text-white' },
+                { label: 'Active', value: stats.active, color: 'text-green-600 dark:text-green-400' },
+                { label: 'Inactive', value: stats.inactive, color: 'text-red-600 dark:text-red-400' },
+                { label: 'Out of Stock', value: stats.outOfStock, color: 'text-orange-600 dark:text-orange-400' },
               ].map((s) => (
-                <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300">
-                  <p className="text-sm text-gray-500 font-medium">{s.label}</p>
+                <div key={s.label} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
                   <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 flex gap-3 items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input type="text" placeholder="Search items..." value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
             </div>
             {[
               { key: 'all', label: 'All' },
@@ -343,7 +347,7 @@ export function Redeem() {
               { key: 'outOfStock', label: 'Out of Stock', icon: <Package className="w-3 h-3" /> },
             ].map(f => (
               <button key={f.key} onClick={() => setFilterStatus(f.key)}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f.key ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f.key ? 'bg-green-600 text-white border-green-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-green-300'}`}>
                 {f.icon}{f.label}
               </button>
             ))}
@@ -355,7 +359,7 @@ export function Redeem() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredItems.map(item => (
                 <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group">
-                  <div className="relative h-36 overflow-hidden bg-gradient-to-br from-amber-50 to-yellow-100">
+                  <div className="relative h-36 overflow-hidden bg-linear-to-br from-amber-50 to-yellow-100">
                     {item.imageUrl ? (
                       <img src={item.imageUrl.startsWith('http') ? item.imageUrl : `${API_HOST}${item.imageUrl}`} alt={item.title} className="w-full h-full object-cover" />
                     ) : (
@@ -409,25 +413,25 @@ export function Redeem() {
           {requestStats && (
             <div className="grid grid-cols-5 gap-4">
               {[
-                { label: 'Pending', value: requestStats.pending, color: 'text-amber-600', bg: 'bg-amber-50' },
-                { label: 'Approved', value: requestStats.approved, color: 'text-blue-600', bg: 'bg-blue-50' },
-                { label: 'Ready to Claim', value: requestStats.readyToClaim, color: 'text-green-600', bg: 'bg-green-50' },
-                { label: 'Rejected', value: requestStats.rejected, color: 'text-red-600', bg: 'bg-red-50' },
-                { label: 'Claimed', value: requestStats.claimed, color: 'text-gray-600', bg: 'bg-gray-50' },
+                { label: 'Pending', value: requestStats.pending, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800/50' },
+                { label: 'Approved', value: requestStats.approved, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800/50' },
+                { label: 'Ready to Claim', value: requestStats.readyToClaim, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20 dark:border-green-800/50' },
+                { label: 'Rejected', value: requestStats.rejected, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20 dark:border-red-800/50' },
+                { label: 'Claimed', value: requestStats.claimed, color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-900/40 dark:border-gray-800' },
               ].map(s => (
                 <div key={s.label} className={`${s.bg} rounded-2xl border border-gray-100 p-5 shadow-sm`}>
-                  <p className="text-sm text-gray-500 font-medium">{s.label}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
                   <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 flex gap-3 items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input type="text" placeholder="Search by user or item..." value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
             </div>
             {[
               { key: 'all', label: 'All' },
@@ -437,7 +441,7 @@ export function Redeem() {
               { key: 'claimed', label: 'Claimed', icon: <Eye className="w-3 h-3" /> },
             ].map(f => (
               <button key={f.key} onClick={() => setRequestFilter(f.key)}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border font-medium transition-all ${requestFilter === f.key ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border font-medium transition-all ${requestFilter === f.key ? 'bg-green-600 text-white border-green-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-green-300'}`}>
                 {f.icon}{f.label}
               </button>
             ))}
@@ -455,7 +459,7 @@ export function Redeem() {
                 <div key={req.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all">
                   <div className="flex items-center gap-4">
                     {/* Item Image */}
-                    <div className="w-16 h-16 rounded-xl bg-gray-50 overflow-hidden flex-shrink-0">
+                    <div className="w-16 h-16 rounded-xl bg-gray-50 overflow-hidden shrink-0">
                       {req.itemImage ? (
                         <img src={req.itemImage.startsWith('http') ? req.itemImage : `${API_HOST}${req.itemImage}`} alt={req.itemTitle} className="w-full h-full object-cover" />
                       ) : (
@@ -489,7 +493,7 @@ export function Redeem() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 flex-shrink-0 items-center">
+                    <div className="flex gap-2 shrink-0 items-center">
                       {req.status === 'pending' && (
                         <>
                           <button onClick={() => openApproveModal(req.id)} disabled={processingId === req.id}

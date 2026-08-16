@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, Loader2, UploadCloud, Power, Star, CheckCircle, XCircle, ShieldCheck, QrCode } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 
 interface Challenge {
   id: string;
@@ -113,28 +115,8 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const [isClosing, setIsClosing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const modalWrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = document.getElementById('admin-scroll-container');
-    if (!container) return;
-    let rafId: number;
-    const updatePosition = () => {
-      if (modalWrapperRef.current) {
-        modalWrapperRef.current.style.transform = `translateY(${container.scrollTop + 40}px)`;
-      }
-    };
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(updatePosition);
-    };
-    updatePosition();
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
+  // Lock background scroll while modal is open
+  useModalScrollLock(true);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -167,10 +149,10 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
     finally { setSaving(false); }
   };
 
-  return (
-    <div ref={modalWrapperRef} className="absolute inset-x-0 z-50 flex justify-center p-4 pointer-events-none" style={{ top: 0, willChange: 'transform' }}>
-      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-[960px] flex flex-col overflow-hidden pointer-events-auto ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 160px)' }}>
-        <div className="flex flex-shrink-0 items-center justify-between p-6 border-b border-gray-100">
+  return createPortal(
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={handleClose}>
+      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-240 flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 100px)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Challenge' : 'New Challenge'}</h2>
           <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
@@ -194,7 +176,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
               <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Image</label>
               <div className="flex items-center gap-4">
                 {form.imageUrl ? (
-                  <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-200 flex-shrink-0">
+                  <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-200 shrink-0">
                     <img src={form.imageUrl.startsWith('http') ? form.imageUrl : `${API_HOST}${form.imageUrl}`} alt="Challenge" className="w-full h-full object-cover" />
                     <button type="button" onClick={async () => {
                         if (form.imageUrl) {
@@ -206,7 +188,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
                     </button>
                   </div>
                 ) : (
-                  <div onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors flex-shrink-0">
+                  <div onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-green-400 hover:bg-green-50 transition-colors shrink-0">
                     {uploadingImg ? <Loader2 className="w-6 h-6 text-green-500 animate-spin" /> : <UploadCloud className="w-6 h-6 text-gray-400" />}
                     <span className="text-[10px] text-gray-500 mt-1">{uploadingImg ? 'Uploading...' : 'Upload'}</span>
                   </div>
@@ -266,11 +248,11 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
               <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" placeholder="e.g. Municipal Waste Collection Center" />
             </div>
             
-            <div className="h-2 w-full flex-shrink-0" />
+            <div className="h-2 w-full shrink-0" />
           </div>
 
           {/* Right Side */}
-          <div className="w-full md:w-[400px] flex flex-col gap-6 overflow-y-auto challenge-modal-scroll p-6 border-l border-gray-100">
+          <div className="w-full md:w-100 flex flex-col gap-6 overflow-y-auto challenge-modal-scroll p-6 border-l border-gray-100">
             <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-5 shadow-sm space-y-4">
               <h3 className="font-semibold text-gray-800">Configuration</h3>
               
@@ -341,7 +323,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
           </div>
         </form>
         {/* Footer buttons */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
+        <div className="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 z-10">
           <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
           <button form="challenge-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -349,7 +331,8 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -498,13 +481,6 @@ export function Challenges() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
-      {/* Backdrop overlay - covers full scroll content area */}
-      {modal && (
-        <div
-          className="absolute inset-0 z-40 backdrop-blur-sm pointer-events-auto"
-          onClick={() => { setModal(null); setEditing(null); }}
-        />
-      )}
       {modal === 'add' && <ChallengeModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <ChallengeModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
 
@@ -617,7 +593,7 @@ export function Challenges() {
                 <tr key={c.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-green-50 border border-green-100 flex-shrink-0 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-green-50 border border-green-100 shrink-0 flex items-center justify-center">
                         {c.imageUrl ? (
                           <img src={c.imageUrl.startsWith('http') ? c.imageUrl : `${API_HOST}${c.imageUrl}`} className="w-full h-full object-cover" alt="Challenge" />
                         ) : (
@@ -708,7 +684,7 @@ export function Challenges() {
 
           {/* Info banner about the flow */}
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl p-4 flex items-start gap-3 animate-reveal delay-160">
-            <ShieldCheck className="w-5 h-5 text-blue-500 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <ShieldCheck className="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" />
             <div className="text-sm text-blue-700 dark:text-blue-300">
               <strong>Multi-step challenge review flow:</strong> Preliminary review (before photo) → Approve for Collection (Generates Municipal QR Code) → User brings items on Weekend & scans QR → User submits After photo → Final review → Final Approve (Awards Linear YOLO Quantity Rewards).
             </div>
@@ -733,7 +709,7 @@ export function Challenges() {
                   <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Stage / Status</th>
                   <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">QR</th>
                   <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Date</th>
-                  <th className="px-4 py-4 w-[200px]"></th>
+                  <th className="px-4 py-4 w-50"></th>
                 </tr>
               </thead>
               <tbody>
@@ -789,7 +765,7 @@ export function Challenges() {
                           </div>
                         </td>
                         <td className="px-4 py-4">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white max-w-[160px] truncate">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white max-w-40 truncate">
                             {sub.challenge?.title || (sub as any).challengeInstance?.challenge?.title || 'Eco Challenge'}
                           </p>
                         </td>
@@ -822,7 +798,7 @@ export function Challenges() {
                           <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full border ${statusBg[sub.status] || 'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'}`}>
                             {sub.status === 'approved_collection' ? '📦 Approved for Collection' : sub.status === 'final_review' ? '🔍 Final Review (Weekend)' : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
                           </span>
-                          {sub.moderatorNotes && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-[120px] truncate" title={sub.moderatorNotes}>{sub.moderatorNotes}</p>}
+                          {sub.moderatorNotes && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-30 truncate" title={sub.moderatorNotes}>{sub.moderatorNotes}</p>}
                         </td>
                         <td className="px-4 py-4">
                           {sub.qrToken ? (
@@ -888,9 +864,9 @@ export function Challenges() {
       )}
 
       {/* QR Code Modal for Verification */}
-      {selectedQr && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setSelectedQr(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full flex flex-col items-center shadow-2xl relative" onClick={e => e.stopPropagation()}>
+      {selectedQr && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setSelectedQr(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full flex flex-col items-center shadow-2xl relative animate-modal" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedQr(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
               <X className="w-5 h-5" />
             </button>
@@ -918,19 +894,21 @@ export function Challenges() {
               <p><strong>Status:</strong> {selectedQr.qrVerified ? '✅ QR Verified' : '⏳ Awaiting Scan'}</p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Image preview modal */}
-      {selectedImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
-          <div className="relative w-full h-full flex items-center justify-center">
-            <button onClick={e => { e.stopPropagation(); setSelectedImage(null); }} className="absolute top-6 right-6 p-2 text-white/70 hover:text-white z-[110]">
+      {selectedImage && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] flex items-center justify-center animate-modal" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setSelectedImage(null)} className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white">
               <XCircle className="w-8 h-8" />
             </button>
-            <img src={selectedImage} alt="Proof" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl border border-white/10" onClick={e => e.stopPropagation()} />
+            <img src={selectedImage} alt="Proof" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/10" />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

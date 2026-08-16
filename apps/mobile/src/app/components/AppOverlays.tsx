@@ -1073,13 +1073,30 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
   React.useEffect(() => {
     if (viewMode === 'map') {
+      let isMounted = true;
       (async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === 'granted' && isMounted) {
+            const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+            if (lastKnown && isMounted) {
+              setUserLocation({ latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude });
+            }
+            const loc = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            if (isMounted && loc?.coords) {
+              setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+            }
+          }
+        } catch (err) {
+          // Gracefully fallback if location services (GPS) are disabled on the device
+          console.log('[EventsOverlay] Location unavailable or GPS disabled, using default map center');
         }
       })();
+      return () => {
+        isMounted = false;
+      };
     }
   }, [viewMode]);
 
@@ -4261,6 +4278,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
               await ecobudApi.redeemItem(token, item.id);
               // Deduct coins locally for instant UI update
               setDisplayCoins(prev => prev - item.coinCost);
+              DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
               Alert.alert('Request Submitted!', `${item.title} redemption request sent for approval.`);
               loadItems();
             } catch (err: any) {
@@ -4285,6 +4303,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
           onPress: async () => {
             try {
               await ecobudApi.claimRedeemRequest(token, request.id);
+              DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
               Alert.alert('Claimed!', 'Item marked as claimed.');
               loadItems();
             } catch (err: any) {
