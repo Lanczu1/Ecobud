@@ -437,13 +437,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
         );
       } catch (error) {
         console.error('ECOBUD hydrateApp error:', error);
-        if (error instanceof Error && (error as any).status === 401) {
+        const status = (error as any)?.status;
+        const msg = error instanceof Error ? error.message : '';
+        const isAuthExpired = status === 401 || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized');
+
+        if (isAuthExpired) {
           setSession(null);
           clearAppData();
           setActiveOverlayState(null);
           setActiveTabState('home');
           void persistSession(null);
-          Alert.alert('Session Expired', 'Your session is no longer valid. Please sign in again.');
+          Alert.alert('Session Expired', 'Your session has expired. Please sign in again.');
           return;
         }
 

@@ -16,7 +16,7 @@ import {
   TextStyle,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { styles } from '../styles/appStyles';
@@ -28,8 +28,14 @@ import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { Header } from './Header';
 
 export function ChatbotFAB({ onPress }: { onPress: () => void }) {
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < 380;
   const { scale, onPressIn, onPressOut } = usePressScale(0.95);
   const floatAnim = useRef(new Animated.Value(0)).current;
+
+  // Responsive bottom offset taking safe-area and responsive navbar into account
+  const bottomOffset = (insets.bottom > 0 ? insets.bottom : 12) + (isNarrow ? 66 : 74);
 
   React.useEffect(() => {
     Animated.loop(
@@ -51,7 +57,13 @@ export function ChatbotFAB({ onPress }: { onPress: () => void }) {
   }, [floatAnim]);
 
   return (
-    <Animated.View style={[styles.chatbotFabOuter, { transform: [{ translateY: floatAnim }, { scale }] }]}>
+    <Animated.View
+      style={[
+        styles.chatbotFabOuter,
+        { bottom: bottomOffset },
+        { transform: [{ translateY: floatAnim }, { scale }] },
+      ]}
+    >
       <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} style={styles.chatbotFab}>
         <Image
           source={require('../../../assets/chatbutton.png')}
@@ -518,9 +530,10 @@ export function BottomTabBar({
   activeTab: AppTab;
   onChange: (tab: AppTab) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
 
-  // On very narrow phones (< 380px), shorten long labels to prevent overflow
+  // On very narrow phones (< 380px or < 340px), adjust dimensions and text
   const isNarrow = screenWidth < 380;
   const isVeryNarrow = screenWidth < 340;
 
@@ -533,7 +546,7 @@ export function BottomTabBar({
   ];
 
   const activeIndex = items.findIndex((item) => item.key === activeTab);
-  const [barWidth, setBarWidth] = React.useState(0);
+  const [barLayout, setBarLayout] = React.useState({ width: 0, height: 0 });
   const slideAnim = useRef(new Animated.Value(activeIndex)).current;
 
   React.useEffect(() => {
@@ -546,34 +559,56 @@ export function BottomTabBar({
   }, [activeIndex, slideAnim]);
 
   const onLayout = (event: any) => {
-    const { width } = event.nativeEvent.layout;
-    setBarWidth(width);
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setBarLayout({ width, height });
+    }
   };
 
   const tabCount = items.length;
-  const tabWidth = barWidth / tabCount;
+  const tabWidth = barLayout.width > 0 ? barLayout.width / tabCount : 0;
   const translateX = slideAnim.interpolate({
     inputRange: [0, 1, 2, 3, 4],
     outputRange: [0, tabWidth, 2 * tabWidth, 3 * tabWidth, 4 * tabWidth],
   });
 
-  // Ensure the active pill fits inside the bar on small screens and zoom modes
-  const pillWidth = Math.min(64, tabWidth - 10);
-  const pillHeight = 54; // Increase padding at the bottom by reducing height and increasing top margin
-  const pillLeft = (tabWidth - pillWidth) / 2;
+  // Calculate dynamic pill dimensions based on measured layout
+  const effectiveBarHeight = barLayout.height || (isNarrow ? 58 : 64);
+  const verticalPadding = isNarrow ? 5 : 6;
+  const pillHeight = Math.max(36, effectiveBarHeight - verticalPadding * 2);
+  const maxPillWidth = isVeryNarrow ? 46 : isNarrow ? 52 : 62;
+  const pillWidth = tabWidth > 0 ? Math.min(maxPillWidth, Math.max(36, tabWidth - (isNarrow ? 6 : 10))) : maxPillWidth;
+  const pillLeft = tabWidth > 0 ? (tabWidth - pillWidth) / 2 : 0;
+  const pillTop = (effectiveBarHeight - pillHeight) / 2;
+
+  // Responsive margins
+  const bottomMargin = insets.bottom > 0 ? insets.bottom : (isNarrow ? 10 : 14);
+  const horizontalMargin = isVeryNarrow ? 8 : isNarrow ? 12 : 16;
 
   return (
-    <View style={styles.bottomBar} onLayout={onLayout}>
-      {barWidth > 0 && (
+    <View
+      style={[
+        styles.bottomBar,
+        {
+          left: horizontalMargin,
+          right: horizontalMargin,
+          bottom: bottomMargin,
+          height: isNarrow ? 58 : 64,
+          paddingHorizontal: 2,
+        },
+      ]}
+      onLayout={onLayout}
+    >
+      {barLayout.width > 0 && (
         <Animated.View
           style={[
             styles.tabActivePill,
             {
               width: pillWidth,
               height: pillHeight,
-              top: 8,
+              top: pillTop,
               left: pillLeft,
-              borderRadius: 16,
+              borderRadius: Math.min(16, pillHeight / 2),
               transform: [{ translateX }],
             },
           ]}
@@ -588,6 +623,7 @@ export function BottomTabBar({
             isActive={item.key === activeTab}
             onPress={() => onChange(item.key)}
             isNarrow={isNarrow}
+            isVeryNarrow={isVeryNarrow}
           />
         );
       })}
@@ -600,11 +636,13 @@ function TabItem({
   isActive,
   onPress,
   isNarrow = false,
+  isVeryNarrow = false,
 }: {
   item: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap };
   isActive: boolean;
   onPress: () => void;
   isNarrow?: boolean;
+  isVeryNarrow?: boolean;
 }) {
   const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
   const activeIconName = isActive
@@ -620,23 +658,26 @@ function TabItem({
     }).start();
   }, [isActive, scaleAnim]);
 
+  const iconSize = isVeryNarrow ? 18 : isNarrow ? 20 : 22;
+  const fontSize = isVeryNarrow ? 8.5 : isNarrow ? 9.5 : 11;
+
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
       style={styles.bottomBarItem}
     >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', gap: 2 }}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', justifyContent: 'center', gap: 2 }}>
         <Ionicons
           name={activeIconName}
-          size={isNarrow ? 20 : 22}
+          size={iconSize}
           color={isActive ? ecoTheme.colors.primaryDark : '#9BA2A7'}
         />
         <Text
           style={[
             styles.bottomBarLabel,
             isActive && styles.bottomBarLabelActive,
-            isNarrow && { fontSize: 9 },
+            { fontSize },
           ]}
           numberOfLines={1}
           adjustsFontSizeToFit

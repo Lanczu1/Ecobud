@@ -195,7 +195,7 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
         {!isLandscape && (
           <View style={styles.newOnboardingHeader}>
             <Image
-              source={require('../../../assets/newlogo.png')}
+              source={require('../../../assets/ecobud_wordmark.png')}
               style={styles.newOnboardingLogo}
               resizeMode="contain"
             />

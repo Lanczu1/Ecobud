@@ -307,9 +307,13 @@ experienceRoutes.post(
   requireUserAccess,
   chatRateLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    const message = typeof req.body?.message === 'string' ? req.body.message : '';
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim().slice(0, 1000) : '';
 
-    // Accept conversation history from the client (capped to last 10 messages)
+    if (!message) {
+      return res.status(400).json({ message: 'Message cannot be empty.' });
+    }
+
+    // Accept conversation history from the client (capped to last 10 messages, max 1000 chars per message)
     const rawHistory: unknown[] = Array.isArray(req.body?.history) ? req.body.history : [];
     const history: ChatHistoryMessage[] = rawHistory
       .slice(-10)
@@ -319,7 +323,11 @@ experienceRoutes.post(
           item !== null &&
           (((item as any).role === 'user') || ((item as any).role === 'assistant')) &&
           typeof (item as any).content === 'string',
-      );
+      )
+      .map((item) => ({
+        role: item.role,
+        content: item.content.slice(0, 1000),
+      }));
 
     const result = await getEcoGuideReply(message, history, req.auth!.userId);
 
