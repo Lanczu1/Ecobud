@@ -62,14 +62,14 @@ const getGreetingPHT = (): string => {
     const hour = parseInt(timeString, 10);
     
     if (!isNaN(hour)) {
-      if (hour >= 5 && hour < 12) return '☀️ Good morning';
-      if (hour >= 12 && hour < 18) return '🌤️ Good afternoon';
-      return '🌙 Good evening';
+      if (hour >= 5 && hour < 12) return 'Good morning';
+      if (hour >= 12 && hour < 18) return 'Good afternoon';
+      return 'Good evening';
     }
   } catch (e) {
     // Fallback if Intl is not fully supported
   }
-  return '☀️ Hello';
+  return 'Hello';
 };
 
 
