@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type SummaryCardsProps } from '../types/home';
 import { FireStreak } from './FireStreak';
@@ -74,7 +75,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
               onPress={onPressRewards}
               style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: moderateScale(16), flexDirection: 'row', alignItems: 'center', gap: 6 }}
             >
-              <Text style={{ fontSize: responsiveFontSize(14) }}>🎁</Text>
+              <Ionicons name="gift-outline" size={scale(15)} color="#FFF" />
               <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: responsiveFontSize(13) }}>Rewards</Text>
             </TouchableOpacity>
           )}

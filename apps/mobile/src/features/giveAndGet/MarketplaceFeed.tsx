@@ -234,29 +234,6 @@ export function MarketplaceFeed({
           </TouchableOpacity>
         </View>
 
-        <View style={localStyles.sortRow}>
-          <Text style={localStyles.sortLabel}>Sort by:</Text>
-          {(['newest', 'nearest', 'active'] as SortOption[]).map((opt) => (
-            <TouchableOpacity
-              key={opt}
-              onPress={() => setSortBy(opt)}
-              style={[
-                localStyles.sortPill,
-                sortBy === opt && localStyles.sortPillActive,
-              ]}
-            >
-              <Text
-                style={[
-                  localStyles.sortPillText,
-                  sortBy === opt && localStyles.sortPillTextActive,
-                ]}
-              >
-                {opt === 'newest' ? 'Newest' : opt === 'nearest' ? 'Nearest' : 'Most Active'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -648,43 +625,8 @@ const localStyles = StyleSheet.create({
     borderRadius: scale(3.5),
     backgroundColor: '#F59E0B',
   },
-  sortRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(8),
-    paddingHorizontal: scale(16),
-    paddingTop: verticalScale(10),
-    paddingBottom: verticalScale(4),
-  },
-  sortLabel: {
-    fontSize: responsiveFontSize(12),
-    fontWeight: '600',
-    color: ecoTheme.colors.textSoft,
-  },
-  sortPill: {
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(5),
-    borderRadius: moderateScale(12),
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: ecoTheme.colors.outline,
-    justifyContent: 'center',
-  },
-  sortPillActive: {
-    backgroundColor: ecoTheme.colors.surfaceMuted,
-    borderColor: ecoTheme.colors.primaryDark,
-  },
-  sortPillText: {
-    fontSize: responsiveFontSize(11),
-    fontWeight: '600',
-    color: ecoTheme.colors.textSoft,
-    textAlign: 'center',
-  },
-  sortPillTextActive: {
-    color: ecoTheme.colors.primaryDark,
-    fontWeight: '700',
-  },
   categoryScroll: {
+    marginTop: verticalScale(8),
     marginBottom: verticalScale(4),
   },
   categoryScrollContent: {

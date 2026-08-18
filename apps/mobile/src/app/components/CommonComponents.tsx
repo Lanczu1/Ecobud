@@ -129,6 +129,10 @@ export function TopNavbar({ model, title, showBack, onBack }: { model: EcoBudMob
       showBack={showBack}
       title={title}
       onBack={onBack || (() => model.setActiveOverlay(null))}
+      onProfilePress={() => {
+        model.setActiveOverlay(null);
+        model.setActiveTab('profile');
+      }}
       onEventsPress={() => model.setActiveOverlay('events')}
       onTrackerPress={() => {
         model.setActiveOverlay(null);
@@ -251,12 +255,13 @@ export function EcoGlowIllustration() {
 
 export function EcoLogo({ light = false, emphasis = 'default' }: { light?: boolean; emphasis?: 'default' | 'hero' }) {
   const hero = emphasis === 'hero';
+  const size = hero ? 96 : 64;
 
   return (
-    <View style={[styles.logoRow, hero && styles.logoRowHero]}>
+    <View style={[styles.logoRow, hero && styles.logoRowHero, { alignItems: 'center', justifyContent: 'center' }]}>
       <Image
-        source={require('../../../assets/logo.png')}
-        style={{ width: hero ? 240 : 180, height: hero ? 80 : 60, resizeMode: 'contain' }}
+        source={require('../../../assets/ecobud_logo_circle.png')}
+        style={{ width: size, height: size, borderRadius: size / 2, resizeMode: 'contain' }}
       />
     </View>
   );

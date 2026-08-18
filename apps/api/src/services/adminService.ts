@@ -355,8 +355,8 @@ export class AdminService {
         active: data.active ?? true,
         imageUrl: data.imageUrl,
         badgeLabel: data.badgeLabel,
-        type: data.type || "GENERAL",
-        aiDetectionTargets: data.aiDetectionTargets || [],
+        type: data.type || "AI Image Recognition Challenge",
+        aiDetectionTargets: data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle"],
         aiMinimumConfidence: data.aiMinimumConfidence || 80,
         isFeatured: data.isFeatured ?? false,
         availableQuantity: data.availableQuantity ?? 50,
@@ -484,15 +484,7 @@ export class AdminService {
         endOfDay.setHours(23, 59, 59, 999);
 
         const [active, signups] = await Promise.all([
-          prisma.user.count({
-            where: {
-              lastActionDate: {
-                gte: startOfDay,
-                lte: endOfDay,
-              },
-              role: 'user',
-            },
-          }),
+          presenceQueryService.getActiveUsersCountForRange(startOfDay, endOfDay),
           prisma.user.count({
             where: {
               createdAt: {
@@ -522,7 +514,7 @@ export class AdminService {
       overview: {
         activeToday: presenceOverview.activeToday,
         lessonCompletions,
-        onlineNow: presenceOverview.activeToday,
+        onlineNow: presenceOverview.onlineUsers.length,
         onlineWindowMinutes: PRESENCE_STALE_TTL_MS / 60000,
         signupsToday,
         snapshotDate: snapshotDate.toISOString(),

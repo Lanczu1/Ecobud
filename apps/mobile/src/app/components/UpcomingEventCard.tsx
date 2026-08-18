@@ -66,8 +66,9 @@ export function UpcomingEventCard({
 
     if (event.userStatus === 'reward_claimed') {
       return (
-        <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)' }]}>
-          <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>✓ Reward Claimed</Text>
+        <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
+          <Ionicons name="checkmark-circle" size={scale(15)} color="#126027" />
+          <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Reward Claimed</Text>
         </View>
       );
     }
@@ -182,9 +183,12 @@ export function UpcomingEventCard({
       </ImageBackground>
 
       <View style={styles.eventListBody}>
-        <Text style={[styles.welcomeLabel, event.isFeatured && styles.welcomeLabelFeatured]}>
-          {event.isFeatured ? '⭐ FEATURED EVENT' : 'PUBLIC EVENT'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: verticalScale(2) }}>
+          {event.isFeatured && <Ionicons name="star" size={scale(11)} color="#F59E0B" />}
+          <Text style={[styles.welcomeLabel, event.isFeatured && styles.welcomeLabelFeatured, { marginBottom: 0 }]}>
+            {event.isFeatured ? 'FEATURED EVENT' : 'PUBLIC EVENT'}
+          </Text>
+        </View>
         <Text style={styles.cardTitle}>{event.title}</Text>
         <Text style={styles.metaTextSmallDark}>{event.description}</Text>
 

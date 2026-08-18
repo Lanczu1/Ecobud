@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Users, Trophy, BookOpen, Coins, AlertCircle } from 'lucide-react';
 import { adminGet } from '../../utils/adminApi';
+import { adminRealtimeService } from '../../services/adminRealtimeService';
 
 interface DashboardStats {
   overview: {
@@ -32,24 +33,49 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
+    let isMounted = true;
+
+    async function loadStats(isInitial = false) {
+      if (isInitial) setLoading(true);
       try {
         const statsData = await adminGet<DashboardStats>('/admin/stats');
-        setStats(statsData);
+        if (isMounted) {
+          setStats(statsData);
+          setError(null);
+        }
       } catch (err: any) {
-        setError(err.message || 'Failed to load dashboard data.');
+        if (isMounted && isInitial) {
+          setError(err.message || 'Failed to load dashboard data.');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted && isInitial) {
+          setLoading(false);
+        }
       }
     }
-    load();
+
+    loadStats(true);
+
+    let unsubscribe: (() => void) | undefined;
+    adminRealtimeService.connect({
+      onStatsRefresh: () => {
+        loadStats(false);
+      },
+    }).then((unsub) => {
+      unsubscribe = unsub;
+    });
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   if (error) {
     return (
       <div className="p-8 flex items-center justify-center min-h-full">
         <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-8 flex items-center gap-4 max-w-lg">
-          <AlertCircle className="w-8 h-8 text-red-500 flex-shrink-0" />
+          <AlertCircle className="w-8 h-8 text-red-500 shrink-0" />
           <div>
             <p className="font-semibold text-gray-900">Failed to load dashboard</p>
             <p className="text-sm text-gray-500 mt-1">{error}</p>
@@ -159,7 +185,7 @@ export function Dashboard() {
                     </span>
                     <div className="w-full relative flex items-end" style={{ height: '96px' }}>
                       <div
-                        className="w-full rounded-t-lg bg-gradient-to-t from-green-500 to-emerald-300 hover:from-green-600 hover:to-emerald-400 transition-all duration-300 cursor-pointer"
+                        className="w-full rounded-t-lg bg-linear-to-t from-green-500 to-emerald-300 hover:from-green-600 hover:to-emerald-400 transition-all duration-300 cursor-pointer"
                         style={{ height: `${Math.max(h, 4)}%` }}
                         title={`${d.dateLabel}: ${d.active} active`}
                       />

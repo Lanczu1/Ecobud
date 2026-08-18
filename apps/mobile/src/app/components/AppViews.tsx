@@ -49,6 +49,7 @@ import { LevelCard, getLevelFromPoints } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
+import { DiscoverChallengeCard } from './DiscoverChallengeCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
@@ -108,8 +109,9 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
   const { width, height } = useWindowDimensions();
   const [step, setStep] = useState(0);
   const isLandscape = width > height;
-  const isCompact = height < 740 || width < 360; // also catch Display Zoom / small phones
-  const { scale, onPressIn, onPressOut } = usePressScale();
+  const isSmallDevice = height <= 680 || width < 375; // Targets iPhone SE 2nd/3rd gen (667h x 375w), iPhone 8/7, Display Zoom, mini devices
+  const isCompact = height < 750 || width < 380;
+  const { scale: buttonScale, onPressIn, onPressOut } = usePressScale();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const screenFadeAnim = useRef(new Animated.Value(0)).current;
@@ -125,7 +127,7 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
     Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, {
-          toValue: -15,
+          toValue: isSmallDevice ? -8 : -14,
           duration: 2000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
@@ -138,24 +140,24 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
         }),
       ])
     ).start();
-  }, [screenFadeAnim, floatAnim]);
+  }, [screenFadeAnim, floatAnim, isSmallDevice]);
 
   const steps = [
     {
       title: 'Learn, Act, and\nEarn rewards',
-      subtitle: 'Discover sustainable habits, join\nchallenges, and track your impact\nwith ECOBUD.',
+      subtitle: 'Discover sustainable habits, join challenges, and track your impact with ECOBUD.',
       image: require('../../../assets/onboarding_hero.png'),
       buttonText: 'Start Your Eco Journey',
     },
     {
       title: 'Verified Actions',
-      subtitle: 'Every positive move matters.\nLog your activities and see real-time\ndata on how you are saving the planet.',
+      subtitle: 'Every positive move matters. Log your activities and see real-time data on how you are saving the planet.',
       image: require('../../../assets/forest.png'),
       buttonText: 'Continue',
     },
     {
       title: 'Lead the Way',
-      subtitle: 'Join a global community of eco-warriors.\nLead by example and earn rewards\nfor your contributions.',
+      subtitle: 'Join a global community of eco-warriors. Lead by example and earn rewards for your contributions.',
       image: require('../../../assets/floating_island.png'),
       buttonText: 'Get Started',
     },
@@ -188,85 +190,152 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
 
   const currentStepData = steps[step];
 
+  // Dynamic sizing calculations for small devices (e.g. iPhone SE: 375 x 667)
+  const heroMaxSize = isSmallDevice ? Math.min(width * 0.52, 200) : isCompact ? Math.min(width * 0.62, 240) : Math.min(width * 0.72, 280);
+  const logoWidth = isSmallDevice ? scale(120) : scale(150);
+
   return (
     <Animated.View style={[styles.newOnboardingContainer, { opacity: screenFadeAnim }]}>
       <StatusBar style="dark" />
       <SafeAreaView style={[styles.newOnboardingSafeArea, isLandscape && { flexDirection: 'row', alignItems: 'center' }]}>
         {!isLandscape && (
-          <View style={styles.newOnboardingHeader}>
+          <View style={[
+            styles.newOnboardingHeader,
+            isSmallDevice && { marginTop: verticalScale(12), marginBottom: verticalScale(4) }
+          ]}>
             <Image
               source={require('../../../assets/ecobud_wordmark.png')}
-              style={styles.newOnboardingLogo}
+              style={[
+                styles.newOnboardingLogo,
+                { width: logoWidth, height: logoWidth * (238 / 691) }
+              ]}
               resizeMode="contain"
             />
           </View>
         )}
 
-        <Animated.View style={[styles.newOnboardingHeroContent, isLandscape && { flex: 0.5, marginTop: 0 }, { opacity: fadeAnim, transform: [{ translateY: floatAnim }] }]}>
-          <View style={styles.heroCircleWrapper}>
+        <Animated.View
+          style={[
+            styles.newOnboardingHeroContent,
+            isLandscape && { flex: 0.5, marginTop: 0 },
+            isSmallDevice && { paddingHorizontal: scale(16), marginVertical: 0 },
+            { opacity: fadeAnim, transform: [{ translateY: floatAnim }] }
+          ]}
+        >
+          <View
+            style={[
+              styles.heroCircleWrapper,
+              { width: heroMaxSize, height: heroMaxSize, maxWidth: heroMaxSize }
+            ]}
+          >
             <Image
               source={currentStepData.image}
               style={[
                 styles.newOnboardingHeroImage,
-                isCompact && !isLandscape && { height: '110%' },
+                isSmallDevice && { width: '120%', height: '120%' },
               ]}
               resizeMode="cover"
             />
           </View>
         </Animated.View>
 
-        <View style={[isLandscape ? { flex: 0.5, paddingRight: 30 } : { flex: 1 }]}>
-          {!isLandscape && <View style={{ height: 20 }} />}
-
-          <Animated.View style={[styles.newOnboardingTextContainer, isLandscape && { marginBottom: 20, paddingHorizontal: 0, alignItems: 'flex-start' }, { opacity: fadeAnim }]}>
-            <Text style={[
-              styles.newOnboardingTitle,
-              isCompact && { fontSize: responsiveFontSize(24), lineHeight: moderateScale(28) },
-              isLandscape && { textAlign: 'left' }
+        <View style={[isLandscape ? { flex: 0.5, paddingRight: 30 } : { flexShrink: 0, justifyContent: 'flex-end' }]}>
+          <Animated.View
+            style={[
+              styles.newOnboardingTextContainer,
+              isSmallDevice && { marginBottom: verticalScale(14), paddingHorizontal: scale(18) },
+              isLandscape && { marginBottom: 20, paddingHorizontal: 0, alignItems: 'flex-start' },
+              { opacity: fadeAnim }
             ]}
+          >
+            <Text
+              style={[
+                styles.newOnboardingTitle,
+                isSmallDevice && {
+                  fontSize: responsiveFontSize(22),
+                  lineHeight: moderateScale(26),
+                  marginBottom: verticalScale(6)
+                },
+                isLandscape && { textAlign: 'left' }
+              ]}
               adjustsFontSizeToFit
               minimumFontScale={0.75}
-              numberOfLines={3}
+              numberOfLines={2}
             >
               {currentStepData.title}
             </Text>
-            <Text style={[
-              styles.newOnboardingSubtitle,
-              isLandscape && { textAlign: 'left', paddingHorizontal: 0 }
-            ]}>
+            <Text
+              style={[
+                styles.newOnboardingSubtitle,
+                isSmallDevice && {
+                  fontSize: responsiveFontSize(13),
+                  lineHeight: moderateScale(18),
+                  paddingHorizontal: scale(4)
+                },
+                isLandscape && { textAlign: 'left', paddingHorizontal: 0 }
+              ]}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              numberOfLines={3}
+            >
               {currentStepData.subtitle}
             </Text>
           </Animated.View>
 
-          <View style={[styles.newOnboardingBottom, isLandscape && { paddingHorizontal: 0, paddingBottom: 0 }, step === 0 && { marginTop: 20 }]}>
-            <Animated.View style={[{ transform: [{ scale }] }]}>
+          <View
+            style={[
+              styles.newOnboardingBottom,
+              isSmallDevice && { paddingHorizontal: scale(20), paddingBottom: Platform.OS === 'ios' ? verticalScale(12) : verticalScale(16) },
+              isLandscape && { paddingHorizontal: 0, paddingBottom: 0 }
+            ]}
+          >
+            <Animated.View style={[{ transform: [{ scale: buttonScale }] }]}>
               <Pressable
                 onPress={nextStep}
                 onPressIn={onPressIn}
                 onPressOut={onPressOut}
-                style={styles.primaryButton}
+                style={[
+                  styles.primaryButton,
+                  isSmallDevice && { minHeight: 48, borderRadius: moderateScale(24) }
+                ]}
               >
                 <LinearGradient
                   colors={['#0B5F58', '#169070', '#69CDA8']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.primaryButtonGradient}
+                  style={[
+                    styles.primaryButtonGradient,
+                    isSmallDevice && { minHeight: 48, borderRadius: moderateScale(24), paddingHorizontal: scale(16) }
+                  ]}
                 >
                   <View style={styles.primaryButtonGlow} />
-                  <Animated.Text style={[styles.primaryButtonText, { opacity: fadeAnim }]}>
+                  <Animated.Text
+                    style={[
+                      styles.primaryButtonText,
+                      isSmallDevice && { fontSize: responsiveFontSize(16) },
+                      { opacity: fadeAnim }
+                    ]}
+                  >
                     {currentStepData.buttonText}
                   </Animated.Text>
                 </LinearGradient>
               </Pressable>
             </Animated.View>
 
-            <View style={[styles.newOnboardingPagination, isLandscape && { alignSelf: 'flex-start' }]}>
+            <View
+              style={[
+                styles.newOnboardingPagination,
+                isSmallDevice && { marginTop: verticalScale(12), gap: 6 },
+                isLandscape && { alignSelf: 'flex-start' }
+              ]}
+            >
               {steps.map((_, i) => (
                 <View
                   key={i}
                   style={[
                     styles.newOnboardingDot,
-                    i === step && styles.newOnboardingDotActive
+                    isSmallDevice && { width: scale(6), height: verticalScale(6) },
+                    i === step && (isSmallDevice ? { width: scale(18), backgroundColor: '#519E59' } : styles.newOnboardingDotActive)
                   ]}
                 />
               ))}
@@ -347,13 +416,19 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                       <View style={[localStyles.glassTag, { backgroundColor: 'rgba(74,222,128,0.3)', borderColor: 'rgba(74,222,128,0.5)' }]}>
                         <Text style={[localStyles.glassTagText, { color: '#ECFDF5' }]}>TODAY'S CHALLENGE</Text>
                       </View>
-                      <View style={localStyles.glassTag}>
+                      <View style={[localStyles.glassTag, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                        <Ionicons
+                          name="shield-checkmark"
+                          size={10}
+                          color={challenge.difficulty.toLowerCase() === 'easy' ? '#4ADE80' : challenge.difficulty.toLowerCase() === 'medium' ? '#FBBF24' : '#F87171'}
+                        />
                         <Text style={localStyles.glassTagText}>
-                          {challenge.difficulty.toLowerCase() === 'easy' ? '🟢' : challenge.difficulty.toLowerCase() === 'medium' ? '🟡' : challenge.difficulty.toLowerCase() === 'hard' ? '🔴' : '🔥'} {challenge.difficulty.toUpperCase()}
+                          {challenge.difficulty.toUpperCase()}
                         </Text>
                       </View>
-                      <View style={localStyles.glassTag}>
-                        <Text style={localStyles.glassTagText}>🌿 {challenge.expReward} Eco Points</Text>
+                      <View style={[localStyles.glassTag, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                        <Ionicons name="leaf" size={12} color="#4ADE80" />
+                        <Text style={localStyles.glassTagText}>{challenge.expReward} Eco Points</Text>
                       </View>
                       {challenge.ecoCoinReward > 0 && (
                         <View style={[localStyles.glassTag, { backgroundColor: 'rgba(74,222,128,0.3)', borderColor: 'rgba(74,222,128,0.5)', flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
@@ -364,12 +439,14 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                     </View>
                     
                     {model.viewedMissionIds.includes(challenge.id) ? (
-                      <View style={[localStyles.glassTag, { backgroundColor: 'rgba(59, 130, 246, 0.3)', borderColor: 'rgba(59, 130, 246, 0.5)', marginLeft: 8 }]}>
-                        <Text style={[localStyles.glassTagText, { color: '#EFF6FF' }]}>👁️ VIEWED</Text>
+                      <View style={[localStyles.glassTag, { backgroundColor: 'rgba(59, 130, 246, 0.3)', borderColor: 'rgba(59, 130, 246, 0.5)', marginLeft: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                        <Ionicons name="eye" size={11} color="#EFF6FF" />
+                        <Text style={[localStyles.glassTagText, { color: '#EFF6FF' }]}>VIEWED</Text>
                       </View>
                     ) : (
-                      <View style={[localStyles.glassTag, { backgroundColor: 'rgba(239, 68, 68, 0.3)', borderColor: 'rgba(239, 68, 68, 0.5)', marginLeft: 8 }]}>
-                        <Text style={[localStyles.glassTagText, { color: '#FEF2F2' }]}>🆕 NEW</Text>
+                      <View style={[localStyles.glassTag, { backgroundColor: 'rgba(239, 68, 68, 0.3)', borderColor: 'rgba(239, 68, 68, 0.5)', marginLeft: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                        <Ionicons name="sparkles" size={11} color="#FEF2F2" />
+                        <Text style={[localStyles.glassTagText, { color: '#FEF2F2' }]}>NEW</Text>
                       </View>
                     )}
                   </View>
@@ -585,10 +662,8 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
       setIsPressing(false);
       if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
         void model.handleClaimChallengeReward(challenge.id, { x: e?.nativeEvent?.pageX || 0, y: e?.nativeEvent?.pageY || 0 }, challenge.progress?.submissionId);
-      } else if (isApprovedCollection || challenge.type === 'AI Image Recognition Challenge') {
-        model.openChallengeMission(challenge);
       } else {
-        void model.handleChallengeProgress(challenge, 100);
+        model.openChallengeMission(challenge);
       }
     });
   };
@@ -666,30 +741,21 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     return matchesSearch && matchesCategory;
   };
 
-  const filteredFeaturedRaw = model.challenges.filter(c => c.isFeatured).filter(filterChallenge).map(c => ({
-    ...c,
-    progress: {
-      progressPercentage: 0,
-      status: 'not_started',
-      submission: undefined,
-      submissions: [],
-    }
-  }));
-  const filteredActiveRaw = model.challenges.filter(c => !c.isFeatured).filter(filterChallenge);
+  const filteredActiveRaw = model.challenges.filter(filterChallenge);
   
-  const filteredActiveSorted = filteredActiveRaw;
-
-  // Discover: all challenge templates without carrying previous in-progress submissions
-  const discoverChallenges = [...filteredActiveSorted].map(c => ({
-    ...c,
-    uniqueId: c.id,
-    progress: {
-      progressPercentage: 0,
-      status: 'not_started',
-      submission: undefined,
-      submissions: [],
-    }
-  }));
+  // Discover: all challenges sorted with Featured first, without carrying previous in-progress submissions
+  const discoverChallenges = [...filteredActiveRaw]
+    .sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))
+    .map(c => ({
+      ...c,
+      uniqueId: c.id,
+      progress: {
+        progressPercentage: 0,
+        status: 'not_started',
+        submission: undefined,
+        submissions: [],
+      }
+    }));
 
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<{ [challengeId: string]: boolean }>({});
 
@@ -722,7 +788,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const inProgressGroups: InProgressGroup[] = [];
   const completedChallenges: any[] = [];
 
-  for (const c of filteredActiveSorted) {
+  for (const c of filteredActiveRaw) {
     const rawSubs = c.progress?.submissions && c.progress.submissions.length > 0 
       ? c.progress.submissions 
       : (c.progress?.submission ? [c.progress.submission] : []);
@@ -774,7 +840,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     }
   }
 
-  const filteredFeatured = viewMode === 'Discover' ? filteredFeaturedRaw : [];
   const currentActiveList = viewMode === 'Discover' ? discoverChallenges : [];
 
   return (
@@ -887,8 +952,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           ))}
         </ScrollView>
 
-
-
         {viewMode === 'Discover' && !isFiltering && (
           <LinearGradient colors={['#126027', '#1D7A3A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.discoverOverview}>
             <View style={localStyles.discoverOverviewIcon}>
@@ -903,112 +966,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               <Text style={localStyles.discoverOverviewLabel}>TO TRY</Text>
             </View>
           </LinearGradient>
-        )}
-
-        {!isFiltering && model.recentViewedMission && viewMode === 'Discover' && (
-          <View style={{ marginTop: 24, marginBottom: 8 }}>
-            <Text style={[styles.welcomeLabel, { marginBottom: 8 }]}>RECENT ACTIVITY</Text>
-            <Text style={[styles.sectionHeadline, { marginTop: 0, color: '#4ADE80' }]}>Recently Viewed</Text>
-            <Pressable style={({ pressed }) => [localStyles.premiumTaskCard, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]} onPress={() => {
-              if (!model.isCycleActive) return;
-              const cleanMission: ChallengeWithProgress = {
-                ...model.recentViewedMission!,
-                progress: {
-                  progressPercentage: 0,
-                  status: 'not_started',
-                  submission: undefined,
-                  submissions: [],
-                }
-              };
-              if (cleanMission.type === 'AI Image Recognition Challenge') {
-                model.openChallengeMission(cleanMission);
-              } else {
-                void model.handleChallengeProgress(cleanMission, 100);
-              }
-            }}>
-              <View style={localStyles.premiumTaskImgWrap}>
-                {model.recentViewedMission.imageUrl ? (
-                  <Image 
-                    source={{ uri: getValidImageUrl(model.recentViewedMission.imageUrl) }} 
-                    style={localStyles.premiumTaskImg} 
-                  />
-                ) : (
-                  <View style={[localStyles.premiumTaskImg, { backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center' }]}>
-                    <Ionicons name="trophy" size={40} color="#126027" style={{ opacity: 0.5 }} />
-                  </View>
-                )}
-                <View style={{ ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(0,0,0,0.1)' }} />
-              </View>
-              <View style={localStyles.premiumTaskBody}>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-                  <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{model.recentViewedMission.difficulty.toUpperCase()}</Text>
-                  <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((model.recentViewedMission as any).category || 'GENERAL').toUpperCase()}</Text>
-                  <Text style={styles.taskMetaValue}>🌿 {model.recentViewedMission.expReward} Eco Points</Text>
-                  <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                    <Text style={{ fontSize: 9, fontWeight: '800', color: '#1D4ED8' }}>👁️ VIEWED</Text>
-                  </View>
-                </View>
-                <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{model.recentViewedMission.title}</Text>
-                <Text style={{ fontSize: 13, color: '#6B7A75', marginTop: 4, lineHeight: 18 }} numberOfLines={2}>{model.recentViewedMission.description}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 12 }}>
-                  {model.recentViewedMission.progress?.status?.toLowerCase() === 'approved' || model.recentViewedMission.progress?.status?.toLowerCase() === 'unclaimed' ? (
-                    <TouchableOpacity 
-                      style={{ backgroundColor: '#F59E0B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                      onPress={(e) => void model.handleClaimChallengeReward(model.recentViewedMission!.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }, model.recentViewedMission!.progress?.submissionId)}
-                    >
-                      <Ionicons name="gift" size={14} color="#FFF" />
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFF' }}>CLAIM REWARD</Text>
-                    </TouchableOpacity>
-                  ) : model.recentViewedMission.progress?.status?.toLowerCase() === 'pending' ? (
-                    <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Ionicons name="time" size={14} color="#B45309" />
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#B45309' }}>PENDING APPROVAL</Text>
-                    </View>
-                  ) : model.recentViewedMission.progress?.status?.toLowerCase() === 'completed' ? (
-                    <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Ionicons name="checkmark-done-circle" size={14} color="#059669" />
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#059669' }}>COMPLETED</Text>
-                    </View>
-                  ) : model.recentViewedMission.progress?.status?.toLowerCase() === 'rejected' ? (
-                    <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Ionicons name="close-circle" size={14} color="#DC2626" />
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#DC2626' }}>REJECTED - RESUBMIT</Text>
-                    </View>
-                  ) : (
-                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#4ADE80' }}>
-                      CONTINUE MISSION
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </Pressable>
-          </View>
-        )}
-
-        {filteredFeatured.length > 0 && (
-          <>
-            <Text style={[styles.welcomeLabel, { marginTop: (!isFiltering && model.recentViewedMission) ? 16 : 24, marginBottom: 8 }]}>FEATURED PROGRAMS</Text>
-            {filteredFeatured.map((challenge) => (
-              <ActiveChallengeCard
-                key={challenge.id}
-                dailyChallenge={challenge}
-                isViewed={model.viewedMissionIds.includes(challenge.id)}
-                isCycleActive={model.isCycleActive}
-                onComplete={() => {
-                  if (challenge.type === 'AI Image Recognition Challenge') {
-                    model.openChallengeMission(challenge);
-                  } else {
-                    void model.handleChallengeProgress(challenge, 100);
-                  }
-                }}
-                onClaim={(origin) => {
-                  if (challenge.id) {
-                    void model.handleClaimChallengeReward(challenge.id, origin);
-                  }
-                }}
-              />
-            ))}
-          </>
         )}
 
         {/* Headings */}
@@ -1034,7 +991,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         )}
 
         {/* Empty States */}
-        {((viewMode === 'Discover' && currentActiveList.length === 0 && filteredFeatured.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedChallenges.length === 0)) && (
+        {((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedChallenges.length === 0)) && (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, marginTop: 20 }}>
             <Ionicons name="leaf-outline" size={60} color="#A7F3D0" style={{ marginBottom: 16 }} />
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#126027', marginBottom: 8 }}>
@@ -1049,89 +1006,17 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         {/* === VIEW MODE 1: DISCOVER TAB === */}
         {viewMode === 'Discover' && (
           <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
-            {currentActiveList.map((challenge) => {
-              const category = ((challenge as any).category || 'General').toUpperCase();
-              const isImageMission = challenge.type === 'AI Image Recognition Challenge';
-              const isWeekendLocked = !model.isCycleActive;
-
-              return (
-                <Pressable
-                  key={challenge.uniqueId || challenge.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Start ${challenge.title}`}
-                  style={({ pressed }) => [
-                    localStyles.discoverCard,
-                    pressed && !isWeekendLocked && localStyles.discoverCardPressed,
-                    isWeekendLocked && { opacity: 0.8 },
-                    isTablet && { width: '48%' },
-                  ]}
-                  onPress={() => {
-                    if (isWeekendLocked) return;
-                    if (isImageMission) {
-                      model.openChallengeMission(challenge);
-                    } else {
-                      void model.handleChallengeProgress(challenge, 100);
-                    }
-                  }}
-                >
-                  <View style={localStyles.discoverImageWrap}>
-                    {challenge.imageUrl ? (
-                      <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={localStyles.discoverImage} />
-                    ) : (
-                      <View style={[localStyles.discoverImage, localStyles.discoverImageFallback]}>
-                        <Ionicons name={isImageMission ? "camera-outline" : "leaf-outline"} size={28} color="#126027" />
-                      </View>
-                    )}
-                    <View style={localStyles.discoverImageShade} />
-                    <View style={localStyles.discoverNewBadge}>
-                      <Text style={localStyles.discoverNewBadgeText}>NEW</Text>
-                    </View>
-                  </View>
-
-                  <View style={localStyles.discoverBody}>
-                    <View style={localStyles.discoverMetaRow}>
-                      <View style={localStyles.discoverCategoryBadge}>
-                        <Text style={localStyles.discoverCategoryText}>{category}</Text>
-                      </View>
-                      <Text style={localStyles.discoverDifficulty}>{challenge.difficulty.toUpperCase()}</Text>
-                    </View>
-
-                    {/* Schedule tag */}
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-                      <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#4B5563' }}>📅 MON - FRI ONLY</Text>
-                      </View>
-                    </View>
-
-                    <Text style={localStyles.discoverTitle} numberOfLines={2}>{challenge.title}</Text>
-                    <Text style={localStyles.discoverDescription} numberOfLines={2}>{challenge.description}</Text>
-                    <View style={localStyles.discoverFooter}>
-                      <View>
-                        <Text style={localStyles.discoverRewardLabel}>REWARD</Text>
-                        <View style={localStyles.discoverRewardRow}>
-                          <Ionicons name="leaf" size={14} color="#15803D" />
-                          <Text style={localStyles.discoverReward}>{challenge.expReward} points</Text>
-                        </View>
-                      </View>
-                      
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        {challenge.availableQuantity !== undefined && (
-                          <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: '#A7F3D0' }}>
-                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
-                              📦 {challenge.availableQuantity} {challenge.quantityUnit || 'items'} left
-                            </Text>
-                          </View>
-                        )}
-                        <View style={localStyles.discoverStartButton}>
-                          <Text style={localStyles.discoverStartText}>{isImageMission ? 'OPEN' : 'START'}</Text>
-                          <Ionicons name="arrow-forward" size={15} color="#FFFFFF" />
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
+            {currentActiveList.map((challenge) => (
+              <DiscoverChallengeCard
+                key={challenge.uniqueId || challenge.id}
+                challenge={challenge}
+                isCycleActive={model.isCycleActive}
+                isTablet={isTablet}
+                onPress={() => {
+                  model.openChallengeMission(challenge);
+                }}
+              />
+            ))}
           </View>
         )}
 
@@ -1194,40 +1079,45 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
                         {/* Summary Badges */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                          <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BBF7D0' }}>
+                          <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="document-text-outline" size={12} color="#166534" />
                             <Text style={{ fontSize: 11, fontWeight: '800', color: '#166534' }}>
-                              📋 {submissions.length} {submissions.length === 1 ? 'Submission' : 'Submissions'}
+                              {submissions.length} {submissions.length === 1 ? 'Submission' : 'Submissions'}
                             </Text>
                           </View>
 
                           {totalQuantity > 0 && (
-                            <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0' }}>
+                            <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="cube-outline" size={12} color="#047857" />
                               <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
-                                📦 {totalQuantity} {challenge.quantityUnit || 'items'} Total
+                                {totalQuantity} {challenge.quantityUnit || 'items'} Total
                               </Text>
                             </View>
                           )}
 
                           {approvedCollectionCount > 0 && (
-                            <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE' }}>
+                            <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="qr-code-outline" size={12} color="#1D4ED8" />
                               <Text style={{ fontSize: 11, fontWeight: '800', color: '#1D4ED8' }}>
-                                🎟️ {approvedCollectionCount} Ready for QR
+                                {approvedCollectionCount} Ready for QR
                               </Text>
                             </View>
                           )}
 
                           {pendingCount > 0 && (
-                            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="time-outline" size={12} color="#B45309" />
                               <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
-                                ⏳ {pendingCount} Pending
+                                {pendingCount} Pending
                               </Text>
                             </View>
                           )}
 
                           {rejectedCount > 0 && (
-                            <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                            <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="alert-circle-outline" size={12} color="#DC2626" />
                               <Text style={{ fontSize: 11, fontWeight: '800', color: '#DC2626' }}>
-                                ⚠️ {rejectedCount} Rejected
+                                {rejectedCount} Rejected
                               </Text>
                             </View>
                           )}
@@ -1288,9 +1178,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
                                   Entry {subIndex + 1}
                                 </Text>
-                                <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                                <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="cube-outline" size={11} color="#475569" />
                                   <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569' }}>
-                                    📦 {quantity} {challenge.quantityUnit || 'items'}
+                                    {quantity} {challenge.quantityUnit || 'items'}
                                   </Text>
                                 </View>
                               </View>
@@ -1406,7 +1297,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6, alignItems: 'center' }}>
                       <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
                       <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
-                      <Text style={styles.taskMetaValue}>🌿 +{challenge.expReward} Eco Points</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="leaf" size={13} color="#15803D" />
+                        <Text style={styles.taskMetaValue}>+{challenge.expReward} Eco Points</Text>
+                      </View>
                       {challenge.ecoCoinReward > 0 && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
                           <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
@@ -1437,9 +1331,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       </View>
 
                       {submissionQuantity && (
-                        <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0' }}>
+                        <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="cube-outline" size={11} color="#047857" />
                           <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
-                            📦 {submissionQuantity} {challenge.quantityUnit || 'items'}
+                            {submissionQuantity} {challenge.quantityUnit || 'items'}
                           </Text>
                         </View>
                       )}
@@ -1470,11 +1365,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         reason={rejectionModal.reason}
         onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
         onResubmit={rejectionModal.challengeObj && model.isCycleActive ? () => {
-          if (rejectionModal.challengeObj!.type === 'AI Image Recognition Challenge') {
-            model.openChallengeMission(rejectionModal.challengeObj!);
-          } else {
-            void model.handleChallengeProgress(rejectionModal.challengeObj!, 0);
-          }
+          model.openChallengeMission(rejectionModal.challengeObj!);
         } : undefined}
       />
     </>
@@ -1514,7 +1405,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     return date;
   });
 
-  // ── Segmented switch: Activity Calendar ↔ Leaderboard ──────────────────────
+  // ── Segmented switch: Activity Calendar / Leaderboard ──────────────────────
   const [segment, setSegment] = useState<'calendar' | 'leaderboard'>('calendar');
   const [segmentWidth, setSegmentWidth] = useState(0);
   const switchAnim = useRef(new Animated.Value(segment === 'calendar' ? 0 : 1)).current;
@@ -1597,13 +1488,6 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     ]).start();
   }, [leaderboardPage, lbFadeAnim, lbSlideAnim, segment]);
 
-  const rankMedal = (rank: number) => {
-    if (rank === 1) return '🥇';
-    if (rank === 2) return '🥈';
-    if (rank === 3) return '🥉';
-    return null;
-  };
-
   const intensityStyle = (cell: (typeof calendarCells)[number]) => {
     if (!cell.dateKey || !cell.completed) {
       return trackerStyles.cellEmpty;
@@ -1630,7 +1514,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
       <TopNavbar model={model} showBack={false} title="Tracker" />
 
       <View style={styles.homeContent}>
-        {/* ── 🔥 Current Streak Card ─────────────────────────────────────────── */}
+        {/* ── Current Streak Card ─────────────────────────────────────────── */}
         <SummaryCards
           currentStreak={getDisplayStreak(model)}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
@@ -1638,7 +1522,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
         />
 
 
-        {/* ── 🌱 Level Progress Card ────────────────────────────────────────── */}
+        {/* ── Level Progress Card ────────────────────────────────────────── */}
         <View style={{ marginTop: 24 }}>
           <LevelCard ecoPoints={totalPoints} />
         </View>
@@ -1671,16 +1555,23 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 onPress={() => setSegment(key)}
                 activeOpacity={0.8}
               >
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  style={[
-                    trackerStyles.segmentText,
-                    segment === key && trackerStyles.segmentTextActive,
-                  ]}
-                >
-                  {key === 'calendar' ? '📅 Activity Calendar' : '🏆 Leaderboard'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons
+                    name={key === 'calendar' ? 'calendar-outline' : 'trophy-outline'}
+                    size={14}
+                    color={segment === key ? '#126027' : '#6B7A75'}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={[
+                      trackerStyles.segmentText,
+                      segment === key && trackerStyles.segmentTextActive,
+                    ]}
+                  >
+                    {key === 'calendar' ? 'Activity Calendar' : 'Leaderboard'}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -1721,10 +1612,11 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   }
                   
                   return calcStreak >= 3 ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
                       <Text style={{ fontSize: 12, fontWeight: '800', color: '#169070', letterSpacing: 0.5 }}>
-                        BUILDING STREAK: {calcStreak} 🔥
+                        BUILDING STREAK: {calcStreak}
                       </Text>
+                      <Ionicons name="flame" size={14} color="#F97316" />
                     </View>
                   ) : (
                     <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7A75', marginBottom: 6 }}>
@@ -1808,18 +1700,26 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 {isLbPageOne && podiumTop3.length > 0 && (
                   <View style={trackerStyles.podiumRow}>
                     {podiumTop3.map((entry) => {
-                      const medal = rankMedal(entry.rank);
                       const isUser = entry.isCurrentUser;
+                      const userAvatar = isUser
+                        ? (entry.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
+                        : entry.avatarUrl;
                       const podiumHeight = entry.rank === 1 ? 78 : entry.rank === 2 ? 62 : 52;
                       return (
                         <View key={entry.id} style={trackerStyles.podiumColumn}>
-                          <Text style={trackerStyles.podiumMedal}>{medal ?? '⭐'}</Text>
+                          <View style={{ marginBottom: 4 }}>
+                            <Ionicons
+                              name={entry.rank === 1 ? 'trophy' : entry.rank === 2 ? 'medal' : 'ribbon'}
+                              size={22}
+                              color={entry.rank === 1 ? '#EAB308' : entry.rank === 2 ? '#94A3B8' : '#D97706'}
+                            />
+                          </View>
                           <AvatarBubble
-                            label={isUser ? 'You' : entry.displayName}
+                            label={isUser ? model.userDisplayName : entry.displayName}
                             size={48}
-                            style={[trackerStyles.podiumAvatar, isUser && trackerStyles.podiumAvatarUser, { borderWidth: 0 }]}
+                            style={[trackerStyles.podiumAvatar, isUser && trackerStyles.podiumAvatarUser]}
                             textStyle={trackerStyles.podiumAvatarText}
-                            avatarUrl={entry.avatarUrl}
+                            avatarUrl={userAvatar}
                           />
                           <Text style={trackerStyles.podiumName} numberOfLines={1}>
                             {isUser ? 'You' : entry.displayName}
@@ -1842,28 +1742,34 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
                 {/* Remaining ranks */}
                 <View style={trackerStyles.rankList}>
-                  {rankListItems.map((entry) => (
-                    <View
-                      key={entry.id}
-                      style={[
-                        trackerStyles.rankRow,
-                        entry.isCurrentUser && trackerStyles.rankRowUser,
-                      ]}
-                    >
-                      <Text style={trackerStyles.rankNumber}>#{entry.rank}</Text>
-                      <AvatarBubble
-                        label={entry.isCurrentUser ? 'You' : entry.displayName}
-                        size={32}
-                        style={[trackerStyles.rankAvatar, { borderWidth: 0 }]}
-                        textStyle={trackerStyles.rankAvatarText}
-                        avatarUrl={entry.avatarUrl}
-                      />
-                      <Text style={trackerStyles.rankName} numberOfLines={1}>
-                        {entry.isCurrentUser ? 'You' : entry.displayName}
-                      </Text>
-                      <Text style={trackerStyles.rankPoints}>{entry.points} Eco Points</Text>
-                    </View>
-                  ))}
+                  {rankListItems.map((entry) => {
+                    const isUser = entry.isCurrentUser;
+                    const userAvatar = isUser
+                      ? (entry.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
+                      : entry.avatarUrl;
+                    return (
+                      <View
+                        key={entry.id}
+                        style={[
+                          trackerStyles.rankRow,
+                          entry.isCurrentUser && trackerStyles.rankRowUser,
+                        ]}
+                      >
+                        <Text style={trackerStyles.rankNumber}>#{entry.rank}</Text>
+                        <AvatarBubble
+                          label={entry.isCurrentUser ? model.userDisplayName : entry.displayName}
+                          size={32}
+                          style={[trackerStyles.rankAvatar, isUser && trackerStyles.rankAvatarUser]}
+                          textStyle={trackerStyles.rankAvatarText}
+                          avatarUrl={userAvatar}
+                        />
+                        <Text style={trackerStyles.rankName} numberOfLines={1}>
+                          {entry.isCurrentUser ? 'You' : entry.displayName}
+                        </Text>
+                        <Text style={trackerStyles.rankPoints}>{entry.points} Eco Points</Text>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 {/* Pagination Controls */}
@@ -1989,6 +1895,9 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ProfileView({ model }: { model: EcoBudMobileModel }) {
+  const { width, height } = useWindowDimensions();
+  const isSmallDevice = height <= 680 || width < 375;
+  const isCompact = height < 750 || width < 380;
   const [isViewingAvatar, setIsViewingAvatar] = useState(false);
 
   const pickImage = async () => {
@@ -2039,6 +1948,8 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
     pointsToNext = nextLevelObj.points - totalPoints;
   }
 
+  const avatarSize = isSmallDevice ? scale(58) : scale(68);
+
   return (
     <>
       <TopNavbar model={model} />
@@ -2054,80 +1965,131 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
           colors={['#126027', '#0F4D20', '#0A3B18']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={profileStyles.headerCard}
+          style={[
+            profileStyles.headerCard,
+            isSmallDevice && { padding: moderateScale(14), marginTop: verticalScale(6), marginBottom: verticalScale(12) }
+          ]}
         >
           {/* Top Row: Level Badge + Settings Button */}
-          <View style={profileStyles.headerTopRow}>
-            <View style={profileStyles.headerBadge}>
-              <Text style={profileStyles.headerBadgeText}>LEVEL {currentLevelObj.level}</Text>
+          <View style={[profileStyles.headerTopRow, isSmallDevice && { marginBottom: verticalScale(8) }]}>
+            <View style={[profileStyles.headerBadge, isSmallDevice && { paddingHorizontal: scale(8), paddingVertical: verticalScale(3) }]}>
+              <Text style={[profileStyles.headerBadgeText, isSmallDevice && { fontSize: responsiveFontSize(9) }]}>
+                LEVEL {currentLevelObj.level}
+              </Text>
             </View>
             <TouchableOpacity 
-              style={profileStyles.headerSettingsBtn}
+              style={[profileStyles.headerSettingsBtn, isSmallDevice && { width: scale(28), height: scale(28), borderRadius: scale(14) }]}
               onPress={() => model.setActiveOverlay('settings')}
             >
-              <Ionicons name="settings-sharp" size={scale(18)} color="#FFF" />
+              <Ionicons name="settings-sharp" size={isSmallDevice ? scale(15) : scale(18)} color="#FFF" />
             </TouchableOpacity>
           </View>
 
           {/* Profile Main Info (Avatar + User Name/Email/Title) */}
-          <View style={profileStyles.profileMainInfo}>
+          <View style={[profileStyles.profileMainInfo, isSmallDevice && { gap: scale(10), marginBottom: verticalScale(10) }]}>
             <TouchableOpacity onPress={() => avatarUrl ? setIsViewingAvatar(true) : void pickImage()} style={profileStyles.avatarContainer}>
               {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={profileStyles.avatarImg} />
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={[profileStyles.avatarImg, isSmallDevice && { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
+                />
               ) : (
                 <AvatarBubble
                   label={model.userDisplayName}
-                  size={scale(68)}
-                  style={profileStyles.avatarImg}
-                  textStyle={{ fontSize: responsiveFontSize(28) }}
+                  size={avatarSize}
+                  style={[profileStyles.avatarImg, isSmallDevice && { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
+                  textStyle={{ fontSize: isSmallDevice ? responsiveFontSize(22) : responsiveFontSize(28) }}
                 />
               )}
-              <TouchableOpacity onPress={() => void pickImage()} style={profileStyles.avatarEditBadge}>
-                <Ionicons name="camera" size={scale(11)} color="#FFF" />
+              <TouchableOpacity
+                onPress={() => void pickImage()}
+                style={[profileStyles.avatarEditBadge, isSmallDevice && { width: scale(18), height: scale(18), borderRadius: scale(9) }]}
+              >
+                <Ionicons name="camera" size={isSmallDevice ? scale(9) : scale(11)} color="#FFF" />
               </TouchableOpacity>
             </TouchableOpacity>
             
             <View style={profileStyles.profileMeta}>
-              <Text style={profileStyles.profileName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              <Text
+                style={[profileStyles.profileName, isSmallDevice && { fontSize: responsiveFontSize(16), marginBottom: 1 }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
                 {model.userDisplayName}
               </Text>
-              <Text style={profileStyles.profileEmail} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              <Text
+                style={[profileStyles.profileEmail, isSmallDevice && { fontSize: responsiveFontSize(11), marginBottom: verticalScale(4) }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
                 {model.session?.user.email}
               </Text>
-              <View style={profileStyles.titleBadge}>
-                <MaterialCommunityIcons name="shield-crown" size={scale(14)} color="#F59E0B" />
-                <Text style={profileStyles.titleBadgeText} numberOfLines={1}>{currentLevelObj.name}</Text>
+              <View style={[profileStyles.titleBadge, isSmallDevice && { paddingHorizontal: scale(6), paddingVertical: verticalScale(2) }]}>
+                <MaterialCommunityIcons name="shield-crown" size={isSmallDevice ? scale(12) : scale(14)} color="#F59E0B" />
+                <Text
+                  style={[profileStyles.titleBadgeText, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
+                  {currentLevelObj.name}
+                </Text>
               </View>
             </View>
           </View>
 
           {/* Integrated Horizontal Coin Balance Glass Bar */}
           <TouchableOpacity 
-            style={profileStyles.coinCardHorizontal}
+            style={[
+              profileStyles.coinCardHorizontal,
+              isSmallDevice && { paddingHorizontal: scale(10), paddingVertical: verticalScale(8), borderRadius: moderateScale(12) }
+            ]}
             onPress={() => model.setActiveOverlay('coinsHistory')}
             activeOpacity={0.85}
           >
-            <View style={profileStyles.coinCardLeft}>
-              <Image source={require('../../../assets/coin.png')} style={profileStyles.coinBalanceIconHoriz} resizeMode="contain" />
-              <View style={{ justifyContent: 'center' }}>
-                <Text style={profileStyles.coinBalanceLabelHoriz}>Eco Coins</Text>
-                <Text style={profileStyles.coinBalanceAmountHoriz} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            <View style={[profileStyles.coinCardLeft, isSmallDevice && { gap: scale(8) }]}>
+              <Image
+                source={require('../../../assets/coin.png')}
+                style={[profileStyles.coinBalanceIconHoriz, isSmallDevice && { width: scale(22), height: scale(22) }]}
+                resizeMode="contain"
+              />
+              <View style={{ justifyContent: 'center', flexShrink: 1 }}>
+                <Text style={[profileStyles.coinBalanceLabelHoriz, isSmallDevice && { fontSize: responsiveFontSize(9) }]}>
+                  Eco Coins
+                </Text>
+                <Text
+                  style={[profileStyles.coinBalanceAmountHoriz, isSmallDevice && { fontSize: responsiveFontSize(15), lineHeight: responsiveFontSize(18) }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
                   {model.dashboard?.ecoCoins ?? 0}
                 </Text>
               </View>
             </View>
-            <View style={profileStyles.coinHistoryChip}>
-              <Text style={profileStyles.coinHistoryChipText}>Coins History</Text>
-              <Ionicons name="chevron-forward" size={scale(14)} color="#FDE68A" />
+            <View style={[profileStyles.coinHistoryChip, isSmallDevice && { paddingHorizontal: scale(8), paddingVertical: verticalScale(4) }]}>
+              <Text style={[profileStyles.coinHistoryChipText, isSmallDevice && { fontSize: responsiveFontSize(10) }]}>
+                Coins History
+              </Text>
+              <Ionicons name="chevron-forward" size={isSmallDevice ? scale(12) : scale(14)} color="#FDE68A" />
             </View>
           </TouchableOpacity>
         </LinearGradient>
 
         {/* Progress Bar Info */}
-        <View style={profileStyles.progressSection}>
-          <View style={profileStyles.progressInfoRow}>
-            <Text style={profileStyles.progressInfoText}>Journey Progress</Text>
-            <Text style={profileStyles.progressInfoValue}>
+        <View style={[profileStyles.progressSection, isSmallDevice && { padding: moderateScale(12), marginBottom: verticalScale(14) }]}>
+          <View style={[profileStyles.progressInfoRow, isSmallDevice && { marginBottom: verticalScale(6) }]}>
+            <Text style={[profileStyles.progressInfoText, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
+              Journey Progress
+            </Text>
+            <Text
+              style={[profileStyles.progressInfoValue, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
               {isMaxLevel ? 'Max Level Reached!' : `${pointsToNext} XP to Lv. ${nextLevelObj.level}`}
             </Text>
           </View>
@@ -2234,9 +2196,9 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
             end={{ x: 1, y: 1 }}
             style={{
               width: '100%',
-              borderRadius: 24,
-              padding: 20,
-              marginBottom: 20,
+              borderRadius: isSmallDevice ? 18 : 24,
+              padding: isSmallDevice ? 14 : 20,
+              marginBottom: isSmallDevice ? 14 : 20,
               position: 'relative',
               overflow: 'hidden',
               borderWidth: 1,
@@ -2272,28 +2234,34 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               }}
             />
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: isSmallDevice ? 10 : 14, flex: 1, minWidth: 0 }}>
                 <View
                   style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 26,
+                    width: isSmallDevice ? 42 : 52,
+                    height: isSmallDevice ? 42 : 52,
+                    borderRadius: isSmallDevice ? 21 : 26,
                     backgroundColor: 'rgba(255, 255, 255, 0.2)',
                     justifyContent: 'center',
                     alignItems: 'center',
                     borderWidth: 1,
                     borderColor: 'rgba(255, 255, 255, 0.3)',
+                    flexShrink: 0,
                   }}
                 >
-                  <Ionicons name="leaf" size={26} color="#FFF" />
+                  <Ionicons name="leaf" size={isSmallDevice ? 20 : 26} color="#FFF" />
                 </View>
-                <View>
-                  <Text style={{ color: '#D1FAE5', fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ color: '#D1FAE5', fontSize: isSmallDevice ? 10 : 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' }}>
                     Eco Balance
                   </Text>
-                  <Text style={{ fontSize: 28, fontWeight: '900', color: '#FFF', letterSpacing: -0.5 }}>
-                    {model.rewards?.points ?? 0} <Text style={{ fontSize: 18, fontWeight: '700', color: '#ECFDF5' }}>Points</Text>
+                  <Text
+                    style={{ fontSize: isSmallDevice ? 22 : 28, fontWeight: '900', color: '#FFF', letterSpacing: -0.5 }}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    {model.rewards?.points ?? 0} <Text style={{ fontSize: isSmallDevice ? 14 : 18, fontWeight: '700', color: '#ECFDF5' }}>Points</Text>
                   </Text>
                 </View>
               </View>
@@ -2301,33 +2269,41 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               <View
                 style={{
                   backgroundColor: 'rgba(0, 0, 0, 0.15)',
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
+                  paddingHorizontal: isSmallDevice ? 8 : 12,
+                  paddingVertical: isSmallDevice ? 4 : 6,
                   borderRadius: 20,
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 4,
                   borderWidth: 1,
                   borderColor: 'rgba(255, 255, 255, 0.15)',
+                  flexShrink: 0,
                 }}
               >
-                <Ionicons name="sparkles" size={12} color="#FDE68A" />
-                <Text style={{ color: '#ECFDF5', fontSize: 11, fontWeight: '600' }}>Available</Text>
+                <Ionicons name="sparkles" size={isSmallDevice ? 10 : 12} color="#FDE68A" />
+                <Text style={{ color: '#ECFDF5', fontSize: isSmallDevice ? 10 : 11, fontWeight: '600' }}>Available</Text>
               </View>
             </View>
           </LinearGradient>
           
-          <Text style={[profileStyles.sectionHeadline, { fontSize: 16, marginTop: 8 }]}>Lifetime Achievements</Text>
+          <Text style={[profileStyles.sectionHeadline, { fontSize: isSmallDevice ? 14 : 16, marginTop: isSmallDevice ? 4 : 8 }]}>Lifetime Achievements</Text>
           {(model.rewards?.achievements ?? []).length > 0 ? (
             (model.rewards?.achievements ?? []).map((achievement) => {
               const progress = Math.min(100, Math.round((achievement.current / achievement.target) * 100));
               return (
-                <View key={achievement.id} style={profileStyles.achievementCard}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <Text style={profileStyles.badgeTitle}>
+                <View key={achievement.id} style={[profileStyles.achievementCard, isSmallDevice && { padding: moderateScale(12), borderRadius: moderateScale(18) }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: isSmallDevice ? 8 : 12, gap: 8 }}>
+                    <Text
+                      style={[profileStyles.badgeTitle, { textAlign: 'left', flex: 1 }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
                       {achievement.label} ({achievement.current}/{achievement.target})
                     </Text>
-                    <Text style={{ color: '#10B981', fontWeight: 'bold' }}>{achievement.reward} pts</Text>
+                    <Text style={[{ color: '#10B981', fontWeight: 'bold' }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
+                      {achievement.reward} pts
+                    </Text>
                   </View>
                   <View style={profileStyles.badgeProgressWrap}>
                     <ProgressBar progress={progress} />
@@ -2582,7 +2558,7 @@ const localStyles = StyleSheet.create({
 });
 
 const trackerStyles = StyleSheet.create({
-  // ── 🔥 Streak Card ────────────────────────────────────────────────────────
+  // ── Streak Card ────────────────────────────────────────────────────────
   streakCard: {
     borderRadius: 24,
     padding: 24,
@@ -2636,7 +2612,7 @@ const trackerStyles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.4)' 
   },
 
-  // ── 🌱 Level Card ─────────────────────────────────────────────────────────
+  // ── Level Card ─────────────────────────────────────────────────────────
   levelCard: {
     marginTop: 16,
     backgroundColor: '#FFF',
@@ -2838,20 +2814,21 @@ const trackerStyles = StyleSheet.create({
   },
   podiumMedal: { fontSize: 28 },
   podiumAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F0F5F2',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#CBEFD6',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#E8F0EC',
+    borderColor: '#CBEFD6',
   },
   podiumAvatarUser: {
-    backgroundColor: '#126027',
-    borderColor: '#0B5F58',
+    backgroundColor: '#CBEFD6',
+    borderColor: '#126027',
+    borderWidth: 2,
   },
-  podiumAvatarText: { color: '#126027', fontSize: 16, fontWeight: '800' },
+  podiumAvatarText: { color: '#126027', fontSize: 18, fontWeight: '900' },
   podiumName: {
     fontSize: 12,
     fontWeight: '700',
@@ -2905,12 +2882,18 @@ const trackerStyles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F0F5F2',
+    backgroundColor: '#CBEFD6',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E6F4EC',
   },
-  rankAvatarUser: { backgroundColor: '#126027' },
-  rankAvatarText: { color: '#126027', fontSize: 14, fontWeight: '700' },
+  rankAvatarUser: {
+    backgroundColor: '#CBEFD6',
+    borderColor: '#126027',
+    borderWidth: 1.5,
+  },
+  rankAvatarText: { color: '#126027', fontSize: 14, fontWeight: '800' },
   rankName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1A211D' },
   rankPoints: { fontSize: 14, fontWeight: '800', color: '#126027' },
 

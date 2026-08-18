@@ -32,6 +32,9 @@ realtimeRoutes.post(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const auth = req.auth!;
+    if (auth.role !== 'user') {
+      return res.status(200).json({ presence: null });
+    }
     const payload = presenceSchema.parse(req.body);
     const presence = await presenceService.connectSession(
       {
@@ -58,6 +61,9 @@ realtimeRoutes.post(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const auth = req.auth!;
+    if (auth.role !== 'user') {
+      return res.status(200).json({ presence: null });
+    }
     const payload = presenceSchema.parse(req.body);
     const presence = await presenceService.heartbeatSession(
       {
@@ -84,6 +90,9 @@ realtimeRoutes.post(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const auth = req.auth!;
+    if (auth.role !== 'user') {
+      return res.status(200).json({ presence: null });
+    }
     const payload = presenceSchema.parse(req.body);
     const presence = await presenceService.disconnectSession(
       {

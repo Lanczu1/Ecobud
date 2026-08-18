@@ -4,7 +4,8 @@ import { Text, View, TextInput, ScrollView, TouchableOpacity, Image } from 'reac
 import { styles } from '../styles/appStyles';
 import { type EcoBudMobileModel } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
-import { TopNavbar, SurfaceCard } from './CommonComponents';
+import { DiscoverChallengeCard } from './DiscoverChallengeCard';
+import { TopNavbar, SurfaceCard, AvatarBubble } from './CommonComponents';
 import { LearnLessonCard } from './LearnLessonCard';
 import { QuickActions } from './QuickActions';
 import { SummaryCards } from './SummaryCards';
@@ -18,42 +19,35 @@ const getCategoryDetails = (category: string, isActive: boolean) => {
   const name = category === 'All Categories' ? 'All' : category;
   const normalized = name.toLowerCase().trim();
   
-  let iconName: string = 'apps';
-  let iconColor: string = isActive ? '#126027' : '#6B7A75';
-  let iconSet: 'Ionicons' | 'MaterialCommunityIcons' = 'Ionicons';
+  let iconName: keyof typeof Ionicons.glyphMap = 'grid-outline';
 
   if (normalized === 'all') {
-    iconName = 'apps';
-    iconColor = isActive ? '#126027' : '#6B7A75';
+    iconName = 'grid-outline';
   } else if (normalized === 'featured') {
-    iconName = 'star';
-    iconColor = isActive ? '#126027' : '#F59E0B';
-  } else if (normalized === 'environment' || normalized === 'general') {
-    iconSet = 'MaterialCommunityIcons';
-    iconName = 'sprout';
-    iconColor = isActive ? '#126027' : '#2E7D32';
-  } else if (normalized === 'waste') {
-    iconSet = 'MaterialCommunityIcons';
-    iconName = 'recycle';
-    iconColor = isActive ? '#126027' : '#2E7D32';
+    iconName = 'star-outline';
+  } else if (normalized === 'environment' || normalized === 'general' || normalized === 'nature') {
+    iconName = 'leaf-outline';
+  } else if (normalized === 'waste' || normalized === 'recycling') {
+    iconName = 'sync-outline';
   } else if (normalized === 'water') {
-    iconSet = 'MaterialCommunityIcons';
-    iconName = 'water';
-    iconColor = isActive ? '#126027' : '#2196F3';
+    iconName = 'water-outline';
   } else if (normalized === 'energy') {
-    iconSet = 'MaterialCommunityIcons';
-    iconName = 'flash';
-    iconColor = isActive ? '#126027' : '#FFB300';
+    iconName = 'flash-outline';
   } else if (normalized === 'climate') {
-    iconSet = 'MaterialCommunityIcons';
-    iconName = 'earth';
-    iconColor = isActive ? '#126027' : '#2196F3';
+    iconName = 'globe-outline';
+  } else if (normalized === 'lifestyle') {
+    iconName = 'sparkles-outline';
+  } else if (normalized === 'transport') {
+    iconName = 'car-outline';
+  } else if (normalized === 'food') {
+    iconName = 'restaurant-outline';
   } else {
-    iconName = 'book';
-    iconColor = isActive ? '#126027' : '#6B7A75';
+    iconName = 'book-outline';
   }
 
-  return { name, iconName, iconColor, iconSet };
+  const iconColor = isActive ? '#2E7D32' : '#6B7A75';
+
+  return { name, iconName, iconColor };
 };
 
 const getGreetingPHT = (): string => {
@@ -78,6 +72,9 @@ const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
   if (!leaderboard || leaderboard.items.length === 0) return null;
 
   const currentUser = leaderboard.items.find((item) => item.isCurrentUser) || leaderboard.items[0];
+  const userAvatar = currentUser.isCurrentUser
+    ? (currentUser.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
+    : currentUser.avatarUrl;
 
   return (
     <View style={{ backgroundColor: '#FFFFFF', borderRadius: moderateScale(20), padding: moderateScale(16), marginBottom: verticalScale(14), borderWidth: 1, borderColor: '#E6F4EC' }}>
@@ -89,9 +86,13 @@ const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#F8FAF9', borderRadius: moderateScale(12), padding: moderateScale(12) }}>
         <Text style={{ fontSize: responsiveFontSize(15), fontWeight: 'bold', color: '#6B7A75', width: scale(24), flexShrink: 1 }}>#{currentUser.rank}</Text>
-        <View style={{ width: scale(32), height: scale(32), backgroundColor: '#126027', borderRadius: scale(16), alignItems: 'center', justifyContent: 'center', marginRight: scale(10), flexShrink: 0 }}>
-          <Text style={{ color: '#FFF', fontSize: responsiveFontSize(12), fontWeight: 'bold' }}>{currentUser.displayName.slice(0, 1).toUpperCase()}</Text>
-        </View>
+        <AvatarBubble
+          label={currentUser.isCurrentUser ? model.userDisplayName : currentUser.displayName}
+          avatarUrl={userAvatar}
+          size={scale(34)}
+          style={{ marginRight: scale(10), flexShrink: 0 }}
+          textStyle={{ fontSize: responsiveFontSize(13) }}
+        />
         <View style={{ flex: 1, minWidth: scale(120) }}>
           <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '700' }}>{currentUser.isCurrentUser ? 'You' : currentUser.displayName}</Text>
           <Text style={{ color: '#6B7A75', fontSize: responsiveFontSize(11) }}>
@@ -115,14 +116,14 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
     ? Math.max(0, baseEcoPoints - (model.earnedPoints || 0)) 
     : baseEcoPoints;
   const weeklyGoal = model.dashboard?.weeklyGoal ?? 0;
-  const primaryChallenge = model.challenges?.find((c) => c.isFeatured) || model.challenges[0] || null;
+  const firstDiscoverChallenge = model.challenges?.slice().sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))[0] || null;
   const featuredLesson = model.lessons?.find((l: any) => l.featured) || (model.lessons && model.lessons.length > 0 ? model.lessons[0] : null);
 
   return (
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
-        <Text style={styles.welcomeTitle}>{getGreetingPHT()}, {model.userDisplayName.split(' ')[0]}! 👋</Text>
+        <Text style={styles.welcomeTitle}>{getGreetingPHT()}, {model.userDisplayName.split(' ')[0]}!</Text>
         <Text style={[styles.welcomeSubtitle, { marginBottom: verticalScale(14) }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
 
         <TouchableOpacity
@@ -181,7 +182,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
           </SurfaceCard>
         ) : null}
 
-        {primaryChallenge ? (
+        {firstDiscoverChallenge ? (
           <View style={{ marginBottom: verticalScale(14) }}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
               <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>Challenges</Text>
@@ -189,21 +190,11 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                 <Text style={{ color: '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
               </TouchableOpacity>
             </View>
-            <ActiveChallengeCard
-              dailyChallenge={primaryChallenge}
-              isViewed={model.viewedMissionIds.includes(primaryChallenge.id)}
+            <DiscoverChallengeCard
+              challenge={firstDiscoverChallenge}
               isCycleActive={model.isCycleActive}
-              onComplete={() => {
-                if (primaryChallenge.type === 'AI Image Recognition Challenge') {
-                  model.openChallengeMission(primaryChallenge);
-                } else {
-                  void model.handleChallengeProgress(primaryChallenge, 100);
-                }
-              }}
-              onClaim={(origin) => {
-                if (primaryChallenge.id) {
-                  void model.handleClaimChallengeReward(primaryChallenge.id, origin);
-                }
+              onPress={() => {
+                model.openChallengeMission(firstDiscoverChallenge);
               }}
             />
           </View>
@@ -216,9 +207,12 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
           return (
             <View style={{ marginBottom: verticalScale(14) }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
-                <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>
-                  {featuredEvent.isFeatured ? '⭐ Featured Event' : 'Event'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  {featuredEvent.isFeatured && <Ionicons name="star" size={scale(13)} color="#F59E0B" />}
+                  <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>
+                    {featuredEvent.isFeatured ? 'Featured Event' : 'Event'}
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={() => model.setActiveOverlay('events')}>
                   <Text style={{ color: '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
                 </TouchableOpacity>
@@ -298,7 +292,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
             
             <Text style={{ color: '#C8E6D3', fontSize: responsiveFontSize(11), fontWeight: '600' }}>
               {progressPercentage === 100 
-                ? "🏆 Outstanding! You've mastered all available lessons!" 
+                ? "Outstanding! You've mastered all available lessons!" 
                 : `Keep going! You are ${progressPercentage}% through the courses.`}
             </Text>
           </View>
@@ -334,7 +328,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
                   />
                 ) : (
                   <View style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Text style={{ fontSize: responsiveFontSize(28), opacity: 0.7 }}>📖</Text>
+                    <Ionicons name="book-outline" size={scale(26)} color="#126027" />
                   </View>
                 )}
                 <View style={{ flex: 1, minWidth: scale(120) }}>
@@ -386,11 +380,11 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
         >
           {(['all', 'not_started', 'seen', 'completed'] as const).map((filter) => {
             const isActive = model.learnFilter === filter;
-            const labels: Record<typeof filter, string> = {
-              all: '🌐 All Status',
-              not_started: '⏳ Not Started',
-              seen: '📖 In Progress',
-              completed: '✅ Completed',
+            const labels: Record<typeof filter, { text: string; icon: keyof typeof Ionicons.glyphMap }> = {
+              all: { text: 'All Status', icon: 'globe-outline' },
+              not_started: { text: 'Not Started', icon: 'time-outline' },
+              seen: { text: 'In Progress', icon: 'book-outline' },
+              completed: { text: 'Completed', icon: 'checkmark-circle-outline' },
             };
             return (
               <TouchableOpacity
@@ -406,16 +400,19 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
                   marginRight: scale(8),
                 }}
               >
-                <Text
-                  style={{
-                    color: isActive ? '#FFFFFF' : '#126027',
-                    fontWeight: isActive ? '700' : '500',
-                    fontSize: responsiveFontSize(13),
-                    textAlign: 'center',
-                  }}
-                >
-                  {labels[filter]}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name={labels[filter].icon} size={scale(13)} color={isActive ? '#FFFFFF' : '#126027'} />
+                  <Text
+                    style={{
+                      color: isActive ? '#FFFFFF' : '#126027',
+                      fontWeight: isActive ? '700' : '500',
+                      fontSize: responsiveFontSize(13),
+                      textAlign: 'center',
+                    }}
+                  >
+                    {labels[filter].text}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -429,8 +426,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
         >
           {['All Categories', 'Featured', ...Array.from(new Set(model.lessons.map(l => l.category || 'General')))].map((category) => {
             const isActive = model.learnCategory === category;
-            const { name, iconName, iconColor, iconSet } = getCategoryDetails(category, isActive);
-            const IconComponent = iconSet === 'MaterialCommunityIcons' ? MaterialCommunityIcons : Ionicons;
+            const { name, iconName, iconColor } = getCategoryDetails(category, isActive);
             
             return (
               <TouchableOpacity
@@ -448,10 +444,10 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
                   marginRight: scale(8),
                 }}
               >
-                <IconComponent 
-                  name={iconName as any} 
+                <Ionicons 
+                  name={iconName} 
                   size={scale(15)} 
-                  color={isActive ? '#2E7D32' : iconColor} 
+                  color={iconColor} 
                   style={{ marginRight: scale(5) }} 
                 />
                 <Text
@@ -471,7 +467,8 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
         <View style={{ marginTop: verticalScale(20) }}>
           {model.filteredLessons.length === 0 ? (
             <SurfaceCard style={{ padding: moderateScale(24), borderRadius: moderateScale(22), alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAF9' }}>
-              <Text style={[styles.cardTitle, { textAlign: 'center', fontSize: responsiveFontSize(16), marginBottom: verticalScale(6) }]}>📚 No lessons available yet.</Text>
+              <Ionicons name="library-outline" size={scale(36)} color="#126027" style={{ marginBottom: verticalScale(8) }} />
+              <Text style={[styles.cardTitle, { textAlign: 'center', fontSize: responsiveFontSize(16), marginBottom: verticalScale(6) }]}>No lessons available yet.</Text>
               <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13) }]}>Check back soon for new content.</Text>
             </SurfaceCard>
           ) : (

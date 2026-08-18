@@ -1,7 +1,6 @@
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode } from 'react';
 import { AdminSidebar, AdminSection } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
-import { adminPost } from '../../utils/adminApi';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -13,31 +12,6 @@ interface AdminLayoutProps {
 }
 
 export function AdminLayout({ children, onLogout, activeSection, onNavigate, isDark, onToggleDark }: AdminLayoutProps) {
-  const sessionIdRef = useRef(`admin-web-${Math.random().toString(36).substring(2, 9)}`);
-
-  useEffect(() => {
-    const sessionId = sessionIdRef.current;
-    
-    const sendHeartbeat = () => {
-      adminPost('/realtime/presence/heartbeat', {
-        sessionId,
-        appState: 'active',
-        connectionState: navigator.onLine ? 'online' : 'offline'
-      }).catch(console.error);
-    };
-
-    sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 30000);
-
-    return () => {
-      clearInterval(interval);
-      adminPost('/realtime/presence/disconnect', {
-        sessionId,
-        appState: 'inactive',
-        connectionState: 'offline'
-      }).catch(console.error);
-    };
-  }, []);
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden animate-fade-in">

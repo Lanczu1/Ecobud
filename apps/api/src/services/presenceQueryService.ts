@@ -165,6 +165,7 @@ export class PresenceQueryService {
 
     return users.map((user) => {
       const summary = presenceMap.get(user.id);
+      const isStaff = user.role !== 'user';
 
       return {
         id: user.id,
@@ -177,27 +178,95 @@ export class PresenceQueryService {
         profile: user.profile,
         createdAt: user.createdAt.toISOString(),
         lastActionDate: user.lastActionDate?.toISOString() ?? null,
-        isOnlineNow: summary?.isOnline ?? false,
-        lastSeenAt: summary?.lastSeenAt ?? user.lastActionDate?.toISOString() ?? null,
-        connectedAt: summary?.connectedAt ?? null,
-        activeSessionCount: summary?.activeSessionCount ?? 0,
-        appState: summary?.appState ?? null,
-        connectionState: summary?.connectionState ?? null,
+        isOnlineNow: isStaff ? false : (summary?.isOnline ?? false),
+        lastSeenAt: isStaff ? null : (summary?.lastSeenAt ?? user.lastActionDate?.toISOString() ?? null),
+        connectedAt: isStaff ? null : (summary?.connectedAt ?? null),
+        activeSessionCount: isStaff ? 0 : (summary?.activeSessionCount ?? 0),
+        appState: isStaff ? null : (summary?.appState ?? null),
+        connectionState: isStaff ? null : (summary?.connectionState ?? null),
       };
     });
   }
 
-  private async getActiveTodayCount(snapshotDate: Date) {
-    const rows = await this.database.$queryRaw<Array<{ activeToday: number }>>(Prisma.sql`
-      SELECT COUNT(DISTINCT ps.user_id)::int AS "activeToday"
-      FROM presence_sessions ps
-      INNER JOIN users u ON ps.user_id = u.id
-      WHERE ps.is_online = TRUE
-        AND ps.expires_at > ${snapshotDate}
-        AND u.role::text = 'user'
-    `);
+  async getActiveUsersCountForRange(startOfDay: Date, endOfDay: Date): Promise<number> {
+    const [
+      presenceUsers,
+      actionOrSignupUsers,
+      lessonUsers,
+      challengeUsers,
+      habitUsers,
+    ] = await Promise.all([
+      this.database.presenceSession.findMany({
+        where: {
+          user: { role: 'user' },
+          OR: [
+            { lastSeenAt: { gte: startOfDay, lte: endOfDay } },
+            { connectedAt: { gte: startOfDay, lte: endOfDay } },
+            { updatedAt: { gte: startOfDay, lte: endOfDay } },
+          ],
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+      this.database.user.findMany({
+        where: {
+          role: 'user',
+          OR: [
+            { lastActionDate: { gte: startOfDay, lte: endOfDay } },
+            { createdAt: { gte: startOfDay, lte: endOfDay } },
+          ],
+        },
+        select: { id: true },
+      }),
+      this.database.userLessonProgress.findMany({
+        where: {
+          user: { role: 'user' },
+          OR: [
+            { updatedAt: { gte: startOfDay, lte: endOfDay } },
+            { createdAt: { gte: startOfDay, lte: endOfDay } },
+          ],
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+      this.database.challengeSubmission.findMany({
+        where: {
+          user: { role: 'user' },
+          OR: [
+            { createdAt: { gte: startOfDay, lte: endOfDay } },
+            { updatedAt: { gte: startOfDay, lte: endOfDay } },
+          ],
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+      this.database.habitCheckIn.findMany({
+        where: {
+          user: { role: 'user' },
+          createdAt: { gte: startOfDay, lte: endOfDay },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+    ]);
 
-    return Number(rows[0]?.activeToday ?? 0);
+    const activeUserIds = new Set<string>();
+    presenceUsers.forEach((u) => activeUserIds.add(u.userId));
+    actionOrSignupUsers.forEach((u) => activeUserIds.add(u.id));
+    lessonUsers.forEach((u) => activeUserIds.add(u.userId));
+    challengeUsers.forEach((u) => activeUserIds.add(u.userId));
+    habitUsers.forEach((u) => activeUserIds.add(u.userId));
+
+    return activeUserIds.size;
+  }
+
+  private async getActiveTodayCount(snapshotDate: Date) {
+    const startOfDay = new Date(snapshotDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(snapshotDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return this.getActiveUsersCountForRange(startOfDay, endOfDay);
   }
 
   private async getPresenceSummaryRows(snapshotDate: Date) {
@@ -238,6 +307,7 @@ export class PresenceQueryService {
           )
         )[1]::text AS "appState"
       FROM presence_sessions ps
+      INNER JOIN users u ON ps.user_id = u.id
       GROUP BY ps.user_id
     `);
   }

@@ -9,7 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
-import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { responsiveFontSize, moderateScale, scale, verticalScale, useResponsive, clampFontSize } from '../utils/responsive';
 import { resolveMediaUrl } from '../utils/appUtils';
 
 interface LearnLessonCardProps {
@@ -42,6 +42,7 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
 };
 
 export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
+  const { isSmall } = useResponsive();
   const [imgError, setImgError] = React.useState(false);
   const animatedProgress = React.useRef(new Animated.Value(0)).current;
   const [displayProgress, setDisplayProgress] = React.useState(0);
@@ -68,33 +69,74 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
     };
   }, [lesson.progress]);
 
+  const starIconSize = isSmall ? clampFontSize(9.5, 8, 10) : clampFontSize(11, 10, 12);
+
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={styles.card}>
-      {lesson.featured && (
-        <View style={{ position: 'absolute', top: verticalScale(20), left: scale(20), backgroundColor: '#F59E0B', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(10), zIndex: 10, shadowColor: '#F59E0B', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
-          <Text style={{ color: '#FFF', fontSize: responsiveFontSize(11), fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>⭐ Featured</Text>
-        </View>
-      )}
+      <View style={styles.imageWrapper}>
+        {resolvedImageUrl && !imgError ? (
+          <Image 
+            source={{ uri: resolvedImageUrl }}
+            style={styles.cardImage}
+            resizeMode="cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <View style={[styles.cardImage, styles.fallbackImageWrap]}>
+            <Ionicons name="book-outline" size={scale(44)} color="#126027" style={{ opacity: 0.7 }} />
+          </View>
+        )}
 
-      {resolvedImageUrl && !imgError ? (
-        <Image 
-          source={{ uri: resolvedImageUrl }}
-          style={{ width: '100%', height: verticalScale(150), borderRadius: moderateScale(16), marginBottom: verticalScale(14) }}
-          resizeMode="cover"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <View style={{ width: '100%', height: verticalScale(150), borderRadius: moderateScale(16), marginBottom: verticalScale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: responsiveFontSize(48), opacity: 0.7 }}>📖</Text>
-        </View>
-      )}
+        {lesson.featured && (
+          <View style={[
+            styles.featuredBadge,
+            isSmall && styles.featuredBadgeSmall
+          ]}>
+            <Ionicons name="star" size={starIconSize} color="#FFF" style={styles.featuredStarIcon} />
+            <Text 
+              style={[
+                styles.featuredBadgeText,
+                isSmall && styles.featuredBadgeTextSmall
+              ]}
+              numberOfLines={1}
+            >
+              Featured
+            </Text>
+          </View>
+        )}
+      </View>
 
       <Text style={styles.title}>{lesson.title}</Text>
       
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: verticalScale(10) }}>
-        <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
-          🔖 {lesson.category || 'General'}  •  {lesson.difficulty?.toLowerCase() === 'advanced' ? '🔴' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '🟠' : '🟢'} {lesson.difficulty || 'Beginner'}{lesson.durationMinutes && lesson.durationMinutes > 0 ? `  •  ⏱ ${lesson.durationMinutes} min` : ''}
-        </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: verticalScale(10), gap: scale(6) }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          <Ionicons name="bookmark-outline" size={scale(12)} color="#6B7A75" />
+          <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
+            {lesson.category || 'General'}
+          </Text>
+        </View>
+        <Text style={{ color: '#9CA3AF' }}>•</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          <Ionicons
+            name="shield-checkmark"
+            size={scale(11)}
+            color={lesson.difficulty?.toLowerCase() === 'advanced' ? '#EF4444' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '#F59E0B' : '#10B981'}
+          />
+          <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
+            {lesson.difficulty || 'Beginner'}
+          </Text>
+        </View>
+        {lesson.durationMinutes && lesson.durationMinutes > 0 ? (
+          <>
+            <Text style={{ color: '#9CA3AF' }}>•</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Ionicons name="time-outline" size={scale(12)} color="#6B7A75" />
+              <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
+                {lesson.durationMinutes} min
+              </Text>
+            </View>
+          </>
+        ) : null}
       </View>
 
       <Text style={[styles.description, { marginBottom: verticalScale(14), lineHeight: responsiveFontSize(20) }]} numberOfLines={3}>
@@ -102,9 +144,12 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
       </Text>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(16) }}>
-        <Text style={{ fontSize: responsiveFontSize(13), color: '#126027', fontWeight: '900', backgroundColor: '#E6F4EC', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(8), overflow: 'hidden' }}>
-          🍃 +{lesson.pointsReward || 10} Eco points
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6F4EC', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(8), gap: scale(4) }}>
+          <Ionicons name="leaf" size={scale(13)} color="#126027" />
+          <Text style={{ fontSize: responsiveFontSize(13), color: '#126027', fontWeight: '900' }}>
+            +{lesson.pointsReward || 10} Eco points
+          </Text>
+        </View>
       </View>
 
       <View style={{ 
@@ -148,6 +193,63 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
     overflow: 'hidden',
+  },
+  imageWrapper: {
+    position: 'relative',
+    width: '100%',
+    height: verticalScale(150),
+    borderRadius: moderateScale(16),
+    marginBottom: verticalScale(14),
+    overflow: 'hidden',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(16),
+  },
+  fallbackImageWrap: {
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredBadge: {
+    position: 'absolute',
+    top: moderateScale(10),
+    left: moderateScale(10),
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: moderateScale(9, 0.3),
+    paddingVertical: moderateScale(4.5, 0.3),
+    borderRadius: moderateScale(8),
+    zIndex: 10,
+    shadowColor: '#F59E0B',
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  featuredBadgeSmall: {
+    top: moderateScale(8),
+    left: moderateScale(8),
+    paddingHorizontal: moderateScale(7, 0.3),
+    paddingVertical: moderateScale(3.5, 0.3),
+    borderRadius: moderateScale(6),
+  },
+  featuredStarIcon: {
+    marginRight: moderateScale(4),
+  },
+  featuredBadgeText: {
+    color: '#FFF',
+    fontSize: responsiveFontSize(10.5, 0.3),
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    includeFontPadding: false,
+  },
+  featuredBadgeTextSmall: {
+    fontSize: responsiveFontSize(9.5, 0.3),
+    letterSpacing: 0.3,
   },
   cardHeader: {
     flexDirection: 'row',

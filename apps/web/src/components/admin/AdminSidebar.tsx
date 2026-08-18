@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 
 import logoImg from '../../assets/logo.png';
+import wordmarkImg from '../../assets/ecobud_wordmark.png';
+import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
 
 export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports';
 interface SidebarProps {
@@ -49,11 +51,20 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
         <img 
           src={logoImg} 
           alt="EcoBud Logo" 
-          className="w-12 h-12 object-contain rounded-xl transition-transform duration-500 hover:scale-110 hover:rotate-12 cursor-pointer filter drop-shadow-sm" 
+          className="w-12 h-12 object-contain rounded-full transition-transform duration-500 hover:scale-110 hover:rotate-12 cursor-pointer filter drop-shadow-sm" 
         />
-        <div className="flex flex-col items-start pt-1">
-          <span className="text-2xl font-black text-green-600 tracking-tight mb-0 leading-none">ECOBUD</span>
-          <p className="text-[10px] text-green-600 font-semibold uppercase tracking-widest leading-none text-left mt-1">Admin Panel</p>
+        <div className="flex flex-col items-start justify-center">
+          <img
+            src={wordmarkImg}
+            alt="ECOBUD"
+            className="h-6.5 w-auto object-contain dark:hidden"
+          />
+          <img
+            src={wordmarkDarkImg}
+            alt="ECOBUD"
+            className="h-6.5 w-auto object-contain hidden dark:block"
+          />
+          <p className="text-[10.5px] text-green-600 dark:text-[#8acd3e] font-bold uppercase tracking-[0.18em] leading-none text-left mt-1.5">Admin Panel</p>
         </div>
       </div>
 

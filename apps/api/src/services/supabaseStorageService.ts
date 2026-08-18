@@ -43,7 +43,7 @@ class SupabaseStorageService {
       if (!exists) {
         const { error: createError } = await this.client.storage.createBucket(this.bucketName, {
           public: true,
-          fileSizeLimit: 104857600, // 100MB
+          fileSizeLimit: 52428800, // 50MB (Supabase Free Tier max limit)
         });
         if (createError) {
           console.error('[SupabaseStorage] Failed to create public bucket:', createError.message);

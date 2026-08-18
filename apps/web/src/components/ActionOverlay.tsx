@@ -40,7 +40,7 @@ export function ActionOverlay({ message }: ActionOverlayProps) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <img src={logo} alt="" aria-hidden style={{ width: 22, height: 22, objectFit: 'contain' }} />
+            <img src={logo} alt="" aria-hidden style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: '50%' }} />
           </div>
           <span style={{ color: '#fff', fontSize: 24, fontWeight: 900, letterSpacing: '0.06em' }}>
             ECOBUD
@@ -88,7 +88,7 @@ function MiniLoader() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
-        <img src="/logo.png" alt="" aria-hidden style={{ width: 20, height: 20, objectFit: 'contain' }} />
+        <img src="/logo.png" alt="" aria-hidden style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: '50%' }} />
       </div>
     </div>
   );

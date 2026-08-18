@@ -42,13 +42,13 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
     ).start();
   }, [pulseAnim]);
 
-  const isAI = dailyChallenge.type === 'AI Image Recognition Challenge';
+  const isAI = !dailyChallenge.type || dailyChallenge.type === 'AI Image Recognition Challenge' || dailyChallenge.type === 'GENERAL';
   const isApproved = status === 'approved' || status === 'unclaimed';
   const isApprovedCollection = status === 'approved_collection';
   const isCompleted = status === 'completed';
   const isWeekendLocked = !isCycleActive && !isApproved && !isApprovedCollection;
   let isPending = false;
-  let btnText = 'MARK AS COMPLETE';
+  let btnText = 'START MISSION';
 
   if (isApproved) {
     btnText = isPressing ? 'CLAIMING...' : 'CLAIM REWARD';
@@ -62,10 +62,8 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
   } else if (isWeekendLocked) {
     btnText = 'LOCKED (WEEKEND - MON-FRI ONLY)';
     isPending = true;
-  } else if (isAI) {
-    btnText = isViewed ? (isPressing ? 'CONTINUING...' : 'CONTINUE MISSION') : (isPressing ? 'STARTING...' : 'START MISSION');
   } else {
-    btnText = 'MARK AS COMPLETE';
+    btnText = isViewed ? (isPressing ? 'CONTINUING...' : 'CONTINUE MISSION') : (isPressing ? 'STARTING...' : 'START MISSION');
   }
 
   const handlePress = (e: any) => {
@@ -134,8 +132,14 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
             )}
             {dailyChallenge.difficulty && (
               <View style={localStyles.pillGlass}>
+                <Ionicons
+                  name="shield-checkmark"
+                  size={scale(10)}
+                  color={dailyChallenge.difficulty.toLowerCase() === 'easy' ? '#4ADE80' : dailyChallenge.difficulty.toLowerCase() === 'medium' ? '#FBBF24' : '#F87171'}
+                  style={{ marginRight: 3 }}
+                />
                 <Text style={localStyles.pillGlassText}>
-                  {dailyChallenge.difficulty.toLowerCase() === 'easy' ? '🟢 Easy' : dailyChallenge.difficulty.toLowerCase() === 'medium' ? '🟡 Medium' : '🔴 Hard'}
+                  {dailyChallenge.difficulty.toUpperCase()}
                 </Text>
               </View>
             )}
