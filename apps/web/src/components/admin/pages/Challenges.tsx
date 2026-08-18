@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, Loader2, UploadCloud, Power, Star, CheckCircle, XCircle, ShieldCheck, QrCode } from 'lucide-react';
+import { 
+  Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
+  Loader2, UploadCloud, Power, Star, CheckCircle, XCircle, ShieldCheck, 
+  QrCode, ChevronDown, ChevronRight, User, Layers, Filter, 
+  RefreshCw, CheckCircle2, Clock
+} from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -355,6 +360,11 @@ export function Challenges() {
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedQr, setSelectedQr] = useState<ChallengeSubmission | null>(null);
+  const [subSearch, setSubSearch] = useState('');
+  const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
+  const [selectedUserIdFilter, setSelectedUserIdFilter] = useState<string>('All');
+  const [collapsedUsers, setCollapsedUsers] = useState<Record<string, boolean>>({});
+  const [collapsedChallenges, setCollapsedChallenges] = useState<Record<string, boolean>>({});
 
   const load = async () => {
     try {
@@ -423,6 +433,185 @@ export function Challenges() {
       return matchStatus && matchSearch;
     });
   }, [challenges, search, filterStatus]);
+
+  // Group submissions hierarchically: User -> Challenge -> Submissions
+  const groupedSubmissions = useMemo(() => {
+    // 1. Filter submissions based on search, status filter, and selected user filter
+    const filteredSubs = submissions.filter(sub => {
+      const userName = sub.user?.profile?.displayName || sub.user?.name || 'Unknown';
+      const challengeTitle = sub.challenge?.title || (sub as any).challengeInstance?.challenge?.title || 'Eco Challenge';
+      const matchSearch = subSearch.trim() === '' || 
+        userName.toLowerCase().includes(subSearch.toLowerCase()) || 
+        challengeTitle.toLowerCase().includes(subSearch.toLowerCase()) ||
+        (sub.moderatorNotes && sub.moderatorNotes.toLowerCase().includes(subSearch.toLowerCase()));
+      
+      const matchStatus = subStatusFilter === 'All' || sub.status === subStatusFilter;
+      const matchUser = selectedUserIdFilter === 'All' || sub.userId === selectedUserIdFilter;
+
+      return matchSearch && matchStatus && matchUser;
+    });
+
+    // 2. Compute true chronological submission numbering per (userId + challengeId)
+    const userChallengeSortedMap = new Map<string, ChallengeSubmission[]>();
+    submissions.forEach(sub => {
+      const key = `${sub.userId}___${sub.challengeId}`;
+      if (!userChallengeSortedMap.has(key)) {
+        userChallengeSortedMap.set(key, []);
+      }
+      userChallengeSortedMap.get(key)!.push(sub);
+    });
+
+    userChallengeSortedMap.forEach(list => {
+      list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    });
+
+    const getSubmissionIndex = (sub: ChallengeSubmission) => {
+      const key = `${sub.userId}___${sub.challengeId}`;
+      const list = userChallengeSortedMap.get(key) || [];
+      const idx = list.findIndex(s => s.id === sub.id);
+      return idx >= 0 ? idx + 1 : 1;
+    };
+
+    // 3. Group by User -> Challenge
+    interface UserGroup {
+      userId: string;
+      userName: string;
+      displayName: string;
+      avatarUrl: string | null;
+      totalSubmissions: number;
+      pendingCount: number;
+      approvedCount: number;
+      collectionCount: number;
+      finalReviewCount: number;
+      rejectedCount: number;
+      latestCreatedAt: string;
+      challenges: {
+        challengeId: string;
+        challengeTitle: string;
+        quantityUnit: string;
+        totalQuantity: number;
+        pendingCount: number;
+        submissions: {
+          sub: ChallengeSubmission;
+          submissionNumber: number;
+        }[];
+      }[];
+    }
+
+    const userMap = new Map<string, UserGroup>();
+
+    filteredSubs.forEach(sub => {
+      const userId = sub.userId || 'unknown';
+      const userName = sub.user?.name || 'Unknown User';
+      const displayName = sub.user?.profile?.displayName || userName;
+      const avatarUrl = sub.user?.profile?.avatarUrl 
+        ? (sub.user.profile.avatarUrl.startsWith('/') ? `${API_HOST}${sub.user.profile.avatarUrl}` : sub.user.profile.avatarUrl)
+        : null;
+      
+      const challengeId = sub.challengeId || 'unknown-challenge';
+      const challengeTitle = sub.challenge?.title || (sub as any).challengeInstance?.challenge?.title || 'Eco Challenge';
+      const quantityUnit = sub.challenge?.quantityUnit || 'items';
+      const quantity = sub.detectedQuantity || sub.reservedQuantity || 1;
+      const submissionNumber = getSubmissionIndex(sub);
+
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          userId,
+          userName,
+          displayName,
+          avatarUrl,
+          totalSubmissions: 0,
+          pendingCount: 0,
+          approvedCount: 0,
+          collectionCount: 0,
+          finalReviewCount: 0,
+          rejectedCount: 0,
+          latestCreatedAt: sub.createdAt,
+          challenges: []
+        });
+      }
+
+      const userGroup = userMap.get(userId)!;
+      userGroup.totalSubmissions += 1;
+      if (sub.status === 'pending') userGroup.pendingCount += 1;
+      if (sub.status === 'approved') userGroup.approvedCount += 1;
+      if (sub.status === 'approved_collection') userGroup.collectionCount += 1;
+      if (sub.status === 'final_review') userGroup.finalReviewCount += 1;
+      if (sub.status === 'rejected') userGroup.rejectedCount += 1;
+
+      if (new Date(sub.createdAt).getTime() > new Date(userGroup.latestCreatedAt).getTime()) {
+        userGroup.latestCreatedAt = sub.createdAt;
+      }
+
+      let challengeGroup = userGroup.challenges.find(c => c.challengeId === challengeId);
+      if (!challengeGroup) {
+        challengeGroup = {
+          challengeId,
+          challengeTitle,
+          quantityUnit,
+          totalQuantity: 0,
+          pendingCount: 0,
+          submissions: []
+        };
+        userGroup.challenges.push(challengeGroup);
+      }
+
+      challengeGroup.totalQuantity += quantity;
+      if (sub.status === 'pending' || sub.status === 'final_review') challengeGroup.pendingCount += 1;
+      challengeGroup.submissions.push({
+        sub,
+        submissionNumber
+      });
+    });
+
+    userMap.forEach(userGroup => {
+      userGroup.challenges.forEach(ch => {
+        // Sort submissions within each challenge so Submission #1, #2, etc. are ordered cleanly
+        ch.submissions.sort((a, b) => b.submissionNumber - a.submissionNumber);
+      });
+      // Sort challenges with pending count first
+      userGroup.challenges.sort((a, b) => b.pendingCount - a.pendingCount || a.challengeTitle.localeCompare(b.challengeTitle));
+    });
+
+    return Array.from(userMap.values()).sort((a, b) => {
+      if (b.pendingCount !== a.pendingCount) {
+        return b.pendingCount - a.pendingCount;
+      }
+      return new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime();
+    });
+  }, [submissions, subSearch, subStatusFilter, selectedUserIdFilter]);
+
+  // Unique list of users for dropdown filter
+  const uniqueUsers = useMemo(() => {
+    const map = new Map<string, string>();
+    submissions.forEach(s => {
+      if (s.userId) {
+        map.set(s.userId, s.user?.profile?.displayName || s.user?.name || 'Unknown User');
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [submissions]);
+
+  const toggleUserCollapse = (userId: string) => {
+    setCollapsedUsers(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  const toggleChallengeCollapse = (key: string) => {
+    setCollapsedChallenges(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const expandAll = () => {
+    setCollapsedUsers({});
+    setCollapsedChallenges({});
+  };
+
+  const collapseAll = () => {
+    const userCol: Record<string, boolean> = {};
+    groupedSubmissions.forEach(u => {
+      userCol[u.userId] = true;
+    });
+    setCollapsedUsers(userCol);
+  };
 
   const handleAdd = async (form: FormData) => {
     const item = await adminPost<Challenge>('/admin/challenges', form);
@@ -663,8 +852,8 @@ export function Challenges() {
         </div>
         </>
       ) : (
-        /* ─── SUBMISSIONS TAB ────────────────────────────────────────────── */
-        <div className="space-y-4">
+        /* ─── SUBMISSIONS TAB (HIERARCHICAL USER -> CHALLENGE -> SUBMISSION) ─── */
+        <div className="space-y-6">
           {/* Submissions stats */}
           <div className="grid grid-cols-4 gap-4">
             {[
@@ -683,183 +872,404 @@ export function Challenges() {
           </div>
 
           {/* Info banner about the flow */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl p-4 flex items-start gap-3 animate-reveal delay-160">
-            <ShieldCheck className="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-700 dark:text-blue-300">
-              <strong>Multi-step challenge review flow:</strong> Preliminary review (before photo) → Approve for Collection (Generates Municipal QR Code) → User brings items on Weekend & scans QR → User submits After photo → Final review → Final Approve (Awards Linear YOLO Quantity Rewards).
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl p-4 flex items-start justify-between gap-3 animate-reveal delay-160">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-700 dark:text-blue-300">
+                <strong>Submissions Filtered by User & Challenge:</strong> Multiple submissions from the same user are grouped together hierarchically per challenge so you can review consecutive Before & After photos easily.
+              </div>
+            </div>
+            <button onClick={loadSubmissions} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg">
+              <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 space-y-3 animate-reveal delay-160">
+            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+              {/* Search input */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search by user name, challenge title, or notes..." 
+                  value={subSearch} 
+                  onChange={e => setSubSearch(e.target.value)} 
+                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:text-white transition-all" 
+                />
+              </div>
+
+              {/* User Selector filter */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <User className="w-4 h-4 text-gray-400" />
+                  <select 
+                    value={selectedUserIdFilter} 
+                    onChange={e => setSelectedUserIdFilter(e.target.value)}
+                    className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
+                  >
+                    <option value="All">All Users ({uniqueUsers.length})</option>
+                    {uniqueUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Expand / Collapse All buttons */}
+                <div className="flex items-center gap-1 border-l border-gray-200 dark:border-gray-700 pl-2">
+                  <button 
+                    onClick={expandAll} 
+                    className="px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                    title="Expand All Users & Challenges"
+                  >
+                    Expand All
+                  </button>
+                  <button 
+                    onClick={collapseAll} 
+                    className="px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                    title="Collapse All Users"
+                  >
+                    Collapse All
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Status pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 border-t border-gray-100 dark:border-gray-800 text-xs">
+              <span className="text-gray-400 font-medium shrink-0 flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5" /> Filter Status:
+              </span>
+              {[
+                { key: 'All', label: 'All Submissions' },
+                { key: 'pending', label: 'Pending Review' },
+                { key: 'approved_collection', label: 'Approved Collection' },
+                { key: 'final_review', label: 'Final Review' },
+                { key: 'approved', label: 'Completed / Approved' },
+                { key: 'rejected', label: 'Rejected' },
+              ].map(f => {
+                const isActive = subStatusFilter === f.key;
+                return (
+                  <button
+                    key={f.key}
+                    onClick={() => setSubStatusFilter(f.key)}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 ${
+                      isActive 
+                        ? 'bg-green-600 text-white shadow-sm' 
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Submissions table */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden animate-reveal delay-280">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="font-semibold text-gray-900 dark:text-white">Challenge Submissions</h3>
-              <button onClick={loadSubmissions} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-                {submissionsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                Refresh
-              </button>
+          {/* Grouped Submission Tree View */}
+          {submissionsLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 space-y-4 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-800" />
+                    <div className="space-y-2">
+                      <div className="w-36 h-4 bg-gray-200 dark:bg-gray-800 rounded" />
+                      <div className="w-24 h-3 bg-gray-200 dark:bg-gray-800 rounded" />
+                    </div>
+                  </div>
+                  <div className="h-20 bg-gray-100 dark:bg-gray-800/50 rounded-xl" />
+                </div>
+              ))}
             </div>
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50/70 dark:bg-gray-800/50">
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-6 py-4">User</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Challenge</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Count</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Photos</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Stage / Status</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">QR</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-4 py-4">Date</th>
-                  <th className="px-4 py-4 w-50"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {submissionsLoading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
-                        <td key={j} className="px-4 py-4"><div className="animate-pulse bg-gray-200 dark:bg-gray-800 rounded h-4 w-full" /></td>
-                      ))}
-                    </tr>
-                  ))
-                ) : submissions.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-gray-400 dark:text-gray-500">No challenge submissions yet.</td></tr>
-                ) : (() => {
-                  // Build a running counter of submissions per (userId + challengeId)
-                  const subCounterMap: Record<string, number> = {};
-                  return submissions.map(sub => {
-                    const mapKey = `${sub.userId}-${sub.challengeId}`;
-                    subCounterMap[mapKey] = (subCounterMap[mapKey] || 0) + 1;
-                    const submissionNum = subCounterMap[mapKey];
+          ) : groupedSubmissions.length === 0 ? (
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-12 text-center text-gray-400 dark:text-gray-500 shadow-sm">
+              <Layers className="w-12 h-12 mx-auto mb-3 opacity-30 text-gray-400" />
+              <p className="text-base font-semibold text-gray-700 dark:text-gray-300">No submissions found</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try adjusting your search query or status filter.</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {groupedSubmissions.map((userGroup) => {
+                const isUserCollapsed = !!collapsedUsers[userGroup.userId];
 
-                    const fullProofUrl = sub.proofUrl ? (sub.proofUrl.startsWith('/') ? `${API_HOST}${sub.proofUrl}` : sub.proofUrl) : null;
-                    const fullAfterUrl = sub.afterProofUrl ? (sub.afterProofUrl.startsWith('/') ? `${API_HOST}${sub.afterProofUrl}` : sub.afterProofUrl) : null;
-                    const avatarUrl = sub.user?.profile?.avatarUrl ? (sub.user.profile.avatarUrl.startsWith('/') ? `${API_HOST}${sub.user.profile.avatarUrl}` : sub.user.profile.avatarUrl) : null;
+                return (
+                  <div 
+                    key={userGroup.userId} 
+                    className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-150 dark:border-gray-800 shadow-sm overflow-hidden transition-all duration-200"
+                  >
+                    {/* User Header */}
+                    <div 
+                      onClick={() => toggleUserCollapse(userGroup.userId)}
+                      className="px-6 py-4 bg-gradient-to-r from-gray-50/90 to-white dark:from-gray-800/80 dark:to-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors select-none"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="relative">
+                          {userGroup.avatarUrl ? (
+                            <img src={userGroup.avatarUrl} alt={userGroup.userName} className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-sm" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-600 to-emerald-400 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                              {userGroup.displayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          {userGroup.pendingCount > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 border-2 border-white dark:border-gray-900 rounded-full flex items-center justify-center text-[9px] font-bold text-white">
+                              {userGroup.pendingCount}
+                            </span>
+                          )}
+                        </div>
 
-                    const statusBg: Record<string, string> = {
-                      pending: 'bg-yellow-50 text-yellow-700 border-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800',
-                      approved: 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800',
-                      approved_collection: 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
-                      final_review: 'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800',
-                      rejected: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
-                    };
-
-                    return (
-                      <tr key={sub.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors group border-t border-gray-50 dark:border-gray-800/50">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            {avatarUrl ? (
-                              <img src={avatarUrl} alt={sub.user?.name} className="w-8 h-8 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                <span className="text-xs font-bold text-green-700 dark:text-green-400">{(sub.user?.name || '?').charAt(0).toUpperCase()}</span>
-                              </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-base font-bold text-gray-900 dark:text-white">{userGroup.displayName}</h4>
+                            {userGroup.userName !== userGroup.displayName && (
+                              <span className="text-xs text-gray-400 font-normal">(@{userGroup.userName})</span>
                             )}
-                            <div className="flex flex-col">
-                              <span className="text-sm font-semibold text-gray-900 dark:text-white">{sub.user?.profile?.displayName || sub.user?.name || 'Unknown'}</span>
-                              {submissionNum > 1 && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 w-fit">
-                                  Submission #{submissionNum}
-                                </span>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2 mt-0.5">
+                            <span>{userGroup.challenges.length} {userGroup.challenges.length === 1 ? 'Challenge' : 'Challenges'}</span>
+                            <span>•</span>
+                            <span>{userGroup.totalSubmissions} Total {userGroup.totalSubmissions === 1 ? 'Submission' : 'Submissions'}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {userGroup.pendingCount > 0 && (
+                          <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
+                            {userGroup.pendingCount} Pending Review
+                          </span>
+                        )}
+                        <button className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                          {isUserCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* User Challenges & Submissions Body */}
+                    {!isUserCollapsed && (
+                      <div className="p-5 sm:p-6 space-y-5 bg-gray-50/40 dark:bg-gray-950/40">
+                        {userGroup.challenges.map((challengeGroup) => {
+                          const challengeKey = `${userGroup.userId}___${challengeGroup.challengeId}`;
+                          const isChallengeCollapsed = !!collapsedChallenges[challengeKey];
+
+                          return (
+                            <div 
+                              key={challengeGroup.challengeId}
+                              className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 shadow-sm overflow-hidden"
+                            >
+                              {/* Challenge Sub-Header */}
+                              <div 
+                                onClick={() => toggleChallengeCollapse(challengeKey)}
+                                className="px-5 py-3.5 bg-gray-50/70 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-100/70 dark:hover:bg-gray-800/70 transition-colors select-none"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 flex items-center justify-center font-bold">
+                                    <Trophy className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                      {challengeGroup.challengeTitle}
+                                    </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2.5">
+                                      ({challengeGroup.submissions.length} {challengeGroup.submissions.length === 1 ? 'submission' : 'submissions'} · {challengeGroup.totalQuantity} {challengeGroup.quantityUnit})
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {challengeGroup.pendingCount > 0 && (
+                                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                      {challengeGroup.pendingCount} action needed
+                                    </span>
+                                  )}
+                                  {isChallengeCollapsed ? <ChevronRight className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                </div>
+                              </div>
+
+                              {/* Submissions Table / Cards */}
+                              {!isChallengeCollapsed && (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left">
+                                    <thead>
+                                      <tr className="border-b border-gray-100 dark:border-gray-800 text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-white dark:bg-gray-900">
+                                        <th className="px-5 py-3 w-36">Submission #</th>
+                                        <th className="px-4 py-3">Quantity</th>
+                                        <th className="px-4 py-3">Photos (Before / After)</th>
+                                        <th className="px-4 py-3">Stage / Status</th>
+                                        <th className="px-4 py-3">Municipal QR</th>
+                                        <th className="px-4 py-3">Date Submitted</th>
+                                        <th className="px-5 py-3 text-right">Review Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60">
+                                      {challengeGroup.submissions.map(({ sub, submissionNumber }) => {
+                                        const fullProofUrl = sub.proofUrl ? (sub.proofUrl.startsWith('/') ? `${API_HOST}${sub.proofUrl}` : sub.proofUrl) : null;
+                                        const fullAfterUrl = sub.afterProofUrl ? (sub.afterProofUrl.startsWith('/') ? `${API_HOST}${sub.afterProofUrl}` : sub.afterProofUrl) : null;
+
+                                        const statusBg: Record<string, string> = {
+                                          pending: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800',
+                                          approved: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
+                                          approved_collection: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+                                          final_review: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800',
+                                          rejected: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+                                        };
+
+                                        return (
+                                          <tr key={sub.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors">
+                                            {/* Submission Number */}
+                                            <td className="px-5 py-4">
+                                              <div className="flex items-center gap-2">
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-green-100/80 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800">
+                                                  Submission #{submissionNumber}
+                                                </span>
+                                              </div>
+                                            </td>
+
+                                            {/* Count / Quantity */}
+                                            <td className="px-4 py-4">
+                                              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                                                {sub.detectedQuantity || sub.reservedQuantity || 1} {sub.challenge?.quantityUnit || challengeGroup.quantityUnit || 'items'}
+                                              </span>
+                                            </td>
+
+                                            {/* Photos */}
+                                            <td className="px-4 py-4">
+                                              <div className="flex items-center gap-2">
+                                                {fullProofUrl ? (
+                                                  <button 
+                                                    onClick={() => setSelectedImage(fullProofUrl)} 
+                                                    className="relative w-14 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer hover:ring-2 hover:ring-green-400 transition-all shadow-xs"
+                                                    title="Click to zoom BEFORE photo"
+                                                  >
+                                                    <img src={fullProofUrl} alt="Before" className="w-full h-full object-cover" />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                      <span className="text-white text-[9px] font-bold">BEFORE</span>
+                                                    </div>
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-xs text-gray-400 dark:text-gray-500 italic">No before</span>
+                                                )}
+
+                                                {fullAfterUrl ? (
+                                                  <button 
+                                                    onClick={() => setSelectedImage(fullAfterUrl)} 
+                                                    className="relative w-14 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all shadow-xs"
+                                                    title="Click to zoom AFTER photo"
+                                                  >
+                                                    <img src={fullAfterUrl} alt="After" className="w-full h-full object-cover" />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                      <span className="text-white text-[9px] font-bold">AFTER</span>
+                                                    </div>
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-[11px] text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md">
+                                                    Awaiting after photo
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </td>
+
+                                            {/* Stage / Status */}
+                                            <td className="px-4 py-4">
+                                              <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full border ${statusBg[sub.status] || 'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                                {sub.status === 'approved_collection' ? '📦 Approved for Collection' : sub.status === 'final_review' ? '🔍 Final Review (Weekend)' : sub.status === 'approved' ? '✅ Completed / Approved' : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+                                              </span>
+                                              {sub.moderatorNotes && (
+                                                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-44 truncate" title={sub.moderatorNotes}>
+                                                  Note: {sub.moderatorNotes}
+                                                </p>
+                                              )}
+                                            </td>
+
+                                            {/* QR */}
+                                            <td className="px-4 py-4">
+                                              {sub.qrToken ? (
+                                                <button
+                                                  onClick={() => setSelectedQr(sub)}
+                                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                                                >
+                                                  <QrCode className="w-3.5 h-3.5" />
+                                                  {sub.qrVerified ? 'Verified ✓' : 'View QR'}
+                                                </button>
+                                              ) : (
+                                                <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                                              )}
+                                            </td>
+
+                                            {/* Date */}
+                                            <td className="px-4 py-4">
+                                              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                                {new Date(sub.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                                              </span>
+                                            </td>
+
+                                            {/* Actions */}
+                                            <td className="px-5 py-4 text-right">
+                                              <div className="flex items-center gap-1.5 justify-end">
+                                                {sub.status === 'pending' && (
+                                                  <button
+                                                    onClick={() => handlePreliminaryApprove(sub.id)}
+                                                    disabled={processingSubId === sub.id}
+                                                    title="Preliminary Approve → Approved for Collection & Generate QR"
+                                                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                                                  >
+                                                    {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                                    Prelim. Approve
+                                                  </button>
+                                                )}
+                                                {(sub.status === 'final_review' || (sub.status === 'approved_collection' && sub.afterProofUrl)) && (
+                                                  <button
+                                                    onClick={() => handleFinalApprove(sub.id)}
+                                                    disabled={processingSubId === sub.id}
+                                                    title="Final Approve → Grant linear YOLO rewards"
+                                                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white hover:bg-green-700 rounded-lg transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                                                  >
+                                                    {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                                    Final Approve
+                                                  </button>
+                                                )}
+                                                {(sub.status === 'pending' || sub.status === 'final_review') && (
+                                                  <button
+                                                    onClick={() => handleRejectSubmission(sub.id)}
+                                                    disabled={processingSubId === sub.id}
+                                                    title="Reject & Return Reserved Quantity"
+                                                    className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
+                                                  >
+                                                    {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                                  </button>
+                                                )}
+                                                {sub.status === 'approved' && (
+                                                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                                                    <CheckCircle2 className="w-4 h-4" /> Approved
+                                                  </span>
+                                                )}
+                                                {sub.status === 'rejected' && (
+                                                  <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
+                                                    <XCircle className="w-4 h-4" /> Rejected
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
                               )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white max-w-40 truncate">
-                            {sub.challenge?.title || (sub as any).challengeInstance?.challenge?.title || 'Eco Challenge'}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                            {sub.detectedQuantity || sub.reservedQuantity || 1} {sub.challenge?.quantityUnit || 'items'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex gap-2">
-                            {fullProofUrl ? (
-                              <button onClick={() => setSelectedImage(fullProofUrl)} className="relative w-14 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer">
-                                <img src={fullProofUrl} alt="Before" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                  <span className="text-white text-[9px] font-bold absolute bottom-0.5 left-1">BEFORE</span>
-                                </div>
-                              </button>
-                            ) : <span className="text-xs text-gray-400 dark:text-gray-500">No photo</span>}
-                            {fullAfterUrl && (
-                              <button onClick={() => setSelectedImage(fullAfterUrl)} className="relative w-14 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer">
-                                <img src={fullAfterUrl} alt="After" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                  <span className="text-white text-[9px] font-bold absolute bottom-0.5 left-1">AFTER</span>
-                                </div>
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full border ${statusBg[sub.status] || 'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'}`}>
-                            {sub.status === 'approved_collection' ? '📦 Approved for Collection' : sub.status === 'final_review' ? '🔍 Final Review (Weekend)' : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
-                          </span>
-                          {sub.moderatorNotes && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-30 truncate" title={sub.moderatorNotes}>{sub.moderatorNotes}</p>}
-                        </td>
-                        <td className="px-4 py-4">
-                          {sub.qrToken ? (
-                            <button
-                              onClick={() => setSelectedQr(sub)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg transition-colors"
-                            >
-                              <QrCode className="w-3.5 h-3.5" />
-                              {sub.qrVerified ? 'Verified ✓' : 'View QR'}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(sub.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                            {sub.status === 'pending' && (
-                              <button
-                                onClick={() => handlePreliminaryApprove(sub.id)}
-                                disabled={processingSubId === sub.id}
-                                title="Preliminary Approve → Approved for Collection & Generate QR"
-                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                {processingSubId === sub.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                Prelim. Approve
-                              </button>
-                            )}
-                            {(sub.status === 'final_review' || (sub.status === 'approved_collection' && sub.afterProofUrl)) && (
-                              <button
-                                onClick={() => handleFinalApprove(sub.id)}
-                                disabled={processingSubId === sub.id}
-                                title="Final Approve → Grant linear YOLO rewards"
-                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                {processingSubId === sub.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
-                                Final Approve
-                              </button>
-                            )}
-                            {(sub.status === 'pending' || sub.status === 'final_review') && (
-                              <button
-                                onClick={() => handleRejectSubmission(sub.id)}
-                                disabled={processingSubId === sub.id}
-                                title="Reject & Return Reserved Quantity"
-                                className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
-                              >
-                                {processingSubId === sub.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  });
-                })()
-              }
-              </tbody>
-            </table>
-          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

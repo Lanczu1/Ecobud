@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
   Modal,
+  useWindowDimensions,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -35,7 +36,9 @@ function AvatarBubble({
 }) {
   return (
     <View style={[styles.avatarBubble, style, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[styles.avatarInitials, textStyle]}>{initialsFromLabel(label)}</Text>
+      <Text style={[styles.avatarInitials, textStyle, { fontSize: Math.round(size * 0.42) }]}>
+        {initialsFromLabel(label)}
+      </Text>
     </View>
   );
 }
@@ -48,13 +51,18 @@ export function Header({
   showBack,
   title,
   onBack,
+  onProfilePress,
   onEventsPress,
   onTrackerPress,
   onNotificationsPress,
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
-  // Use device safe area top inset (notch / status bar) with a minimum of 16px breathing room
-  const topPadding = Math.max(insets.top, 16);
+  const { width, height } = useWindowDimensions();
+  const isSmallDevice = height <= 680 || width < 375;
+  const isTablet = width >= 600;
+
+  // Use device safe area top inset (notch / status bar) with breathing room
+  const topPadding = Math.max(insets.top, isSmallDevice ? 10 : 16);
 
   const getAvatarSource = () => {
     if (!userAvatarUrl || userAvatarUrl === 'null') return null;
@@ -70,70 +78,107 @@ export function Header({
   const avatarSource = getAvatarSource();
   const [isViewingAvatar, setIsViewingAvatar] = useState(false);
 
+  // Keep clean standard avatar & indicator dimensions so it maintains the exact default visual quality
+  const avatarSize = isTablet ? 50 : 44;
+  const indicatorSize = 11;
+  const iconSize = isSmallDevice ? 22 : isTablet ? 26 : 24;
+  const actionGap = isSmallDevice ? 10 : isTablet ? 16 : 12;
+  const logoSize = isSmallDevice ? scale(42) : isTablet ? scale(52) : scale(46);
+
   return (
     <>
-      <View style={[styles.topNavbar, { paddingTop: topPadding }]}>
+      <View style={[
+        styles.topNavbar,
+        { paddingTop: topPadding },
+        isSmallDevice && { paddingHorizontal: scale(16), paddingBottom: scale(12) }
+      ]}>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' }}>
           {showBack ? (
-            <TouchableOpacity onPress={onBack} style={{ marginRight: 12 }}>
-              <Feather name="arrow-left" size={24} color="#1A211D" />
+            <TouchableOpacity onPress={onBack} style={{ marginRight: isSmallDevice ? 8 : 12, padding: 4 }}>
+              <Feather name="arrow-left" size={iconSize} color="#1A211D" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.avatarWrap} onPress={() => { if (avatarSource) setIsViewingAvatar(true); }}>
+            <TouchableOpacity
+              style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (onProfilePress) {
+                  onProfilePress();
+                }
+              }}
+              onLongPress={() => {
+                setIsViewingAvatar(true);
+              }}
+              delayLongPress={300}
+            >
               {avatarSource ? (
                 <Image
                   source={avatarSource}
-                  style={[styles.topNavAvatar, { width: 44, height: 44, borderRadius: 22 }]}
+                  style={[styles.topNavAvatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
                 />
               ) : (
                 <AvatarBubble
                   label={userDisplayName}
-                  size={44}
+                  size={avatarSize}
                   style={styles.topNavAvatar}
                   textStyle={styles.topNavAvatarText}
                 />
               )}
               <ConnectionStatusIndicator
                 hasUsableInternet={hasUsableInternet}
-                size={11}
+                size={indicatorSize}
                 style={styles.connectionIndicator}
               />
             </TouchableOpacity>
           )}
         </View>
-        <View style={{ alignItems: 'center' }}>
+
+        <View style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
           <Image
-            source={require('../../../assets/logo.png')}
-            style={{ width: scale(130), height: scale(130) * (45 / 140), resizeMode: 'contain' }}
+            source={require('../../../assets/ecobud_logo_circle.png')}
+            style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2, resizeMode: 'contain' }}
           />
         </View>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: actionGap }}>
           {onTrackerPress && (
-            <TouchableOpacity onPress={onTrackerPress}>
-              <Ionicons name="bar-chart-outline" size={24} color="#126027" />
+            <TouchableOpacity onPress={onTrackerPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+              <Ionicons name="bar-chart-outline" size={iconSize} color="#126027" />
             </TouchableOpacity>
           )}
           {onEventsPress && (
-            <TouchableOpacity onPress={onEventsPress}>
-              <Ionicons name="calendar-outline" size={24} color="#126027" />
+            <TouchableOpacity onPress={onEventsPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+              <Ionicons name="calendar-outline" size={iconSize} color="#126027" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={onNotificationsPress}>
-            <Ionicons name="notifications" size={24} color="#126027" />
-            {notificationCount > 0 && <View style={styles.topNavBadge} />}
+          <TouchableOpacity onPress={onNotificationsPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+            <Ionicons name="notifications" size={iconSize} color="#126027" />
+            {notificationCount > 0 && (
+              <View style={[
+                styles.topNavBadge,
+                isSmallDevice && { width: scale(8), height: scale(8), borderRadius: scale(4) }
+              ]} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
 
       {isViewingAvatar && (
         <Modal visible={isViewingAvatar} transparent={true} animationType="fade" onRequestClose={() => setIsViewingAvatar(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
-            <TouchableOpacity style={{ position: 'absolute', top: 60, right: 30, zIndex: 10 }} onPress={() => setIsViewingAvatar(false)}>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}
+            activeOpacity={1}
+            onPress={() => setIsViewingAvatar(false)}
+          >
+            <TouchableOpacity
+              style={{ position: 'absolute', top: Math.max(topPadding, 20), right: 24, zIndex: 10, padding: 8 }}
+              onPress={() => setIsViewingAvatar(false)}
+            >
               <Ionicons name="close" size={32} color="#FFF" />
             </TouchableOpacity>
 
             {avatarSource ? (
-              <Image source={avatarSource} style={{ width: '100%', height: '70%', resizeMode: 'contain' }} />
+              <Image source={avatarSource} style={{ width: '85%', height: '70%', resizeMode: 'contain' }} />
             ) : (
               <AvatarBubble
                 label={userDisplayName}
@@ -142,7 +187,7 @@ export function Header({
                 textStyle={{ fontSize: 80 }}
               />
             )}
-          </View>
+          </TouchableOpacity>
         </Modal>
       )}
     </>
@@ -151,7 +196,6 @@ export function Header({
 
 const styles = StyleSheet.create({
   topNavbar: {
-    // paddingTop is now applied dynamically via useSafeAreaInsets() in the component
     paddingHorizontal: scale(20),
     paddingBottom: scale(14),
     flexDirection: 'row',
@@ -164,12 +208,13 @@ const styles = StyleSheet.create({
     borderColor: '#4ADE80',
   },
   topNavAvatarText: {
-    fontSize: responsiveFontSize(18),
+    fontWeight: '900',
+    color: '#126027',
   },
   avatarWrap: {
     position: 'relative',
-    width: scale(44),
-    height: scale(44),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topNavTitle: {
     fontSize: responsiveFontSize(20),
@@ -194,8 +239,10 @@ const styles = StyleSheet.create({
   },
   connectionIndicator: {
     position: 'absolute',
-    top: 1,
-    right: 1,
+    bottom: -2,
+    right: -2,
+    zIndex: 10,
+    elevation: 4,
   },
   avatarBubble: {
     backgroundColor: '#CBEFD6',
@@ -203,7 +250,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarInitials: {
-    fontSize: responsiveFontSize(20),
     fontWeight: '900',
     color: '#126027',
   },

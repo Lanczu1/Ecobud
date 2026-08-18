@@ -47,16 +47,17 @@ export interface EcoLevelTier {
   level: number;
   name: string;
   emoji: string;
+  icon?: string;
   floor: number;
   ceiling: number; // exclusive upper bound; Infinity for the top tier
 }
 
 const ECO_LEVEL_TIERS: EcoLevelTier[] = [
-  { level: 1, name: 'Eco Seedling', emoji: '🌱', floor: 0, ceiling: 200 },
-  { level: 2, name: 'Eco Learner', emoji: '🌿', floor: 200, ceiling: 450 },
-  { level: 3, name: 'Eco Advocate', emoji: '🌳', floor: 450, ceiling: 800 },
-  { level: 4, name: 'Eco Warrior', emoji: '🛡️', floor: 800, ceiling: 1200 },
-  { level: 5, name: 'Eco Champion', emoji: '👑', floor: 1200, ceiling: Infinity },
+  { level: 1, name: 'Eco Seedling', emoji: 'sprout', icon: 'sprout', floor: 0, ceiling: 200 },
+  { level: 2, name: 'Eco Learner', emoji: 'leaf', icon: 'leaf', floor: 200, ceiling: 450 },
+  { level: 3, name: 'Eco Advocate', emoji: 'tree', icon: 'tree', floor: 450, ceiling: 800 },
+  { level: 4, name: 'Eco Warrior', emoji: 'shield-star', icon: 'shield-star', floor: 800, ceiling: 1200 },
+  { level: 5, name: 'Eco Champion', emoji: 'crown', icon: 'crown', floor: 1200, ceiling: Infinity },
 ];
 
 export function getEcoLevel(totalPoints: number) {

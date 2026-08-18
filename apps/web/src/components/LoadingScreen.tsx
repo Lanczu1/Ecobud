@@ -78,13 +78,13 @@ export function LoadingScreen({
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <img src={logo} alt="EcoBud logo" style={{ width: 56, height: 56, objectFit: 'contain' }} />
+            <img src={logo} alt="EcoBud logo" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: '50%' }} />
           </div>
         </div>
 
         {/* Wordmark */}
         <div className="mt-7 flex items-center justify-center gap-4">
-          <img src={logo} alt="Logo" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+          <img src={logo} alt="Logo" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: '50%' }} />
           <img src={logoname} alt="Brand Name" style={{ width: 160, height: 'auto', objectFit: 'contain' }} />
         </div>
 
@@ -165,7 +165,7 @@ function CircleLoader() {
           src="/logo.png"
           alt=""
           aria-hidden
-          style={{ width: 24, height: 24, objectFit: 'contain' }}
+          style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: '50%' }}
         />
       </div>
     </div>

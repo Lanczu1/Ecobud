@@ -77,7 +77,7 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
             <img
               src={logoImg}
               alt="Logo"
-              style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 8 }}
+              style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: '50%' }}
             />
             <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-auth-primary)' }}>ECOBUD</span>
           </div>

@@ -215,9 +215,9 @@ challengeRoutes.post(
 
     const challenge = instance?.challenge;
 
-    if (!challenge || !challenge.active || challenge.type !== 'AI Image Recognition Challenge') {
+    if (!challenge || !challenge.active) {
       fs.unlinkSync(req.file.path);
-      throw new HttpError(404, 'Active AI challenge not found.');
+      throw new HttpError(404, 'Active challenge not found.');
     }
 
     const scriptPath = path.join(__dirname, '../utils/analyze_image.py');
@@ -225,7 +225,10 @@ challengeRoutes.post(
 
     return new Promise((resolve, reject) => {
       const pythonCommand = process.platform === 'win32' ? 'py' : 'python';
-      const targetsArg = (challenge.aiDetectionTargets || []).join(',');
+      const rawTargets = Array.isArray(challenge.aiDetectionTargets) && (challenge.aiDetectionTargets as any[]).length > 0
+        ? (challenge.aiDetectionTargets as string[])
+        : ['Plastic Bottle', 'Glass Bottle'];
+      const targetsArg = rawTargets.join(',');
       const pythonProcess = spawn(pythonCommand, [scriptPath, imagePath, targetsArg]);
       
       let outputData = '';
@@ -261,7 +264,7 @@ challengeRoutes.post(
           }
 
           const detected = result.detected || [];
-          const targets = (challenge.aiDetectionTargets || []).map(t => t.toLowerCase().trim());
+          const targets = rawTargets.map(t => String(t).toLowerCase().trim());
           const minConf = challenge.aiMinimumConfidence || 30;
 
           let passed = false;
@@ -285,7 +288,7 @@ challengeRoutes.post(
             const isMatch = matchedTargetIndex !== -1;
             
             if (isMatch) {
-              const originalTarget = (challenge.aiDetectionTargets || [])[matchedTargetIndex] || det.object;
+              const originalTarget = rawTargets[matchedTargetIndex] || det.object;
               if (det.confidence >= minConf) {
                 passed = true;
                 matchedObject = originalTarget;

@@ -20,7 +20,10 @@ import {
   DeviceEventEmitter,
   ActivityIndicator,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
+import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -205,7 +208,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setProcessing(true);
     try {
       await model.handleVerifyChallengeQr(challenge.id, data, undefined, undefined, challenge.progress?.submissionId);
-      Alert.alert('QR Verified! 🎉', 'You have successfully verified your presence at the collection point. Now take your After Photo!', [
+      Alert.alert('QR Verified!', 'You have successfully verified your presence at the collection point. Now take your After Photo!', [
         { text: 'Take After Photo', onPress: () => setStep('capture_after') }
       ]);
     } catch (err: any) {
@@ -223,7 +226,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
       await model.handleSubmitChallengeAfterPhoto(challenge.id, uploadResult.proofUrl, challenge.progress?.submissionId);
       Alert.alert(
-        'Mission Completed! 🌿',
+        'Mission Completed!',
         'Your After photo was submitted and is now in Final Review. You will be awarded your Eco Points & Coins once finalized by the admin!',
         [{ text: 'OK', onPress: handleClose }]
       );
@@ -319,9 +322,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
 
             <View style={{ backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, width: '100%', borderWidth: 1, borderColor: '#BBF7D0' }}>
-              <Text style={{ fontSize: 13, color: '#166534', fontWeight: '700', marginBottom: 4 }}>
-                📍 Collection Note:
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                <Ionicons name="location" size={14} color="#166534" />
+                <Text style={{ fontSize: 13, color: '#166534', fontWeight: '700' }}>
+                  Collection Note:
+                </Text>
+              </View>
               <Text style={{ fontSize: 13, color: '#15803D', lineHeight: 18 }}>
                 Once verified, the camera will automatically unlock for your "AFTER" proof photo.
               </Text>
@@ -362,7 +368,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
                 <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Status:</Text>
                 <Text style={{ fontSize: 18, fontWeight: '800', color: mockResult.passed ? '#4ADE80' : '#F87171', marginBottom: mockResult.passed ? 0 : 16 }}>
-                  {mockResult.passed ? 'Passed ✅' : 'Failed ❌'}
+                  {mockResult.passed ? 'Passed' : 'Failed'}
                 </Text>
 
                 {!mockResult.passed && (
@@ -380,17 +386,26 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     We detected <Text style={{ fontWeight: 'bold', color: '#10B981' }}>{count} {mockResult.object}</Text>. Submitting this will reserve {count} units for your mission.
                   </Text>
                   <View style={{ backgroundColor: '#F0FDF4', padding: 14, borderRadius: 14, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#BBF7D0', marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: '#15803D', fontWeight: '700', marginBottom: 4 }}>Reward upon weekend completion:</Text>
-                    <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>🌱 +{expAward} Eco Points</Text>
+                    <Text style={{ fontSize: 13, color: '#15803D', fontWeight: '700', marginBottom: 6 }}>Reward upon weekend completion:</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="leaf" size={16} color="#10B981" />
+                      <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>+{expAward} Eco Points</Text>
+                    </View>
                     {coinsAward > 0 && (
-                      <Text style={{ fontSize: 16, color: '#F59E0B', fontWeight: 'bold', marginTop: 2 }}>🪙 +{coinsAward} Eco Coins</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
+                        <Text style={{ fontSize: 16, color: '#F59E0B', fontWeight: 'bold' }}>+{coinsAward} Eco Coins</Text>
+                      </View>
                     )}
                   </View>
 
                   <View style={{ backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, width: '100%', borderWidth: 1, borderColor: '#FDE68A' }}>
-                    <Text style={{ fontSize: 12, color: '#92400E', lineHeight: 18, textAlign: 'center' }}>
-                      📋 After preliminary admin review, bring your items to the collection point on the weekend to scan the QR code and submit the final After photo!
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+                      <Ionicons name="information-circle-outline" size={16} color="#92400E" style={{ marginTop: 2 }} />
+                      <Text style={{ flex: 1, fontSize: 12, color: '#92400E', lineHeight: 18 }}>
+                        After preliminary admin review, bring your items to the collection point on the weekend to scan the QR code and submit the final After photo!
+                      </Text>
+                    </View>
                   </View>
                 </View>
               )}
@@ -458,7 +473,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   // Details step (Default)
   return (
     <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-      <OverlayScaffold title="📷 AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
+      <OverlayScaffold title="AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
         <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
           <Animated.View style={{ opacity: fadeAnim }}>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>{challenge.title}</Text>
@@ -470,7 +485,10 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Rewards / Item:</Text>
-                <Text style={{ fontSize: 16, color: '#10B981', marginBottom: 4, fontWeight: '600' }}>🌱 {challenge.expReward} Eco Points</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <Ionicons name="leaf" size={14} color="#10B981" />
+                  <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.expReward} Eco Points</Text>
+                </View>
                 {challenge.ecoCoinReward > 0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
@@ -484,7 +502,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Available Quantity:</Text>
                 <Text style={{ fontSize: 16, color: '#15803D', fontWeight: '700' }}>
-                  {challenge.availableQuantity ?? 50} {challenge.quantityUnit || 'bottles'} left
+                  {challenge.availableQuantity ?? 50} items left
                 </Text>
               </View>
 
@@ -500,10 +518,16 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Targets:</Text>
                 {challenge.aiDetectionTargets?.map(target => (
-                  <Text key={target} style={{ fontSize: 16, color: '#6B7A75', marginBottom: 4 }}>✓ {target}</Text>
+                  <View key={target} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <Ionicons name="checkmark-circle-outline" size={15} color="#166534" />
+                    <Text style={{ fontSize: 16, color: '#6B7A75' }}>{target}</Text>
+                  </View>
                 ))}
                 {(!challenge.aiDetectionTargets || challenge.aiDetectionTargets.length === 0) && (
-                  <Text style={{ fontSize: 16, color: '#6B7A75', marginBottom: 4 }}>✓ Plastic Bottle</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <Ionicons name="checkmark-circle-outline" size={15} color="#166534" />
+                    <Text style={{ fontSize: 16, color: '#6B7A75' }}>Plastic Bottle</Text>
+                  </View>
                 )}
               </View>
 
@@ -515,9 +539,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Schedule & Workflow:</Text>
             <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 16, lineHeight: 22 }}>
-              1. 📅 <Text style={{ fontWeight: 'bold', color: '#166534' }}>Mon-Fri</Text>: Capture Before photo with YOLO detection.{'\n'}
-              2. ⏳ <Text style={{ fontWeight: 'bold', color: '#166534' }}>Admin Review</Text>: Preliminary approval for drop-off.{'\n'}
-              3. 📦 <Text style={{ fontWeight: 'bold', color: '#166534' }}>Weekend</Text>: Visit collection center, scan QR, & upload After photo to claim reward!
+              1. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Mon-Fri</Text>: Capture Before photo with YOLO detection.{'\n'}
+              2. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Admin Review</Text>: Preliminary approval for drop-off.{'\n'}
+              3. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Weekend</Text>: Visit collection center, scan QR, & upload After photo to claim reward!
             </Text>
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
@@ -532,7 +556,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 <View style={{ backgroundColor: '#FEF3C7', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#FDE68A', alignItems: 'center' }}>
                   <Ionicons name="calendar-outline" size={24} color="#B45309" style={{ marginBottom: 6 }} />
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#92400E', textAlign: 'center', marginBottom: 4 }}>
-                    Approved for Collection! 📦
+                    Approved for Collection!
                   </Text>
                   <Text style={{ fontSize: 13, color: '#78350F', textAlign: 'center', lineHeight: 18 }}>
                     QR scanning and After photo upload will automatically unlock this coming <Text style={{ fontWeight: 'bold' }}>Saturday & Sunday</Text> at the collection point.
@@ -765,60 +789,215 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
+  const responsive = useResponsive();
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = React.useRef<ScrollView>(null);
+
+  const { isSmall, isTablet, isCompact } = responsive;
+
+  // Responsive layout and dimension tokens
+  const horizontalPadding = isSmall ? 14 : isTablet ? 32 : 18;
+  const contentPaddingVertical = isCompact ? 14 : 20;
+  const maxContainerWidth = isTablet ? 720 : '100%';
+
+  const avatarSize = isSmall ? 40 : isTablet ? 56 : 48;
+  const avatarIconSize = isSmall ? 20 : isTablet ? 28 : 24;
+
+  const bubbleMaxWidth = isTablet ? '68%' : isSmall ? '88%' : '84%';
+  const bubblePadding = isSmall ? 12 : isTablet ? 18 : 14;
+  const bubbleRadius = isSmall ? 16 : 20;
+
+  const textFontSize = responsive.fontSize(14);
+  const textLineHeight = Math.round(textFontSize * 1.45);
+  const timeFontSize = responsive.fontSize(10);
+
+  const quickReplyMinHeight = isSmall ? 34 : isTablet ? 42 : 38;
+  const quickReplyRadius = isSmall ? 17 : isTablet ? 21 : 19;
+  const quickReplyPaddingH = isSmall ? 12 : isTablet ? 18 : 14;
+  const quickReplyFontSize = responsive.fontSize(13);
+
+  const composerMinHeight = isSmall ? 44 : isTablet ? 54 : 48;
+  const composerRadius = isSmall ? 22 : isTablet ? 27 : 24;
+  const composerInputFontSize = responsive.fontSize(14);
+  const composerBottomPadding = Math.max(
+    insets.bottom + (Platform.OS === 'android' ? 10 : 6),
+    Platform.OS === 'android' ? (isSmall ? 16 : 20) : (isSmall ? 12 : 16)
+  );
+
   return (
     <View style={styles.fullscreenOverlay}>
       <TopNavbar model={model} showBack={true} title="AI Assistant" />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', height: '100%' }}>
-        <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }}>
-          <View style={{ alignItems: 'center', marginBottom: 24, opacity: 0.7 }}>
-            <View style={[styles.badgeCircleMedium, { width: 48, height: 48, borderRadius: 24, marginBottom: 8 }]}>
-              <Ionicons name="chatbubbles" size={24} color="#FFF" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        style={{ flex: 1, width: '100%', alignItems: 'center' }}
+      >
+        <View style={{ flex: 1, width: '100%', maxWidth: maxContainerWidth }}>
+          <ScrollView
+            ref={scrollViewRef}
+            contentContainerStyle={{
+              paddingHorizontal: horizontalPadding,
+              paddingVertical: contentPaddingVertical,
+              flexGrow: 1,
+            }}
+            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={{ alignItems: 'center', marginBottom: isSmall ? 16 : 24, opacity: 0.75 }}>
+              <View
+                style={[
+                  styles.badgeCircleMedium,
+                  {
+                    width: avatarSize,
+                    height: avatarSize,
+                    borderRadius: avatarSize / 2,
+                    marginBottom: isSmall ? 6 : 8,
+                  },
+                ]}
+              >
+                <Ionicons name="chatbubbles" size={avatarIconSize} color="#FFF" />
+              </View>
+              <Text style={[styles.metaTextSmallDark, { fontSize: responsive.fontSize(12) }]}>
+                EcoBud Assistant is here to help
+              </Text>
             </View>
-            <Text style={styles.metaTextSmallDark}>EcoBud Assistant is here to help</Text>
-          </View>
 
-          {model.assistantMessages.map((message) => (
-            <View
-              key={message.id}
+            {model.assistantMessages.map((message) => {
+              const isUser = message.role === 'user';
+              return (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.chatBubble,
+                    isUser ? styles.chatBubbleUser : styles.chatBubbleBot,
+                    {
+                      maxWidth: bubbleMaxWidth as any,
+                      padding: bubblePadding,
+                      borderRadius: bubbleRadius,
+                      borderBottomLeftRadius: isUser ? bubbleRadius : moderateScale(4),
+                      borderBottomRightRadius: isUser ? moderateScale(4) : bubbleRadius,
+                      marginBottom: isSmall ? 10 : 12,
+                    },
+                  ]}
+                >
+                  {isUser ? (
+                    <Text
+                      style={[
+                        styles.chatBubbleTextUser,
+                        { fontSize: textFontSize, lineHeight: textLineHeight },
+                      ]}
+                    >
+                      {message.text}
+                    </Text>
+                  ) : (
+                    <SimpleMarkdown
+                      baseStyle={{
+                        color: '#1A211D',
+                        fontSize: textFontSize,
+                        lineHeight: textLineHeight,
+                      }}
+                      boldStyle={{ fontWeight: '700' }}
+                    >
+                      {message.text}
+                    </SimpleMarkdown>
+                  )}
+                  <Text
+                    style={[
+                      isUser ? styles.chatTimeUser : styles.chatTimeBot,
+                      { fontSize: timeFontSize, marginTop: isSmall ? 4 : 6 },
+                    ]}
+                  >
+                    {message.time}
+                  </Text>
+                </View>
+              );
+            })}
+
+            {model.sendingMessage ? (
+              <LoadingGlyph size={isSmall ? 'sm' : 'md'} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
+            ) : null}
+          </ScrollView>
+
+          {model.assistantQuickReplies.length > 0 && (
+            <View style={{ paddingHorizontal: horizontalPadding, paddingBottom: isSmall ? 8 : 12 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: isSmall ? 6 : 8 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                {model.assistantQuickReplies.map((reply) => (
+                  <TouchableOpacity
+                    key={reply}
+                    onPress={() => void model.handleAssistantSend(reply)}
+                    style={[
+                      styles.categoryOutlineBtn,
+                      {
+                        minHeight: quickReplyMinHeight,
+                        paddingVertical: 0,
+                        paddingHorizontal: quickReplyPaddingH,
+                        borderRadius: quickReplyRadius,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryOutlineBtnText,
+                        { fontSize: quickReplyFontSize, paddingHorizontal: 0 },
+                      ]}
+                    >
+                      {reply}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          <View
+            style={[
+              styles.assistantComposer,
+              {
+                paddingHorizontal: horizontalPadding,
+                paddingBottom: composerBottomPadding,
+                paddingTop: isSmall ? 6 : 8,
+                gap: isSmall ? 8 : 10,
+              },
+            ]}
+          >
+            <TextInput
+              value={model.assistantInput}
+              onChangeText={model.setAssistantInput}
+              placeholder="Message ECOBUD..."
+              placeholderTextColor="#6B7A75"
               style={[
-                styles.chatBubble,
-                message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleBot,
+                styles.assistantInput,
+                {
+                  minHeight: composerMinHeight,
+                  borderRadius: composerRadius,
+                  fontSize: composerInputFontSize,
+                  paddingHorizontal: isSmall ? 14 : 18,
+                  paddingVertical: isSmall ? 6 : 8,
+                },
+              ]}
+            />
+            <TouchableOpacity
+              onPress={() => void model.handleAssistantSend()}
+              style={[
+                styles.sendButton,
+                {
+                  width: composerMinHeight,
+                  height: composerMinHeight,
+                  borderRadius: composerRadius,
+                },
               ]}
             >
-              {message.role === 'user' ? (
-                <Text style={styles.chatBubbleTextUser}>{message.text}</Text>
-              ) : (
-                <SimpleMarkdown>{message.text}</SimpleMarkdown>
-              )}
-              <Text style={message.role === 'user' ? styles.chatTimeUser : styles.chatTimeBot}>{message.time}</Text>
-            </View>
-          ))}
-          {model.sendingMessage ? (
-            <LoadingGlyph size="md" style={{ marginTop: 8, alignSelf: 'flex-start' }} />
-          ) : null}
-        </ScrollView>
-
-        <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {model.assistantQuickReplies.map((reply) => (
-              <TouchableOpacity key={reply} onPress={() => void model.handleAssistantSend(reply)} style={styles.categoryOutlineBtn}>
-                <Text style={[styles.categoryOutlineBtnText, { paddingHorizontal: 12 }]}>{reply}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={[styles.assistantComposer, { paddingBottom: Platform.OS === 'android' ? 90 : 60 }]}>
-          <TextInput
-            value={model.assistantInput}
-            onChangeText={model.setAssistantInput}
-            placeholder="Message ECOBUD..."
-            placeholderTextColor="#6B7A75"
-            style={styles.assistantInput}
-          />
-          <TouchableOpacity onPress={() => void model.handleAssistantSend()} style={styles.sendButton}>
-            <Ionicons name="send" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
+              <Ionicons name="send" size={isSmall ? 16 : 18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -899,7 +1078,11 @@ function isWithinPhilippines(lat: number, lng: number) {
 }
 
 function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: { latitude: number; longitude: number } | null }) {
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const webViewRef = React.useRef<WebView | null>(null);
+
+  // Responsive map container height: tailored for small screens like iPhone SE (667h) up to larger devices
+  const mapHeight = Math.max(290, Math.min(screenHeight * 0.52, 480));
 
   const initialLat = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
     ? userLocation.latitude
@@ -934,19 +1117,31 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       <!DOCTYPE html>
       <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
-          html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #e2e8f0; }
+          * { box-sizing: border-box; }
+          html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+          
           .custom-popup .leaflet-popup-content-wrapper {
-            background: #126027; color: white; border-radius: 12px; font-family: -apple-system, sans-serif;
+            background: #126027; color: white; border-radius: 12px;
+            padding: 2px;
+            max-width: 230px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+          }
+          .custom-popup .leaflet-popup-content {
+            margin: 8px 10px;
+            line-height: 1.3;
           }
           .custom-popup .leaflet-popup-tip { background: #126027; }
           .popup-btn {
-            background: #4ade80; color: #052e16; border: none; padding: 6px 12px; border-radius: 6px;
-            font-weight: bold; cursor: pointer; margin-top: 6px; width: 100%; font-size: 13px;
+            background: #4ade80; color: #052e16; border: none; padding: 6px 10px; border-radius: 6px;
+            font-weight: 700; cursor: pointer; margin-top: 6px; width: 100%; font-size: 12px;
+            display: block; text-align: center;
           }
+          .popup-btn:active { background: #22c55e; }
+          
           .user-marker {
             background-color: #2563eb; width: 18px; height: 18px; border-radius: 50%;
             border: 3px solid #ffffff; box-shadow: 0 0 12px rgba(37,99,235,0.8);
@@ -958,17 +1153,31 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
           }
           .osm-badge {
-            position: absolute; bottom: 10px; left: 10px; z-index: 1000;
-            background: rgba(18, 96, 39, 0.9); color: #fff; padding: 4px 10px;
-            border-radius: 20px; font-size: 11px; font-weight: bold;
-            font-family: -apple-system, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            position: absolute; bottom: 8px; left: 8px; z-index: 1000;
+            background: rgba(18, 96, 39, 0.92); color: #fff; padding: 3px 8px;
+            border-radius: 14px; font-size: 10px; font-weight: 700;
+            letter-spacing: 0.2px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
             pointer-events: none;
+          }
+          .leaflet-control-zoom {
+            border: none !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
+            margin-right: 8px !important;
+            margin-top: 8px !important;
+          }
+          .leaflet-control-zoom a {
+            width: 28px !important;
+            height: 28px !important;
+            line-height: 28px !important;
+            font-size: 14px !important;
+            border-radius: 6px !important;
           }
         </style>
       </head>
       <body>
         <div id="map"></div>
-        <div class="osm-badge">🇵🇭 OpenStreetMap Philippines Data</div>
+        <div class="osm-badge">🇵🇭 OpenStreetMap PH</div>
         <script>
           const phBounds = L.latLngBounds(
             L.latLng(4.5, 116.0),
@@ -981,7 +1190,8 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             minZoom: 5,
             maxZoom: 18,
             maxBounds: phBounds,
-            maxBoundsViscosity: 0.85
+            maxBoundsViscosity: 0.85,
+            zoomControl: true
           });
 
           const osmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1005,10 +1215,10 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 
           const userLoc = ${userLocJson};
           if (userLoc) {
-            const userIcon = L.divIcon({ className: 'user-marker', iconSize: [22, 22] });
+            const userIcon = L.divIcon({ className: 'user-marker', iconSize: [20, 20] });
             L.marker([userLoc.lat, userLoc.lng], { icon: userIcon })
               .addTo(map)
-              .bindPopup('<b>📍 Your Live Location</b><br/>Philippines');
+              .bindPopup('<b>Your Live Location</b><br/>Philippines');
             
             map.flyTo([userLoc.lat, userLoc.lng], 13, { duration: 2.2 });
           }
@@ -1017,9 +1227,9 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           events.forEach(ev => {
             const marker = L.marker([ev.lat, ev.lng]).addTo(map);
             const popupContent = \`
-              <div style="padding: 2px;">
-                <div style="font-weight: 800; font-size: 14px;">\${ev.title}</div>
-                <div style="font-size: 12px; opacity: 0.9; margin-top: 2px;">📍 \${ev.location}</div>
+              <div style="padding: 1px;">
+                <div style="font-weight: 700; font-size: 13px; color: #fff;">\${ev.title}</div>
+                <div style="font-size: 11px; opacity: 0.9; margin-top: 2px; color: #E8F5E9;">\${ev.location}</div>
                 <button class="popup-btn" onclick="window.ReactNativeWebView.postMessage(JSON.stringify({type:'join', id:'\${ev.id}'}))">Join Event</button>
               </div>
             \`;
@@ -1034,7 +1244,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
   const WebViewComponent = WebView as any;
 
   return (
-    <View style={{ height: 500, width: '100%', backgroundColor: '#E2E8F0', overflow: 'hidden', borderRadius: 16 }}>
+    <View style={{ height: mapHeight, width: '100%', backgroundColor: '#E2E8F0', overflow: 'hidden', borderRadius: moderateScale(16) }}>
       <WebViewComponent
         ref={webViewRef}
         originWhitelist={['*']}
@@ -1151,20 +1361,22 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 12, marginBottom: 16 }}>
-          <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
-            <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? '#126027' : '#6B7A75' }}>Browse</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveTab('joined')} style={{ borderBottomWidth: activeTab === 'joined' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
-            <Text style={{ fontSize: 16, fontWeight: activeTab === 'joined' ? '700' : '500', color: activeTab === 'joined' ? '#126027' : '#6B7A75' }}>My Events</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveTab('past')} style={{ borderBottomWidth: activeTab === 'past' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
-            <Text style={{ fontSize: 16, fontWeight: activeTab === 'past' ? '700' : '500', color: activeTab === 'past' ? '#126027' : '#6B7A75' }}>Past</Text>
-          </TouchableOpacity>
-        </View>
+        {viewMode === 'list' && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 12, marginBottom: 16 }}>
+            <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? '#126027' : '#6B7A75' }}>Browse</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab('joined')} style={{ borderBottomWidth: activeTab === 'joined' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: activeTab === 'joined' ? '700' : '500', color: activeTab === 'joined' ? '#126027' : '#6B7A75' }}>My Events</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setActiveTab('past')} style={{ borderBottomWidth: activeTab === 'past' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: activeTab === 'past' ? '700' : '500', color: activeTab === 'past' ? '#126027' : '#6B7A75' }}>Past</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {viewMode === 'map' ? (
-          <View style={{ height: 500, width: '100%', marginTop: 8 }}>
+          <View style={{ width: '100%', marginTop: verticalScale(8) }}>
             <CustomAnimatedMap model={model} userLocation={userLocation} />
           </View>
         ) : (
@@ -1248,9 +1460,12 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                     </View>
                   </ImageBackground>
                   <View style={styles.eventListBody}>
-                    <Text style={[styles.welcomeLabel, event.isFeatured && { color: '#D97706' }]}>
-                      {event.isFeatured ? '⭐ FEATURED EVENT' : 'PUBLIC EVENT'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                      {event.isFeatured && <Ionicons name="star" size={12} color="#F59E0B" />}
+                      <Text style={[styles.welcomeLabel, event.isFeatured && { color: '#D97706', marginBottom: 0 }]}>
+                        {event.isFeatured ? 'FEATURED EVENT' : 'PUBLIC EVENT'}
+                      </Text>
+                    </View>
                     <Text style={styles.cardTitle}>{event.title}</Text>
                     <Text style={styles.metaTextSmallDark}>{event.description}</Text>
                     <View style={[styles.rowMeta, { marginTop: 12 }]}>
@@ -1338,8 +1553,9 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                       }
                       if (event.userStatus === 'reward_claimed') {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>✓ Reward Claimed</Text>
+                          <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
+                            <Ionicons name="checkmark-circle" size={14} color="#126027" />
+                            <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Reward Claimed</Text>
                           </View>
                         );
                       }
@@ -1738,8 +1954,9 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
               <Text style={styles.sectionCaption}>{model.selectedLesson.description}</Text>
               
               {model.selectedLesson.durationMinutes ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#E6F4EC', borderRadius: 8, alignSelf: 'flex-start' }}>
-                  <Text style={{ fontSize: 13, color: '#126027', fontWeight: '700' }}>⏱ {model.selectedLesson.durationMinutes} minutes</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#E6F4EC', borderRadius: 8, alignSelf: 'flex-start', gap: 4 }}>
+                  <Ionicons name="time-outline" size={14} color="#126027" />
+                  <Text style={{ fontSize: 13, color: '#126027', fontWeight: '700' }}>{model.selectedLesson.durationMinutes} minutes</Text>
                 </View>
               ) : null}
 
@@ -2486,7 +2703,7 @@ function ExpCounter({ targetPoints }: { targetPoints: number }) {
       }}>
         <Ionicons name="flame" size={14} color="#FF6B6B" />
         <Text style={{ fontSize: 11, fontWeight: '800', color: '#4ade80', letterSpacing: 0.5 }}>
-          STREAK MULTIPLIER ACTIVE 🔥
+          STREAK MULTIPLIER ACTIVE
         </Text>
       </View>
     </Animated.View>
@@ -3463,66 +3680,78 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
         <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {isPageOne && top3.length > 0 && (
             <View style={styles.leaderboardTop3}>
-              {podiumLeaders.map((leader) => (
-                <View key={leader.rank} style={[styles.lbTopCard, leader.cardStyle]}>
-                  <View style={styles.lbAvatarWrap}>
-                    <AvatarBubble
-                      label={leader.displayName}
-                      size={leader.avatarSize}
-                      style={styles.lbAvatarImg}
-                      textStyle={leader.avatarSize > 64 ? styles.lbAvatarTextLarge : styles.lbAvatarText}
-                    />
-                    <View
+              {podiumLeaders.map((leader) => {
+                const leaderAvatar = leader.isCurrentUser
+                  ? (leader.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
+                  : leader.avatarUrl;
+                return (
+                  <View key={leader.rank} style={[styles.lbTopCard, leader.cardStyle]}>
+                    <View style={styles.lbAvatarWrap}>
+                      <AvatarBubble
+                        label={leader.isCurrentUser ? model.userDisplayName : leader.displayName}
+                        size={leader.avatarSize}
+                        style={styles.lbAvatarImg}
+                        textStyle={leader.avatarSize > 64 ? styles.lbAvatarTextLarge : styles.lbAvatarText}
+                        avatarUrl={leaderAvatar}
+                      />
+                      <View
+                        style={[
+                          styles.lbRankBadge,
+                          {
+                            backgroundColor: leader.badgeColor,
+                            width: leader.rank === 1 ? 28 : 24,
+                            height: leader.rank === 1 ? 28 : 24,
+                            borderRadius: leader.rank === 1 ? 14 : 12,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.lbRankText, leader.rank === 1 ? { fontSize: 14 } : null]}>{leader.rank}</Text>
+                      </View>
+                    </View>
+                    <Text
                       style={[
-                        styles.lbRankBadge,
-                        {
-                          backgroundColor: leader.badgeColor,
-                          width: leader.rank === 1 ? 28 : 24,
-                          height: leader.rank === 1 ? 28 : 24,
-                          borderRadius: leader.rank === 1 ? 14 : 12,
-                        },
+                        styles.lbTopName,
+                        leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
                       ]}
                     >
-                      <Text style={[styles.lbRankText, leader.rank === 1 ? { fontSize: 14 } : null]}>{leader.rank}</Text>
-                    </View>
+                      {leader.isCurrentUser ? 'You' : leader.displayName}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.lbTopPoints,
+                        leader.rank === 1 ? { color: '#126027', fontWeight: 'bold' } : null,
+                      ]}
+                    >
+                      {leader.points} pts
+                    </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.lbTopName,
-                      leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
-                    ]}
-                  >
-                    {leader.isCurrentUser ? 'You' : leader.displayName}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.lbTopPoints,
-                      leader.rank === 1 ? { color: '#126027', fontWeight: 'bold' } : null,
-                    ]}
-                  >
-                    {leader.points} pts
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
           <ScrollView style={{ flex: 1, marginTop: isPageOne ? 24 : 8, paddingHorizontal: 4 }}>
-            {remainingList.map(user => (
-              <View key={user.rank} style={styles.lbListRow}>
-                <Text style={styles.lbListRank}>{user.rank}</Text>
-                <AvatarBubble
-                  label={user.displayName}
-                  size={40}
-                  style={styles.lbListAvatar}
-                  textStyle={styles.lbListAvatarText}
-                />
-                <View style={{ flex: 1, marginLeft: 16 }}>
-                  <Text style={styles.cardTitle}>{user.isCurrentUser ? 'You' : user.displayName}</Text>
+            {remainingList.map(user => {
+              const userAvatar = user.isCurrentUser
+                ? (user.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
+                : user.avatarUrl;
+              return (
+                <View key={user.rank} style={styles.lbListRow}>
+                  <Text style={styles.lbListRank}>{user.rank}</Text>
+                  <AvatarBubble
+                    label={user.isCurrentUser ? model.userDisplayName : user.displayName}
+                    size={40}
+                    style={styles.lbListAvatar}
+                    textStyle={styles.lbListAvatarText}
+                    avatarUrl={userAvatar}
+                  />
+                  <View style={{ flex: 1, marginLeft: 16 }}>
+                    <Text style={styles.cardTitle}>{user.isCurrentUser ? 'You' : user.displayName}</Text>
+                  </View>
+                  <Text style={styles.lbListPoints}>{user.points} pts</Text>
                 </View>
-                <Text style={styles.lbListPoints}>{user.points} pts</Text>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
         </Animated.View>
 
@@ -3551,10 +3780,11 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
           <View style={[styles.lbCurrentUserCard, { marginTop: 0, marginBottom: 24, borderRadius: 16, marginHorizontal: 16 }]}>
             <Text style={styles.lbListRank}>{currentUser.rank}</Text>
             <AvatarBubble
-              label={currentUser.displayName}
+              label={model.userDisplayName}
               size={40}
               style={[styles.lbListAvatar, styles.lbCurrentUserAvatar]}
               textStyle={styles.lbCurrentUserAvatarText}
+              avatarUrl={currentUser.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl}
             />
             <View style={{ flex: 1, marginLeft: 16 }}>
               <Text style={[styles.cardTitle, { color: '#FFF' }]}>You</Text>
@@ -3923,7 +4153,7 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
               alignItems: 'center',
               gap: 8,
             }}>
-              <Text style={{ fontSize: 24 }}>🌱</Text>
+              <Ionicons name="leaf" size={24} color="#34D399" />
               <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '800' }}>+50 XP</Text>
             </View>
 
@@ -3933,7 +4163,7 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
               alignItems: 'center',
               gap: 8,
             }}>
-              <Text style={{ fontSize: 24 }}>🪙</Text>
+              <Image source={require('../../../assets/coin.png')} style={{ width: 22, height: 22, resizeMode: 'contain' }} />
               <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '800' }}>+10 Coins</Text>
             </View>
           </View>
@@ -4053,11 +4283,11 @@ export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
                 >
                   <View style={{ width: 32, alignItems: 'center', justifyContent: 'center' }}>
                     {isUnlocked ? (
-                      <Text style={{ fontSize: 18 }}>✓</Text>
+                      <Ionicons name="checkmark-circle" size={18} color="#4ADE80" />
                     ) : isMilestone ? (
-                      <Text style={{ fontSize: 18 }}>👑</Text>
+                      <Ionicons name="trophy" size={18} color="#FBBF24" />
                     ) : (
-                      <Text style={{ fontSize: 18 }}>🔒</Text>
+                      <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.4)" />
                     )}
                   </View>
                   <View style={{ width: 70 }}>

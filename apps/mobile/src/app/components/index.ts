@@ -5,6 +5,7 @@ export { QuickActions } from './QuickActions';
 export { ContinueLessonCard } from './ContinueLessonCard';
 export { LearnLessonCard } from './LearnLessonCard';
 export { ActiveChallengeCard } from './ActiveChallengeCard';
+export { DiscoverChallengeCard } from './DiscoverChallengeCard';
 export { UpcomingEventCard } from './UpcomingEventCard';
 export { CommunityImpactCard } from './CommunityImpactCard';
 export { LevelCard } from './LevelCard';

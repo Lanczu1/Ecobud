@@ -3,23 +3,12 @@ import { Activity, Sun, Moon, UserCog } from 'lucide-react';
 import { AdminSection } from './AdminSidebar';
 
 interface AdminHeaderProps {
-  activeSection: AdminSection;
+  activeSection?: AdminSection;
   isDark: boolean;
   onToggleDark: () => void;
 }
 
-const sectionDescriptions: Record<AdminSection, string> = {
-  Dashboard: 'Welcome back, Admin',
-  Users: 'View and manage all registered members',
-  'Learning Content': 'Manage eco-education articles and modules',
-  Challenges: 'Design and manage community eco-challenges',
-  Events: 'Organize and track community eco-events',
-  'Give and Get Hub': 'Monitor and moderate community swap listings',
-  Redeem: 'Manage the reward catalog for eco coin redemption',
-  Reports: 'Platform-wide performance metrics and insights',
-};
-
-export function AdminHeader({ activeSection, isDark, onToggleDark }: AdminHeaderProps) {
+export function AdminHeader({ isDark, onToggleDark }: AdminHeaderProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -49,12 +38,7 @@ export function AdminHeader({ activeSection, isDark, onToggleDark }: AdminHeader
   const roleName = user?.role === 'moderator' ? 'Community Moderator' : 'Administrator';
 
   return (
-    <div className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8">
-      <div>
-        <h2 className="text-xl font-bold font-serif text-gray-900 animate-reveal">{activeSection}</h2>
-        <p className="text-gray-500 text-sm mt-0.5 animate-reveal delay-60">{sectionDescriptions[activeSection]}</p>
-      </div>
-
+    <div className="h-20 bg-white border-b border-gray-100 flex items-center justify-end px-8">
       <div className="flex items-center gap-6">
         <button
           onClick={onToggleDark}

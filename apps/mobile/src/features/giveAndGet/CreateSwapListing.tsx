@@ -335,18 +335,20 @@ export function CreateSwapListing({
                     setListingType('swap');
                     setLookingFor('');
                   }}
-                  style={[localStyles.suggestionChip, listingType === 'swap' && localStyles.suggestionChipActive]}
+                  style={[localStyles.suggestionChip, listingType === 'swap' && localStyles.suggestionChipActive, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
                 >
-                  <Text style={[localStyles.suggestionText, listingType === 'swap' && localStyles.suggestionTextActive]}>🔄 Swap</Text>
+                  <Ionicons name="swap-horizontal" size={16} color={listingType === 'swap' ? '#126027' : '#374151'} />
+                  <Text style={[localStyles.suggestionText, listingType === 'swap' && localStyles.suggestionTextActive]}>Swap</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
                     setListingType('giveaway');
                     setLookingFor('Giveaway');
                   }}
-                  style={[localStyles.suggestionChip, listingType === 'giveaway' && localStyles.suggestionChipActive]}
+                  style={[localStyles.suggestionChip, listingType === 'giveaway' && localStyles.suggestionChipActive, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
                 >
-                  <Text style={[localStyles.suggestionText, listingType === 'giveaway' && localStyles.suggestionTextActive]}>🎁 Giveaway</Text>
+                  <Ionicons name="gift-outline" size={16} color={listingType === 'giveaway' ? '#126027' : '#374151'} />
+                  <Text style={[localStyles.suggestionText, listingType === 'giveaway' && localStyles.suggestionTextActive]}>Giveaway</Text>
                 </TouchableOpacity>
               </View>
 

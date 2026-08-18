@@ -9,16 +9,16 @@ export interface LevelCardProps {
 }
 
 const LEVELS = [
-  { level: 1, name: 'Eco Seedling', icon: '🌱', points: 0 },
-  { level: 2, name: 'Eco Learner', icon: '📚', points: 100 },
-  { level: 3, name: 'Eco Advocate', icon: '🗣️', points: 300 },
-  { level: 4, name: 'Eco Warrior', icon: '♻️', points: 600 },
-  { level: 5, name: 'Eco Champion', icon: '🏆', points: 1000 },
-  { level: 6, name: 'Eco Guardian', icon: '🌳', points: 1500 },
-  { level: 7, name: 'Eco Leader', icon: '🌎', points: 2200 },
-  { level: 8, name: 'Eco Ambassador', icon: '💚', points: 3000 },
-  { level: 9, name: 'Eco Hero', icon: '🌍', points: 4000 },
-  { level: 10, name: 'Eco Legend', icon: '👑', points: 5500 },
+  { level: 1, name: 'Eco Seedling', icon: 'sprout', points: 0 },
+  { level: 2, name: 'Eco Learner', icon: 'book-open-variant', points: 100 },
+  { level: 3, name: 'Eco Advocate', icon: 'bullhorn', points: 300 },
+  { level: 4, name: 'Eco Warrior', icon: 'recycle', points: 600 },
+  { level: 5, name: 'Eco Champion', icon: 'trophy', points: 1000 },
+  { level: 6, name: 'Eco Guardian', icon: 'tree', points: 1500 },
+  { level: 7, name: 'Eco Leader', icon: 'earth', points: 2200 },
+  { level: 8, name: 'Eco Ambassador', icon: 'heart', points: 3000 },
+  { level: 9, name: 'Eco Hero', icon: 'shield-star', points: 4000 },
+  { level: 10, name: 'Eco Legend', icon: 'crown', points: 5500 },
 ];
 
 export function getLevelFromPoints(points: number) {
@@ -99,7 +99,7 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
         
         <View style={styles.header}>
           <View style={styles.iconCircle}>
-            <Text style={{ fontSize: 24 }}>{currentLevelObj.icon}</Text>
+            <MaterialCommunityIcons name={currentLevelObj.icon as any} size={22} color="#34D399" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.levelLabel}>LEVEL {currentLevelObj.level}</Text>

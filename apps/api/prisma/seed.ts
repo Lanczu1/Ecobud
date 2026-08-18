@@ -232,6 +232,9 @@ async function main() {
         category: 'Waste',
         expReward: 100,
         ecoCoinReward: 20,
+        type: 'AI Image Recognition Challenge',
+        aiDetectionTargets: ['Plastic Bottle', 'Glass Bottle'],
+        aiMinimumConfidence: 80,
       },
       {
         title: 'Energy Saver Challenge',
@@ -240,6 +243,9 @@ async function main() {
         category: 'Energy',
         expReward: 250,
         ecoCoinReward: 50,
+        type: 'AI Image Recognition Challenge',
+        aiDetectionTargets: ['Plastic Bottle', 'Glass Bottle'],
+        aiMinimumConfidence: 80,
       },
       {
         title: 'Plant-Based Meal Week',
@@ -248,6 +254,9 @@ async function main() {
         category: 'Food',
         expReward: 30,
         ecoCoinReward: 30,
+        type: 'AI Image Recognition Challenge',
+        aiDetectionTargets: ['Plastic Bottle', 'Glass Bottle'],
+        aiMinimumConfidence: 80,
         imageUrl:
           'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=80',
         badgeLabel: 'Green Plate',

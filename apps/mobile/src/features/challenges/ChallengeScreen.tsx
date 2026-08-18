@@ -14,7 +14,12 @@ const ChallengeCard = ({ title, progress, isCompleted, category }: { title: stri
           <Text style={styles.cardTitle}>{title}</Text>
           {category && <Text style={styles.categoryTag}>{category}</Text>}
         </View>
-        {isCompleted && <Text style={styles.completedBadge}>Done ✓</Text>}
+        {isCompleted && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            <Ionicons name="checkmark-circle" size={scale(13)} color="#2E7D32" />
+            <Text style={styles.completedBadge}>Done</Text>
+          </View>
+        )}
       </View>
       <View style={styles.progressBarContainer}>
         <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
@@ -59,8 +64,9 @@ export const ChallengeScreen = () => {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Challenges</Text>
-        <View style={styles.pointsPill}>
-          <Text style={styles.pointsText}>🌱 {points} pts</Text>
+        <View style={[styles.pointsPill, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+          <Ionicons name="leaf" size={scale(13)} color="#2E7D32" />
+          <Text style={styles.pointsText}>{points} pts</Text>
         </View>
       </View>
 

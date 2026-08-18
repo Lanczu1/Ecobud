@@ -70,6 +70,7 @@ export interface HeaderProps {
   showBack?: boolean;
   title?: string;
   onBack?: () => void;
+  onProfilePress?: () => void;
   onEventsPress?: () => void;
   onTrackerPress?: () => void;
   onNotificationsPress?: () => void;

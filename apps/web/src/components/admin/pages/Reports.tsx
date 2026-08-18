@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Users, Trophy, BookOpen, Coins, ArrowUpRight, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { adminGet } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 
 interface DashboardStats {
   overview: {
@@ -32,17 +33,42 @@ export function Reports() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
+    let isMounted = true;
+
+    async function loadStats(isInitial = false) {
+      if (isInitial) setLoading(true);
       try {
         const data = await adminGet<DashboardStats>('/admin/stats');
-        setStats(data);
+        if (isMounted) {
+          setStats(data);
+          setError(null);
+        }
       } catch (err: any) {
-        setError(err.message || 'Failed to load report data.');
+        if (isMounted && isInitial) {
+          setError(err.message || 'Failed to load report data.');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted && isInitial) {
+          setLoading(false);
+        }
       }
     }
-    load();
+
+    loadStats(true);
+
+    let unsubscribe: (() => void) | undefined;
+    adminRealtimeService.connect({
+      onStatsRefresh: () => {
+        loadStats(false);
+      },
+    }).then((unsub) => {
+      unsubscribe = unsub;
+    });
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const kpis = stats ? [
@@ -63,9 +89,18 @@ export function Reports() {
           <h2 className="text-2xl font-serif font-bold text-gray-900">Reports & Analytics</h2>
           <p className="text-gray-500 text-sm mt-1">Platform-wide performance metrics and insights</p>
         </div>
-        <button className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
-          <Download className="w-4 h-4" />Export Report
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            Real-time Live Data
+          </div>
+          <button className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
+            <Download className="w-4 h-4" />Export Report
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -139,7 +174,7 @@ export function Reports() {
                     <span className="text-xs font-bold text-gray-600 opacity-0 group-hover/bar:opacity-100 transition-opacity">{d.active}</span>
                     <div className="w-full relative flex items-end" style={{ height: '120px' }}>
                       <div
-                        className="w-full rounded-t-lg bg-gradient-to-t from-green-500 to-emerald-300 hover:from-green-600 hover:to-emerald-400 transition-all duration-300 cursor-pointer"
+                        className="w-full rounded-t-lg bg-linear-to-t from-green-500 to-emerald-300 hover:from-green-600 hover:to-emerald-400 transition-all duration-300 cursor-pointer"
                         style={{ height: `${Math.max(h, 4)}%` }}
                         title={`${d.dateLabel}: ${d.active} active`}
                       />
@@ -178,7 +213,7 @@ export function Reports() {
                     <span className="text-xs font-bold text-gray-600 opacity-0 group-hover/bar:opacity-100 transition-opacity">{d.signups}</span>
                     <div className="w-full relative flex items-end" style={{ height: '120px' }}>
                       <div
-                        className="w-full rounded-t-lg bg-gradient-to-t from-blue-500 to-sky-300 hover:from-blue-600 hover:to-sky-400 transition-all duration-300 cursor-pointer"
+                        className="w-full rounded-t-lg bg-linear-to-t from-blue-500 to-sky-300 hover:from-blue-600 hover:to-sky-400 transition-all duration-300 cursor-pointer"
                         style={{ height: `${Math.max(h, 4)}%` }}
                         title={`${d.dateLabel}: ${d.signups} signups`}
                       />

@@ -404,8 +404,8 @@ export function AuthView({
         >
           <View style={[styles.topNavbar, { justifyContent: 'center' }]}>
             <Image
-              source={require('../../../assets/logo.png')}
-              style={{ width: 180, height: 60, resizeMode: 'contain' }}
+              source={require('../../../assets/ecobud_logo_circle.png')}
+              style={{ width: 72, height: 72, borderRadius: 36, resizeMode: 'contain' }}
               fadeDuration={0}
             />
           </View>
