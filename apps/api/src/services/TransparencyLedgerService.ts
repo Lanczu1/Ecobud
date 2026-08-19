@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { TransparencyHasher } from '../utils/transparencyHasher';
+import { apiCache } from '../lib/cache';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -13,6 +14,7 @@ interface LogPayload {
 
 export class TransparencyLedgerService {
   async appendLog(session: DatabaseSession, payload: LogPayload) {
+    apiCache.delete('transparency_public_metrics');
     const lastLog = await session.transparencyLog.findFirst({
       orderBy: { timestamp: 'desc' },
     });
@@ -45,28 +47,30 @@ export class TransparencyLedgerService {
   }
 
   async getPublicMetrics() {
-    const [totalActions, activeParticipants, rewards] = await Promise.all([
-      prisma.transparencyLog.count(),
-      prisma.user.count({
-        where: {
-          role: {
-            in: ['user', 'moderator'],
+    return apiCache.getOrSet('transparency_public_metrics', 60, async () => {
+      const [totalActions, activeParticipants, rewards] = await Promise.all([
+        prisma.transparencyLog.count(),
+        prisma.user.count({
+          where: {
+            role: {
+              in: ['user', 'moderator'],
+            },
+            status: 'active',
           },
-          status: 'active',
-        },
-      }),
-      prisma.transparencyLog.aggregate({
-        _sum: {
-          pointsAwarded: true,
-        },
-      }),
-    ]);
+        }),
+        prisma.transparencyLog.aggregate({
+          _sum: {
+            pointsAwarded: true,
+          },
+        }),
+      ]);
 
-    return {
-      totalActions,
-      totalRewards: rewards._sum.pointsAwarded ?? 0,
-      activeParticipants,
-    };
+      return {
+        totalActions,
+        totalRewards: rewards._sum.pointsAwarded ?? 0,
+        activeParticipants,
+      };
+    });
   }
 
   async getLogs(page: number, pageSize: number, userId?: string) {

@@ -155,7 +155,7 @@ export interface QuizQuestion {
   optionB: string;
   optionC: string;
   optionD: string;
-  correctAnswer: string;
+  correctAnswer?: string;
 }
 
 export interface LessonWithProgress {
@@ -428,9 +428,24 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   return data as T;
 };
 
+const resolveMimeType = (uri: string): { mimeType: string; fileName: string } => {
+  const cleanUri = uri.split('?')[0].toLowerCase();
+  if (cleanUri.endsWith('.png')) {
+    return { mimeType: 'image/png', fileName: 'upload.png' };
+  }
+  if (cleanUri.endsWith('.webp')) {
+    return { mimeType: 'image/webp', fileName: 'upload.webp' };
+  }
+  if (cleanUri.endsWith('.gif')) {
+    return { mimeType: 'image/gif', fileName: 'upload.gif' };
+  }
+  return { mimeType: 'image/jpeg', fileName: 'upload.jpg' };
+};
+
 const uploadFileAsync = async <T>(path: string, token: string, uri: string, extraFields?: Record<string, string>) => {
   try {
     const uploadUrl = `${API_BASE}${path}`;
+    const { mimeType, fileName } = resolveMimeType(uri);
 
     if (Platform.OS === 'web') {
       try {
@@ -444,7 +459,7 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
           });
         }
         
-        formData.append('image', blob, 'upload.jpg');
+        formData.append('image', blob, fileName);
         
         const res = await fetch(uploadUrl, {
           method: 'POST',
@@ -480,7 +495,7 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
       httpMethod: 'POST',
       uploadType: uploadType,
       fieldName: 'image',
-      mimeType: 'image/jpeg',
+      mimeType,
       headers: {
         Authorization: `Bearer ${token}`
       },
@@ -557,11 +572,11 @@ export const ecobudApi = {
       token,
       body: { lessonId },
     }),
-  completeLesson: (token: string, lessonId: string) =>
-    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number; awardedBadges?: EcoBadge[]; pointsAwarded?: number; ecoCoinsAwarded?: number }>('/learn/complete', {
+  completeLesson: (token: string, lessonId: string, answers?: Record<string, string>) =>
+    request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number; awardedBadges?: EcoBadge[]; pointsAwarded?: number; ecoCoinsAwarded?: number; passed?: boolean; score?: number; message?: string }>('/learn/complete', {
       method: 'POST',
       token,
-      body: { lessonId },
+      body: { lessonId, answers },
     }),
   updateLessonProgress: (token: string, lessonId: string, progress: number, videoTimestamp?: number) =>
     request<{ lessonId: string; status: LessonWithProgress['status']; progress: number; videoTimestamp?: number }>('/learn/progress', {

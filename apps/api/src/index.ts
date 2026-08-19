@@ -40,14 +40,36 @@ app.use(
 );
 app.use(express.json());
 
-// Serve uploads directory statically
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+// Serve uploads directory statically with security headers and caching
+app.use(
+  '/uploads',
+  (req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; media-src 'self'; img-src 'self' data:;");
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    next();
+  },
+  express.static(path.join(__dirname, '..', 'uploads'), {
+    maxAge: '1d',
+  }),
+);
 
-// Prevent aggressive caching on mobile devices
-app.use((_req, res, next) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+// Smart cache headers based on request method and path
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    const isPublicRead =
+      req.path.startsWith('/api/faqs') ||
+      req.path.startsWith('/api/transparency/metrics') ||
+      req.path === '/api/health';
+
+    if (isPublicRead) {
+      res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
+    } else {
+      res.setHeader('Cache-Control', 'private, no-cache');
+    }
+  } else {
+    res.setHeader('Cache-Control', 'no-store');
+  }
   next();
 });
 

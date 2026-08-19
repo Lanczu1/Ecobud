@@ -84,6 +84,10 @@ model Lesson {
   createdBy        User?                @relation("LessonAuthor", fields: [createdById], references: [id])
   quizQuestions    QuizQuestion[]
 
+  @@index([isPublished, scheduledAt])
+  @@index([category])
+  @@index([createdAt])
+  @@index([createdById])
   @@map("lessons")
 }
 
@@ -98,6 +102,7 @@ model LessonPage {
   updatedAt   DateTime @updatedAt @map("updated_at")
   lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
+  @@index([lessonId, order])
   @@map("lesson_pages")
 }
 
@@ -114,6 +119,7 @@ model QuizQuestion {
   updatedAt     DateTime @updatedAt @map("updated_at")
   lesson        Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
+  @@index([lessonId])
   @@map("quiz_questions")
 }
 
@@ -131,6 +137,8 @@ model UserLessonProgress {
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
+  @@index([userId, status])
+  @@index([lessonId])
   @@map("lesson_progress")
 }
 
@@ -185,6 +193,9 @@ model Challenge {
   collectionPointLng      Float?                @map("collection_point_lng")
   requireLocation         Boolean               @default(false) @map("require_location")
   instances               ChallengeInstance[]
+
+  @@index([active, isFeatured])
+  @@index([category])
 }
 
 model ChallengeInstance {
@@ -200,6 +211,8 @@ model ChallengeInstance {
   submissions         ChallengeSubmission[]
 
   @@unique([challengeId, startDate, endDate])
+  @@index([challengeId, status])
+  @@index([startDate, endDate])
 }
 
 model UserChallenge {
@@ -250,6 +263,9 @@ model ChallengeSubmission {
   user                       User                      @relation("SubmittedChallengeProofs", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, challengeInstanceId])
+  @@index([userId, status])
+  @@index([challengeInstanceId, status])
+  @@index([reviewedById])
 }
 
 model Habit {
@@ -272,6 +288,8 @@ model HabitCheckIn {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, habitId, dateKey])
+  @@index([userId, dateKey])
+  @@index([habitId])
 }
 
 model Badge {
@@ -317,6 +335,10 @@ model Event {
   qrCodes         EventQrCode[]
   submissions     EventSubmission[]
   rewards         RewardTransaction[]
+
+  @@index([startDatetime, endDatetime])
+  @@index([isFeatured])
+  @@index([managedById])
 }
 
 model EventRegistration {
@@ -330,6 +352,8 @@ model EventRegistration {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
+  @@index([userId, status])
+  @@index([eventId])
 }
 
 model EventQrCode {
@@ -357,6 +381,8 @@ model EventSubmission {
   user                 User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
+  @@index([userId, status])
+  @@index([eventId])
   @@map("event_submissions")
 }
 
@@ -370,6 +396,8 @@ model RewardTransaction {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   event       Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
+  @@index([eventId])
   @@map("reward_transactions")
 }
 
@@ -382,6 +410,8 @@ model Notification {
   createdAt   DateTime @default(now()) @map("created_at")
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isRead])
+  @@index([createdAt])
   @@map("notifications")
 }
 
@@ -396,6 +426,9 @@ model TransparencyLog {
   currentHash   String   @unique
   timestamp     DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@index([timestamp])
 }
 
 model OtpCode {
@@ -413,6 +446,8 @@ model Faq {
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sortOrder])
 }
 
 model SystemSetting {
@@ -453,6 +488,8 @@ model AuditLog {
   timestamp DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id])
 
+  @@index([userId, timestamp])
+  @@index([timestamp])
   @@map("audit_logs")
 }
 
@@ -515,6 +552,8 @@ model GiveAndGetItem {
   updatedAt   DateTime @updatedAt @map("updated_at")
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([status, category])
+  @@index([userId])
   @@map("give_and_get_items")
 }
 

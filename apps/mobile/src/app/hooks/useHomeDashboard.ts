@@ -28,6 +28,7 @@ import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 import { type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
+import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -773,7 +774,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
           setRealtimeConnected(connected);
         },
-        // @ts-expect-error onSessionExpired is loosely typed in RealtimeConnectionHandlers
         onSessionExpired: () => {
           if (!isMounted) {
             return;
@@ -993,12 +993,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [selectedLesson, setActiveOverlayState]);
 
   const selectAnswer = useCallback((questionId: string, answer: string) => {
+    triggerImpactLight();
     setSelectedAnswer(answer);
     setQuizAnswers((prev) => ({ ...prev, [questionId]: answer }));
   }, []);
 
   const nextQuestion = useCallback(() => {
     if (currentQuestionIndex < quizQuestions.length - 1) {
+      triggerImpactLight();
       setCurrentQuestionIndex((prev) => prev + 1);
       setSelectedAnswer(null);
     }
@@ -1010,35 +1012,32 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const activeSession = ensureSession();
         if (!selectedLessonId) return;
 
-        let correctCount = 0;
-        quizQuestions.forEach((q) => {
-          if (quizAnswers[q.id] === q.correctAnswer) {
-            correctCount++;
-          }
-        });
+        const res = await homeService.completeLesson(activeSession.token, selectedLessonId, quizAnswers);
 
-        const score = quizQuestions.length > 0
-          ? Math.round((correctCount / quizQuestions.length) * 100)
-          : 0;
-
-        setQuizScore(score);
-        setQuizCompleted(true);
-
-        if (score >= (selectedLesson?.hasQuiz ? 70 : 0)) {
-          await homeService.completeLesson(activeSession.token, selectedLessonId);
-          await hydrateApp(activeSession, true);
-          const points = selectedLesson?.pointsReward ?? 10;
-          setEarnedPoints(points);
-          setCompletionCelebrationType('quiz');
-          setActiveOverlayState('lessonCompleted');
-        } else {
-          Alert.alert('Quiz Failed', `You scored ${score}%. You need at least 70% to pass. Please try again.`);
+        if (res && res.passed === false) {
+          triggerWarningHaptic();
+          const score = res.score ?? 0;
+          setQuizScore(score);
           setQuizCompleted(false);
+          Alert.alert('Quiz Failed', res.message || `You scored ${score}%. You need at least 70% to pass. Please try again.`);
           setCurrentQuestionIndex(0);
           setSelectedAnswer(null);
           setQuizAnswers({});
+          return;
         }
+
+        triggerSuccessHaptic();
+        const finalScore = res.score ?? 100;
+        setQuizScore(finalScore);
+        setQuizCompleted(true);
+
+        await hydrateApp(activeSession, true);
+        const points = res.pointsAwarded ?? (selectedLesson?.pointsReward ?? 10);
+        setEarnedPoints(points);
+        setCompletionCelebrationType('quiz');
+        setActiveOverlayState('lessonCompleted');
       } catch (error) {
+        triggerWarningHaptic();
         Alert.alert('Unable to submit quiz', error instanceof Error ? error.message : 'Please try again.');
       }
     });

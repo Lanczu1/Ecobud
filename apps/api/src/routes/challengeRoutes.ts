@@ -559,7 +559,7 @@ challengeRoutes.post(
     let submission;
     if (submissionId) {
       submission = await prisma.challengeSubmission.findUnique({
-        where: { id: submissionId }
+        where: { id: submissionId },
       });
     } else {
       // Find latest submission that is in approved_collection / preliminary approved status
@@ -568,12 +568,17 @@ challengeRoutes.post(
           userId,
           challengeInstanceId: actualInstanceId,
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
       });
     }
 
     if (!submission) {
       throw new HttpError(404, 'Submission not found.');
+    }
+
+    // Ensure the submission belongs to the authenticated user
+    if (submission.userId !== userId) {
+      throw new HttpError(403, 'You do not own this challenge submission.');
     }
 
     if (submission.status !== 'approved_collection' && !submission.adminPreliminaryApproved) {
@@ -585,6 +590,26 @@ challengeRoutes.post(
       throw new HttpError(400, 'QR code does not match this challenge submission.');
     }
 
+    if (parsedQr.userId && parsedQr.userId !== userId) {
+      throw new HttpError(400, 'QR code belongs to a different user.');
+    }
+
+    // If a secure token was issued in qrToken, verify that the scanned token matches
+    if (submission.qrToken) {
+      try {
+        const storedTokenObj = JSON.parse(submission.qrToken);
+        if (storedTokenObj.token && parsedQr.token && storedTokenObj.token !== parsedQr.token) {
+          throw new HttpError(400, 'Invalid or expired QR verification token.');
+        }
+      } catch (err: any) {
+        if (err instanceof HttpError) throw err;
+        // Non-JSON qrToken fallback string compare
+        if (submission.qrToken !== qrData && !qrData.includes(submission.id)) {
+          throw new HttpError(400, 'Invalid QR verification token.');
+        }
+      }
+    }
+
     const updated = await prisma.challengeSubmission.update({
       where: { id: submission.id },
       data: {
@@ -592,12 +617,12 @@ challengeRoutes.post(
         qrVerifiedAt: new Date(),
         locationVerified: Boolean(latitude && longitude),
         locationVerifiedAt: latitude && longitude ? new Date() : null,
-      }
+      },
     });
 
     return res.json({
       message: 'QR code verified successfully. You may now take your After Photo.',
-      submission: updated
+      submission: updated,
     });
   }),
 );

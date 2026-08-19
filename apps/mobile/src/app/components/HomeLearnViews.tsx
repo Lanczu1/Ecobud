@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Text, View, TextInput, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { Text, View, TextInput, ScrollView, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { styles } from '../styles/appStyles';
 import { type EcoBudMobileModel } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
@@ -10,10 +10,12 @@ import { LearnLessonCard } from './LearnLessonCard';
 import { QuickActions } from './QuickActions';
 import { SummaryCards } from './SummaryCards';
 import { LevelCard } from './LevelCard';
+import { MilestoneBadgePreview } from './MilestoneBadgePreview';
 import { UpcomingEventCard } from './UpcomingEventCard';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { resolveMediaUrl } from '../utils/appUtils';
+import { HomeViewSkeleton, LearnViewSkeleton } from '../../shared/ui/SkeletonLoaders';
 
 const getCategoryDetails = (category: string, isActive: boolean) => {
   const name = category === 'All Categories' ? 'All' : category;
@@ -110,6 +112,18 @@ const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
 };
 
 export function HomeView({ model }: { model: EcoBudMobileModel }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 600;
+
+  if ((model.initializing || model.booting) && !model.dashboard && !model.session) {
+    return (
+      <>
+        <TopNavbar model={model} />
+        <HomeViewSkeleton />
+      </>
+    );
+  }
+
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;
   const baseEcoPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
   const ecoPoints = (model.activeOverlay === 'lessonCompleted' || model.activeOverlay === 'eventApproved')
@@ -128,35 +142,69 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 
         <TouchableOpacity
           onPress={() => model.setActiveOverlay('assistant')}
+          activeOpacity={0.88}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             backgroundColor: '#FFFFFF',
-            borderRadius: moderateScale(20),
+            borderRadius: moderateScale(22),
             paddingHorizontal: scale(16),
-            marginBottom: verticalScale(20),
-            minHeight: verticalScale(48),
+            paddingVertical: verticalScale(10),
+            marginBottom: verticalScale(18),
+            minHeight: verticalScale(50),
             shadowColor: '#126027',
             shadowOpacity: 0.08,
-            shadowRadius: 12,
+            shadowRadius: 14,
             shadowOffset: { width: 0, height: 4 },
             elevation: 3,
             borderWidth: 1,
-            borderColor: '#E6F4EC',
+            borderColor: '#E2EFE7',
           }}
         >
-          <Ionicons name="sparkles" size={scale(20)} color="#126027" />
-          <Text style={{ flex: 1, marginLeft: scale(10), fontSize: responsiveFontSize(14), color: '#6B7A75', fontWeight: '500' }}>
-            Ask EcoBud a question...
+          <View style={{ width: scale(32), height: scale(32), borderRadius: scale(16), backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="sparkles" size={scale(16)} color="#126027" />
+          </View>
+          <Text style={{ flex: 1, marginLeft: scale(10), fontSize: responsiveFontSize(14), color: '#4B5563', fontWeight: '600' }}>
+            Ask EcoBud AI a question...
           </Text>
-          <View style={{ backgroundColor: '#EDF6F1', paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: moderateScale(12) }}>
-            <Text style={{ color: '#126027', fontSize: responsiveFontSize(11), fontWeight: '700' }}>AI</Text>
+          <View style={{ backgroundColor: '#EDF6F1', paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: moderateScale(12), flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ color: '#126027', fontSize: responsiveFontSize(11), fontWeight: '800' }}>AI</Text>
+            <Ionicons name="chevron-forward" size={scale(12)} color="#126027" />
           </View>
         </TouchableOpacity>
 
-        <LevelCard ecoPoints={ecoPoints} />
+        {/* Quick Action Grid */}
+        <QuickActions model={model} />
 
-        <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
+        {isTablet ? (
+          <View style={{ flexDirection: 'row', gap: scale(14), marginBottom: verticalScale(4), alignItems: 'stretch' }}>
+            <View style={{ flex: 1 }}>
+              <LevelCard
+                ecoPoints={ecoPoints}
+                onPress={() => model.setActiveOverlay('ecoLevels')}
+              />
+              <MilestoneBadgePreview
+                ecoPoints={ecoPoints}
+                onPress={() => model.setActiveOverlay('ecoLevels')}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
+            </View>
+          </View>
+        ) : (
+          <>
+            <LevelCard
+              ecoPoints={ecoPoints}
+              onPress={() => model.setActiveOverlay('ecoLevels')}
+            />
+            <MilestoneBadgePreview
+              ecoPoints={ecoPoints}
+              onPress={() => model.setActiveOverlay('ecoLevels')}
+            />
+            <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
+          </>
+        )}
 
         <LeaderboardSnippet model={model} />
 
@@ -243,6 +291,18 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function LearnView({ model }: { model: EcoBudMobileModel }) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 600;
+
+  if ((model.initializing || model.booting) && (!model.lessons || model.lessons.length === 0)) {
+    return (
+      <>
+        <TopNavbar model={model} />
+        <LearnViewSkeleton />
+      </>
+    );
+  }
+
   const continueLesson = model.lessons.find((l) => l.status === 'seen');
   const completedLessonsCount = model.lessons.filter((l) => l.status === 'completed').length;
   const totalLessonsCount = model.lessons.length;
@@ -318,25 +378,33 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
                   shadowRadius: 10,
                   shadowOffset: { width: 0, height: 4 },
                   elevation: 2,
+                  borderWidth: 1,
+                  borderColor: '#E6F4EC',
+                  gap: scale(12),
                 }}
               >
-                {continueImgUrl ? (
-                  <Image 
-                    source={{ uri: continueImgUrl }}
-                    style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), flexShrink: 0 }}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={{ width: scale(56), height: scale(56), borderRadius: moderateScale(12), marginRight: scale(14), backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Ionicons name="book-outline" size={scale(26)} color="#126027" />
-                  </View>
-                )}
-                <View style={{ flex: 1, minWidth: scale(120) }}>
-                  <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(14), fontWeight: '800', marginBottom: verticalScale(2) }} numberOfLines={1}>{continueLesson.title}</Text>
-                  <Text style={{ color: '#6B7A75', fontSize: responsiveFontSize(12), fontWeight: '600' }}>{continueLesson.progress}% Completed</Text>
+                <View style={{ width: scale(48), height: scale(48), borderRadius: moderateScale(12), backgroundColor: '#E8F5E9', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+                  {continueImgUrl ? (
+                    <Image source={{ uri: continueImgUrl }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                  ) : (
+                    <Ionicons name="book" size={scale(22)} color="#126027" />
+                  )}
                 </View>
-                <View style={{ width: scale(32), height: scale(32), borderRadius: scale(16), backgroundColor: '#E6F4EC', alignItems: 'center', justifyContent: 'center', marginLeft: scale(8) }}>
-                  <Ionicons name="play" size={scale(15)} color="#126027" style={{ marginLeft: 2 }} />
+                <View style={{ flex: 1, minWidth: scale(120) }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ color: '#D97706', fontSize: responsiveFontSize(10), fontWeight: '700' }}>IN PROGRESS</Text>
+                    </View>
+                    <Text style={{ color: '#6B7A75', fontSize: responsiveFontSize(11), fontWeight: '500' }}>
+                      {continueLesson.durationMinutes || 5} min read
+                    </Text>
+                  </View>
+                  <Text style={{ color: '#1A211D', fontSize: responsiveFontSize(14), fontWeight: '700' }} numberOfLines={1}>
+                    {continueLesson.title}
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: '#126027', width: scale(32), height: scale(32), borderRadius: scale(16), alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="play" size={scale(14)} color="#FFFFFF" style={{ marginLeft: 2 }} />
                 </View>
               </TouchableOpacity>
             </View>
@@ -472,13 +540,16 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
               <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13) }]}>Check back soon for new content.</Text>
             </SurfaceCard>
           ) : (
-            model.filteredLessons.map((lesson) => (
-              <LearnLessonCard
-                key={lesson.id}
-                lesson={lesson}
-                onPress={() => void model.openLesson(lesson.id)}
-              />
-            ))
+            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) } : {}}>
+              {model.filteredLessons.map((lesson) => (
+                <View key={lesson.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                  <LearnLessonCard
+                    lesson={lesson}
+                    onPress={() => void model.openLesson(lesson.id)}
+                  />
+                </View>
+              ))}
+            </View>
           )}
         </View>
 

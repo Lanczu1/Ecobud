@@ -163,11 +163,55 @@ export const swapService = {
     return formatListing(row);
   },
 
-  async updateListing(id: string, data: Record<string, unknown>) {
-    await prisma.swapListing.update({ where: { id }, data });
+  async updateListing(id: string, userId: string, role: string, data: Record<string, unknown>) {
+    const listing = await prisma.swapListing.findUnique({ where: { id } });
+    if (!listing) {
+      throw new Error('Listing not found');
+    }
+
+    if (listing.userId !== userId && role !== 'admin' && role !== 'moderator') {
+      throw new Error('You do not have permission to edit this listing');
+    }
+
+    // Whitelist allowed user-editable fields to prevent mass assignment
+    const allowedFields = [
+      'title',
+      'category',
+      'quantity',
+      'condition',
+      'description',
+      'lookingFor',
+      'images',
+      'meetupMethod',
+      'meetupLocation',
+      'meetupLandmark',
+      'meetupNotes',
+      'city',
+      'province',
+      'latitude',
+      'longitude',
+    ];
+
+    const sanitizedData: Record<string, unknown> = {};
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        sanitizedData[field] = data[field];
+      }
+    }
+
+    await prisma.swapListing.update({ where: { id }, data: sanitizedData });
   },
 
-  async deleteListing(id: string) {
+  async deleteListing(id: string, userId: string, role: string) {
+    const listing = await prisma.swapListing.findUnique({ where: { id } });
+    if (!listing) {
+      throw new Error('Listing not found');
+    }
+
+    if (listing.userId !== userId && role !== 'admin' && role !== 'moderator') {
+      throw new Error('You do not have permission to delete this listing');
+    }
+
     await prisma.swapListing.update({
       where: { id },
       data: { isActive: false },
@@ -177,9 +221,13 @@ export const swapService = {
   async sendSwapRequest(listingId: string, fromUserId: string, message?: string) {
     const listing = await prisma.swapListing.findUnique({
       where: { id: listingId },
-      select: { userId: true },
+      select: { userId: true, isActive: true },
     });
-    if (!listing) throw new Error('Listing not found');
+    if (!listing || !listing.isActive) throw new Error('Listing not found or inactive');
+
+    if (listing.userId === fromUserId) {
+      throw new Error('You cannot send a swap request to your own listing');
+    }
 
     const request = await prisma.swapRequest.create({
       data: {
@@ -204,7 +252,14 @@ export const swapService = {
     return request;
   },
 
-  async updateSwapRequestStatus(requestId: string, status: string) {
+  async updateSwapRequestStatus(requestId: string, userId: string, role: string, status: string) {
+    const swapReq = await prisma.swapRequest.findUnique({ where: { id: requestId } });
+    if (!swapReq) throw new Error('Swap request not found');
+
+    if (swapReq.toUserId !== userId && swapReq.fromUserId !== userId && role !== 'admin' && role !== 'moderator') {
+      throw new Error('You do not have permission to update this swap request');
+    }
+
     await prisma.swapRequest.update({
       where: { id: requestId },
       data: { status },
@@ -243,7 +298,22 @@ export const swapService = {
     });
   },
 
-  async fetchMessages(swapRequestId: string) {
+  async fetchMessages(conversationOrSwapRequestId: string, userId: string, role: string) {
+    // Check conversation ownership
+    const conv = await prisma.swapConversation.findFirst({
+      where: {
+        OR: [
+          { id: conversationOrSwapRequestId },
+          { swapRequestId: conversationOrSwapRequestId },
+        ],
+      },
+    });
+
+    if (conv && conv.user1Id !== userId && conv.user2Id !== userId && role !== 'admin' && role !== 'moderator') {
+      throw new Error('You are not authorized to view this conversation');
+    }
+
+    const swapRequestId = conv ? conv.swapRequestId : conversationOrSwapRequestId;
     const rows = await prisma.swapMessage.findMany({
       where: { swapRequestId },
       orderBy: { timestamp: 'asc' },
@@ -251,7 +321,21 @@ export const swapService = {
     return rows.map(formatMessage);
   },
 
-  async sendMessage(swapRequestId: string, senderId: string, text: string, imageUrl?: string) {
+  async sendMessage(conversationOrSwapRequestId: string, senderId: string, role: string, text: string, imageUrl?: string) {
+    const conv = await prisma.swapConversation.findFirst({
+      where: {
+        OR: [
+          { id: conversationOrSwapRequestId },
+          { swapRequestId: conversationOrSwapRequestId },
+        ],
+      },
+    });
+
+    if (conv && conv.user1Id !== senderId && conv.user2Id !== senderId && role !== 'admin' && role !== 'moderator') {
+      throw new Error('You are not authorized to send messages in this conversation');
+    }
+
+    const swapRequestId = conv ? conv.swapRequestId : conversationOrSwapRequestId;
     const row = await prisma.swapMessage.create({
       data: {
         swapRequestId,
@@ -266,7 +350,17 @@ export const swapService = {
     return formatMessage(row);
   },
 
-  async markMessagesRead(swapRequestId: string, userId: string) {
+  async markMessagesRead(conversationOrSwapRequestId: string, userId: string) {
+    const conv = await prisma.swapConversation.findFirst({
+      where: {
+        OR: [
+          { id: conversationOrSwapRequestId },
+          { swapRequestId: conversationOrSwapRequestId },
+        ],
+      },
+    });
+    const swapRequestId = conv ? conv.swapRequestId : conversationOrSwapRequestId;
+
     await prisma.swapMessage.updateMany({
       where: {
         swapRequestId,

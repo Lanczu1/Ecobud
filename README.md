@@ -111,9 +111,9 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
 
 ## Demo Accounts
 
-- Member mobile login: `member@bayanijuan.app / eco12345`
-- Admin web login: `admin@bayanijuan.app / admin12345`
-- Moderator login: `moderator@bayanijuan.app / moderator123`
+- Member mobile login: `member@ecobud.local / eco12345`
+- Admin web login: `admin@ecobud.local / admin12345`
+- Moderator login: `moderator@ecobud.local / moderator123`
 
 ## Validation Commands
 

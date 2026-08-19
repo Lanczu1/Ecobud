@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
@@ -7,6 +8,7 @@ import { AccessRole, getRoleRedirectPath, TokenService } from '../security/token
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import nodemailer from 'nodemailer';
+import { emailRegistrationSchema } from '../security/emailValidator';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -25,8 +27,16 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many verification requests. Please try again in 10 minutes.' },
+});
+
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: emailRegistrationSchema,
   password: z.string().min(8),
   name: z.string().min(2).max(50).optional(),
   displayName: z.string().min(2).max(50).optional(),
@@ -37,7 +47,7 @@ const registerSchema = z.object({
 });
 
 const otpSchema = z.object({
-  email: z.string().email(),
+  email: emailRegistrationSchema,
 });
 
 const loginSchema = z.object({
@@ -188,6 +198,7 @@ authRoutes.post(
 
 authRoutes.post(
   '/send-otp',
+  otpLimiter,
   errorBoundary(async (req, res) => {
     const { email } = otpSchema.parse(req.body);
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -196,7 +207,7 @@ authRoutes.post(
       throw new HttpError(409, 'An ECOBUD account already exists for this email.');
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     await prisma.otpCode.upsert({

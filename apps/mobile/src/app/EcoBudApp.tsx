@@ -124,6 +124,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
                   refreshing={model.refreshing}
                   onRefresh={() => void model.refreshEverything()}
                   tintColor={ecoTheme.colors.primaryDark}
+                  colors={[ecoTheme.colors.primaryDark, '#4ADE80']}
                 />
               }
               contentContainerStyle={styles.mainScrollContent}

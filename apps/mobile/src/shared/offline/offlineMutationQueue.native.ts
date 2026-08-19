@@ -143,6 +143,15 @@ export const offlineMutationQueue: OfflineMutationQueue = {
       now,
       id,
     );
+
+    // Prune already synced records older than 24 hours to prevent data lingering and database bloat
+    try {
+      await database.runAsync(
+        `DELETE FROM ${TABLE_NAME} WHERE synced = 1 AND updated_at < datetime('now', '-1 day')`,
+      );
+    } catch {
+      // Best-effort cleanup
+    }
   },
 
   async markFailed(id: string, errorMessage: string) {

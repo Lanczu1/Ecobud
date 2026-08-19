@@ -9,6 +9,8 @@ export { DiscoverChallengeCard } from './DiscoverChallengeCard';
 export { UpcomingEventCard } from './UpcomingEventCard';
 export { CommunityImpactCard } from './CommunityImpactCard';
 export { LevelCard } from './LevelCard';
+export { MilestoneBadgePreview } from './MilestoneBadgePreview';
+export { EcoLevelsOverlay } from './EcoLevelsOverlay';
 // Re-export common components
 export * from './CommonComponents';
 // Re-export views and overlays

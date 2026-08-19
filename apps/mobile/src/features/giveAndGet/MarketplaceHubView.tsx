@@ -51,8 +51,8 @@ export function MarketplaceHubView({
   }, [loadConversations]);
 
   useEffect(() => {
-    onScreenStateChange?.(screen === 'chat' || screen === 'detail' || screen === 'create' || feedTab === 'mylistings');
-  }, [screen, feedTab, onScreenStateChange]);
+    onScreenStateChange?.(screen === 'chat' || screen === 'detail' || screen === 'create');
+  }, [screen, onScreenStateChange]);
 
   useEffect(() => {
     if (!token || !supabaseClient) return;

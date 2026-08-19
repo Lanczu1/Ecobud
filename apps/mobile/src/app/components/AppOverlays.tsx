@@ -48,6 +48,7 @@ import {
   getEventLifecycleStatus,
   resolveMediaUrl,
 } from '../utils/appUtils';
+import { triggerSuccessHaptic, triggerImpactMedium, triggerSelectionHaptic } from '../utils/haptics';
 import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
 import {
   TopNavbar,
@@ -63,6 +64,7 @@ import {
 } from './CommonComponents';
 import { UpcomingEventCard } from './UpcomingEventCard';
 import { FireStreak } from './FireStreak';
+import { EcoLevelsOverlay } from './EcoLevelsOverlay';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const challenge = model.selectedChallenge;
@@ -783,6 +785,8 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <EventApprovedOverlay model={model} />;
     case 'settings':
       return <SettingsOverlay model={model} />;
+    case 'ecoLevels':
+      return <EcoLevelsOverlay model={model} />;
     default:
       return null;
   }
@@ -1098,19 +1102,31 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
     );
   }, [model.events]);
 
+  const escapeHtml = (text: string) => {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
   const leafletHtml = React.useMemo(() => {
-    const markersJson = JSON.stringify(
-      phEvents.map((e: any) => ({
-        id: e.id,
-        title: e.title || 'Eco Event',
-        location: e.location || 'Philippines',
-        lat: e.latitude,
-        lng: e.longitude,
-      }))
-    );
+    const rawMarkers = phEvents.map((e: any) => ({
+      id: escapeHtml(String(e.id || '')),
+      title: escapeHtml(String(e.title || 'Eco Event')),
+      location: escapeHtml(String(e.location || 'Philippines')),
+      lat: Number(e.latitude) || 0,
+      lng: Number(e.longitude) || 0,
+    }));
+
+    // Prevent </script> tags from breaking out of the inline script block
+    const markersJson = JSON.stringify(rawMarkers)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e');
 
     const userLocJson = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
-      ? JSON.stringify({ lat: userLocation.latitude, lng: userLocation.longitude })
+      ? JSON.stringify({ lat: Number(userLocation.latitude), lng: Number(userLocation.longitude) })
       : 'null';
 
     return `
@@ -1226,14 +1242,35 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           const events = ${markersJson};
           events.forEach(ev => {
             const marker = L.marker([ev.lat, ev.lng]).addTo(map);
-            const popupContent = \`
-              <div style="padding: 1px;">
-                <div style="font-weight: 700; font-size: 13px; color: #fff;">\${ev.title}</div>
-                <div style="font-size: 11px; opacity: 0.9; margin-top: 2px; color: #E8F5E9;">\${ev.location}</div>
-                <button class="popup-btn" onclick="window.ReactNativeWebView.postMessage(JSON.stringify({type:'join', id:'\${ev.id}'}))">Join Event</button>
-              </div>
-            \`;
-            marker.bindPopup(popupContent, { className: 'custom-popup' });
+            const container = document.createElement('div');
+            container.style.padding = '1px';
+
+            const titleEl = document.createElement('div');
+            titleEl.style.fontWeight = '700';
+            titleEl.style.fontSize = '13px';
+            titleEl.style.color = '#fff';
+            titleEl.textContent = ev.title;
+            container.appendChild(titleEl);
+
+            const locEl = document.createElement('div');
+            locEl.style.fontSize = '11px';
+            locEl.style.opacity = '0.9';
+            locEl.style.marginTop = '2px';
+            locEl.style.color = '#E8F5E9';
+            locEl.textContent = ev.location;
+            container.appendChild(locEl);
+
+            const btnEl = document.createElement('button');
+            btnEl.className = 'popup-btn';
+            btnEl.textContent = 'Join Event';
+            btnEl.onclick = function() {
+              if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'join', id: ev.id }));
+              }
+            };
+            container.appendChild(btnEl);
+
+            marker.bindPopup(container, { className: 'custom-popup' });
           });
         </script>
       </body>
@@ -2718,7 +2755,25 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
     player.play();
   };
 
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isTablet = width >= 600;
+
+  // Dynamically compute exact center position of LevelCard progress bar across any device size
+  const targetProgressBarX = isTablet
+    ? scale(16) + (width - scale(32)) * 0.25 - 15
+    : (width / 2) - 15;
+
+  const topSafeArea = insets.top || 44;
+  const targetProgressBarY =
+    topSafeArea +
+    verticalScale(64) + // TopNavbar
+    verticalScale(38) + // Welcome title
+    verticalScale(52) + // Welcome subtitle + margin
+    verticalScale(68) + // AI Search bar + margin
+    verticalScale(114) + // QuickActions grid + margin
+    verticalScale(218); // LevelCard top down directly onto the green Progress to Eco Learner bar line
+
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
   const checkScale = React.useRef(new Animated.Value(0)).current;
@@ -2740,6 +2795,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   ).current;
 
   const startPointsAnimation = () => {
+    triggerSuccessHaptic();
     // 1. Immediately switch tab so the home page renders in background
     model.setActiveTab('home', true);
 
@@ -2796,7 +2852,10 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
           Animated.delay(120),
           Animated.parallel([
             Animated.timing(particle.pos, {
-              toValue: { x: (width / 2) - 15, y: 434 }, // Target exactly the center of the LevelCard progress bar (pushed further down by AI search)
+              toValue: {
+                x: targetProgressBarX + (Math.random() * scale(60) - scale(30)),
+                y: targetProgressBarY,
+              }, // Target exactly the green LevelCard progress bar
               duration: 650,
               easing: Easing.bezier(0.25, 1, 0.5, 1),
               useNativeDriver: true,
@@ -2947,7 +3006,13 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
       </Animated.View>
 
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: scale(20),
+          paddingVertical: verticalScale(30),
+        }}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
@@ -2956,17 +3021,18 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
             transform: [{ scale: contentScale }],
             alignItems: 'center',
             width: '100%',
+            maxWidth: 480,
           }}
         >
           {/* Glassmorphic Container Card */}
           <View style={{
             width: '100%',
             backgroundColor: 'rgba(255, 255, 255, 0.09)',
-            borderRadius: 32,
+            borderRadius: moderateScale(32),
             borderWidth: 1.5,
             borderColor: 'rgba(255, 255, 255, 0.14)',
-            paddingHorizontal: 24,
-            paddingVertical: 36,
+            paddingHorizontal: scale(24),
+            paddingVertical: verticalScale(32),
             alignItems: 'center',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 16 },
@@ -2992,7 +3058,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
             />
 
             {/* 3D concentric rings around checkmark */}
-            <View style={{ position: 'relative', marginBottom: 28 }}>
+            <View style={{ position: 'relative', marginBottom: verticalScale(24) }}>
               {/* Concentric outer breathing glow */}
               <Animated.View
                 style={{
@@ -3031,9 +3097,9 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
               {/* Main Check Ring */}
               <Animated.View
                 style={{
-                  width: 96,
-                  height: 96,
-                  borderRadius: 48,
+                  width: scale(92),
+                  height: scale(92),
+                  borderRadius: scale(46),
                   backgroundColor: '#10b981',
                   justifyContent: 'center',
                   alignItems: 'center',
@@ -3047,34 +3113,34 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
                   borderColor: 'rgba(255, 255, 255, 0.25)',
                 }}
               >
-                <Ionicons name="checkmark-sharp" size={56} color="#FFFFFF" />
+                <Ionicons name="checkmark-sharp" size={scale(52)} color="#FFFFFF" />
               </Animated.View>
             </View>
 
             {/* Sparkle badge */}
             <View style={{
               backgroundColor: 'rgba(251, 191, 36, 0.16)',
-              paddingHorizontal: 14,
-              paddingVertical: 6,
-              borderRadius: 20,
+              paddingHorizontal: scale(14),
+              paddingVertical: verticalScale(6),
+              borderRadius: moderateScale(20),
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 6,
-              marginBottom: 16,
+              gap: scale(6),
+              marginBottom: verticalScale(14),
               borderWidth: 1,
               borderColor: 'rgba(251, 191, 36, 0.3)',
             }}>
-              <Ionicons name="sparkles" size={14} color="#FBBF24" />
-              <Text style={{ fontSize: 11, fontWeight: '900', color: '#FBBF24', letterSpacing: 1, textTransform: 'uppercase' }}>
+              <Ionicons name="sparkles" size={scale(14)} color="#FBBF24" />
+              <Text style={{ fontSize: responsiveFontSize(11), fontWeight: '900', color: '#FBBF24', letterSpacing: 1, textTransform: 'uppercase' }}>
                 {model.completionCelebrationType === 'quiz' ? 'Quiz Passed' : model.completionCelebrationType === 'lesson' ? 'Lesson Mastered' : 'Reward Claimed'}
               </Text>
             </View>
 
-            <Text style={{ fontSize: 32, fontWeight: '900', color: '#FFFFFF', marginBottom: 8, textAlign: 'center', letterSpacing: -0.5 }}>
+            <Text style={{ fontSize: responsiveFontSize(28), fontWeight: '900', color: '#FFFFFF', marginBottom: verticalScale(8), textAlign: 'center', letterSpacing: -0.5 }}>
               {model.completionCelebrationType === 'quiz' ? 'Quiz Passed!' : model.completionCelebrationType === 'lesson' ? 'Lesson Complete!' : 'Challenge Claimed!'}
             </Text>
 
-            <Text style={{ fontSize: 15, color: '#C2D9CE', marginBottom: 32, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 }}>
+            <Text style={{ fontSize: responsiveFontSize(14), color: '#C2D9CE', marginBottom: verticalScale(24), textAlign: 'center', lineHeight: responsiveFontSize(21), paddingHorizontal: scale(8) }}>
               {model.completionCelebrationType === 'quiz'
                 ? 'Excellent work! You have successfully verified your knowledge.'
                 : model.completionCelebrationType === 'lesson'
@@ -3083,17 +3149,17 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
             </Text>
 
             {model.completionCelebrationType === 'claim' && model.earnedCoins > 0 ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(20) }}>
                 <ExpCounter targetPoints={model.earnedPoints} />
                 <View style={{ alignItems: 'center' }}>
-                  <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
-                    <View style={{ position: 'absolute', top: 5, left: 5, width: 100, height: 100, borderRadius: 50, backgroundColor: '#FBBF24' }}>
-                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: 50 }} />
+                  <View style={{ width: scale(96), height: scale(96), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(16) }}>
+                    <View style={{ position: 'absolute', top: 5, left: 5, width: scale(86), height: scale(86), borderRadius: scale(43), backgroundColor: '#FBBF24' }}>
+                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: scale(43) }} />
                     </View>
-                    <Ionicons name="cash" size={44} color="#FFF" />
+                    <Ionicons name="cash" size={scale(40)} color="#FFF" />
                   </View>
-                  <Text style={{ fontSize: 52, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: 4 }}>+{model.earnedCoins}</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
+                  <Text style={{ fontSize: responsiveFontSize(44), fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: verticalScale(4) }}>+{model.earnedCoins}</Text>
+                  <Text style={{ fontSize: responsiveFontSize(12), fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
                 </View>
               </View>
             ) : (
@@ -3104,40 +3170,58 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
       </ScrollView>
 
       {/* Footer view with Continue button */}
-      <Animated.View style={{ paddingHorizontal: 24, paddingBottom: 48, backgroundColor: 'transparent', alignItems: 'center', opacity: btnOpacity }}>
-        <View style={{ width: '100%' }}>
-          <TouchableOpacity
-            onPress={startPointsAnimation}
+      <Animated.View style={{
+        width: '100%',
+        maxWidth: 480,
+        alignSelf: 'center',
+        paddingHorizontal: scale(20),
+        paddingBottom: verticalScale(36),
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        opacity: btnOpacity,
+      }}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={startPointsAnimation}
+          style={{
+            width: '100%',
+            height: Math.max(52, verticalScale(56)),
+            borderRadius: moderateScale(20),
+            overflow: 'hidden',
+            shadowColor: '#10b981',
+            shadowOpacity: 0.35,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 8,
+          }}
+        >
+          <LinearGradient
+            colors={['#10b981', '#059669']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
             style={{
+              flex: 1,
               width: '100%',
-              height: 58,
-              borderRadius: 20,
-              overflow: 'hidden',
-              shadowColor: '#10b981',
-              shadowOpacity: 0.35,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 8 },
-              elevation: 8,
+              height: '100%',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: scale(8),
             }}
           >
-            <LinearGradient
-              colors={['#10b981', '#059669']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                flexDirection: 'row', flexWrap: 'wrap', gap: 8,
-              }}
-            >
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
-                Continue
-              </Text>
-              <Ionicons name="arrow-forward-outline" size={18} color="#FFFFFF" />
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+            <Text style={{
+              color: '#FFFFFF',
+              fontSize: responsiveFontSize(16),
+              fontWeight: '800',
+              letterSpacing: 0.5,
+              textAlign: 'center',
+              includeFontPadding: false,
+            }}>
+              Continue
+            </Text>
+            <Ionicons name="arrow-forward-outline" size={scale(18)} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
       </Animated.View>
 
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -3189,7 +3273,25 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
     player.play();
   };
 
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isTablet = width >= 600;
+
+  // Dynamically compute exact center position of LevelCard progress bar across any device size
+  const targetProgressBarX = isTablet
+    ? scale(16) + (width - scale(32)) * 0.25 - 15
+    : (width / 2) - 15;
+
+  const topSafeArea = insets.top || 44;
+  const targetProgressBarY =
+    topSafeArea +
+    verticalScale(64) + // TopNavbar
+    verticalScale(38) + // Welcome title
+    verticalScale(52) + // Welcome subtitle + margin
+    verticalScale(68) + // AI Search bar + margin
+    verticalScale(114) + // QuickActions grid + margin
+    verticalScale(218); // LevelCard top down directly onto the green Progress to Eco Learner bar line
+
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
   const checkScale = React.useRef(new Animated.Value(0)).current;
@@ -3256,7 +3358,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
             Animated.timing(particle.pos, {
               toValue: isCoin
                 ? { x: width + 100, y: 150 }
-                : { x: width / 2 - 15 + (Math.random() * 40 - 20), y: 434 },
+                : { x: targetProgressBarX + (Math.random() * 40 - 20), y: targetProgressBarY },
               duration: 650,
               easing: Easing.bezier(0.25, 1, 0.5, 1),
               useNativeDriver: true,
@@ -3392,7 +3494,13 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
       </Animated.View>
 
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: scale(20),
+          paddingVertical: verticalScale(30),
+        }}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
@@ -3401,16 +3509,17 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
             transform: [{ scale: contentScale }],
             alignItems: 'center',
             width: '100%',
+            maxWidth: 480,
           }}
         >
           <View style={{
             width: '100%',
             backgroundColor: 'rgba(255, 255, 255, 0.09)',
-            borderRadius: 32,
+            borderRadius: moderateScale(32),
             borderWidth: 1.5,
             borderColor: 'rgba(255, 255, 255, 0.14)',
-            paddingHorizontal: 24,
-            paddingVertical: 36,
+            paddingHorizontal: scale(24),
+            paddingVertical: verticalScale(32),
             alignItems: 'center',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 16 },
@@ -3434,7 +3543,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
               }}
             />
 
-            <View style={{ position: 'relative', marginBottom: 28 }}>
+            <View style={{ position: 'relative', marginBottom: verticalScale(24) }}>
               <Animated.View
                 style={{
                   position: 'absolute',
@@ -3470,9 +3579,9 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
 
               <Animated.View
                 style={{
-                  width: 96,
-                  height: 96,
-                  borderRadius: 48,
+                  width: scale(92),
+                  height: scale(92),
+                  borderRadius: scale(46),
                   backgroundColor: '#F59E0B',
                   justifyContent: 'center',
                   alignItems: 'center',
@@ -3486,51 +3595,51 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
                   borderColor: 'rgba(255, 255, 255, 0.25)',
                 }}
               >
-                <Ionicons name="checkmark-sharp" size={56} color="#FFFFFF" />
+                <Ionicons name="checkmark-sharp" size={scale(52)} color="#FFFFFF" />
               </Animated.View>
             </View>
 
             <View style={{
               backgroundColor: 'rgba(251, 191, 36, 0.16)',
-              paddingHorizontal: 14,
-              paddingVertical: 6,
-              borderRadius: 20,
+              paddingHorizontal: scale(14),
+              paddingVertical: verticalScale(6),
+              borderRadius: moderateScale(20),
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 6,
-              marginBottom: 16,
+              gap: scale(6),
+              marginBottom: verticalScale(14),
               borderWidth: 1,
               borderColor: 'rgba(251, 191, 36, 0.3)',
             }}>
-              <Ionicons name="sparkles" size={14} color="#FBBF24" />
-              <Text style={{ fontSize: 11, fontWeight: '900', color: '#FBBF24', letterSpacing: 1, textTransform: 'uppercase' }}>
+              <Ionicons name="sparkles" size={scale(14)} color="#FBBF24" />
+              <Text style={{ fontSize: responsiveFontSize(11), fontWeight: '900', color: '#FBBF24', letterSpacing: 1, textTransform: 'uppercase' }}>
                 Event Claimed
               </Text>
             </View>
 
-            <Text style={{ fontSize: 32, fontWeight: '900', color: '#FFFFFF', marginBottom: 8, textAlign: 'center', letterSpacing: -0.5 }}>
+            <Text style={{ fontSize: responsiveFontSize(28), fontWeight: '900', color: '#FFFFFF', marginBottom: verticalScale(8), textAlign: 'center', letterSpacing: -0.5 }}>
               Event Approved!
             </Text>
 
-            <Text style={{ fontSize: 15, color: '#C2D9CE', marginBottom: 32, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 }}>
+            <Text style={{ fontSize: responsiveFontSize(14), color: '#C2D9CE', marginBottom: verticalScale(24), textAlign: 'center', lineHeight: responsiveFontSize(21), paddingHorizontal: scale(8) }}>
               Awesome! Your attendance has been verified and your eco rewards have been claimed!
             </Text>
 
             {model.earnedCoins > 0 ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(20) }}>
                 <ExpCounter targetPoints={model.earnedPoints} />
                 <View style={{ alignItems: 'center' }}>
-                  <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
-                    <View style={{ position: 'absolute', top: 5, left: 5, width: 100, height: 100, borderRadius: 50, backgroundColor: '#FBBF24' }}>
-                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: 50 }} />
+                  <View style={{ width: scale(96), height: scale(96), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(16) }}>
+                    <View style={{ position: 'absolute', top: 5, left: 5, width: scale(86), height: scale(86), borderRadius: scale(43), backgroundColor: '#FBBF24' }}>
+                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: scale(43) }} />
                     </View>
                     <Image
                       source={require('../../../assets/coin.png')}
-                      style={{ width: 50, height: 50, resizeMode: 'contain' }}
+                      style={{ width: scale(46), height: scale(46), resizeMode: 'contain' }}
                     />
                   </View>
-                  <Text style={{ fontSize: 52, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: 4 }}>+{model.earnedCoins}</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
+                  <Text style={{ fontSize: responsiveFontSize(44), fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: verticalScale(4) }}>+{model.earnedCoins}</Text>
+                  <Text style={{ fontSize: responsiveFontSize(12), fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
                 </View>
               </View>
             ) : (
@@ -3540,40 +3649,58 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
         </Animated.View>
       </ScrollView>
 
-      <Animated.View style={{ paddingHorizontal: 24, paddingBottom: 48, backgroundColor: 'transparent', alignItems: 'center', opacity: btnOpacity }}>
-        <View style={{ width: '100%' }}>
-          <TouchableOpacity
-            onPress={startPointsAnimation}
+      <Animated.View style={{
+        width: '100%',
+        maxWidth: 480,
+        alignSelf: 'center',
+        paddingHorizontal: scale(20),
+        paddingBottom: verticalScale(36),
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        opacity: btnOpacity,
+      }}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={startPointsAnimation}
+          style={{
+            width: '100%',
+            height: Math.max(52, verticalScale(56)),
+            borderRadius: moderateScale(20),
+            overflow: 'hidden',
+            shadowColor: '#F59E0B',
+            shadowOpacity: 0.35,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 8,
+          }}
+        >
+          <LinearGradient
+            colors={['#F59E0B', '#D97706']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
             style={{
+              flex: 1,
               width: '100%',
-              height: 58,
-              borderRadius: 20,
-              overflow: 'hidden',
-              shadowColor: '#F59E0B',
-              shadowOpacity: 0.35,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 8 },
-              elevation: 8,
+              height: '100%',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: scale(8),
             }}
           >
-            <LinearGradient
-              colors={['#F59E0B', '#D97706']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                flexDirection: 'row', flexWrap: 'wrap', gap: 8,
-              }}
-            >
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
-                Continue
-              </Text>
-              <Ionicons name="arrow-forward-outline" size={18} color="#FFFFFF" />
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+            <Text style={{
+              color: '#FFFFFF',
+              fontSize: responsiveFontSize(16),
+              fontWeight: '800',
+              letterSpacing: 0.5,
+              textAlign: 'center',
+              includeFontPadding: false,
+            }}>
+              Continue
+            </Text>
+            <Ionicons name="arrow-forward-outline" size={scale(18)} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
       </Animated.View>
 
       <View style={StyleSheet.absoluteFill} pointerEvents="none">

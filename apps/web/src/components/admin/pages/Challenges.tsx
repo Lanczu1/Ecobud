@@ -1002,14 +1002,14 @@ export function Challenges() {
                     {/* User Header */}
                     <div 
                       onClick={() => toggleUserCollapse(userGroup.userId)}
-                      className="px-6 py-4 bg-gradient-to-r from-gray-50/90 to-white dark:from-gray-800/80 dark:to-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors select-none"
+                      className="px-6 py-4 bg-linear-to-r from-gray-50/90 to-white dark:from-gray-800/80 dark:to-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors select-none"
                     >
                       <div className="flex items-center gap-3.5">
                         <div className="relative">
                           {userGroup.avatarUrl ? (
                             <img src={userGroup.avatarUrl} alt={userGroup.userName} className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-sm" />
                           ) : (
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-600 to-emerald-400 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                            <div className="w-10 h-10 rounded-full bg-linear-to-tr from-green-600 to-emerald-400 flex items-center justify-center text-white font-bold text-sm shadow-sm">
                               {userGroup.displayName.charAt(0).toUpperCase()}
                             </div>
                           )}
