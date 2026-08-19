@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 

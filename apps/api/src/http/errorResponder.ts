@@ -32,6 +32,10 @@ export const errorResponder = (
     return res.status(400).json({ message: 'Invalid JSON payload.' });
   }
 
+  if (error.name === 'MulterError' || error.message.includes('Only JPEG, PNG, and WebP') || error.message.includes('Invalid media file type')) {
+    return res.status(400).json({ message: error.message });
+  }
+
   console.error(error);
   return res.status(500).json({ message: 'Unexpected server error.' });
 };

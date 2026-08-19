@@ -1,11 +1,13 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
+import { triggerImpactLight } from '../utils/haptics';
 
 export interface LevelCardProps {
   ecoPoints: number;
+  onPress?: () => void;
 }
 
 const LEVELS = [
@@ -36,7 +38,7 @@ export function getLevelFromPoints(points: number) {
   return { currentLevelObj, nextLevelObj };
 }
 
-export function LevelCard({ ecoPoints }: LevelCardProps) {
+export function LevelCard({ ecoPoints, onPress }: LevelCardProps) {
   const [displayPoints, setDisplayPoints] = React.useState(ecoPoints);
 
   React.useEffect(() => {
@@ -83,55 +85,75 @@ export function LevelCard({ ecoPoints }: LevelCardProps) {
     pointsToNext = nextLevelObj.points - displayPoints;
   }
 
+  const handlePress = () => {
+    if (onPress) {
+      triggerImpactLight();
+      onPress();
+    }
+  };
+
+  const CardWrapper = onPress ? TouchableOpacity : View;
+
   return (
     <View style={{ marginBottom: 24, paddingHorizontal: 0 }}>
-      <LinearGradient
-        colors={['#064E3B', '#047857', '#059669']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.card}
+      <CardWrapper
+        activeOpacity={0.9}
+        onPress={onPress ? handlePress : undefined}
       >
-        {/* Background Leaves Decorations */}
-        <View style={styles.cardGlow} />
-        <MaterialCommunityIcons name="leaf" size={60} color="rgba(255,255,255,0.05)" style={styles.bgLeaf1} />
-        <MaterialCommunityIcons name="leaf" size={90} color="rgba(255,255,255,0.03)" style={styles.bgLeaf2} />
-        <MaterialCommunityIcons name="leaf" size={40} color="rgba(255,255,255,0.06)" style={styles.bgLeaf3} />
-        
-        <View style={styles.header}>
-          <View style={styles.iconCircle}>
-            <MaterialCommunityIcons name={currentLevelObj.icon as any} size={22} color="#34D399" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.levelLabel}>LEVEL {currentLevelObj.level}</Text>
-            <Text style={styles.levelTitle}>{currentLevelObj.name}</Text>
-          </View>
-        </View>
-
-        <View style={styles.pointsRow}>
-          <Text style={styles.pointsNumber}>{displayPoints}</Text>
-          <Text style={styles.pointsUnit}>Eco Points</Text>
-        </View>
-
-        <View style={styles.progressContainer}>
-          <View style={styles.progressHeader}>
-            {isMaxLevel ? (
-              <Text style={styles.progressText}>Max Level Reached!</Text>
-            ) : (
-              <>
-                <Text style={styles.progressText}>Progress to {nextLevelObj.name}</Text>
-                <Text style={styles.progressText}>{displayPoints} / {nextLevelObj.points}</Text>
-              </>
+        <LinearGradient
+          colors={['#064E3B', '#047857', '#059669']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.card}
+        >
+          {/* Background Leaves Decorations */}
+          <View style={styles.cardGlow} />
+          <MaterialCommunityIcons name="leaf" size={60} color="rgba(255,255,255,0.05)" style={styles.bgLeaf1} />
+          <MaterialCommunityIcons name="leaf" size={90} color="rgba(255,255,255,0.03)" style={styles.bgLeaf2} />
+          <MaterialCommunityIcons name="leaf" size={40} color="rgba(255,255,255,0.06)" style={styles.bgLeaf3} />
+          
+          <View style={styles.header}>
+            <View style={styles.iconCircle}>
+              <MaterialCommunityIcons name={currentLevelObj.icon as any} size={22} color="#34D399" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.levelLabel}>LEVEL {currentLevelObj.level}</Text>
+              <Text style={styles.levelTitle}>{currentLevelObj.name}</Text>
+            </View>
+            {onPress && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: moderateScale(10), gap: 2 }}>
+                <Text style={{ color: '#E6F4EC', fontSize: responsiveFontSize(10), fontWeight: '700' }}>Roadmap</Text>
+                <Ionicons name="chevron-forward" size={scale(11)} color="#E6F4EC" />
+              </View>
             )}
           </View>
-          <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
-          </View>
-          {!isMaxLevel && (
-             <Text style={styles.pointsToNextText}>{pointsToNext} points to next level</Text>
-          )}
-        </View>
 
-      </LinearGradient>
+          <View style={styles.pointsRow}>
+            <Text style={styles.pointsNumber}>{displayPoints}</Text>
+            <Text style={styles.pointsUnit}>Eco Points</Text>
+          </View>
+
+          <View style={styles.progressContainer}>
+            <View style={styles.progressHeader}>
+              {isMaxLevel ? (
+                <Text style={styles.progressText}>Max Level Reached!</Text>
+              ) : (
+                <>
+                  <Text style={styles.progressText}>Progress to {nextLevelObj.name}</Text>
+                  <Text style={styles.progressText}>{displayPoints} / {nextLevelObj.points}</Text>
+                </>
+              )}
+            </View>
+            <View style={styles.progressBarBackground}>
+              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+            </View>
+            {!isMaxLevel && (
+               <Text style={styles.pointsToNextText}>{pointsToNext} points to next level</Text>
+            )}
+          </View>
+
+        </LinearGradient>
+      </CardWrapper>
     </View>
   );
 }

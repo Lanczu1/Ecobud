@@ -82,7 +82,7 @@ export function Header({
   const avatarSize = isTablet ? 50 : 44;
   const indicatorSize = 11;
   const iconSize = isSmallDevice ? 22 : isTablet ? 26 : 24;
-  const actionGap = isSmallDevice ? 10 : isTablet ? 16 : 12;
+  const actionGap = isSmallDevice ? 10 : isTablet ? 20 : 14;
   const logoSize = isSmallDevice ? scale(42) : isTablet ? scale(52) : scale(46);
 
   return (

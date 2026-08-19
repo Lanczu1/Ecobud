@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { HttpError } from '../http/errorResponder';
 import { prisma } from '../prismaClient';
+import { apiCache } from '../lib/cache';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -32,34 +33,36 @@ export class UserStatsService {
   constructor(private readonly database: PrismaClient = prisma) {}
 
   async getHomeDashboard(userId: string): Promise<HomeDashboardPayload> {
-    const [stats, weeklyGoal, totalLessons, completedLessons] = await Promise.all([
-      this.ensureStats(this.database, userId),
-      this.ensureWeeklyGoal(this.database, userId),
-      this.database.lesson.count(),
-      this.database.userLessonProgress.count({
-        where: { userId, status: 'completed' }
-      })
-    ]);
+    return apiCache.getOrSet(`user_dashboard_${userId}`, 15, async () => {
+      const [stats, weeklyGoal, totalLessons, completedLessons] = await Promise.all([
+        this.ensureStats(this.database, userId),
+        this.ensureWeeklyGoal(this.database, userId),
+        apiCache.getOrSet('total_lessons_count', 60, () => this.database.lesson.count()),
+        this.database.userLessonProgress.count({
+          where: { userId, status: 'completed' }
+        })
+      ]);
 
-    const learningProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+      const learningProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
-    return {
-      streak: stats.currentStreak,
-      ecoPoints: stats.ecoPoints,
-      ecoCoins: stats.ecoCoins,
-      weeklyGoal: weeklyGoal.weeklyGoal,
-      knowledgePoints: stats.knowledgePoints,
-      learningProgress,
-      dailyTip: {
-        title: "Reduce Single-Use Plastics",
-        description: "Bring a reusable bag when shopping to significantly cut down on plastic waste."
-      },
-      communityStats: {
-        co2Saved: "12.5k kg",
-        treesPlanted: 3420,
-        communityMembers: 12500
-      }
-    };
+      return {
+        streak: stats.currentStreak,
+        ecoPoints: stats.ecoPoints,
+        ecoCoins: stats.ecoCoins,
+        weeklyGoal: weeklyGoal.weeklyGoal,
+        knowledgePoints: stats.knowledgePoints,
+        learningProgress,
+        dailyTip: {
+          title: "Reduce Single-Use Plastics",
+          description: "Bring a reusable bag when shopping to significantly cut down on plastic waste."
+        },
+        communityStats: {
+          co2Saved: "12.5k kg",
+          treesPlanted: 3420,
+          communityMembers: 12500
+        }
+      };
+    });
   }
 
   async resetKnowledgePoints(input: ResetKnowledgeInput) {
@@ -74,6 +77,8 @@ export class UserStatsService {
         where: { userId: resolvedUserId },
         data: { knowledgePoints: 0 },
       });
+
+      apiCache.delete(`user_dashboard_${resolvedUserId}`);
 
       return {
         userId: resolvedUserId,
@@ -150,6 +155,8 @@ export class UserStatsService {
     knowledgePointsIncrement = 0,
   ) {
     const existingStats = await this.ensureStats(database, userId);
+
+    apiCache.delete(`user_dashboard_${userId}`);
 
     return database.userStats.update({
       where: { userId },

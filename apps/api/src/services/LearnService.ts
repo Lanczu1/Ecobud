@@ -4,6 +4,7 @@ import { prisma } from '../prismaClient';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { GamificationService } from './GamificationService';
 import { UserActivityService } from './userActivityService';
+import { apiCache } from '../lib/cache';
 
 export type LessonStatus = 'not_started' | 'seen' | 'completed';
 
@@ -14,7 +15,6 @@ export interface QuizQuestionPayload {
   optionB: string;
   optionC: string;
   optionD: string;
-  correctAnswer: string;
 }
 
 export interface LearnLessonPayload {
@@ -61,41 +61,43 @@ export class LearnService {
   }
 
   async getPublishedLessons(userId: string): Promise<LearnLessonPayload[]> {
-    const lessons = await this.database.lesson.findMany({
-      where: {
-        OR: [
-          { isPublished: true },
-          { scheduledAt: { lte: new Date() } }
-        ]
-      },
-      orderBy: [{ createdAt: 'asc' }, { title: 'asc' }],
-      include: {
-        progress: {
-          where: { userId },
-          take: 1,
+    return apiCache.getOrSet(`learn_published_${userId}`, 30, async () => {
+      const lessons = await this.database.lesson.findMany({
+        where: {
+          OR: [
+            { isPublished: true },
+            { scheduledAt: { lte: new Date() } }
+          ]
         },
-        quizQuestions: {
-          select: { id: true, question: true, optionA: true, optionB: true, optionC: true, optionD: true, correctAnswer: true },
-        },
-        pages: {
-          orderBy: { order: 'asc' },
-          select: { id: true, title: true, description: true, content: true, order: true },
-        },
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            profile: {
-              select: {
-                displayName: true,
+        orderBy: [{ createdAt: 'asc' }, { title: 'asc' }],
+        include: {
+          progress: {
+            where: { userId },
+            take: 1,
+          },
+          quizQuestions: {
+            select: { id: true, question: true, optionA: true, optionB: true, optionC: true, optionD: true },
+          },
+          pages: {
+            orderBy: { order: 'asc' },
+            select: { id: true, title: true, description: true, content: true, order: true },
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              profile: {
+                select: {
+                  displayName: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    return lessons.map((lesson) => this.toLessonPayload(lesson));
+      return lessons.map((lesson) => this.toLessonPayload(lesson));
+    });
   }
 
   async markLessonSeen(userId: string, lessonId: string) {
@@ -152,6 +154,7 @@ export class LearnService {
       videoTimestamp: progress.videoTimestamp,
     };
 
+    apiCache.delete(`learn_published_${userId}`);
     await this.userActivityService.touchUserActivity(userId);
     await Promise.all([
       supabaseRealtimeService.publishUserSectionRefresh(userId, 'learn', {
@@ -171,7 +174,7 @@ export class LearnService {
     return result;
   }
 
-  async completeLesson(userId: string, lessonId: string) {
+  async completeLesson(userId: string, lessonId: string, submittedAnswers?: Record<string, string>) {
     const lesson = await this.database.lesson.findFirst({
       where: {
         id: lessonId,
@@ -180,11 +183,48 @@ export class LearnService {
           { scheduledAt: { lte: new Date() } }
         ]
       },
-      select: { id: true },
+      include: {
+        quizQuestions: {
+          select: { id: true, correctAnswer: true },
+        },
+      },
     });
 
     if (!lesson) {
       throw new HttpError(404, 'Published lesson not found.');
+    }
+
+    const quizQuestions = lesson.quizQuestions || [];
+    let score = 100;
+    let correctCount = 0;
+
+    if (quizQuestions.length > 0) {
+      if (!submittedAnswers || Object.keys(submittedAnswers).length === 0) {
+        throw new HttpError(400, 'Quiz answers are required to complete this lesson.');
+      }
+
+      quizQuestions.forEach((q) => {
+        const userAnswer = submittedAnswers[q.id]?.trim().toUpperCase();
+        const expected = q.correctAnswer?.trim().toUpperCase();
+        if (userAnswer && userAnswer === expected) {
+          correctCount++;
+        }
+      });
+
+      score = Math.round((correctCount / quizQuestions.length) * 100);
+      const passingScore = lesson.quizPassingScore || 70;
+
+      if (score < passingScore) {
+        return {
+          lessonId,
+          passed: false,
+          score,
+          correctCount,
+          totalQuestions: quizQuestions.length,
+          passingScore,
+          message: `You scored ${score}%. You need at least ${passingScore}% to pass. Please try again.`,
+        };
+      }
     }
 
     const rewardResult = await this.gamificationService.completeLesson(userId, lessonId);
@@ -199,8 +239,15 @@ export class LearnService {
       throw new HttpError(404, 'Lesson progress was not found after completion.');
     }
 
+    apiCache.delete(`learn_published_${userId}`);
+    apiCache.delete(`user_dashboard_${userId}`);
+
     return {
       lessonId,
+      passed: true,
+      score,
+      correctCount,
+      totalQuestions: quizQuestions.length,
       status: progress.status as LessonStatus,
       progress: progress.progress,
       videoTimestamp: progress.videoTimestamp,
@@ -265,6 +312,8 @@ export class LearnService {
         },
       });
 
+    apiCache.delete(`learn_published_${userId}`);
+
     return {
       lessonId,
       status: progress.status as LessonStatus,
@@ -293,7 +342,7 @@ export class LearnService {
       progress: number;
       videoTimestamp: number;
     }>;
-    quizQuestions?: Array<{ id: string; question: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string }>;
+    quizQuestions?: Array<{ id: string; question: string; optionA: string; optionB: string; optionC: string; optionD: string }>;
     pages?: Array<{ id: string; title: string; description: string; content: string; order: number }>;
     createdBy?: {
       id: string;
@@ -338,7 +387,6 @@ export class LearnService {
             optionB: q.optionB,
             optionC: q.optionC,
             optionD: q.optionD,
-            correctAnswer: q.correctAnswer,
           }))
         : [],
       pages: lesson.pages && lesson.pages.length > 0 

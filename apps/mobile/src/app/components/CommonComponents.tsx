@@ -25,6 +25,8 @@ import { LoadingGlyph, LoadingScreenVisual } from '../../shared/ui/OptimizedLoad
 import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
 import { initialsFromLabel, usePressScale } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { triggerSelectionHaptic } from '../utils/haptics';
 import { Header } from './Header';
 
 export function ChatbotFAB({ onPress }: { onPress: () => void }) {
@@ -538,9 +540,9 @@ export function BottomTabBar({
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
 
-  // On very narrow phones (< 380px or < 340px), adjust dimensions and text
   const isNarrow = screenWidth < 380;
   const isVeryNarrow = screenWidth < 340;
+  const isTablet = screenWidth >= 600;
 
   const items: { key: AppTab; label: string; shortLabel: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { key: 'home', label: 'Home', shortLabel: 'Home', icon: 'home-outline' },
@@ -551,87 +553,105 @@ export function BottomTabBar({
   ];
 
   const activeIndex = items.findIndex((item) => item.key === activeTab);
-  const [barLayout, setBarLayout] = React.useState({ width: 0, height: 0 });
-  const slideAnim = useRef(new Animated.Value(activeIndex)).current;
+  const hasActiveTab = activeIndex >= 0;
+  const slideAnim = useRef(new Animated.Value(hasActiveTab ? activeIndex : 0)).current;
+  const opacityAnim = useRef(new Animated.Value(hasActiveTab ? 1 : 0)).current;
 
   React.useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: activeIndex,
-      useNativeDriver: true,
-      tension: 90,
-      friction: 11,
-    }).start();
-  }, [activeIndex, slideAnim]);
-
-  const onLayout = (event: any) => {
-    const { width, height } = event.nativeEvent.layout;
-    if (width > 0 && height > 0) {
-      setBarLayout({ width, height });
+    if (hasActiveTab) {
+      Animated.parallel([
+        Animated.spring(slideAnim, {
+          toValue: activeIndex,
+          useNativeDriver: true,
+          tension: 130,
+          friction: 12,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start();
     }
-  };
+  }, [activeIndex, hasActiveTab, opacityAnim, slideAnim]);
 
-  const tabCount = items.length;
-  const tabWidth = barLayout.width > 0 ? barLayout.width / tabCount : 0;
-  const translateX = slideAnim.interpolate({
-    inputRange: [0, 1, 2, 3, 4],
-    outputRange: [0, tabWidth, 2 * tabWidth, 3 * tabWidth, 4 * tabWidth],
-  });
-
-  // Calculate dynamic pill dimensions based on measured layout
-  const effectiveBarHeight = barLayout.height || (isNarrow ? 58 : 64);
-  const verticalPadding = isNarrow ? 5 : 6;
-  const pillHeight = Math.max(36, effectiveBarHeight - verticalPadding * 2);
-  const maxPillWidth = isVeryNarrow ? 46 : isNarrow ? 52 : 62;
-  const pillWidth = tabWidth > 0 ? Math.min(maxPillWidth, Math.max(36, tabWidth - (isNarrow ? 6 : 10))) : maxPillWidth;
-  const pillLeft = tabWidth > 0 ? (tabWidth - pillWidth) / 2 : 0;
-  const pillTop = (effectiveBarHeight - pillHeight) / 2;
-
-  // Responsive margins
   const bottomMargin = insets.bottom > 0 ? insets.bottom : (isNarrow ? 10 : 14);
   const horizontalMargin = isVeryNarrow ? 8 : isNarrow ? 12 : 16;
+  const barWidth = isTablet ? Math.min(540, screenWidth - 48) : screenWidth - horizontalMargin * 2;
+  const barHeight = isNarrow ? 58 : 64;
+
+  const slotWidth = (barWidth - 8) / items.length;
+  const pillWidth = Math.min(64, Math.max(46, slotWidth - (isNarrow ? 4 : 8)));
+  const pillHeight = barHeight - 12;
+  const pillBaseLeft = 4 + (slotWidth - pillWidth) / 2;
+  const pillTop = 6;
+
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1, 2, 3, 4],
+    outputRange: [0, slotWidth, 2 * slotWidth, 3 * slotWidth, 4 * slotWidth],
+  });
 
   return (
     <View
-      style={[
-        styles.bottomBar,
-        {
-          left: horizontalMargin,
-          right: horizontalMargin,
-          bottom: bottomMargin,
-          height: isNarrow ? 58 : 64,
-          paddingHorizontal: 2,
-        },
-      ]}
-      onLayout={onLayout}
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        bottom: bottomMargin,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 90,
+      }}
     >
-      {barLayout.width > 0 && (
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            width: barWidth,
+            height: barHeight,
+            paddingHorizontal: 4,
+          },
+        ]}
+      >
         <Animated.View
+          pointerEvents="none"
           style={[
             styles.tabActivePill,
             {
               width: pillWidth,
               height: pillHeight,
               top: pillTop,
-              left: pillLeft,
-              borderRadius: Math.min(16, pillHeight / 2),
+              left: pillBaseLeft,
+              borderRadius: moderateScale(16),
+              opacity: opacityAnim,
               transform: [{ translateX }],
             },
           ]}
         />
-      )}
-      {items.map((item) => {
-        const displayLabel = isVeryNarrow ? item.shortLabel : isNarrow ? item.shortLabel : item.label;
-        return (
-          <TabItem
-            key={item.key}
-            item={{ ...item, label: displayLabel }}
-            isActive={item.key === activeTab}
-            onPress={() => onChange(item.key)}
-            isNarrow={isNarrow}
-            isVeryNarrow={isVeryNarrow}
-          />
-        );
-      })}
+        {items.map((item) => {
+          const displayLabel = isVeryNarrow ? item.shortLabel : isNarrow ? item.shortLabel : item.label;
+          return (
+            <TabItem
+              key={item.key}
+              item={{ ...item, label: displayLabel }}
+              isActive={item.key === activeTab}
+              onPress={() => {
+                triggerSelectionHaptic();
+                onChange(item.key);
+              }}
+              isNarrow={isNarrow}
+              isVeryNarrow={isVeryNarrow}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -658,8 +678,8 @@ function TabItem({
     Animated.spring(scaleAnim, {
       toValue: isActive ? 1.05 : 1.0,
       useNativeDriver: true,
-      tension: 100,
-      friction: 8,
+      tension: 120,
+      friction: 10,
     }).start();
   }, [isActive, scaleAnim]);
 
@@ -669,14 +689,21 @@ function TabItem({
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.75}
       style={styles.bottomBarItem}
     >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+      <Animated.View
+        style={{
+          transform: [{ scale: scaleAnim }],
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+        }}
+      >
         <Ionicons
           name={activeIconName}
           size={iconSize}
-          color={isActive ? ecoTheme.colors.primaryDark : '#9BA2A7'}
+          color={isActive ? ecoTheme.colors.primaryDark : '#8A959F'}
         />
         <Text
           style={[

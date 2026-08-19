@@ -2,6 +2,7 @@ import { prisma } from "../prismaClient";
 import { presenceQueryService } from './presenceQueryService';
 import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
+import { apiCache } from "../lib/cache";
 
 export class AdminService {
   static async getAllLessons() {
@@ -83,6 +84,9 @@ export class AdminService {
         quizQuestions: true
       }
     });
+
+    apiCache.invalidatePrefix('learn_published_');
+    apiCache.delete('total_lessons_count');
 
     if (lesson.isPublished) {
       await Promise.all([
@@ -167,6 +171,9 @@ export class AdminService {
       }
     });
 
+    apiCache.invalidatePrefix('learn_published_');
+    apiCache.delete('total_lessons_count');
+
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
         actorRole: 'admin',
@@ -187,6 +194,9 @@ export class AdminService {
     const lesson = await prisma.lesson.delete({
       where: { id }
     });
+
+    apiCache.invalidatePrefix('learn_published_');
+    apiCache.delete('total_lessons_count');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -209,6 +219,9 @@ export class AdminService {
       where: { id },
       data: { isPublished }
     });
+
+    apiCache.invalidatePrefix('learn_published_');
+    apiCache.delete('total_lessons_count');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {

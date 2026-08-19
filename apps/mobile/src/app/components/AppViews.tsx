@@ -54,6 +54,8 @@ import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
 import { ecobudApiOrigin, type ChallengeWithProgress } from '../../shared/api/ecobudApi';
+import { ChallengesViewSkeleton, LeaderboardSkeleton } from '../../shared/ui/SkeletonLoaders';
+import { triggerSelectionHaptic } from '../utils/haptics';
 
 const getValidImageUrl = (url: string | null | undefined) => {
   if (!url) return undefined;
@@ -706,7 +708,17 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
 
 export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const isTablet = width >= 600;
+
+  if ((model.initializing || model.booting) && (!model.challenges || model.challenges.length === 0)) {
+    return (
+      <>
+        <TopNavbar model={model} />
+        <ChallengesViewSkeleton />
+      </>
+    );
+  }
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -992,14 +1004,104 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
         {/* Empty States */}
         {((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedChallenges.length === 0)) && (
-          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, marginTop: 20 }}>
-            <Ionicons name="leaf-outline" size={60} color="#A7F3D0" style={{ marginBottom: 16 }} />
-            <Text style={{ fontSize: 18, fontWeight: '700', color: '#126027', marginBottom: 8 }}>
-              {isFiltering ? 'No matches found' : viewMode === 'My Tasks' ? 'No active tasks' : viewMode === 'History' ? 'No completed tasks yet' : 'Check back later!'}
+          <View style={{
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 36,
+            paddingHorizontal: 24,
+            marginTop: 16,
+            backgroundColor: '#FFFFFF',
+            borderRadius: moderateScale(24),
+            borderWidth: 1,
+            borderColor: '#E6F4EC',
+            shadowColor: '#126027',
+            shadowOpacity: 0.05,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 2,
+          }}>
+            <View style={{ width: scale(64), height: scale(64), borderRadius: scale(32), backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+              <Ionicons
+                name={isFiltering ? 'search' : viewMode === 'My Tasks' ? 'clipboard-outline' : viewMode === 'History' ? 'trophy-outline' : 'leaf-outline'}
+                size={scale(30)}
+                color="#126027"
+              />
+            </View>
+            <Text style={{ fontSize: responsiveFontSize(17), fontWeight: '800', color: '#17231B', marginBottom: 6, textAlign: 'center' }}>
+              {isFiltering ? 'No matching missions found' : viewMode === 'My Tasks' ? 'No active tasks yet' : viewMode === 'History' ? 'No completed tasks yet' : 'No missions available'}
             </Text>
-            <Text style={{ fontSize: 14, color: '#6B7A75', textAlign: 'center', paddingHorizontal: 40, lineHeight: 20 }}>
-              {isFiltering ? 'Try adjusting your search or category filters to find what you are looking for.' : viewMode === 'My Tasks' ? 'Start a mission from the Discover tab to see it here.' : viewMode === 'History' ? 'Complete eco missions to earn rewards and build your history.' : 'We are adding new challenges soon.'}
+            <Text style={{ fontSize: responsiveFontSize(13), color: '#6B7A75', textAlign: 'center', paddingHorizontal: 16, lineHeight: 19, marginBottom: 18 }}>
+              {isFiltering
+                ? 'Try clearing your search or category filters to explore all available eco missions.'
+                : viewMode === 'My Tasks'
+                ? 'Pick an eco mission from the Discover tab to start reducing waste and earning Eco Points.'
+                : viewMode === 'History'
+                ? 'Your finished missions and verified eco rewards will be displayed right here.'
+                : 'Check back soon for exciting new environmental challenges!'}
             </Text>
+
+            {isFiltering ? (
+              <TouchableOpacity
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  setSearchQuery('');
+                  setSelectedCategory('All');
+                }}
+                activeOpacity={0.85}
+                style={{
+                  backgroundColor: '#126027',
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  borderRadius: moderateScale(14),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: responsiveFontSize(13) }}>Reset Filters</Text>
+              </TouchableOpacity>
+            ) : viewMode === 'My Tasks' ? (
+              <TouchableOpacity
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  setViewMode('Discover');
+                }}
+                activeOpacity={0.85}
+                style={{
+                  backgroundColor: '#126027',
+                  paddingHorizontal: 22,
+                  paddingVertical: 12,
+                  borderRadius: moderateScale(14),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="compass-outline" size={18} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: responsiveFontSize(13) }}>Explore Discover Missions</Text>
+              </TouchableOpacity>
+            ) : viewMode === 'History' ? (
+              <TouchableOpacity
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  setViewMode('Discover');
+                }}
+                activeOpacity={0.85}
+                style={{
+                  backgroundColor: '#126027',
+                  paddingHorizontal: 22,
+                  paddingVertical: 12,
+                  borderRadius: moderateScale(14),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="flash-outline" size={18} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: responsiveFontSize(13) }}>Start a Challenge</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
 
@@ -1655,6 +1757,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   disabled={!cell.dateKey}
                   onPress={() => openDay(cell)}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   {cell.dateKey ? (
                     <View
@@ -1689,7 +1792,9 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { flexShrink: 1 }]}>By Eco Points</Text>
             </View>
 
-            {leaderboardItems.length === 0 ? (
+            {(model.initializing || model.booting || model.refreshing) && leaderboardItems.length === 0 ? (
+              <LeaderboardSkeleton />
+            ) : leaderboardItems.length === 0 ? (
               <View style={trackerStyles.leaderboardEmpty}>
                 <MaterialCommunityIcons name="trophy-outline" size={40} color="#B0C4B8" />
                 <Text style={trackerStyles.leaderboardEmptyText}>No rankings yet. Be the first!</Text>

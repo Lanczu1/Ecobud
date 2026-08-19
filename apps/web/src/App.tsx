@@ -52,6 +52,22 @@ export default function App() {
   });
 
   useEffect(() => {
+    // Temporarily suppress all transitions so all elements switch theme simultaneously in one instant pass
+    const css = document.createElement('style');
+    css.type = 'text/css';
+    css.appendChild(
+      document.createTextNode(
+        `*, *::before, *::after {
+          -webkit-transition: none !important;
+          -moz-transition: none !important;
+          -o-transition: none !important;
+          -ms-transition: none !important;
+          transition: none !important;
+        }`
+      )
+    );
+    document.head.appendChild(css);
+
     if (isDark) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('ecobud_dark_mode', 'true');
@@ -59,6 +75,24 @@ export default function App() {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('ecobud_dark_mode', 'false');
     }
+
+    // Force DOM reflow to apply colors immediately
+    void window.getComputedStyle(document.body);
+
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (document.head.contains(css)) {
+          document.head.removeChild(css);
+        }
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (document.head.contains(css)) {
+        document.head.removeChild(css);
+      }
+    };
   }, [isDark]);
 
   useEffect(() => {

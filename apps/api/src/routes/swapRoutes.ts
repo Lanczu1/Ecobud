@@ -1,12 +1,11 @@
 import { Router } from 'express';
-import multer from 'multer';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
 import { swapService } from '../services/swapService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import { prisma } from '../prismaClient';
+import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 
 const router = Router();
-const upload = multer({ dest: 'uploads/tmp' });
 
 // Fetch marketplace listings
 router.get('/listings', authenticateRequest, async (req: AuthenticatedRequest, res) => {
@@ -53,30 +52,32 @@ router.post('/listings', authenticateRequest, async (req: AuthenticatedRequest, 
   }
 });
 
-// Update listing
+// Update listing (with IDOR protection)
 router.patch('/listings/:id', authenticateRequest, async (req: AuthenticatedRequest, res) => {
   try {
-    await swapService.updateListing(req.params.id, req.body);
+    await swapService.updateListing(req.params.id, req.auth!.userId, req.auth!.role, req.body);
     res.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating swap listing:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    const status = error.message?.includes('permission') ? 403 : error.message?.includes('not found') ? 404 : 500;
+    res.status(status).json({ message: error.message || 'Internal server error' });
   }
 });
 
-// Delete listing
+// Delete listing (with IDOR protection)
 router.delete('/listings/:id', authenticateRequest, async (req: AuthenticatedRequest, res) => {
   try {
-    await swapService.deleteListing(req.params.id);
+    await swapService.deleteListing(req.params.id, req.auth!.userId, req.auth!.role);
     res.status(204).send();
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting swap listing:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    const status = error.message?.includes('permission') ? 403 : error.message?.includes('not found') ? 404 : 500;
+    res.status(status).json({ message: error.message || 'Internal server error' });
   }
 });
 
 // Upload listing image
-router.post('/upload-image', authenticateRequest, upload.single('image'), async (req: AuthenticatedRequest, res) => {
+router.post('/upload-image', authenticateRequest, avatarUploadMiddleware.single('image'), async (req: AuthenticatedRequest, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file provided' });
     const url = await swapService.uploadImage(req.auth!.userId, req.file);
@@ -114,7 +115,7 @@ router.patch('/requests/:id/status', authenticateRequest, async (req: Authentica
   try {
     const { status } = req.body;
     if (!status) return res.status(400).json({ message: 'Status is required' });
-    await swapService.updateSwapRequestStatus(req.params.id, status);
+    await swapService.updateSwapRequestStatus(req.params.id, req.auth!.userId, req.auth!.role, status);
     const conversations = await swapService.fetchConversations(req.auth!.userId);
     const conv = conversations.find((c) => c.swapRequestId === req.params.id);
     if (conv) {
@@ -129,9 +130,10 @@ router.patch('/requests/:id/status', authenticateRequest, async (req: Authentica
       }
     }
     res.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating swap request status:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    const statusCode = error.message?.includes('permission') ? 403 : error.message?.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({ message: error.message || 'Internal server error' });
   }
 });
 
@@ -146,29 +148,27 @@ router.get('/conversations', authenticateRequest, async (req: AuthenticatedReque
   }
 });
 
-// Fetch messages for a conversation
+// Fetch messages for a conversation (with IDOR protection)
 router.get('/conversations/:conversationId/messages', authenticateRequest, async (req: AuthenticatedRequest, res) => {
   try {
-    const messages = await swapService.fetchMessages(req.params.conversationId);
+    const messages = await swapService.fetchMessages(req.params.conversationId, req.auth!.userId, req.auth!.role);
     res.json(messages);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching messages:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    const status = error.message?.includes('authorized') ? 403 : 500;
+    res.status(status).json({ message: error.message || 'Internal server error' });
   }
 });
 
-// Send message
+// Send message (with IDOR protection)
 router.post('/conversations/:conversationId/messages', authenticateRequest, async (req: AuthenticatedRequest, res) => {
   try {
     const { text, imageUrl } = req.body;
     const { conversationId } = req.params;
-    const conversation = await prisma.swapConversation.findUnique({ where: { id: conversationId }, select: { id: true } });
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
-    }
     const message = await swapService.sendMessage(
       conversationId,
       req.auth!.userId,
+      req.auth!.role,
       text,
       imageUrl,
     );
@@ -186,9 +186,10 @@ router.post('/conversations/:conversationId/messages', authenticateRequest, asyn
       }
     }
     res.status(201).json(message);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error sending message:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    const status = error.message?.includes('authorized') ? 403 : 500;
+    res.status(status).json({ message: error.message || 'Internal server error' });
   }
 });
 

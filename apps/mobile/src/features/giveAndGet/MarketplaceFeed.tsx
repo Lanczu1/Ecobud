@@ -164,6 +164,7 @@ export function MarketplaceFeed({
   return (
     <ScrollView 
       style={localStyles.container}
+      contentContainerStyle={{ paddingBottom: verticalScale(96) }}
       stickyHeaderIndices={[1]}
       showsVerticalScrollIndicator={false}
       refreshControl={

@@ -26,6 +26,11 @@ type FieldName = 'username' | 'email' | 'password' | 'verificationCode';
 type FieldErrors = Partial<Record<FieldName, string>>;
 type UsernameCheckState = 'idle' | 'checking' | 'available' | 'taken';
 
+export interface FieldRequirement {
+  label: string;
+  met: boolean;
+}
+
 const isAndroid = Platform.OS === 'android';
 const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : 0;
 const isLegacyAndroid = isAndroid && androidVersion > 0 && androidVersion < 29;
@@ -49,10 +54,10 @@ const palette = {
   primary: '#163A24',
   primaryBright: '#0F2919',
   primarySoft: '#F0F4EC',
-  border: '#E5E7EB',
-  borderStrong: '#D1D5DB',
+  border: '#E2E8F0',
+  borderStrong: '#CBD5E1',
   surface: '#FFFFFF',
-  inputFill: '#FFFFFF',
+  inputFill: '#F8FAF8',
   fieldIcon: '#9CA3AF',
   fieldIconActive: '#163A24',
   danger: '#DC2626',
@@ -60,7 +65,7 @@ const palette = {
   textStrong: '#163A24',
   textMuted: '#6B7280',
   separator: '#E5E7EB',
-  googleBorder: '#E5E7EB',
+  googleBorder: '#E2E8F0',
   glowTop: 'transparent',
   glowBottom: 'transparent',
 };
@@ -82,7 +87,7 @@ const AUTH_COPY: Record<
   },
   signup: {
     title: 'Create your account',
-    subtitle: 'Join BAYANI JUAN and start building greener habits with guided rewards.',
+    subtitle: 'Join ECOBUD and start building greener habits with guided rewards.',
     primaryLabel: 'Send Verification Code',
     loadingLabel: 'Sending Code...',
   },
@@ -96,6 +101,41 @@ const AUTH_COPY: Record<
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DUPLICATE_EMAIL_ERROR_FRAGMENT = 'account already exists for this email';
+
+const TRUSTED_DOMAINS = new Set([
+  'gmail.com',
+  'yahoo.com',
+  'yahoo.com.ph',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'icloud.com',
+  'proton.me',
+  'protonmail.com',
+  'aol.com',
+]);
+
+function isEduEmailDomain(domain: string): boolean {
+  return (
+    domain.endsWith('.edu') ||
+    domain.endsWith('.edu.ph') ||
+    domain.endsWith('.ac.uk') ||
+    domain.endsWith('.ac.jp') ||
+    domain.endsWith('.edu.au')
+  );
+}
+
+function isAllowedEmail(email: string): boolean {
+  const normalized = email.trim().toLowerCase();
+  if (!EMAIL_REGEX.test(normalized)) return false;
+
+  const parts = normalized.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+
+  // Must be either trusted personal domain OR educational domain (.edu / .edu.ph)
+  return TRUSTED_DOMAINS.has(domain) || isEduEmailDomain(domain);
+}
 
 function validateFields(
   mode: AuthModeType,
@@ -123,8 +163,8 @@ function validateFields(
     errors.email = 'Email is required.';
   } else if (!EMAIL_REGEX.test(trimmedEmail)) {
     errors.email = 'Enter a valid email address.';
-  } else if (mode !== 'signin' && !trimmedEmail.endsWith('@gmail.com')) {
-    errors.email = 'Use a @gmail.com address for sign up.';
+  } else if (mode !== 'signin' && !isAllowedEmail(trimmedEmail)) {
+    errors.email = 'Only trusted personal (Gmail, Yahoo, etc.) or educational emails (.edu / .edu.ph) are allowed.';
   }
 
   if (!values.password) {
@@ -178,6 +218,7 @@ export function AuthView({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
@@ -209,6 +250,33 @@ export function AuthView({
     [fieldErrors, touched],
   );
 
+  const usernameRequirements = useMemo<FieldRequirement[]>(() => {
+    const trimmed = username.trim();
+    return [
+      { label: 'At least 3 characters', met: trimmed.length >= 3 },
+      { label: 'No spaces allowed', met: Boolean(trimmed) && !/\s/.test(trimmed) },
+    ];
+  }, [username]);
+
+  const emailRequirements = useMemo<FieldRequirement[]>(() => {
+    const trimmed = email.trim().toLowerCase();
+    const hasValidFormat = Boolean(trimmed) && EMAIL_REGEX.test(trimmed);
+    const domain = trimmed.split('@')[1] || '';
+    const isEduOrTrusted = Boolean(domain) && (TRUSTED_DOMAINS.has(domain) || isEduEmailDomain(domain));
+
+    return [
+      { label: 'Valid email format (e.g. name@gmail.com)', met: hasValidFormat },
+      { label: 'Personal (Gmail, Yahoo) or Educational (.edu / .edu.ph)', met: isEduOrTrusted },
+    ];
+  }, [email]);
+
+  const passwordRequirements = useMemo<FieldRequirement[]>(() => {
+    return [
+      { label: 'At least 8 characters', met: password.length >= 8 },
+      { label: 'Contains at least one number or symbol', met: /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) },
+    ];
+  }, [password]);
+
   useEffect(() => {
     setUsernameCheckState('idle');
     setUsernameCheckMessage(null);
@@ -225,6 +293,14 @@ export function AuthView({
       setLocalError(authError);
     }
   }, [authError, mode]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const backgroundPalette = useMemo(
     () =>
@@ -366,6 +442,7 @@ export function AuthView({
       try {
         await onSendOTP(email.trim());
         setMode('verify');
+        setResendCooldown(60);
         setTouched({});
       } catch (error) {
         setLocalError(
@@ -389,13 +466,13 @@ export function AuthView({
   return (
     <View style={{ flex: 1 }}>
       <VideoView style={StyleSheet.absoluteFill} player={player as any} contentFit="cover" />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(249, 250, 245, 0.4)' }]} />
       <StatusBar style="dark" />
 
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.safeArea}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView
           contentContainerStyle={[styles.authShell, isLegacyAndroid && styles.authShellLegacy]}
@@ -411,8 +488,6 @@ export function AuthView({
           </View>
 
           <View style={styles.contentContainer}>
-            {showEnhancedChrome ? <View pointerEvents="none" style={styles.titleAura} /> : null}
-
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' }}>
               <Text style={styles.welcomeTitle}>{copy.title}</Text>
               <Ionicons name="leaf" size={18} color={palette.primary} style={{ marginTop: 2, marginLeft: 2 }} />
@@ -425,84 +500,140 @@ export function AuthView({
             >
               {bannerMessage ? <InlineBanner message={bannerMessage} /> : null}
 
-              {mode !== 'signin' ? (
-                <CustomInputField
-                  label="Username"
-                  labelIcon="person-outline"
-                  value={username}
-                  onChangeText={setUsername}
-                  onBlur={() => markTouched('username')}
-                  iconName="person-outline"
-                  helperText={usernameCheckMessage}
-                  helperTone={
-                    usernameCheckState === 'available'
-                      ? 'success'
-                      : usernameCheckState === 'taken'
-                        ? 'danger'
-                        : 'neutral'
-                  }
-                  autoCapitalize="words"
-                  autoComplete="username"
-                  textContentType="username"
-                  error={visibleFieldErrors.username}
-                  returnKeyType="next"
-                  actionLabel={mode === 'signup' ? 'Check' : undefined}
-                  onActionPress={mode === 'signup' ? () => void handleCheckUsername() : undefined}
-                  actionLoading={mode === 'signup' ? isCheckingUsername : false}
-                  actionDisabled={mode !== 'signup' || isLoading || username.trim().length < 2}
-                />
-              ) : null}
-
-              <CustomInputField
-                label="Email Address"
-                labelIcon="leaf-outline"
-                value={email}
-                onChangeText={setEmail}
-                onBlur={() => markTouched('email')}
-                iconName="mail-outline"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                textContentType="emailAddress"
-                error={visibleFieldErrors.email}
-                returnKeyType="next"
-                placeholder="nature@ecobud.com"
-              />
-
-              <CustomInputField
-                label="Password"
-                labelIcon="lock-closed-outline"
-                value={password}
-                onChangeText={setPassword}
-                onBlur={() => markTouched('password')}
-                iconName="lock-closed-outline"
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoComplete="password"
-                textContentType="password"
-                error={visibleFieldErrors.password}
-                returnKeyType={mode === 'verify' ? 'next' : 'done'}
-                trailingIconName={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                onTrailingPress={() => setShowPassword((current) => !current)}
-                placeholder="Enter your password"
-              />
-
               {mode === 'verify' ? (
-                <CustomInputField
-                  label="Verification Code"
-                  labelIcon="key-outline"
-                  value={verificationCode}
-                  onChangeText={(value) => setVerificationCode(value.replace(/[^\d]/g, '').slice(0, 6))}
-                  onBlur={() => markTouched('verificationCode')}
-                  iconName="key-outline"
-                  keyboardType="number-pad"
-                  autoCapitalize="none"
-                  autoComplete="sms-otp"
-                  textContentType="oneTimeCode"
-                  error={visibleFieldErrors.verificationCode}
-                  returnKeyType="done"
-                />
-              ) : null}
+                <View style={styles.verifyStepBox}>
+                  <View style={styles.verifyEmailBadge}>
+                    <Ionicons name="mail-outline" size={16} color={palette.primary} />
+                    <Text style={styles.verifyEmailText} numberOfLines={1}>
+                      {email.trim()}
+                    </Text>
+                    <Pressable
+                      onPress={() => switchMode('signup')}
+                      hitSlop={8}
+                      style={styles.changeEmailButton}
+                    >
+                      <Text style={styles.changeEmailText}>Edit</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.otpPromptLabel}>Enter the 6-digit verification code</Text>
+                  
+                  <SegmentedOtpInput
+                    value={verificationCode}
+                    onChange={(val) => {
+                      setVerificationCode(val);
+                      if (val.length === 6) {
+                        markTouched('verificationCode');
+                      }
+                    }}
+                    error={visibleFieldErrors.verificationCode}
+                  />
+
+                  <View style={styles.resendRow}>
+                    <Text style={styles.resendPromptText}>Didn't receive the code?</Text>
+                    <Pressable
+                      disabled={resendCooldown > 0 || isLoading}
+                      onPress={async () => {
+                        if (resendCooldown > 0 || isLoading) return;
+                        setIsSendingCode(true);
+                        setLocalError(null);
+                        try {
+                          await onSendOTP(email.trim());
+                          setResendCooldown(60);
+                        } catch (err) {
+                          setLocalError(err instanceof Error ? err.message : 'Failed to resend code.');
+                        } finally {
+                          setIsSendingCode(false);
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.resendButton,
+                        pressed && styles.resendButtonPressed,
+                        (resendCooldown > 0 || isLoading) && styles.resendButtonDisabled,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.resendButtonText,
+                          resendCooldown > 0 && styles.resendButtonTextDisabled,
+                        ]}
+                      >
+                        {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  {mode === 'signup' ? (
+                    <CustomInputField
+                      label="Username"
+                      labelIcon="person-outline"
+                      value={username}
+                      onChangeText={setUsername}
+                      onBlur={() => markTouched('username')}
+                      iconName="person-outline"
+                      requirements={usernameRequirements}
+                      showRequirementsAlways={true}
+                      helperText={usernameCheckMessage}
+                      helperTone={
+                        usernameCheckState === 'available'
+                          ? 'success'
+                          : usernameCheckState === 'taken'
+                            ? 'danger'
+                            : 'neutral'
+                      }
+                      autoCapitalize="words"
+                      autoComplete="username"
+                      textContentType="username"
+                      error={visibleFieldErrors.username}
+                      returnKeyType="next"
+                      actionLabel="Check"
+                      onActionPress={() => void handleCheckUsername()}
+                      actionLoading={isCheckingUsername}
+                      actionDisabled={isLoading || username.trim().length < 2}
+                    />
+                  ) : null}
+
+                  <CustomInputField
+                    label="Email Address"
+                    labelIcon="leaf-outline"
+                    value={email}
+                    onChangeText={setEmail}
+                    onBlur={() => markTouched('email')}
+                    iconName="mail-outline"
+                    keyboardType="email-address"
+                    requirements={mode === 'signup' ? emailRequirements : undefined}
+                    showRequirementsAlways={mode === 'signup'}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    error={visibleFieldErrors.email}
+                    returnKeyType="next"
+                    placeholder="nature@gmail.com or student@univ.edu.ph"
+                  />
+
+                  <CustomInputField
+                    label="Password"
+                    labelIcon="lock-closed-outline"
+                    value={password}
+                    onChangeText={setPassword}
+                    onBlur={() => markTouched('password')}
+                    iconName="lock-closed-outline"
+                    secureTextEntry={!showPassword}
+                    requirements={mode === 'signup' ? passwordRequirements : undefined}
+                    showRequirementsAlways={mode === 'signup'}
+                    autoCapitalize="none"
+                    autoComplete="password"
+                    textContentType="password"
+                    error={visibleFieldErrors.password}
+                    returnKeyType="done"
+                    trailingIconName={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    onTrailingPress={() => setShowPassword((current) => !current)}
+                    placeholder="Enter your password"
+                  />
+                </>
+              )}
 
               {mode !== 'signin' ? (
                 <Text style={styles.supportingCopy}>
@@ -650,6 +781,117 @@ interface CustomInputFieldProps {
   onActionPress?: () => void;
   actionLoading?: boolean;
   actionDisabled?: boolean;
+  requirements?: FieldRequirement[];
+  showRequirementsAlways?: boolean;
+}
+
+function RequirementChecklist({
+  requirements,
+  hasValue,
+}: {
+  requirements: FieldRequirement[];
+  hasValue: boolean;
+}) {
+  return (
+    <View style={styles.requirementBox}>
+      {requirements.map((req, idx) => {
+        const isError = hasValue && !req.met;
+        return (
+          <View key={idx} style={styles.requirementRow}>
+            <View
+              style={[
+                styles.requirementIconBadge,
+                req.met
+                  ? styles.requirementIconBadgeMet
+                  : isError
+                    ? styles.requirementIconBadgeError
+                    : styles.requirementIconBadgeUnmet,
+              ]}
+            >
+              <Ionicons
+                name={req.met ? 'checkmark' : isError ? 'close' : 'ellipse-outline'}
+                size={11}
+                color={req.met ? '#16A34A' : isError ? '#DC2626' : '#9CA3AF'}
+              />
+            </View>
+            <Text
+              style={[
+                styles.requirementText,
+                req.met
+                  ? styles.requirementTextMet
+                  : isError
+                    ? styles.requirementTextError
+                    : styles.requirementTextUnmet,
+              ]}
+            >
+              {req.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function SegmentedOtpInput({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  error?: string;
+}) {
+  const inputRef = useRef<TextInput>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const digits = Array.from({ length: 6 }, (_, i) => value[i] || '');
+
+  return (
+    <View style={styles.otpWrapper}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Enter verification code"
+        onPress={() => inputRef.current?.focus()}
+        style={styles.otpBoxesRow}
+      >
+        {digits.map((digit, idx) => {
+          const isFilled = Boolean(value[idx]);
+          const isCurrent = isFocused && idx === Math.min(value.length, 5);
+
+          return (
+            <View
+              key={idx}
+              style={[
+                styles.otpBox,
+                isFilled && styles.otpBoxFilled,
+                isCurrent && styles.otpBoxActive,
+                Boolean(error) && styles.otpBoxError,
+              ]}
+            >
+              <Text style={styles.otpDigitText}>{digit}</Text>
+            </View>
+          );
+        })}
+      </Pressable>
+
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={(text) => onChange(text.replace(/[^0-9]/g, '').slice(0, 6))}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        keyboardType="number-pad"
+        textContentType="oneTimeCode"
+        autoComplete="sms-otp"
+        maxLength={6}
+        autoFocus={true}
+        style={styles.hiddenOtpInput}
+        caretHidden={true}
+      />
+
+      {error ? <Text style={styles.inlineErrorText}>{error}</Text> : null}
+    </View>
+  );
 }
 
 function CustomInputField({
@@ -675,6 +917,8 @@ function CustomInputField({
   onActionPress,
   actionLoading = false,
   actionDisabled = false,
+  requirements,
+  showRequirementsAlways = false,
 }: CustomInputFieldProps) {
   const [isFocused, setIsFocused] = useState(false);
   const focusValue = useRef(new Animated.Value(0)).current;
@@ -730,11 +974,11 @@ function CustomInputField({
         style={[
           styles.inputOuter,
           {
-            borderColor: error ? palette.danger : borderColor,
+            borderColor: (error && !requirements) ? palette.danger : borderColor,
             backgroundColor: fillColor,
-            shadowOpacity: error ? 0 : shadowOpacity,
+            shadowOpacity: (error && !requirements) ? 0 : shadowOpacity,
           },
-          error ? styles.inputOuterError : null,
+          (error && !requirements) ? styles.inputOuterError : null,
           !showEnhancedChrome && styles.inputOuterFallback,
         ]}
       >
@@ -791,8 +1035,11 @@ function CustomInputField({
           ) : null}
         </View>
       </Animated.View>
-      {error ? <Text style={styles.inlineErrorText}>{error}</Text> : null}
-      {!error && helperText ? (
+      {requirements && (showRequirementsAlways || value.length > 0 || isFocused) ? (
+        <RequirementChecklist requirements={requirements} hasValue={value.length > 0} />
+      ) : null}
+      {!requirements && error ? <Text style={styles.inlineErrorText}>{error}</Text> : null}
+      {helperText ? (
         <Text
           style={[
             styles.helperText,
@@ -977,15 +1224,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 14,
     position: 'relative',
+    width: '100%',
+    maxWidth: 500,
+    alignSelf: 'center',
   },
   titleAura: {
-    position: 'absolute',
-    top: 2,
-    left: 8,
-    right: 82,
-    height: 124,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,255,255,0.38)',
+    display: 'none',
   },
   welcomeTitle: {
     fontFamily: 'serif',
@@ -1005,24 +1249,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   authCard: {
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 24,
+    borderRadius: moderateScale(24),
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(24),
+    paddingBottom: verticalScale(24),
   },
   authCardModern: {
-    backgroundColor: palette.surface,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 58, 36, 0.07)',
+    shadowColor: '#163A24',
     shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
     elevation: 4,
   },
   authCardLegacy: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: palette.border,
-    elevation: 2,
+    borderColor: '#E2E8F0',
+    elevation: 3,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -1045,6 +1291,52 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 18,
+  },
+  requirementBox: {
+    marginTop: 8,
+    paddingHorizontal: 2,
+    gap: 6,
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  requirementIconBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  requirementIconBadgeMet: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+  },
+  requirementIconBadgeUnmet: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  requirementIconBadgeError: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+  },
+  requirementText: {
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(17),
+  },
+  requirementTextMet: {
+    color: '#15803D',
+    fontWeight: '600',
+  },
+  requirementTextUnmet: {
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  requirementTextError: {
+    color: '#DC2626',
+    fontWeight: '600',
   },
   inputLabelRow: {
     flexDirection: 'row',
@@ -1267,6 +1559,120 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  verifyStepBox: {
+    marginVertical: 4,
+  },
+  verifyEmailBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3FAF5',
+    borderWidth: 1,
+    borderColor: '#D3ECD9',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(10),
+    marginBottom: verticalScale(20),
+    gap: 8,
+  },
+  verifyEmailText: {
+    flex: 1,
+    fontSize: responsiveFontSize(13),
+    fontWeight: '700',
+    color: palette.textStrong,
+  },
+  changeEmailButton: {
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+  },
+  changeEmailText: {
+    fontSize: responsiveFontSize(12),
+    fontWeight: '700',
+    color: palette.primary,
+    textDecorationLine: 'underline',
+  },
+  otpPromptLabel: {
+    fontSize: responsiveFontSize(13),
+    fontWeight: '700',
+    color: palette.textStrong,
+    marginBottom: verticalScale(12),
+    textAlign: 'center',
+  },
+  otpWrapper: {
+    alignItems: 'center',
+    marginBottom: verticalScale(16),
+  },
+  otpBoxesRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: scale(8),
+    width: '100%',
+  },
+  otpBox: {
+    flex: 1,
+    maxWidth: scale(46),
+    height: verticalScale(54),
+    borderRadius: moderateScale(12),
+    borderWidth: 1.5,
+    borderColor: palette.border,
+    backgroundColor: '#FAFCFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpBoxActive: {
+    borderColor: palette.primary,
+    backgroundColor: '#FFFFFF',
+    transform: [{ scale: 1.04 }],
+  },
+  otpBoxFilled: {
+    borderColor: '#86EFAC',
+    backgroundColor: '#FFFFFF',
+  },
+  otpBoxError: {
+    borderColor: palette.danger,
+    backgroundColor: '#FEF2F2',
+  },
+  otpDigitText: {
+    fontSize: responsiveFontSize(22),
+    fontWeight: '800',
+    color: palette.textStrong,
+  },
+  hiddenOtpInput: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    opacity: 0.01,
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: verticalScale(8),
+  },
+  resendPromptText: {
+    fontSize: responsiveFontSize(13),
+    color: palette.textMuted,
+  },
+  resendButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  resendButtonPressed: {
+    opacity: 0.7,
+  },
+  resendButtonDisabled: {
+    opacity: 0.6,
+  },
+  resendButtonText: {
+    fontSize: responsiveFontSize(13),
+    fontWeight: '700',
+    color: palette.primary,
+  },
+  resendButtonTextDisabled: {
+    color: palette.textMuted,
   },
 });
 

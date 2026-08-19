@@ -1,46 +1,86 @@
 import { Dimensions, PixelRatio, useWindowDimensions } from 'react-native';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: RAW_WIDTH, height: RAW_HEIGHT } = Dimensions.get('window');
 const BASE_WIDTH = 375; // iPhone standard base
 const BASE_HEIGHT = 812;
 
+// Detect large screen / tablet statically
+export const isStaticTablet =
+  Math.min(RAW_WIDTH, RAW_HEIGHT) >= 600 || Math.max(RAW_WIDTH, RAW_HEIGHT) >= 900;
+
+// Maximum container widths for tablets/large screens to prevent excessive horizontal stretching
+export const TABLET_MAX_CONTAINER_WIDTH = 640;
+export const TABLET_MAX_CARD_WIDTH = 500;
+
 // ─── Static helpers (safe to use inside StyleSheet.create) ───────────────────
-export const scale = (size: number) => (SCREEN_WIDTH / BASE_WIDTH) * size;
-export const verticalScale = (size: number) => (SCREEN_HEIGHT / BASE_HEIGHT) * size;
 
 /**
- * Moderate scaling with a dampening factor (default 0.4 for smooth adaptation)
+ * Intelligent horizontal scale:
+ * For phones (<= 430px), scales smoothly with screen width.
+ * For tablets/large screens (> 430px), caps aggressive magnification to a gentle ~1.15x - 1.25x max factor
+ * so icons, buttons, and layouts remain crisp, ergonomic, and proportioned without blowing up.
  */
-export const moderateScale = (size: number, factor = 0.4) =>
+export const scale = (size: number): number => {
+  if (RAW_WIDTH <= 430) {
+    return (RAW_WIDTH / BASE_WIDTH) * size;
+  }
+  const phoneMaxScale = 430 / BASE_WIDTH; // ~1.147
+  const tabletAdditional = Math.min(0.2, (RAW_WIDTH - 430) / 1800);
+  return size * (phoneMaxScale + tabletAdditional);
+};
+
+/**
+ * Intelligent vertical scale:
+ * Prevents vertical elements (like massive paddings/heights) from exploding on tall iPad screens.
+ */
+export const verticalScale = (size: number): number => {
+  if (RAW_HEIGHT <= 932) {
+    return (RAW_HEIGHT / BASE_HEIGHT) * size;
+  }
+  const phoneMaxVertical = 932 / BASE_HEIGHT; // ~1.148
+  const tabletAdditional = Math.min(0.2, (RAW_HEIGHT - 932) / 2000);
+  return size * (phoneMaxVertical + tabletAdditional);
+};
+
+/**
+ * Moderate scaling with a dampening factor (default 0.35 for smooth adaptation)
+ */
+export const moderateScale = (size: number, factor = 0.35): number =>
   size + (scale(size) - size) * factor;
 
 /**
  * Responsive font size calculation that scales gracefully across small, normal, and large devices.
- * Uses a moderate dampening factor to preserve legibility without causing text overflow.
+ * Implements a strict upper ceiling on tablets (max 1.2x of base size) so text stays elegant and legible.
  */
-export const responsiveFontSize = (size: number, factor = 0.35) => {
+export const responsiveFontSize = (size: number, factor = 0.3): number => {
   const scaled = moderateScale(size, factor);
-  return Math.round(scaled);
+  const maxMultiplier = size > 24 ? 1.25 : 1.18;
+  const clamped = Math.min(scaled, size * maxMultiplier);
+  return Math.round(clamped);
 };
 
 /**
  * Clamps a font-size value between a min and max.
  * Useful when a responsiveFontSize result would be too large/small on edge devices.
  */
-export const clampFontSize = (size: number, min: number, max: number) =>
+export const clampFontSize = (size: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, responsiveFontSize(size)));
 
 /**
  * Responsive spacing with light damping so margins/paddings don't blow up on tablets or collapse on compact phones.
  */
-export const responsiveSpacing = (size: number, factor = 0.5) =>
-  Math.round(size + (scale(size) - size) * factor);
+export const responsiveSpacing = (size: number, factor = 0.4): number => {
+  const scaled = moderateScale(size, factor);
+  return Math.round(Math.min(scaled, size * 1.3));
+};
 
 /**
  * Responsive border radius helper.
  */
-export const responsiveRadius = (size: number, factor = 0.3) =>
-  Math.round(size + (scale(size) - size) * factor);
+export const responsiveRadius = (size: number, factor = 0.25): number => {
+  const scaled = moderateScale(size, factor);
+  return Math.round(Math.min(scaled, size * 1.25));
+};
 
 // ─── Semantic Typography Scale Tokens ────────────────────────────────────────
 
@@ -124,20 +164,43 @@ export function useResponsive(): ResponsiveMetrics {
     ? 'large'
     : 'normal';
 
-  const rScale = (size: number) => (width / BASE_WIDTH) * size;
-  const rVerticalScale = (size: number) => (height / BASE_HEIGHT) * size;
-  const rModerateScale = (size: number, factor = 0.4) =>
+  const rScale = (size: number) => {
+    if (width <= 430) {
+      return (width / BASE_WIDTH) * size;
+    }
+    const phoneMaxScale = 430 / BASE_WIDTH;
+    const tabletAdditional = Math.min(0.2, (width - 430) / 1800);
+    return size * (phoneMaxScale + tabletAdditional);
+  };
+
+  const rVerticalScale = (size: number) => {
+    if (height <= 932) {
+      return (height / BASE_HEIGHT) * size;
+    }
+    const phoneMaxVertical = 932 / BASE_HEIGHT;
+    const tabletAdditional = Math.min(0.2, (height - 932) / 2000);
+    return size * (phoneMaxVertical + tabletAdditional);
+  };
+
+  const rModerateScale = (size: number, factor = 0.35) =>
     size + (rScale(size) - size) * factor;
-  const rFontSize = (size: number, factor = 0.35) =>
-    Math.round(rModerateScale(size, factor));
-  const rSpacing = (size: number, factor = 0.5) =>
-    Math.round(size + (rScale(size) - size) * factor);
-  const rRadius = (size: number, factor = 0.3) =>
-    Math.round(size + (rScale(size) - size) * factor);
+
+  const rFontSize = (size: number, factor = 0.3) => {
+    const scaled = rModerateScale(size, factor);
+    const maxMultiplier = size > 24 ? 1.25 : 1.18;
+    return Math.round(Math.min(scaled, size * maxMultiplier));
+  };
+
+  const rSpacing = (size: number, factor = 0.4) =>
+    Math.round(Math.min(rModerateScale(size, factor), size * 1.3));
+
+  const rRadius = (size: number, factor = 0.25) =>
+    Math.round(Math.min(rModerateScale(size, factor), size * 1.25));
+
   const rClampFont = (size: number, min: number, max: number) =>
     Math.min(max, Math.max(min, rFontSize(size)));
 
-  const maxContentWidth = isTablet ? 680 : width;
+  const maxContentWidth = isTablet ? 640 : width;
 
   return {
     width,

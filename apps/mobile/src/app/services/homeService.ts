@@ -70,8 +70,8 @@ export const homeService = {
 
   // ─── Actions ───────────────────────────────────────────────────────────────────
 
-  completeLesson: (token: string, lessonId: string) =>
-    ecobudApi.completeLesson(token, lessonId),
+  completeLesson: (token: string, lessonId: string, answers?: Record<string, string>) =>
+    ecobudApi.completeLesson(token, lessonId, answers),
 
   updateLessonProgress: (token: string, lessonId: string, progress: number, videoTimestamp?: number) =>
     ecobudApi.updateLessonProgress(token, lessonId, progress, videoTimestamp),

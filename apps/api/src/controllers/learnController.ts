@@ -7,6 +7,7 @@ const learnService = new LearnService();
 
 const lessonActionSchema = z.object({
   lessonId: z.string().min(1),
+  answers: z.record(z.string(), z.string()).optional(),
 });
 
 const lessonProgressSchema = z.object({
@@ -34,8 +35,8 @@ export const learnController = {
   },
 
   async completeLesson(req: AuthenticatedRequest, res: Response) {
-    const { lessonId } = lessonActionSchema.parse(req.body);
-    const result = await learnService.completeLesson(req.auth!.userId, lessonId);
+    const { lessonId, answers } = lessonActionSchema.parse(req.body);
+    const result = await learnService.completeLesson(req.auth!.userId, lessonId, answers);
     return res.json(result);
   },
 };

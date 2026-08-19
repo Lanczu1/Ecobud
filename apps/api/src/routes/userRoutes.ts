@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
@@ -7,10 +8,19 @@ import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { PasswordService } from '../security/passwordService';
+import { TokenService } from '../security/tokenService';
 import path from 'path';
 import fs from 'fs';
 
 const userRoutes = Router();
+
+const securityUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many security update attempts. Please try again in 15 minutes.' },
+});
 
 const preferenceSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
@@ -20,9 +30,9 @@ const preferenceSchema = z.object({
 });
 
 const securitySchema = z.object({
-  currentPassword: z.string(),
+  currentPassword: z.string().min(1).max(100),
   newEmail: z.string().email().optional(),
-  newPassword: z.string().min(8).optional(),
+  newPassword: z.string().min(8).max(100, 'New password cannot exceed 100 characters.').optional(),
 });
 
 userRoutes.get(
@@ -185,6 +195,7 @@ userRoutes.post(
 
 userRoutes.patch(
   '/me/security',
+  securityUpdateLimiter,
   authenticateRequest,
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
@@ -192,7 +203,7 @@ userRoutes.patch(
     
     const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
     if (!user) {
-      throw new HttpError(404, 'User not found');
+      throw new HttpError(404, 'User not found.');
     }
 
     const passwordMatches = await PasswordService.compare(payload.currentPassword, user.passwordHash);
@@ -202,26 +213,42 @@ userRoutes.patch(
 
     const updateData: any = {};
 
-    if (payload.newEmail && payload.newEmail !== user.email) {
-      const existingUser = await prisma.user.findUnique({ where: { email: payload.newEmail } });
-      if (existingUser) {
-        throw new HttpError(409, 'This email is already taken.');
+    if (payload.newEmail) {
+      const normalizedEmail = payload.newEmail.toLowerCase().trim();
+      if (normalizedEmail !== user.email) {
+        const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        if (existingUser) {
+          throw new HttpError(409, 'This email is already in use by another account.');
+        }
+        updateData.email = normalizedEmail;
       }
-      updateData.email = payload.newEmail;
     }
 
     if (payload.newPassword) {
       updateData.passwordHash = await PasswordService.hash(payload.newPassword);
     }
 
+    let updatedUser = user;
     if (Object.keys(updateData).length > 0) {
-      await prisma.user.update({
+      updatedUser = await prisma.user.update({
         where: { id: req.auth!.userId },
         data: updateData,
       });
     }
 
-    return res.json({ success: true, message: 'Security settings updated.' });
+    const newToken = TokenService.sign({
+      userId: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      status: updatedUser.status,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Security settings updated successfully.',
+      token: newToken,
+    });
   }),
 );
 

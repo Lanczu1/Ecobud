@@ -45,6 +45,10 @@ export const authenticateRequest = async (
       return res.status(401).json({ message: 'The access token is no longer valid.' });
     }
 
+    if (session.email && user.email.toLowerCase() !== session.email.toLowerCase()) {
+      return res.status(401).json({ message: 'Session credentials have changed. Please log in again.' });
+    }
+
     if (user.status !== 'active') {
       return res.status(403).json({ message: getInactiveStatusMessage(user.status) });
     }

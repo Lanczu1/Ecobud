@@ -21,9 +21,10 @@ interface RealtimeNotice {
 }
 
 interface RealtimeConnectionHandlers {
-  onNotice: (notice: RealtimeNotice) => void;
-  onSignal: (signal: RealtimeSignal) => void;
+  onNotice?: (notice: RealtimeNotice) => void;
+  onSignal?: (signal: RealtimeSignal) => void;
   onConnectionChange?: (connected: boolean) => void;
+  onSessionExpired?: () => void;
 }
 
 const toRevision = (payload: unknown) => {
