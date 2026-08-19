@@ -394,7 +394,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
           onPressRewards={() => model.setActiveOverlay('streakRewards')}
         />
 
-        <QuickActions weeklyGoal={model.dashboard?.weeklyGoal ?? 0} />
+        <QuickActions model={model} />
 
         {(() => {
           const challenge = model.challenges[0];

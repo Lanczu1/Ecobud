@@ -41,7 +41,7 @@ const bindBroadcast = <TPayload extends RealtimeSignal | RealtimeNotice>(
   event: string,
   connectedAt: number,
   seenRevisions: Record<string, number>,
-  onPayload: (payload: TPayload) => void,
+  onPayload?: (payload: TPayload) => void,
 ) => {
   if (!supabaseClient) {
     return null;
@@ -70,7 +70,9 @@ const bindBroadcast = <TPayload extends RealtimeSignal | RealtimeNotice>(
       }
 
       seenRevisions[revisionKey] = revision;
-      onPayload(payload as TPayload);
+      if (onPayload) {
+        onPayload(payload as TPayload);
+      }
     })
     .subscribe();
 };
