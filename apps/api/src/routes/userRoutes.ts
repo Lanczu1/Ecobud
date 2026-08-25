@@ -24,6 +24,7 @@ const securityUpdateLimiter = rateLimit({
 
 const preferenceSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
+  email: z.string().email().optional(),
   headline: z.string().max(120).optional(),
   city: z.string().max(80).optional(),
   preferences: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
@@ -96,22 +97,50 @@ userRoutes.patch(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const payload = preferenceSchema.parse(req.body);
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.auth!.userId },
+    });
+    if (!currentUser) {
+      throw new HttpError(404, 'User not found.');
+    }
+
+    let normalizedEmail: string | undefined;
+    if (payload.email) {
+      normalizedEmail = payload.email.toLowerCase().trim();
+      if (normalizedEmail !== currentUser.email) {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: normalizedEmail },
+        });
+        if (existingUser && existingUser.id !== req.auth!.userId) {
+          throw new HttpError(409, 'This email is already in use by another account.');
+        }
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
+      const userUpdateData: any = {};
       if (payload.displayName) {
-        await tx.user.update({
+        userUpdateData.name = payload.displayName;
+      }
+      if (normalizedEmail) {
+        userUpdateData.email = normalizedEmail;
+      }
+
+      let updatedUser = currentUser;
+      if (Object.keys(userUpdateData).length > 0) {
+        updatedUser = await tx.user.update({
           where: { id: req.auth!.userId },
-          data: {
-            name: payload.displayName,
-          },
+          data: userUpdateData,
         });
       }
 
       const profile = await tx.profile.upsert({
         where: { userId: req.auth!.userId },
         update: {
-          displayName: payload.displayName,
-          headline: payload.headline,
-          city: payload.city,
+          displayName: payload.displayName ?? undefined,
+          headline: payload.headline ?? undefined,
+          city: payload.city !== undefined ? payload.city : undefined,
           preferencesJson: payload.preferences ? JSON.stringify(payload.preferences) : undefined,
         },
         create: {
@@ -123,16 +152,19 @@ userRoutes.patch(
         },
       });
 
-      const user = await tx.user.findUnique({
-        where: { id: req.auth!.userId },
-        select: {
-          name: true,
-        },
+      const newToken = TokenService.sign({
+        userId: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        status: updatedUser.status,
       });
 
       return {
         profile,
-        name: user?.name ?? req.auth!.name,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        token: newToken,
       };
     });
 

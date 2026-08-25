@@ -18,8 +18,8 @@ export const homeService = {
   login: (email: string, pass: string) =>
     ecobudApi.login(email.trim(), pass),
 
-  register: (email: string, pass: string, username: string, otpCode: string) =>
-    ecobudApi.register(email.trim(), pass, username.trim(), otpCode.trim()),
+  register: (email: string, pass: string, username: string, city: string, otpCode: string) =>
+    ecobudApi.register(email.trim(), pass, username.trim(), city, otpCode.trim()),
 
   sendOTP: (email: string) =>
     ecobudApi.sendOTP(email.trim()),
@@ -64,6 +64,9 @@ export const homeService = {
 
   uploadAvatar: (token: string, uri: string) =>
     ecobudApi.uploadAvatar(token, uri),
+
+  updateProfile: (token: string, payload: { displayName?: string; email?: string; city?: string }) =>
+    ecobudApi.updateProfile(token, payload),
 
   updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; newPassword?: string }) =>
     ecobudApi.updateSecuritySettings(token, payload),

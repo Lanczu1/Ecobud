@@ -731,6 +731,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     challengeObj: null,
   });
 
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
   const categories = ['All', 'General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
 
   useEffect(() => {
@@ -1272,8 +1274,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                               elevation: 1,
                             }}
                           >
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, flexWrap: 'wrap' }}>
                                 <View style={{ backgroundColor: '#E2E8F0', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
                                   <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569' }}>#{subIndex + 1}</Text>
                                 </View>
@@ -1307,6 +1309,20 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                                 </View>
                               ) : null}
                             </View>
+
+                            {/* Submission Proof Image */}
+                            {item.sub?.proofUrl && (
+                              <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
+                                <Image 
+                                  source={{ uri: item.sub.proofUrl }}
+                                  style={{ width: '100%', height: 140 }}
+                                  resizeMode="cover"
+                                />
+                                <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                  <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>YOUR PROOF</Text>
+                                </View>
+                              </TouchableOpacity>
+                            )}
 
                             {/* Rejection Message if any */}
                             {isRejected && item.rejectionReason && (
@@ -1414,6 +1430,19 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{challenge.title}</Text>
                     <Text style={{ fontSize: 13, color: '#6B7A75', marginTop: 4, lineHeight: 18 }} numberOfLines={2}>{challenge.description}</Text>
 
+                    {/* Show user's proof picture for completed task */}
+                    {challenge.progress?.submission?.proofUrl && (
+                      <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(challenge.progress!.submission!.proofUrl)} style={{ marginTop: 12, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
+                        <Image 
+                          source={{ uri: challenge.progress.submission.proofUrl }}
+                          style={{ width: '100%', height: 100 }}
+                          resizeMode="cover"
+                        />
+                        <View style={{ position: 'absolute', top: 6, left: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '800' }}>YOUR PROOF</Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                         {isApproved ? (
@@ -1470,6 +1499,20 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           model.openChallengeMission(rejectionModal.challengeObj!);
         } : undefined}
       />
+
+      <Modal visible={!!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity style={{ position: 'absolute', top: 40, right: 20, zIndex: 10, padding: 10 }} onPress={() => setPreviewImage(null)}>
+            <Ionicons name="close" size={32} color="#FFF" />
+          </TouchableOpacity>
+          {previewImage && (
+            <Image 
+              source={{ uri: previewImage }} 
+              style={{ width: '90%', height: '80%', resizeMode: 'contain' }} 
+            />
+          )}
+        </View>
+      </Modal>
     </>
   );
 }
@@ -2082,12 +2125,20 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                 LEVEL {currentLevelObj.level}
               </Text>
             </View>
-            <TouchableOpacity 
-              style={[profileStyles.headerSettingsBtn, isSmallDevice && { width: scale(28), height: scale(28), borderRadius: scale(14) }]}
-              onPress={() => model.setActiveOverlay('settings')}
-            >
-              <Ionicons name="settings-sharp" size={isSmallDevice ? scale(15) : scale(18)} color="#FFF" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+              <TouchableOpacity 
+                style={[profileStyles.headerSettingsBtn, isSmallDevice && { width: scale(28), height: scale(28), borderRadius: scale(14) }]}
+                onPress={() => model.setActiveOverlay('editProfile')}
+              >
+                <Ionicons name="pencil" size={isSmallDevice ? scale(14) : scale(16)} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[profileStyles.headerSettingsBtn, isSmallDevice && { width: scale(28), height: scale(28), borderRadius: scale(14) }]}
+                onPress={() => model.setActiveOverlay('settings')}
+              >
+                <Ionicons name="settings-sharp" size={isSmallDevice ? scale(15) : scale(18)} color="#FFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Profile Main Info (Avatar + User Name/Email/Title) */}
@@ -2131,16 +2182,31 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               >
                 {model.session?.user.email}
               </Text>
-              <View style={[profileStyles.titleBadge, isSmallDevice && { paddingHorizontal: scale(6), paddingVertical: verticalScale(2) }]}>
-                <MaterialCommunityIcons name="shield-crown" size={isSmallDevice ? scale(12) : scale(14)} color="#F59E0B" />
-                <Text
-                  style={[profileStyles.titleBadgeText, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                >
-                  {currentLevelObj.name}
-                </Text>
+              
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+                <View style={[profileStyles.titleBadge, isSmallDevice && { paddingHorizontal: scale(6), paddingVertical: verticalScale(2) }]}>
+                  <MaterialCommunityIcons name="shield-crown" size={isSmallDevice ? scale(12) : scale(14)} color="#F59E0B" />
+                  <Text
+                    style={[profileStyles.titleBadgeText, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    {currentLevelObj.name}
+                  </Text>
+                </View>
+
+                {model.profile?.profile?.city ? (
+                  <View style={[profileStyles.titleBadge, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }, isSmallDevice && { paddingHorizontal: scale(6), paddingVertical: verticalScale(2) }]}>
+                    <Ionicons name="location-sharp" size={isSmallDevice ? scale(11) : scale(13)} color="#A7F3D0" />
+                    <Text
+                      style={[profileStyles.titleBadgeText, { color: '#E6F4EC' }, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
+                      numberOfLines={1}
+                    >
+                      Brgy. {model.profile?.profile?.city}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </View>
@@ -2230,6 +2296,22 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
           <View style={profileStyles.actionListCard}>
             <TouchableOpacity 
               style={profileStyles.actionItem}
+              onPress={() => model.setActiveOverlay('editProfile')}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#E0F2FE' }]}>
+                <Ionicons name="person-outline" size={20} color="#0369A1" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={profileStyles.actionLabel}>Edit Profile</Text>
+                <Text style={profileStyles.actionSub}>Update username, email & barangay</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+            </TouchableOpacity>
+
+            <View style={profileStyles.divider} />
+
+            <TouchableOpacity 
+              style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('redeemPoints')}
             >
               <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
@@ -2269,7 +2351,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               </View>
               <View style={profileStyles.actionTextCol}>
                 <Text style={profileStyles.actionLabel}>Settings & Security</Text>
-                <Text style={profileStyles.actionSub}>Manage account security & notifications</Text>
+                <Text style={profileStyles.actionSub}>Manage account security & password</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
             </TouchableOpacity>

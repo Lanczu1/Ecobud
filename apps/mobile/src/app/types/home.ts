@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'editProfile' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -184,7 +184,7 @@ export interface EcoBudMobileModel {
   continueWithReadOnlyAccess: () => Promise<void>;
   leaveReadOnlyAccess: () => Promise<void>;
   handleLoginArgs: (email: string, pass: string) => Promise<void>;
-  handleSignUpArgs: (username: string, email: string, pass: string, otpCode?: string) => Promise<void>;
+  handleSignUpArgs: (username: string, email: string, pass: string, city: string, otpCode?: string) => Promise<void>;
   handleSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
   handleLogout: () => Promise<void>;
@@ -222,5 +222,6 @@ export interface EcoBudMobileModel {
   handleSubmitChallengeAfterPhoto: (challengeId: string, afterProofUrl: string, submissionId?: string) => Promise<void>;
   handleClaimChallengeReward: (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => Promise<void>;
   handleUpdateProfileImage: (uri: string) => Promise<any>;
+  handleUpdateProfile: (payload: { displayName?: string; email?: string; city?: string }) => Promise<void>;
   handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => Promise<void>;
 }

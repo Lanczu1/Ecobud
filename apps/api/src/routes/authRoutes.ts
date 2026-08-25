@@ -40,6 +40,7 @@ const registerSchema = z.object({
   password: z.string().min(8),
   name: z.string().min(2).max(50).optional(),
   displayName: z.string().min(2).max(50).optional(),
+  city: z.string().min(1, 'Please select a barangay.'),
   otpCode: z.string().length(6),
 }).refine((payload) => Boolean(payload.name ?? payload.displayName), {
   message: 'A display name is required.',
@@ -183,6 +184,7 @@ authRoutes.post(
         profile: {
           create: {
             displayName,
+            city: payload.city,
             headline: 'Growing sustainable habits every day.',
           },
         },

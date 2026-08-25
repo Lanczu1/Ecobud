@@ -12,7 +12,11 @@ import {
   TextInput,
   View,
   Image,
+  TouchableOpacity,
+  Modal,
+  FlatList,
 } from 'react-native';
+import { BARANGAYS } from '../../shared/constants/barangays';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,7 +26,7 @@ import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 type AuthModeType = 'signin' | 'signup' | 'verify';
-type FieldName = 'username' | 'email' | 'password' | 'verificationCode';
+type FieldName = 'username' | 'email' | 'password' | 'verificationCode' | 'city';
 type FieldErrors = Partial<Record<FieldName, string>>;
 type UsernameCheckState = 'idle' | 'checking' | 'available' | 'taken';
 
@@ -42,7 +46,7 @@ interface AuthViewProps {
   onLogin: (email: string, pass: string) => void;
   onGoogleSignIn: () => void;
 
-  onSignUp: (username: string, email: string, pass: string, otpCode: string) => void;
+  onSignUp: (username: string, email: string, pass: string, city: string, otpCode: string) => void;
   onSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
   onCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
 }
@@ -143,6 +147,7 @@ function validateFields(
     username: string;
     email: string;
     password: string;
+    city: string;
     verificationCode: string;
   },
 ): FieldErrors {
@@ -156,6 +161,10 @@ function validateFields(
       errors.username = 'Enter a username so your profile can be created.';
     } else if (trimmedUsername.length < 3) {
       errors.username = 'Username must be at least 3 characters.';
+    }
+    
+    if (!values.city) {
+      errors.city = 'Please select a barangay.';
     }
   }
 
@@ -190,10 +199,10 @@ function getRequiredFields(mode: AuthModeType): FieldName[] {
   }
 
   if (mode === 'signup') {
-    return ['username', 'email', 'password'];
+    return ['username', 'email', 'password', 'city'];
   }
 
-  return ['username', 'email', 'password', 'verificationCode'];
+  return ['username', 'email', 'password', 'city', 'verificationCode'];
 }
 
 
@@ -217,6 +226,9 @@ export function AuthView({
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [city, setCity] = useState('');
+  const [isBarangayPickerOpen, setIsBarangayPickerOpen] = useState(false);
+  const [barangaySearchQuery, setBarangaySearchQuery] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -237,9 +249,10 @@ export function AuthView({
         username,
         email,
         password,
+        city,
         verificationCode,
       }),
-    [email, mode, password, username, verificationCode],
+    [email, mode, password, username, city, verificationCode],
   );
 
   const visibleFieldErrors = useMemo(
@@ -249,6 +262,12 @@ export function AuthView({
       ) as FieldErrors,
     [fieldErrors, touched],
   );
+
+  const filteredBarangays = useMemo(() => {
+    if (!barangaySearchQuery.trim()) return BARANGAYS;
+    const query = barangaySearchQuery.toLowerCase().trim();
+    return BARANGAYS.filter((b) => b.toLowerCase().includes(query));
+  }, [barangaySearchQuery]);
 
   const usernameRequirements = useMemo<FieldRequirement[]>(() => {
     const trimmed = username.trim();
@@ -454,8 +473,8 @@ export function AuthView({
       return;
     }
 
-    onSignUp(username.trim(), email.trim(), password, verificationCode.trim());
-  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, usernameCheckState, verificationCode]);
+    onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
+  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode]);
 
   const bannerMessage = localError || authError;
   const verifySubtitle =
@@ -613,6 +632,33 @@ export function AuthView({
                     placeholder="nature@gmail.com or student@univ.edu.ph"
                   />
 
+                  {mode === 'signup' ? (
+                    <View style={styles.inputGroup}>
+                      <View style={styles.inputLabelRow}>
+                        <Text style={styles.inputLabel}>Location (Barangay)</Text>
+                      </View>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => setIsBarangayPickerOpen(true)}
+                        style={[
+                          styles.inputOuter,
+                          { height: 56, flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 10 },
+                          visibleFieldErrors.city ? styles.inputOuterError : null
+                        ]}
+                      >
+                        <View style={styles.inputIcon}>
+                          <Ionicons name="location-outline" size={20} color={palette.fieldIcon} />
+                        </View>
+                        <Text style={[styles.textInput, { color: city ? palette.textStrong : palette.textMuted, textAlignVertical: 'center', minHeight: undefined, flex: 1 }]}>
+                          {city ? `Brgy. ${city}` : 'Select Barangay'}
+                        </Text>
+                      </TouchableOpacity>
+                      {visibleFieldErrors.city ? (
+                        <Text style={styles.inlineErrorText}>{visibleFieldErrors.city}</Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+
                   <CustomInputField
                     label="Password"
                     labelIcon="lock-closed-outline"
@@ -720,6 +766,53 @@ export function AuthView({
           <LoadingScreenVisual label={loadingCopy.label} message={loadingCopy.message} />
         </Animated.View>
       ) : null}
+
+      <Modal visible={isBarangayPickerOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setIsBarangayPickerOpen(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: palette.textStrong }}>Select Barangay</Text>
+            <Pressable onPress={() => setIsBarangayPickerOpen(false)}>
+              <Ionicons name="close" size={24} color={palette.textStrong} />
+            </Pressable>
+          </View>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: palette.inputFill, borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: palette.border }}>
+              <Ionicons name="search" size={20} color={palette.fieldIcon} />
+              <TextInput
+                style={{ flex: 1, marginLeft: 8, fontSize: 16, color: palette.textStrong }}
+                placeholder="Search barangay..."
+                placeholderTextColor={palette.textMuted}
+                value={barangaySearchQuery}
+                onChangeText={setBarangaySearchQuery}
+              />
+            </View>
+          </View>
+          <FlatList
+            data={filteredBarangays}
+            keyExtractor={(item) => item}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
+            renderItem={({ item }) => (
+              <Pressable
+                style={({ pressed }) => [
+                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+                  pressed && { backgroundColor: palette.primarySoft }
+                ]}
+                onPress={() => {
+                  setCity(item);
+                  setIsBarangayPickerOpen(false);
+                  markTouched('city');
+                }}
+              >
+                <Text style={{ fontSize: 16, color: city === item ? palette.primary : palette.textStrong, fontWeight: city === item ? '700' : '400' }}>
+                  {item}
+                </Text>
+                {city === item && <Ionicons name="checkmark" size={20} color={palette.primary} />}
+              </Pressable>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
+
     </View>
   );
 }

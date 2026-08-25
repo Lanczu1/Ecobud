@@ -37,6 +37,7 @@ import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
+import { BARANGAYS } from '../../shared/constants/barangays';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
 import { RejectionModal } from './RejectionModal';
 import {
@@ -785,6 +786,8 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <EventApprovedOverlay model={model} />;
     case 'settings':
       return <SettingsOverlay model={model} />;
+    case 'editProfile':
+      return <EditProfileOverlay model={model} />;
     case 'ecoLevels':
       return <EcoLevelsOverlay model={model} />;
     default:
@@ -4441,9 +4444,216 @@ export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
+  const currentDisplayName = model.profile?.profile?.displayName ?? model.session?.user.displayName ?? '';
+  const currentEmail = model.session?.user.email ?? '';
+  const currentCity = model.profile?.profile?.city ?? '';
+
+  const [displayName, setDisplayName] = React.useState(currentDisplayName);
+  const [email, setEmail] = React.useState(currentEmail);
+  const [selectedBarangay, setSelectedBarangay] = React.useState(currentCity);
+  const [isBarangayPickerOpen, setIsBarangayPickerOpen] = React.useState(false);
+  const [barangaySearchQuery, setBarangaySearchQuery] = React.useState('');
+
+  const filteredBarangays = React.useMemo(() => {
+    if (!barangaySearchQuery.trim()) return BARANGAYS;
+    const query = barangaySearchQuery.toLowerCase().trim();
+    return BARANGAYS.filter((b) => b.toLowerCase().includes(query));
+  }, [barangaySearchQuery]);
+
+  const handleSave = async () => {
+    const trimmedName = displayName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Error', 'Username cannot be empty.');
+      return;
+    }
+    if (trimmedName.length < 2) {
+      Alert.alert('Error', 'Username must be at least 2 characters.');
+      return;
+    }
+    if (!trimmedEmail) {
+      Alert.alert('Error', 'Email address cannot be empty.');
+      return;
+    }
+
+    try {
+      await model.handleUpdateProfile({
+        displayName: trimmedName,
+        email: trimmedEmail,
+        city: selectedBarangay,
+      });
+      model.setActiveOverlay(null);
+    } catch (e) {
+      // error handled in hook
+    }
+  };
+
+  return (
+    <OverlayScaffold
+      title="Edit Profile"
+      subtitle="Update your username, email, and barangay"
+      onBack={() => model.setActiveOverlay(null)}
+    >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled">
+          
+          <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Username</Text>
+          <SurfaceCard style={{ padding: 16 }}>
+            <TextInput
+              style={localStyles.formInput}
+              value={displayName}
+              onChangeText={setDisplayName}
+              autoCapitalize="words"
+              placeholder="Enter your username"
+              placeholderTextColor="#8CA397"
+            />
+          </SurfaceCard>
+
+          <Text style={styles.sectionHeadline}>Email Address</Text>
+          <SurfaceCard style={{ padding: 16 }}>
+            <TextInput
+              style={localStyles.formInput}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="Enter your email"
+              placeholderTextColor="#8CA397"
+            />
+          </SurfaceCard>
+
+          <Text style={styles.sectionHeadline}>Location (Barangay)</Text>
+          <SurfaceCard style={{ padding: 16 }}>
+            <Text style={{ fontSize: 13, color: '#6B7A75', marginBottom: 10 }}>
+              Select your registered barangay to represent your community in Eco-Challenges.
+            </Text>
+            <TouchableOpacity
+              style={localStyles.selectTrigger}
+              onPress={() => {
+                setBarangaySearchQuery('');
+                setIsBarangayPickerOpen(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <Ionicons name="location-sharp" size={20} color="#126027" />
+                <Text
+                  style={[
+                    localStyles.selectTriggerText,
+                    !selectedBarangay && { color: '#8CA397' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {selectedBarangay ? `Brgy. ${selectedBarangay}` : 'Select Barangay'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-down" size={18} color="#4A6956" />
+            </TouchableOpacity>
+          </SurfaceCard>
+
+          <View style={{ marginTop: 24, marginBottom: 40 }}>
+            <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Barangay Picker Modal */}
+      {isBarangayPickerOpen && (
+        <View style={localStyles.modalOverlay}>
+          <TouchableOpacity 
+            style={localStyles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setIsBarangayPickerOpen(false)} 
+          />
+          <View style={localStyles.modalContainer}>
+            <View style={localStyles.modalHeader}>
+              <View>
+                <Text style={localStyles.modalTitle}>Select Barangay</Text>
+                <Text style={localStyles.modalSub}>Choose your local community</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsBarangayPickerOpen(false)}
+                style={localStyles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={20} color="#334155" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Filter Input */}
+            <View style={localStyles.modalSearchWrap}>
+              <Ionicons name="search" size={18} color="#6B7A75" />
+              <TextInput
+                style={localStyles.modalSearchInput}
+                placeholder="Search barangay..."
+                placeholderTextColor="#8CA397"
+                value={barangaySearchQuery}
+                onChangeText={setBarangaySearchQuery}
+                autoCorrect={false}
+              />
+              {barangaySearchQuery ? (
+                <TouchableOpacity onPress={() => setBarangaySearchQuery('')}>
+                  <Ionicons name="close-circle" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* Barangay List */}
+            <ScrollView style={localStyles.barangayListScroll} keyboardShouldPersistTaps="handled">
+              {filteredBarangays.map((barangay) => {
+                const isSelected = selectedBarangay === barangay;
+                return (
+                  <TouchableOpacity
+                    key={barangay}
+                    style={[
+                      localStyles.barangayOption,
+                      isSelected && localStyles.barangayOptionSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedBarangay(barangay);
+                      setIsBarangayPickerOpen(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                      <Ionicons
+                        name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                        size={20}
+                        color={isSelected ? '#126027' : '#94A3B8'}
+                      />
+                      <Text
+                        style={[
+                          localStyles.barangayOptionText,
+                          isSelected && localStyles.barangayOptionTextSelected,
+                        ]}
+                      >
+                        {barangay}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={20} color="#126027" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+              {filteredBarangays.length === 0 && (
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Ionicons name="search-outline" size={32} color="#94A3B8" />
+                  <Text style={{ color: '#64748B', marginTop: 8, fontSize: 14, fontWeight: '500' }}>
+                    No barangay found
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+    </OverlayScaffold>
+  );
+}
+
 export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [currentPassword, setCurrentPassword] = React.useState('');
-  const [newEmail, setNewEmail] = React.useState(model.session?.user.email ?? '');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
 
@@ -4452,7 +4662,15 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       Alert.alert('Error', 'Current password is required to save changes.');
       return;
     }
-    if (newPassword && newPassword !== confirmPassword) {
+    if (!newPassword) {
+      Alert.alert('Error', 'Please enter a new password.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      Alert.alert('Error', 'New password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'New passwords do not match.');
       return;
     }
@@ -4460,8 +4678,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
     try {
       await model.handleUpdateSecuritySettings({
         currentPassword,
-        newEmail: newEmail !== model.session?.user.email ? newEmail : undefined,
-        newPassword: newPassword ? newPassword : undefined,
+        newPassword,
       });
       // clear fields on success
       setCurrentPassword('');
@@ -4477,31 +4694,20 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <OverlayScaffold
       title="Settings & Security"
-      subtitle="Update your account details and password"
+      subtitle="Update your account password and security"
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.overlayScroll}>
-          <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Email Address</Text>
-          <SurfaceCard style={{ padding: 16 }}>
-            <TextInput
-              style={localStyles.formInput}
-              value={newEmail}
-              onChangeText={setNewEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholder="Enter new email"
-            />
-          </SurfaceCard>
-
-          <Text style={styles.sectionHeadline}>Change Password</Text>
+          <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Change Password</Text>
           <SurfaceCard style={{ padding: 16 }}>
             <TextInput
               style={[localStyles.formInput, { marginBottom: 16 }]}
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
-              placeholder="New Password (optional)"
+              placeholder="New Password"
+              placeholderTextColor="#8CA397"
             />
             <TextInput
               style={localStyles.formInput}
@@ -4509,13 +4715,14 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               onChangeText={setConfirmPassword}
               secureTextEntry
               placeholder="Confirm New Password"
+              placeholderTextColor="#8CA397"
             />
           </SurfaceCard>
 
           <Text style={styles.sectionHeadline}>Confirm Changes</Text>
           <SurfaceCard style={{ padding: 16 }}>
             <Text style={{ marginBottom: 12, fontSize: 13, color: '#6B7A75' }}>
-              Please enter your current password to save any security changes.
+              Please enter your current password to authorize changing your password.
             </Text>
             <TextInput
               style={localStyles.formInput}
@@ -4523,13 +4730,14 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               onChangeText={setCurrentPassword}
               secureTextEntry
               placeholder="Current Password"
+              placeholderTextColor="#8CA397"
             />
           </SurfaceCard>
-
-          <View style={{ marginTop: 24 }}>
-            <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
-          </View>
         </ScrollView>
+
+        <View style={{ padding: 16, paddingBottom: 32, backgroundColor: '#FFF' }}>
+          <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
+        </View>
       </KeyboardAvoidingView>
     </OverlayScaffold>
   );
@@ -4546,10 +4754,125 @@ const localStyles = StyleSheet.create({
     color: '#1A3326',
     fontWeight: '500',
   },
+  selectTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F7FBF9',
+    borderWidth: 1,
+    borderColor: '#E6F4EC',
+    borderRadius: 16,
+    padding: 16,
+  },
+  selectTriggerText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1A3326',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContainer: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    gap: 8,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  barangayListScroll: {
+    paddingHorizontal: 16,
+    maxHeight: 380,
+  },
+  barangayOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  barangayOptionSelected: {
+    backgroundColor: '#EDF6F1',
+  },
+  barangayOptionText: {
+    fontSize: 15,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  barangayOptionTextSelected: {
+    color: '#126027',
+    fontWeight: '700',
+  },
 });
 
 export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
-  const logs = model.transparency?.logs ?? [];
+  const logs = model.profile?.recentLogs ?? [];
 
   return (
     <View style={styles.fullscreenOverlay}>
@@ -4563,8 +4886,21 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
             logs.map((log) => (
               <SurfaceCard key={log.id} style={{ padding: 16, borderRadius: 16, backgroundColor: '#FFF' }}>
                 <View style={styles.rowBetween}>
-                  <Text style={[styles.cardTitle, { flex: 1 }]}>{log.publicLabel}</Text>
-                  <Text style={{ color: '#10B981', fontWeight: 'bold', fontSize: 16 }}>+{log.pointsAwarded}</Text>
+                  <Text style={[styles.cardTitle, { flex: 1 }]}>{model.userDisplayName}</Text>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    {log.pointsAwarded > 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="leaf" size={14} color="#10B981" />
+                        <Text style={{ color: '#10B981', fontWeight: 'bold', fontSize: 16 }}>+{log.pointsAwarded} points</Text>
+                      </View>
+                    )}
+                    {typeof log.metadata?.ecoCoinsAwarded === 'number' && log.metadata.ecoCoinsAwarded > 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
+                        <Text style={{ color: '#F59E0B', fontWeight: 'bold', fontSize: 16 }}>+{log.metadata.ecoCoinsAwarded as number} coins</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 <Text style={[styles.metaTextSmallDark, { marginTop: 4 }]}>Action: {log.actionType}</Text>
                 <Text style={[styles.metaTextSmallDark, { marginTop: 4 }]}>Date: {formatLongDate(log.timestamp)}</Text>

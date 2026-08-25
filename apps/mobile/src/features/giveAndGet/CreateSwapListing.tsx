@@ -15,6 +15,7 @@ import {
   Animated,
   Easing,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -188,12 +189,11 @@ export function CreateSwapListing({
       >
         <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={localStyles.header}>
           <View style={localStyles.headerRow}>
-            <TouchableOpacity onPress={handleBack} style={localStyles.backBtn}>
+            <TouchableOpacity onPress={handleBack} style={[localStyles.backBtn, { position: 'absolute', left: 0, zIndex: 10 }]}>
               <Feather name="arrow-left" size={22} color="#FFF" />
               <Text style={localStyles.backLabel}>Back</Text>
             </TouchableOpacity>
             <Text style={localStyles.headerTitle}>New Listing</Text>
-            <View style={{ width: 60 }} />
           </View>
 
           <View style={localStyles.progressRow}>
@@ -201,7 +201,7 @@ export function CreateSwapListing({
               <View key={s} style={localStyles.progressStep}>
                 <View style={[localStyles.progressDot, step >= s && localStyles.progressDotActive]}>
                   {step > s ? (
-                    <Ionicons name="checkmark" size={12} color="#FFF" />
+                    <Ionicons name="checkmark" size={16} color="#071C19" />
                   ) : (
                     <Text style={[localStyles.progressDotText, step >= s && localStyles.progressDotTextActive]}>
                       {s}
@@ -227,7 +227,7 @@ export function CreateSwapListing({
             <>
               <View style={localStyles.imagePicker}>
                 {images.length > 0 ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={localStyles.imageList}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.imageList}>
                     {images.map((uri, i) => (
                       <View key={i} style={localStyles.imageThumbWrap}>
                         <Image source={{ uri }} style={localStyles.imageThumb} />
@@ -250,13 +250,17 @@ export function CreateSwapListing({
                     )}
                   </ScrollView>
                 ) : (
-                  <View style={[localStyles.imagePlaceholder, { flexDirection: 'row', justifyContent: 'center', gap: 40 }]}>
+                  <View style={[localStyles.imagePlaceholder, { flexDirection: 'row', justifyContent: 'center', gap: scale(40) }]}>
                     <TouchableOpacity onPress={pickImages} style={{ alignItems: 'center' }}>
-                      <Ionicons name="images-outline" size={40} color="#A7D5BA" />
+                      <View style={localStyles.iconCircle}>
+                        <Ionicons name="images-outline" size={32} color={ecoTheme.colors.primaryDark} />
+                      </View>
                       <Text style={[localStyles.imagePlaceholderText, { marginTop: 8 }]}>Gallery</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={takePicture} style={{ alignItems: 'center' }}>
-                      <Ionicons name="camera-outline" size={40} color="#A7D5BA" />
+                      <View style={localStyles.iconCircle}>
+                        <Ionicons name="camera-outline" size={32} color={ecoTheme.colors.primaryDark} />
+                      </View>
                       <Text style={[localStyles.imagePlaceholderText, { marginTop: 8 }]}>Camera</Text>
                     </TouchableOpacity>
                   </View>
@@ -488,38 +492,41 @@ export function CreateSwapListing({
               />
             </>
           )}
-
-          <View style={localStyles.bottomBar}>
-            {step > 1 && (
-              <TouchableOpacity onPress={() => setStep(step - 1)} style={localStyles.prevBtn}>
-                <Text style={localStyles.prevBtnText}>Previous</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              onPress={() => {
-                if (step === 1 && images.length < 3) {
-                  setShowImageError(true);
-                  return;
-                }
-                if (step < totalSteps) {
-                  setStep(step + 1);
-                } else {
-                  handleSubmit();
-                }
-              }}
-              disabled={!canProceed() || submitting}
-              style={[localStyles.nextBtn, (!canProceed() || submitting) && { opacity: 0.5 }]}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={localStyles.nextBtnText}>
-                  {step < totalSteps ? 'Continue' : 'Create Listing'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
         </ScrollView>
+
+        <View style={localStyles.bottomBar}>
+          {step > 1 && (
+            <TouchableOpacity onPress={() => setStep(step - 1)} style={localStyles.prevBtn}>
+              <Text style={localStyles.prevBtnText}>Previous</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => {
+              if (step === 1 && images.length < 3) {
+                setShowImageError(true);
+                return;
+              }
+              if (step < totalSteps) {
+                setStep(step + 1);
+              } else {
+                handleSubmit();
+              }
+            }}
+            disabled={!canProceed() || submitting}
+            style={[
+              localStyles.nextBtn, 
+              (!canProceed() || submitting) && { backgroundColor: '#E2E8F0', shadowOpacity: 0, elevation: 0 }
+            ]}
+          >
+            {submitting ? (
+              <ActivityIndicator color={canProceed() ? "#FFF" : "#94A3B8"} />
+            ) : (
+              <Text style={[localStyles.nextBtnText, (!canProceed() || submitting) && { color: '#94A3B8' }]}>
+                {step < totalSteps ? 'Continue' : 'Create Listing'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </View>
 
@@ -562,15 +569,16 @@ const localStyles = StyleSheet.create({
     backgroundColor: ecoTheme.colors.background,
   },
   header: {
-    paddingTop: verticalScale(6),
-    paddingBottom: verticalScale(14),
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + verticalScale(8) : verticalScale(44),
+    paddingBottom: verticalScale(16),
     paddingHorizontal: scale(16),
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: verticalScale(12),
+    justifyContent: 'center',
+    marginBottom: verticalScale(16),
+    minHeight: verticalScale(32),
   },
   backBtn: {
     flexDirection: 'row',
@@ -592,36 +600,43 @@ const localStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: verticalScale(6),
+    marginBottom: verticalScale(10),
+    marginTop: verticalScale(4),
   },
   progressStep: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   progressDot: {
-    width: scale(26),
-    height: scale(26),
-    borderRadius: scale(13),
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(16),
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   progressDotActive: {
     backgroundColor: '#4ADE80',
+    shadowColor: '#4ADE80',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   progressDotText: {
-    fontSize: responsiveFontSize(11),
-    fontWeight: '800',
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: responsiveFontSize(13),
+    fontWeight: '900',
+    color: 'rgba(255,255,255,0.5)',
   },
   progressDotTextActive: {
-    color: '#FFF',
+    color: '#071C19',
   },
   progressLine: {
-    width: scale(40),
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: scale(45),
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     marginHorizontal: scale(4),
+    borderRadius: 2,
   },
   progressLineActive: {
     backgroundColor: '#4ADE80',
@@ -640,21 +655,28 @@ const localStyles = StyleSheet.create({
     paddingBottom: verticalScale(100),
   },
   fieldLabel: {
-    fontSize: responsiveFontSize(13),
-    fontWeight: '700',
-    color: ecoTheme.colors.text,
-    marginBottom: verticalScale(6),
-    marginTop: verticalScale(14),
+    fontSize: responsiveFontSize(11),
+    fontWeight: '800',
+    color: ecoTheme.colors.textSoft,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: verticalScale(8),
+    marginTop: verticalScale(18),
   },
   input: {
-    minHeight: verticalScale(48),
+    minHeight: verticalScale(50),
     borderRadius: moderateScale(14),
-    backgroundColor: '#F7FBF8',
-    borderWidth: 1,
-    borderColor: ecoTheme.colors.outline,
-    paddingHorizontal: scale(14),
-    fontSize: responsiveFontSize(14),
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: scale(16),
+    fontSize: responsiveFontSize(15),
     color: ecoTheme.colors.text,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   textArea: {
     minHeight: verticalScale(90),
@@ -671,31 +693,37 @@ const localStyles = StyleSheet.create({
     gap: scale(8),
   },
   chip: {
-    paddingHorizontal: scale(12),
-    paddingVertical: verticalScale(7),
-    borderRadius: moderateScale(14),
-    backgroundColor: '#F5FBF8',
-    borderWidth: 1,
-    borderColor: ecoTheme.colors.outline,
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(20),
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
   },
   chipActive: {
     backgroundColor: ecoTheme.colors.primaryDark,
     borderColor: ecoTheme.colors.primaryDark,
+    shadowColor: ecoTheme.colors.primaryDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   chipText: {
-    fontSize: responsiveFontSize(12),
+    fontSize: responsiveFontSize(13),
     fontWeight: '600',
     color: ecoTheme.colors.textSoft,
   },
   chipTextActive: {
     color: '#FFFFFF',
+    fontWeight: '700',
   },
   imagePicker: {
     minHeight: verticalScale(130),
     borderRadius: moderateScale(18),
-    backgroundColor: '#F5FBF8',
+    backgroundColor: '#F0F9F4',
     borderWidth: 2,
-    borderColor: '#E0EFE3',
+    borderColor: '#C6E8D3',
     borderStyle: 'dashed',
     overflow: 'hidden',
   },
@@ -709,6 +737,20 @@ const localStyles = StyleSheet.create({
   imagePlaceholderText: {
     fontSize: responsiveFontSize(13),
     color: ecoTheme.colors.textSoft,
+    fontWeight: '600',
+  },
+  iconCircle: {
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   imageList: {
     flexDirection: 'row',
@@ -857,12 +899,17 @@ const localStyles = StyleSheet.create({
   },
   nextBtn: {
     flex: 2,
-    minHeight: verticalScale(48),
+    minHeight: verticalScale(52),
     paddingVertical: verticalScale(10),
-    borderRadius: moderateScale(14),
+    borderRadius: moderateScale(16),
     backgroundColor: ecoTheme.colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: ecoTheme.colors.primaryDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   nextBtnText: {
     fontSize: responsiveFontSize(14),

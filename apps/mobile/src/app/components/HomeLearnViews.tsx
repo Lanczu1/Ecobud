@@ -17,7 +17,7 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../util
 import { resolveMediaUrl } from '../utils/appUtils';
 import { HomeViewSkeleton, LearnViewSkeleton } from '../../shared/ui/SkeletonLoaders';
 
-const getCategoryDetails = (category: string, isActive: boolean) => {
+export const getCategoryDetails = (category: string, isActive: boolean) => {
   const name = category === 'All Categories' ? 'All' : category;
   const normalized = name.toLowerCase().trim();
   

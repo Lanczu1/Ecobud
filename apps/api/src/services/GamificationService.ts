@@ -438,8 +438,14 @@ export class GamificationService {
       );
 
       const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
-      const log = await ledgerService.appendLog(tx, action);
-
+      const logAction = {
+        ...action,
+        metadata: {
+          ...(action.metadata || {}),
+          ecoCoinsAwarded: action.ecoCoinsAwarded ?? 0,
+        }
+      };
+      const log = await ledgerService.appendLog(tx, logAction);
       return {
         alreadyCompleted: false,
         awardedBadges,
