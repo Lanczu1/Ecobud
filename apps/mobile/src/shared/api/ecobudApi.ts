@@ -532,10 +532,10 @@ export const ecobudApi = {
     request<{ available: boolean; message: string }>(
       `/auth/check-username?displayName=${encodeURIComponent(displayName.trim())}`,
     ),
-  register: (email: string, password: string, displayName: string, otpCode: string) =>
+  register: (email: string, password: string, displayName: string, city: string, otpCode: string) =>
     request<SessionPayload>('/auth/register', {
       method: 'POST',
-      body: { email, password, displayName, otpCode },
+      body: { email, password, displayName, city, otpCode },
     }),
   sendOTP: (email: string) =>
     request<{ success: boolean; message: string }>('/auth/send-otp', {
@@ -648,6 +648,12 @@ export const ecobudApi = {
       token,
       uri
     ),
+  updateProfile: (token: string, payload: { displayName?: string; email?: string; city?: string }) =>
+    request<{ profile: any; name: string; email: string; token: string }>('/users/me/preferences', {
+      method: 'PATCH',
+      token,
+      body: payload,
+    }),
   updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; newPassword?: string }) =>
     request<{ success: boolean; message: string }>('/users/me/security', {
       method: 'PATCH',

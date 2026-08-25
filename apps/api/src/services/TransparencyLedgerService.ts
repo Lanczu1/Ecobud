@@ -32,11 +32,24 @@ export class TransparencyLedgerService {
       previousHash,
     );
 
+    let publicLabel = TransparencyHasher.anonymizeUserForPublicBoard(payload.userId);
+    try {
+      const userProfile = await session.profile.findUnique({
+        where: { userId: payload.userId },
+        select: { displayName: true },
+      });
+      if (userProfile?.displayName) {
+        publicLabel = userProfile.displayName;
+      }
+    } catch (err) {
+      // fallback to anonymized
+    }
+
     return session.transparencyLog.create({
       data: {
         userId: payload.userId,
         actionType: payload.actionType,
-        publicLabel: TransparencyHasher.anonymizeUserForPublicBoard(payload.userId),
+        publicLabel,
         pointsAwarded: payload.pointsAwarded,
         metadata: JSON.stringify(payload.metadata ?? {}),
         previousHash,

@@ -102,7 +102,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
             'Google Sign-In is currently in development for mobile. Please sign in or register with your email.'
           );
         }}
-        onSignUp={(username, email, pass, otpCode) => void model.handleSignUpArgs(username, email, pass, otpCode)}
+        onSignUp={(username, email, pass, city, otpCode) => void model.handleSignUpArgs(username, email, pass, city, otpCode)}
         onSendOTP={(email) => model.handleSendOTP(email)}
         onCheckUsernameAvailability={(displayName) => model.handleCheckUsernameAvailability(displayName)}
       />

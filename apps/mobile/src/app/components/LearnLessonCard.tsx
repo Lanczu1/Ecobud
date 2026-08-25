@@ -11,6 +11,7 @@ import {
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale, useResponsive, clampFontSize } from '../utils/responsive';
 import { resolveMediaUrl } from '../utils/appUtils';
+import { getCategoryDetails } from './HomeLearnViews';
 
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
@@ -110,7 +111,7 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
       
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: verticalScale(10), gap: scale(6) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-          <Ionicons name="bookmark-outline" size={scale(12)} color="#6B7A75" />
+          <Ionicons name={getCategoryDetails(lesson.category || 'General', false).iconName} size={scale(12)} color="#6B7A75" />
           <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
             {lesson.category || 'General'}
           </Text>

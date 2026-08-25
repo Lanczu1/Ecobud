@@ -672,13 +672,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }, 900);
   }, [hydrateApp, persistSession, runWithActionLoader]);
 
-  const handleSignUpArgs = useCallback(async (username: string, email: string, pass: string, otpCode?: string) => {
+  const handleSignUpArgs = useCallback(async (username: string, email: string, pass: string, city: string, otpCode?: string) => {
     await runWithActionLoader('Creating your account...', async () => {
       setAuthLoading(true);
       setAuthError(null);
 
       try {
-        const nextSession = await homeService.register(email.trim(), pass, username.trim(), otpCode?.trim() || '');
+        const nextSession = await homeService.register(email.trim(), pass, username.trim(), city, otpCode?.trim() || '');
         setSession(nextSession);
         await persistSession(nextSession);
         await hydrateApp(nextSession);
@@ -870,6 +870,25 @@ export function useHomeDashboard(): EcoBudMobileModel {
   ]);
 
   const openChallengeMission = useCallback((challenge: ChallengeWithProgress) => {
+    const userBarangay = profile?.profile?.city?.trim();
+    if (!userBarangay) {
+      Alert.alert(
+        'Barangay Location Required',
+        'Please set your registered Barangay in your profile before participating in challenges to represent your community!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Set Barangay',
+            style: 'default',
+            onPress: () => {
+              setActiveOverlayState('editProfile');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setSelectedChallenge(challenge);
 
     setRecentViewedMission(challenge);
@@ -882,7 +901,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
 
     setActiveOverlayState('ai_mission');
-  }, []);
+  }, [profile]);
 
   const handleCompleteLesson = useCallback(async () => {
     await runWithActionLoader('Verifying lesson completion...', async () => {
@@ -1503,6 +1522,50 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
   }, [ensureSession, runWithActionLoader, hydrateApp, persistSession]);
 
+  const handleUpdateProfile = useCallback(async (payload: { displayName?: string; email?: string; city?: string }) => {
+    await runWithActionLoader('Saving profile changes...', async () => {
+      try {
+        const activeSession = ensureSession();
+        const res = await homeService.updateProfile(activeSession.token, payload);
+        
+        const updatedSession = {
+          ...activeSession,
+          token: res.token || activeSession.token,
+          user: {
+            ...activeSession.user,
+            name: res.name || activeSession.user.name,
+            displayName: res.name || payload.displayName || activeSession.user.displayName,
+            email: res.email || payload.email || activeSession.user.email,
+          },
+        };
+        await persistSession(updatedSession);
+        setSession(updatedSession);
+
+        if (res.profile) {
+          setProfile((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              name: res.name || prev.name,
+              email: res.email || prev.email,
+              profile: {
+                ...prev.profile,
+                ...res.profile,
+                displayName: res.profile.displayName || payload.displayName || prev.profile?.displayName,
+                city: res.profile.city !== undefined ? res.profile.city : prev.profile?.city,
+              },
+            };
+          });
+        }
+
+        Alert.alert('Success', 'Profile updated successfully.');
+      } catch (error) {
+        Alert.alert('Update Failed', error instanceof Error ? error.message : 'Please try again.');
+        throw error;
+      }
+    });
+  }, [ensureSession, runWithActionLoader, persistSession]);
+
   const handleUpdateSecuritySettings = useCallback(async (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => {
     await runWithActionLoader('Updating security settings...', async () => {
       try {
@@ -1636,6 +1699,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleSubmitChallengeAfterPhoto,
     handleClaimChallengeReward,
     handleUpdateProfileImage,
+    handleUpdateProfile,
     handleUpdateSecuritySettings,
   };
 }

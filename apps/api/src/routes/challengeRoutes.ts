@@ -65,9 +65,14 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
       where: { userId_challengeInstanceId: { userId, challengeInstanceId: instance.id } }
     });
     
-    // Get ALL submissions for this challenge instance
+    // Get ALL submissions for this challenge template (across all cycles)
     const submissions = await prisma.challengeSubmission.findMany({
-      where: { userId, challengeInstanceId: instance.id },
+      where: { 
+        userId, 
+        challengeInstance: {
+          challengeId: challenge.id
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
 

@@ -1,14 +1,14 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, memo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   StyleSheet,
   Pressable,
   Animated,
   ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -77,7 +77,7 @@ function getMeetupIcon(method: string): string {
   }
 }
 
-export function SwapListingCard({
+function SwapListingCardComponent({
   listing,
   onPress,
   onSwap,
@@ -601,4 +601,16 @@ const localStyles = StyleSheet.create({
     color: ecoTheme.colors.primaryDark,
   },
 });
+
+export const SwapListingCard = memo(
+  SwapListingCardComponent,
+  (prevProps, nextProps) =>
+    prevProps.listing.id === nextProps.listing.id &&
+    prevProps.listing.title === nextProps.listing.title &&
+    prevProps.listing.isActive === nextProps.listing.isActive &&
+    prevProps.listing.approvalStatus === nextProps.listing.approvalStatus &&
+    prevProps.isOwnListing === nextProps.isOwnListing &&
+    prevProps.onPress === nextProps.onPress &&
+    prevProps.onSwap === nextProps.onSwap
+);
 
