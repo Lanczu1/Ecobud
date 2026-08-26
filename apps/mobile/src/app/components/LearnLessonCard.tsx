@@ -10,8 +10,7 @@ import {
 } from 'react-native';
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale, useResponsive, clampFontSize } from '../utils/responsive';
-import { resolveMediaUrl } from '../utils/appUtils';
-import { getCategoryDetails } from './HomeLearnViews';
+import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
 
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
