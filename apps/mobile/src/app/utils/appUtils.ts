@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { AppTab } from '../types/home';
 import { useCallback, useRef } from 'react';
 import { Animated } from 'react-native';
@@ -231,5 +232,40 @@ export function resolveMediaUrl(url?: string | null, apiOrigin?: string): string
   }
 
   return clean;
+}
+
+export function getCategoryDetails(category: string, isActive: boolean = false) {
+  const name = category === 'All Categories' ? 'All' : category;
+  const normalized = name.toLowerCase().trim();
+
+  let iconName: keyof typeof Ionicons.glyphMap = 'grid-outline';
+
+  if (normalized === 'all') {
+    iconName = 'grid-outline';
+  } else if (normalized === 'featured') {
+    iconName = 'star-outline';
+  } else if (normalized === 'environment' || normalized === 'general' || normalized === 'nature') {
+    iconName = 'leaf-outline';
+  } else if (normalized === 'waste' || normalized === 'recycling') {
+    iconName = 'sync-outline';
+  } else if (normalized === 'water') {
+    iconName = 'water-outline';
+  } else if (normalized === 'energy') {
+    iconName = 'flash-outline';
+  } else if (normalized === 'climate') {
+    iconName = 'globe-outline';
+  } else if (normalized === 'lifestyle') {
+    iconName = 'sparkles-outline';
+  } else if (normalized === 'transport') {
+    iconName = 'car-outline';
+  } else if (normalized === 'food') {
+    iconName = 'restaurant-outline';
+  } else {
+    iconName = 'book-outline';
+  }
+
+  const iconColor = isActive ? '#2E7D32' : '#6B7A75';
+
+  return { name, iconName, iconColor };
 }
 
