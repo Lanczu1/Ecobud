@@ -44,7 +44,13 @@ interface AuthViewProps {
   authLoading: boolean;
   authError: string | null;
   onLogin: (email: string, pass: string) => void;
-  onGoogleSignIn: () => void;
+  onGoogleSignIn: () => Promise<{
+    requiresBarangay: boolean;
+    email: string;
+    displayName: string;
+    avatarUrl: string;
+    onConfirmBarangay: (chosenBarangay: string) => Promise<void>;
+  } | void> | void;
 
   onSignUp: (username: string, email: string, pass: string, city: string, otpCode: string) => void;
   onSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
@@ -178,8 +184,12 @@ function validateFields(
 
   if (!values.password) {
     errors.password = mode === 'signin' ? 'Password is required.' : 'Create a password.';
-  } else if (mode !== 'signin' && values.password.length < 8) {
-    errors.password = 'Password must be at least 8 characters.';
+  } else if (mode !== 'signin') {
+    if (values.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters.';
+    } else if (!/[a-zA-Z]/.test(values.password) || !/[0-9]/.test(values.password)) {
+      errors.password = 'Password must contain at least one letter and one number.';
+    }
   }
 
   if (mode === 'verify') {
@@ -229,6 +239,16 @@ export function AuthView({
   const [city, setCity] = useState('');
   const [isBarangayPickerOpen, setIsBarangayPickerOpen] = useState(false);
   const [barangaySearchQuery, setBarangaySearchQuery] = useState('');
+  const [pendingGoogleAuth, setPendingGoogleAuth] = useState<{
+    requiresBarangay: boolean;
+    email: string;
+    displayName: string;
+    avatarUrl: string;
+    onConfirmBarangay: (chosenBarangay: string) => Promise<void>;
+  } | null>(null);
+  const [isGoogleBarangayModalOpen, setIsGoogleBarangayModalOpen] = useState(false);
+  const [selectedGoogleBarangay, setSelectedGoogleBarangay] = useState('');
+  const [isConfirmingGoogleBarangay, setIsConfirmingGoogleBarangay] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -239,7 +259,7 @@ export function AuthView({
   const [usernameCheckState, setUsernameCheckState] = useState<UsernameCheckState>('idle');
   const [usernameCheckMessage, setUsernameCheckMessage] = useState<string | null>(null);
   const loadingOpacity = useRef(new Animated.Value(0)).current;
-  const isLoading = authLoading || isSendingCode;
+  const isLoading = authLoading || isSendingCode || isConfirmingGoogleBarangay;
   const [renderLoadingOverlay, setRenderLoadingOverlay] = useState(isLoading);
 
   const copy = AUTH_COPY[mode];
@@ -705,7 +725,19 @@ export function AuthView({
                   <SocialButton
                     label="Continue with Google"
                     iconName="logo-google"
-                    onPress={onGoogleSignIn}
+                    onPress={async () => {
+                      try {
+                        const result = await onGoogleSignIn();
+                        if (result && result.requiresBarangay) {
+                          setPendingGoogleAuth(result);
+                          setSelectedGoogleBarangay('');
+                          setBarangaySearchQuery('');
+                          setIsGoogleBarangayModalOpen(true);
+                        }
+                      } catch (e) {
+                        // Handled in parent hook
+                      }
+                    }}
                     disabled={isLoading}
                   />
                 </>
@@ -810,6 +842,95 @@ export function AuthView({
               </Pressable>
             )}
           />
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal for Google Sign-In New User Barangay Selection */}
+      <Modal
+        visible={isGoogleBarangayModalOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (!isConfirmingGoogleBarangay) {
+            setIsGoogleBarangayModalOpen(false);
+            setPendingGoogleAuth(null);
+          }
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: palette.textStrong }}>Select Your Barangay</Text>
+              <Text style={{ fontSize: 13, color: palette.textMuted, marginTop: 2 }}>
+                Welcome to EcoBud! Please choose your barangay to complete your setup.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                if (!isConfirmingGoogleBarangay) {
+                  setIsGoogleBarangayModalOpen(false);
+                  setPendingGoogleAuth(null);
+                }
+              }}
+              disabled={isConfirmingGoogleBarangay}
+            >
+              <Ionicons name="close" size={24} color={palette.textStrong} />
+            </Pressable>
+          </View>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: palette.inputFill, borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: palette.border }}>
+              <Ionicons name="search" size={20} color={palette.fieldIcon} />
+              <TextInput
+                style={{ flex: 1, marginLeft: 8, fontSize: 16, color: palette.textStrong }}
+                placeholder="Search barangay..."
+                placeholderTextColor={palette.textMuted}
+                value={barangaySearchQuery}
+                onChangeText={setBarangaySearchQuery}
+              />
+            </View>
+          </View>
+          <FlatList
+            data={filteredBarangays}
+            keyExtractor={(item) => item}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}
+            renderItem={({ item }) => (
+              <Pressable
+                style={({ pressed }) => [
+                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+                  pressed && { backgroundColor: palette.primarySoft }
+                ]}
+                onPress={() => {
+                  setSelectedGoogleBarangay(item);
+                }}
+              >
+                <Text style={{ fontSize: 16, color: selectedGoogleBarangay === item ? palette.primary : palette.textStrong, fontWeight: selectedGoogleBarangay === item ? '700' : '400' }}>
+                  {item}
+                </Text>
+                {selectedGoogleBarangay === item && <Ionicons name="checkmark-circle" size={22} color={palette.primary} />}
+              </Pressable>
+            )}
+          />
+          {selectedGoogleBarangay ? (
+            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: palette.surface, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: palette.border }}>
+              <PrimaryButton
+                label={isConfirmingGoogleBarangay ? 'Setting up account...' : `Continue with ${selectedGoogleBarangay}`}
+                disabled={isConfirmingGoogleBarangay}
+                loading={isConfirmingGoogleBarangay}
+                onPress={async () => {
+                  if (!pendingGoogleAuth || !selectedGoogleBarangay) return;
+                  setIsConfirmingGoogleBarangay(true);
+                  try {
+                    setIsGoogleBarangayModalOpen(false);
+                    await pendingGoogleAuth.onConfirmBarangay(selectedGoogleBarangay);
+                  } catch (err) {
+                    setIsGoogleBarangayModalOpen(true);
+                  } finally {
+                    setIsConfirmingGoogleBarangay(false);
+                  }
+                }}
+              />
+            </View>
+          ) : null}
         </SafeAreaView>
       </Modal>
 

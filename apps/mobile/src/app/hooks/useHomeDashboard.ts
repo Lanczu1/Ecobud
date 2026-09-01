@@ -25,10 +25,15 @@ import { usePresence } from '../../shared/presence/usePresence';
 import { offlineSyncService } from '../../shared/offline/offlineSyncService';
 import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMutationQueue.types';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
+import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 import { type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +75,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [activeTab, setActiveTabState] = useState<AppTab>('home');
+  const [challengesViewMode, setChallengesViewMode] = useState<'Discover' | 'My Tasks' | 'History'>('Discover');
   const [activeOverlay, setActiveOverlayState] = useState<OverlayScreen>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [selectedChallenge, setSelectedChallenge] = useState<ChallengeWithProgress | null>(null);
@@ -119,9 +125,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [earnedPoints, setEarnedPoints] = useState(0);
   const [earnedCoins, setEarnedCoins] = useState(0);
   const [pendingStreakUnlock, setPendingStreakUnlock] = useState(false);
+  const [pendingBadgeQueue, setPendingBadgeQueue] = useState<EcoBadge[]>([]);
   const [newlyUnlockedBadges, setNewlyUnlockedBadges] = useState<EcoBadge[]>([]);
+  const [selectedBadge, setSelectedBadge] = useState<EcoBadge | null>(null);
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
   const presence = usePresence(session);
+
+  const openBadgeOverlay = useCallback((badge: EcoBadge) => {
+    setSelectedBadge(badge);
+    setNewlyUnlockedBadges([badge]);
+    setActiveOverlayState('badgeUnlocked');
+  }, []);
 
   const selectedLesson = useMemo(
     () => lessons.find((lesson) => lesson.id === selectedLessonId) ?? null,
@@ -184,6 +198,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setAssistantMessages([]);
     setSelectedLessonId(null);
     setSelectedChallenge(null);
+    setSelectedBadge(null);
+    setNewlyUnlockedBadges([]);
+    setPendingBadgeQueue([]);
+    setPendingStreakUnlock(false);
+    previousStreakRef.current = null;
+    previousUnlockedBadgeIdsRef.current = null;
     // Intentionally keep viewed missions across logouts
   }, []);
 
@@ -412,6 +432,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
           });
         }
 
+        // Initialize baseline refs on first hydration if not yet set
+        if (previousStreakRef.current === null && data.dashboard) {
+          previousStreakRef.current = data.dashboard.streak;
+        }
+        if (previousUnlockedBadgeIdsRef.current === null && data.rewards?.badges) {
+          const unlockedIds = new Set<string>(data.rewards.badges.filter((b: any) => b.unlocked).map((b: any) => String(b.id)));
+          previousUnlockedBadgeIdsRef.current = unlockedIds;
+        }
+
         setDashboard(data.dashboard);
         setLessons(data.lessons);
         setChallenges(data.challenges);
@@ -544,9 +573,40 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [dashboard?.streak]);
 
+  // Monitor newly unlocked collectible badges from rewards
+  const previousUnlockedBadgeIdsRef = React.useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (rewards?.badges) {
+      const currentUnlocked = rewards.badges.filter((b) => b.unlocked);
+      const currentUnlockedIds = new Set(currentUnlocked.map((b) => b.id));
+
+      if (previousUnlockedBadgeIdsRef.current !== null) {
+        const newBadges = currentUnlocked.filter((b) => !previousUnlockedBadgeIdsRef.current!.has(b.id));
+        if (newBadges.length > 0) {
+          setPendingBadgeQueue((prev) => [...prev, ...newBadges]);
+        }
+      }
+
+      previousUnlockedBadgeIdsRef.current = currentUnlockedIds;
+    }
+  }, [rewards?.badges]);
+
+  // Trigger badge overlay when activeOverlay finishes/is null
+  useEffect(() => {
+    if (activeOverlay === null && pendingBadgeQueue.length > 0) {
+      const nextBadge = pendingBadgeQueue[0];
+      const t = setTimeout(() => {
+        setSelectedBadge(nextBadge);
+        setActiveOverlayState('badgeUnlocked');
+        setPendingBadgeQueue((prev) => prev.slice(1));
+      }, 400);
+      return () => clearTimeout(t);
+    }
+  }, [activeOverlay, pendingBadgeQueue]);
+
   // Trigger streak overlay when other overlays finish
   useEffect(() => {
-    if (activeOverlay === null && pendingStreakUnlock) {
+    if (activeOverlay === null && pendingBadgeQueue.length === 0 && pendingStreakUnlock) {
       // Small timeout to allow previous overlay to fully unmount
       const t = setTimeout(() => {
         setActiveOverlayState('streakUnlocked');
@@ -554,7 +614,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }, 500);
       return () => clearTimeout(t);
     }
-  }, [activeOverlay, pendingStreakUnlock]);
+  }, [activeOverlay, pendingBadgeQueue.length, pendingStreakUnlock]);
 
   useEffect(() => () => {
     if (realtimeRefreshTimer.current) {
@@ -562,23 +622,30 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, []);
 
-  // Auto-sync polling specifically for Events
+  // Auto-sync polling for Challenges, Events & Real-time status updates
   useEffect(() => {
+    if (!session?.token) return;
+
     const interval = setInterval(() => {
-      if (AppState.currentState === 'active') {
-        const token = session ? session.token : undefined;
-        homeService.getEvents(token)
-          .then((newEvents) => {
+      if (AppState.currentState === 'active' && presence.hasUsableInternet) {
+        // Silently fetch latest challenges and events without blocking UI
+        Promise.all([
+          homeService.getChallenges(session.token).catch(() => null),
+          homeService.getEvents(session.token).catch(() => null),
+        ]).then(([challengesRes, newEvents]) => {
+          if (challengesRes) {
+            setChallenges(challengesRes.items || []);
+            setIsCycleActive(challengesRes.isCycleActive ?? false);
+          }
+          if (newEvents) {
             setEvents(newEvents);
-          })
-          .catch(() => {
-            // Silently ignore polling errors
-          });
+          }
+        }).catch(() => {});
       }
-    }, 5000); // Poll every 5 seconds for real-time feel
+    }, 3000); // Automatically sync every 3 seconds for seamless real-time updates
 
     return () => clearInterval(interval);
-  }, [session]);
+  }, [session?.token, presence.hasUsableInternet]);
 
   useEffect(() => {
     if (!session || !presence.hasUsableInternet) {
@@ -672,6 +739,189 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }, 900);
   }, [hydrateApp, persistSession, runWithActionLoader]);
 
+  const handleGoogleSignIn = useCallback(async () => {
+    setAuthError(null);
+
+    try {
+      if (!supabaseClient) {
+        throw new Error('Supabase client is not initialized.');
+      }
+
+      const redirectUri = makeRedirectUri({
+        scheme: 'ecobud',
+      });
+
+      const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUri,
+          skipBrowserRedirect: true,
+          queryParams: {
+            prompt: 'select_account',
+            access_type: 'offline',
+          },
+        },
+      });
+
+      if (error || !data?.url) {
+        throw new Error(error?.message || 'Failed to initialize Google authentication URL.');
+      }
+
+      let authUrl = data.url;
+      if (!authUrl.includes('prompt=')) {
+        authUrl += `${authUrl.includes('?') ? '&' : '?'}prompt=select_account`;
+      }
+
+      const authResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, {
+        showInRecents: true,
+        preferEphemeralSession: true,
+      });
+
+      if (authResult.type !== 'success') {
+        return;
+      }
+
+      let accessToken: string | null = null;
+      let refreshToken: string | null = null;
+      let authCode: string | null = null;
+
+      if (authResult.url) {
+        try {
+          const cleanUrl = authResult.url.replace('#', '?');
+          const urlObj = new URL(cleanUrl);
+          accessToken = urlObj.searchParams.get('access_token');
+          refreshToken = urlObj.searchParams.get('refresh_token');
+          authCode = urlObj.searchParams.get('code');
+
+          if (!accessToken && !authCode && cleanUrl.includes('=')) {
+            const matches = cleanUrl.match(/access_token=([^&]+)/);
+            if (matches && matches[1]) {
+              accessToken = decodeURIComponent(matches[1]);
+            }
+            const refreshMatches = cleanUrl.match(/refresh_token=([^&]+)/);
+            if (refreshMatches && refreshMatches[1]) {
+              refreshToken = decodeURIComponent(refreshMatches[1]);
+            }
+            const codeMatches = cleanUrl.match(/code=([^&]+)/);
+            if (codeMatches && codeMatches[1]) {
+              authCode = decodeURIComponent(codeMatches[1]);
+            }
+          }
+        } catch (urlErr) {
+          // Ignore URL parsing error silently
+        }
+      }
+
+      let authEmail = '';
+      let authDisplayName = '';
+      let authAvatarUrl = '';
+
+      if (authCode) {
+        try {
+          const { data: codeData, error: codeErr } = await supabaseClient.auth.exchangeCodeForSession(authCode);
+          if (!codeErr && codeData?.user?.email) {
+            authEmail = codeData.user.email;
+            authDisplayName = codeData.user.user_metadata?.full_name || codeData.user.user_metadata?.name || '';
+            authAvatarUrl = codeData.user.user_metadata?.avatar_url || codeData.user.user_metadata?.picture || '';
+          }
+        } catch (e) {
+          // Silently fallback
+        }
+      }
+
+      if (!authEmail && accessToken) {
+        try {
+          const { data: sessionData, error: setSessionError } = await supabaseClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+
+          if (!setSessionError && sessionData?.user?.email) {
+            authEmail = sessionData.user.email;
+            authDisplayName = sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name || '';
+            authAvatarUrl = sessionData.user.user_metadata?.avatar_url || sessionData.user.user_metadata?.picture || '';
+          }
+        } catch (sessionErr) {
+          // Silently fallback
+        }
+      }
+
+      if (!authEmail) {
+        try {
+          const { data: userData } = await supabaseClient.auth.getUser();
+          if (userData?.user?.email) {
+            authEmail = userData.user.email;
+            authDisplayName = userData.user.user_metadata?.full_name || userData.user.user_metadata?.name || '';
+            authAvatarUrl = userData.user.user_metadata?.avatar_url || userData.user.user_metadata?.picture || '';
+          }
+        } catch (userErr) {
+          // Silently fallback
+        }
+      }
+
+      if (!authEmail) {
+        return;
+      }
+
+      // Check if this google account already exists in database
+      let userExists = false;
+      let existingCity: string | null = null;
+      try {
+        const checkResult = await homeService.checkEmail(authEmail);
+        userExists = Boolean(checkResult.exists);
+        existingCity = checkResult.city ?? null;
+      } catch (err) {
+        // Fallback to proceed if check failed
+      }
+
+      const completeGoogleAuth = async (selectedCity?: string) => {
+        await runWithActionLoader('Signing you into EcoBud...', async () => {
+          setAuthLoading(true);
+          try {
+            const nextSession = await homeService.googleLogin({
+              email: authEmail,
+              displayName: authDisplayName,
+              avatarUrl: authAvatarUrl,
+              city: selectedCity || existingCity || undefined,
+            });
+
+            if (nextSession.user.role === 'admin' || nextSession.user.role === 'moderator') {
+              throw new Error('Administrators and moderators cannot log in via the mobile app.');
+            }
+
+            setSession(nextSession);
+            await persistSession(nextSession);
+            await hydrateApp(nextSession);
+          } finally {
+            setAuthLoading(false);
+          }
+        }, 700);
+      };
+
+      if (userExists) {
+        // If user already exists, proceed directly to home dashboard without asking barangay
+        await completeGoogleAuth();
+      } else {
+        // If new user signing up via Google, prompt for barangay selection first
+        return {
+          requiresBarangay: true,
+          email: authEmail,
+          displayName: authDisplayName,
+          avatarUrl: authAvatarUrl,
+          onConfirmBarangay: async (chosenBarangay: string) => {
+            await completeGoogleAuth(chosenBarangay);
+          },
+        };
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('cancelled')) {
+        return;
+      }
+      const errorMsg = error instanceof Error ? error.message : 'Google Sign-In failed.';
+      setAuthError(errorMsg);
+    }
+  }, [hydrateApp, persistSession, runWithActionLoader]);
+
   const handleSignUpArgs = useCallback(async (username: string, email: string, pass: string, city: string, otpCode?: string) => {
     await runWithActionLoader('Creating your account...', async () => {
       setAuthLoading(true);
@@ -718,6 +968,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
       clearAppData();
       setActiveOverlayState(null);
       setActiveTabState('home');
+      if (supabaseClient) {
+        await supabaseClient.auth.signOut().catch(() => {});
+      }
       await persistSession(null);
     }, 700).catch((error) => {
       Alert.alert(
@@ -1377,7 +1630,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
             challenge.id === challengeId
               ? {
                 ...challenge,
-                availableQuantity: challenge.availableQuantity !== undefined ? Math.max(0, challenge.availableQuantity - (detectedQuantity || 1)) : challenge.availableQuantity,
                 progress: {
                   progressPercentage: challenge.progress?.progressPercentage || 0,
                   status: 'pending',
@@ -1386,8 +1638,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
                     status: 'pending',
                     proofUrl,
                     afterProofUrl: null,
-                    detectedQuantity: detectedQuantity || 1,
-                    reservedQuantity: detectedQuantity || 1,
+                    detectedQuantity: 1,
+                    reservedQuantity: 1,
                     qrToken: null,
                     qrVerified: false,
                     adminPreliminaryApproved: false,
@@ -1412,7 +1664,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [ensureSession, hydrateApp, runWithActionLoader]);
 
   const handleVerifyChallengeQr = useCallback(async (challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) => {
-    await runWithActionLoader('Verifying Municipal QR code...', async () => {
+    await runWithActionLoader('Verifying Barangay QR code...', async () => {
       try {
         const activeSession = ensureSession();
         setRefreshing(true);
@@ -1449,7 +1701,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => {
-    const challenge = challenges.find((c) => c.id === challengeId);
+    const challenge = challenges.find((c) => c.id === challengeId || (c as any).instanceId === challengeId);
     if (!challenge) {
       return;
     }
@@ -1458,11 +1710,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
     try {
       const activeSession = ensureSession();
 
-      setEarnedPoints(challenge.expReward);
-      setEarnedCoins(challenge.ecoCoinReward);
+      const totalExp = challenge.expReward;
+      const totalCoins = challenge.ecoCoinReward;
+
+      setEarnedPoints(totalExp);
+      setEarnedCoins(totalCoins);
 
       if (origin) {
-        setClaimRewardData({ points: challenge.expReward, coins: challenge.ecoCoinReward, origin });
+        setClaimRewardData({ points: totalExp, coins: totalCoins, origin });
       }
       
       setCompletionCelebrationType('claim');
@@ -1470,21 +1725,32 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       setChallenges((prev) =>
         prev.map((c) =>
-          c.id === challengeId
+          c.id === challengeId || (c as any).instanceId === challengeId
             ? {
                 ...c,
-                progress: {
-                  ...c.progress!,
-                  status: 'completed',
-                },
+                progress: c.progress
+                  ? {
+                      ...c.progress,
+                      status: 'completed',
+                      submission: c.progress.submission
+                        ? { ...c.progress.submission, status: 'completed', rewardAwarded: true }
+                        : c.progress.submission,
+                      submissions: c.progress.submissions?.map((s: any) =>
+                        !submissionId || s.id === submissionId
+                          ? { ...s, status: 'completed', rewardAwarded: true }
+                          : s
+                      ),
+                    }
+                  : c.progress,
               }
             : c
         )
       );
 
       const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
-      if (res?.awardedBadges) {
+      if (res?.awardedBadges && res.awardedBadges.length > 0) {
         setNewlyUnlockedBadges(res.awardedBadges);
+        setPendingBadgeQueue((prev) => [...prev, ...res.awardedBadges!]);
       }
 
       await hydrateApp(activeSession, true);
@@ -1648,6 +1914,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     rewards,
     newlyUnlockedBadges,
     setNewlyUnlockedBadges,
+    selectedBadge,
+    setSelectedBadge,
+    openBadgeOverlay,
     leaderboard,
     events,
     transparency,
@@ -1656,6 +1925,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     hasUsableInternet: presence.hasUsableInternet,
     isUserOnline,
     notificationCount: Math.min(9, events.length),
+    challengesViewMode,
+    setChallengesViewMode,
     setActiveTab,
     setActiveOverlay,
     setLearnSearch,
@@ -1668,6 +1939,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     continueWithReadOnlyAccess,
     leaveReadOnlyAccess,
     handleLoginArgs,
+    handleGoogleSignIn,
     handleSignUpArgs,
     handleSendOTP,
     handleCheckUsernameAvailability,

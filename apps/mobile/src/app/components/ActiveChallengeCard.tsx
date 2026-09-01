@@ -46,22 +46,18 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
   const isApproved = status === 'approved' || status === 'unclaimed';
   const isApprovedCollection = status === 'approved_collection';
   const isCompleted = status === 'completed';
-  const isWeekendLocked = !isCycleActive && !isApproved && !isApprovedCollection;
   let isPending = false;
   let btnText = 'START MISSION';
 
   if (isApproved) {
     btnText = isPressing ? 'CLAIMING...' : 'CLAIM REWARD';
   } else if (isApprovedCollection) {
-    btnText = 'SCAN WEEKEND QR';
+    btnText = dailyChallenge.progress?.submission?.afterProofUrl ? 'PENDING AFTER REVIEW' : 'TAKE AFTER PHOTO';
   } else if (status === 'pending') {
     btnText = 'PENDING APPROVAL';
     isPending = true;
   } else if (isCompleted) {
     btnText = 'CHALLENGE FINISHED';
-  } else if (isWeekendLocked) {
-    btnText = 'LOCKED (WEEKEND - MON-FRI ONLY)';
-    isPending = true;
   } else {
     btnText = isViewed ? (isPressing ? 'CONTINUING...' : 'CONTINUE MISSION') : (isPressing ? 'STARTING...' : 'START MISSION');
   }
@@ -158,22 +154,6 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
             )}
           </View>
         </View>
-
-        {/* Bottom Banner Info (Schedule / Cycle Tag) */}
-        <View style={localStyles.bannerBottomRow}>
-          <View style={localStyles.pillSchedule}>
-            <Ionicons name="calendar-outline" size={scale(11)} color="#FFF" style={{ marginRight: 4 }} />
-            <Text style={localStyles.pillScheduleText}>Mon – Fri</Text>
-          </View>
-          {dailyChallenge.cycle && (
-            <View style={localStyles.pillSchedule}>
-              <Ionicons name="time-outline" size={scale(11)} color="#FFF" style={{ marginRight: 4 }} />
-              <Text style={localStyles.pillScheduleText}>
-                Ends {new Date(dailyChallenge.cycle.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </Text>
-            </View>
-          )}
-        </View>
       </View>
 
       {/* Card Content Body */}
@@ -226,14 +206,6 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
                 {dailyChallenge.aiDetectionTargets.join(', ')}
               </Text>
             </Text>
-            {dailyChallenge.availableQuantity !== undefined && (
-              <View style={localStyles.quantityPill}>
-                <Ionicons name="cube-outline" size={scale(11)} color="#15803D" />
-                <Text style={localStyles.quantityPillText}>
-                  {dailyChallenge.availableQuantity} {dailyChallenge.quantityUnit || 'items'} left
-                </Text>
-              </View>
-            )}
           </View>
         )}
 
@@ -273,7 +245,7 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
                 ? localStyles.approvedBtn
                 : isCompleted
                 ? localStyles.completedBtn
-                : isWeekendLocked || isPending
+                : isPending
                 ? localStyles.disabledBtn
                 : localStyles.primaryBtn,
             ]}
@@ -282,8 +254,6 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
               <Ionicons name="gift-outline" size={scale(16)} color="#FFF" style={{ marginRight: 6 }} />
             ) : isCompleted ? (
               <Ionicons name="checkmark-circle" size={scale(16)} color="#9CA3AF" style={{ marginRight: 6 }} />
-            ) : isWeekendLocked ? (
-              <Ionicons name="lock-closed-outline" size={scale(16)} color="#FFF" style={{ marginRight: 6 }} />
             ) : isAI ? (
               <Ionicons name="camera-outline" size={scale(16)} color={isApproved ? '#FFF' : '#FFF'} style={{ marginRight: 6 }} />
             ) : (

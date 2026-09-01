@@ -33,7 +33,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'settings' | 'editProfile' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'badgeUnlocked' | 'settings' | 'editProfile' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -162,6 +162,9 @@ export interface EcoBudMobileModel {
   rewards: RewardsData | null;
   newlyUnlockedBadges: EcoBadge[];
   setNewlyUnlockedBadges: (badges: EcoBadge[]) => void;
+  selectedBadge: EcoBadge | null;
+  setSelectedBadge: (badge: EcoBadge | null) => void;
+  openBadgeOverlay: (badge: EcoBadge) => void;
   leaderboard: LeaderboardData | null;
   events: EcoEvent[];
   transparency: TransparencyFeed | null;
@@ -172,6 +175,8 @@ export interface EcoBudMobileModel {
   notificationCount: number;
   claimRewardData: { points: number; coins: number; origin?: { x: number; y: number } } | null;
   triggerTestReward: (origin?: { x: number; y: number }) => void;
+  challengesViewMode: 'Discover' | 'My Tasks' | 'History';
+  setChallengesViewMode: (mode: 'Discover' | 'My Tasks' | 'History') => void;
   setActiveTab: (tab: AppTab, silent?: boolean) => void;
   setActiveOverlay: (screen: OverlayScreen) => void;
   setLearnSearch: (value: string) => void;
@@ -184,6 +189,13 @@ export interface EcoBudMobileModel {
   continueWithReadOnlyAccess: () => Promise<void>;
   leaveReadOnlyAccess: () => Promise<void>;
   handleLoginArgs: (email: string, pass: string) => Promise<void>;
+  handleGoogleSignIn: () => Promise<{
+    requiresBarangay: boolean;
+    email: string;
+    displayName: string;
+    avatarUrl: string;
+    onConfirmBarangay: (chosenBarangay: string) => Promise<void>;
+  } | void>;
   handleSignUpArgs: (username: string, email: string, pass: string, city: string, otpCode?: string) => Promise<void>;
   handleSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;

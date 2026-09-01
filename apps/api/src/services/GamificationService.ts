@@ -158,11 +158,37 @@ export class GamificationService {
     return result;
   }
 
-  async claimChallenge(userId: string, challengeInstanceId: string) {
+  async claimChallenge(userId: string, challengeInstanceId: string, submissionId?: string) {
     const result = await this.database.$transaction(async (tx) => {
-      const challengeInstance = await tx.challengeInstance.findUnique({
-        where: { id: challengeInstanceId },
-        include: { challenge: true }
+      let submission: any = null;
+      let effectiveInstanceId = challengeInstanceId;
+
+      if (submissionId) {
+        submission = await tx.challengeSubmission.findUnique({
+          where: { id: submissionId },
+          include: { challengeInstance: { include: { challenge: true } } },
+        });
+        if (submission) {
+          effectiveInstanceId = submission.challengeInstanceId;
+        }
+      }
+
+      if (!submission) {
+        submission = await tx.challengeSubmission.findFirst({
+          where: {
+            userId,
+            challengeInstanceId: effectiveInstanceId,
+            status: 'approved',
+            rewardAwarded: false,
+          },
+          include: { challengeInstance: { include: { challenge: true } } },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+
+      const challengeInstance = submission?.challengeInstance || await tx.challengeInstance.findUnique({
+        where: { id: effectiveInstanceId },
+        include: { challenge: true },
       });
       if (!challengeInstance) {
         throw new HttpError(404, 'Challenge instance not found.');
@@ -171,21 +197,11 @@ export class GamificationService {
       const challenge = challengeInstance.challenge;
 
       const userChallenge = await tx.userChallenge.findUnique({
-        where: { userId_challengeInstanceId: { userId, challengeInstanceId } }
-      });
-
-      const submission = await tx.challengeSubmission.findFirst({
-        where: {
-          userId,
-          challengeInstanceId,
-          status: 'approved',
-          rewardAwarded: false,
-        },
-        orderBy: { createdAt: 'desc' }
+        where: { userId_challengeInstanceId: { userId, challengeInstanceId: effectiveInstanceId } },
       });
 
       if (submission) {
-        if (submission.status !== 'approved') {
+        if (submission.status !== 'approved' && submission.status !== 'completed') {
           throw new HttpError(400, 'Submission is not approved yet.');
         }
         if (submission.rewardAwarded) {
@@ -198,21 +214,20 @@ export class GamificationService {
       }
 
       await tx.userChallenge.upsert({
-        where: { userId_challengeInstanceId: { userId, challengeInstanceId } },
+        where: { userId_challengeInstanceId: { userId, challengeInstanceId: effectiveInstanceId } },
         update: { status: 'COMPLETED', completedAt: new Date(), progressPercentage: 100 },
         create: {
           userId,
-          challengeInstanceId,
+          challengeInstanceId: effectiveInstanceId,
           status: 'COMPLETED',
           completedAt: new Date(),
           progressPercentage: 100,
         },
       });
 
-      // Linear scaling calculation: detectedQuantity * base reward
-      const quantityMultiplier = (submission?.detectedQuantity || submission?.reservedQuantity || 1);
-      const totalExpAwarded = challenge.expReward * quantityMultiplier;
-      const totalEcoCoinsAwarded = challenge.ecoCoinReward * quantityMultiplier;
+      // Fixed flat reward for challenge completion
+      const totalExpAwarded = challenge.expReward;
+      const totalEcoCoinsAwarded = challenge.ecoCoinReward;
 
       if (submission) {
         await tx.challengeSubmission.update({
@@ -221,19 +236,21 @@ export class GamificationService {
             rewardAwarded: true,
             ecoCoinsAwarded: totalEcoCoinsAwarded,
             expAwarded: totalExpAwarded,
-          }
+            status: 'approved',
+          },
         });
       }
 
       return this.awardAction(tx, {
         userId,
-        actionType: `Challenge completed: ${challenge.title} (${quantityMultiplier} ${challenge.quantityUnit || 'items'})`,
+        actionType: `Challenge completed: ${challenge.title}`,
         pointsAwarded: totalExpAwarded,
         ecoCoinsAwarded: totalEcoCoinsAwarded,
         metadata: {
           challengeId: challenge.id,
           difficulty: challenge.difficulty,
-          detectedQuantity: quantityMultiplier,
+          detectedQuantity: 1,
+          submissionId: submission?.id,
         },
       });
     });

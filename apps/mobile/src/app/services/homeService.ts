@@ -18,6 +18,12 @@ export const homeService = {
   login: (email: string, pass: string) =>
     ecobudApi.login(email.trim(), pass),
 
+  googleLogin: (payload: { idToken?: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
+    ecobudApi.googleLogin(payload),
+
+  checkEmail: (email: string) =>
+    ecobudApi.checkEmailExists(email.trim()),
+
   register: (email: string, pass: string, username: string, city: string, otpCode: string) =>
     ecobudApi.register(email.trim(), pass, username.trim(), city, otpCode.trim()),
 

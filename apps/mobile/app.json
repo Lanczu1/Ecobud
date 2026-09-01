@@ -2,6 +2,7 @@
   "expo": {
     "name": "ECO-BUD",
     "slug": "eco-bud",
+    "scheme": "ecobud",
     "version": "1.0.0",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -18,8 +19,8 @@
       "favicon": "./assets/logo.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ]
   }
 }
-

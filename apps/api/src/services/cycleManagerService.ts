@@ -93,11 +93,9 @@ export async function checkAndApplyWeeklyQuantityIncrement(challengeId: string) 
     if (!challenge) return null;
 
     if (challenge.lastCycleKey !== currentKey) {
-      const incrementBy = challenge.weeklyIncrementQuantity || 50;
       const updated = await tx.challenge.update({
         where: { id: challengeId },
         data: {
-          availableQuantity: { increment: incrementBy },
           lastCycleKey: currentKey,
         }
       });
@@ -149,4 +147,44 @@ export async function getOrCreateActiveInstance(challengeId: string) {
   }
 
   return instance;
+}
+
+/**
+ * Automatically fails/expires submissions that were preliminarily approved but exceeded
+ * the 1-week grace period without completing after-photo or QR verification.
+ * Refunds reserved quantity back to the challenge.
+ */
+export async function expireStaleSubmissions(): Promise<number> {
+  const GRACE_PERIOD_DAYS = 7;
+  const cutoffDate = new Date(Date.now() - GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+
+  const staleSubmissions = await prisma.challengeSubmission.findMany({
+    where: {
+      status: { in: ['approved_collection', 'final_review'] },
+      adminPreliminaryApproved: true,
+      adminPreliminaryApprovedAt: {
+        lte: cutoffDate
+      }
+    },
+    include: {
+      challengeInstance: { include: { challenge: true } }
+    }
+  });
+
+  let expiredCount = 0;
+
+  for (const sub of staleSubmissions) {
+    await prisma.challengeSubmission.update({
+      where: { id: sub.id },
+      data: {
+        status: 'rejected',
+        moderatorNotes: 'Failed: 1-week grace period expired without completing After Photo or QR verification.',
+        reservedQuantity: 0,
+      }
+    });
+
+    expiredCount++;
+  }
+
+  return expiredCount;
 }
