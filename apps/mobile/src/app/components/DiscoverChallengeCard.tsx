@@ -16,7 +16,6 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../util
 export interface DiscoverChallengeCardProps {
   challenge: ChallengeWithProgress;
   onPress: () => void;
-  isCycleActive?: boolean;
   style?: StyleProp<ViewStyle>;
   isTablet?: boolean;
 }
@@ -24,13 +23,11 @@ export interface DiscoverChallengeCardProps {
 export function DiscoverChallengeCard({
   challenge,
   onPress,
-  isCycleActive = true,
   style,
   isTablet,
 }: DiscoverChallengeCardProps) {
   const category = ((challenge as any).category || 'General').toUpperCase();
   const isImageMission = challenge.type === 'AI Image Recognition Challenge';
-  const isWeekendLocked = !isCycleActive;
   const imageUrl = resolveMediaUrl(challenge.imageUrl, ecobudApiOrigin);
 
   return (
@@ -39,15 +36,11 @@ export function DiscoverChallengeCard({
       accessibilityLabel={`Start ${challenge.title}`}
       style={({ pressed }) => [
         cardStyles.discoverCard,
-        pressed && !isWeekendLocked && cardStyles.discoverCardPressed,
-        isWeekendLocked && { opacity: 0.8 },
+        pressed && cardStyles.discoverCardPressed,
         isTablet && { width: '48%' },
         style,
       ]}
-      onPress={() => {
-        if (isWeekendLocked) return;
-        onPress();
-      }}
+      onPress={onPress}
     >
       <View style={cardStyles.discoverImageWrap}>
         {imageUrl ? (
@@ -86,14 +79,6 @@ export function DiscoverChallengeCard({
           )}
         </View>
 
-        {/* Schedule tag */}
-        <View style={cardStyles.scheduleRow}>
-          <View style={cardStyles.scheduleBadge}>
-            <Ionicons name="calendar-outline" size={scale(11)} color="#4B5563" />
-            <Text style={cardStyles.scheduleText}>MON - FRI ONLY</Text>
-          </View>
-        </View>
-
         <Text style={cardStyles.discoverTitle} numberOfLines={2}>
           {challenge.title}
         </Text>
@@ -126,14 +111,6 @@ export function DiscoverChallengeCard({
               </Text>
               <Ionicons name="arrow-forward" size={scale(15)} color="#FFFFFF" />
             </View>
-            {challenge.availableQuantity !== undefined && (
-              <View style={cardStyles.quantityBadge}>
-                <Ionicons name="cube-outline" size={scale(11)} color="#047857" />
-                <Text style={cardStyles.quantityText}>
-                  {challenge.availableQuantity} items left
-                </Text>
-              </View>
-            )}
           </View>
         </View>
       </View>

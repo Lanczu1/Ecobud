@@ -207,7 +207,6 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             </View>
             <DiscoverChallengeCard
               challenge={firstDiscoverChallenge}
-              isCycleActive={model.isCycleActive}
               onPress={() => {
                 model.openChallengeMission(firstDiscoverChallenge);
               }}

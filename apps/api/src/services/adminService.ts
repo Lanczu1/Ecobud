@@ -3,6 +3,7 @@ import { presenceQueryService } from './presenceQueryService';
 import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { apiCache } from "../lib/cache";
+import { expireStaleSubmissions } from './cycleManagerService';
 
 export class AdminService {
   static async getAllLessons() {
@@ -543,6 +544,8 @@ export class AdminService {
   }
 
   static async getSubmissions() {
+    await expireStaleSubmissions();
+
     const challengeSubs = await prisma.challengeSubmission.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -621,22 +624,12 @@ export class AdminService {
 
       // Handle preliminary approval (approved_collection)
       if (status === 'approved_collection') {
-        const qrPayload = JSON.stringify({
-          subId: challengeSub.id,
-          userId: challengeSub.userId,
-          challengeId: challengeSub.challengeInstance?.challengeId,
-          instanceId: challengeSub.challengeInstanceId,
-          collectionPoint: challenge?.collectionPointName || 'Municipal Waste Collection Center',
-          token: `VRF-${challengeSub.id}-${Date.now().toString(36).toUpperCase()}`
-        });
-
         const submission = await prisma.challengeSubmission.update({
           where: { id },
           data: {
             status: 'approved_collection',
             adminPreliminaryApproved: true,
             adminPreliminaryApprovedAt: new Date(),
-            qrToken: qrPayload,
             moderatorNotes: notes,
             reviewedById: reviewerId,
             reviewedAt: new Date(),
@@ -675,38 +668,25 @@ export class AdminService {
 
         await supabaseRealtimeService.publishUserNotice(submission.userId, {
           level: 'success',
-          message: `Your proof for "${challenge?.title}" was approved for collection! Please visit the collection point on the weekend to verify with QR.`,
+          message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
           scope: 'moderation',
-          title: 'Approved for Weekend Collection',
+          title: 'Pending After Photo',
         });
 
         return submission;
       }
 
-      // Handle Rejection -> If quantity was reserved, return/refund it back to availableQuantity
+      // Handle Rejection
       if (status === 'rejected') {
-        const reserved = challengeSub.reservedQuantity || 0;
-        
-        await prisma.$transaction(async (tx) => {
-          if (reserved > 0 && challenge?.id) {
-            await tx.challenge.update({
-              where: { id: challenge.id },
-              data: {
-                availableQuantity: { increment: reserved }
-              }
-            });
-          }
-
-          await tx.challengeSubmission.update({
-            where: { id },
-            data: {
-              status: 'rejected',
-              moderatorNotes: notes,
-              reviewedById: reviewerId,
-              reviewedAt: new Date(),
-              reservedQuantity: 0,
-            }
-          });
+        await prisma.challengeSubmission.update({
+          where: { id },
+          data: {
+            status: 'rejected',
+            moderatorNotes: notes || null,
+            reviewedById: reviewerId,
+            reviewedAt: new Date(),
+            reservedQuantity: 0,
+          },
         });
 
         const updated = await prisma.challengeSubmission.findUnique({
@@ -725,7 +705,6 @@ export class AdminService {
               submissionId: id,
               challengeTitle: challenge?.title,
               reviewerId,
-              refundedQuantity: reserved,
               notes
             }),
             timestamp: new Date()

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary, HttpError } from '../http/errorResponder';
-import { getOrCreateActiveInstance, isCycleActive } from '../services/cycleManagerService';
+import { getOrCreateActiveInstance } from '../services/cycleManagerService';
 import { GamificationService } from '../services/GamificationService';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { challengeUploadMiddleware, analyzeUploadMiddleware } from '../http/uploadMiddleware';
@@ -11,9 +12,35 @@ import { supabaseStorageService } from '../services/supabaseStorageService';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import rateLimit from 'express-rate-limit';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
+
+// OWASP: DoS / Resource Exhaustion Protection on AI processing and file uploads
+const analyzeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many analysis requests. Please wait a moment before trying again.' },
+});
+
+const uploadProofLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many upload requests. Please slow down.' },
+});
+
+const qrVerificationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many verification attempts. Please wait a moment.' },
+});
 
 const progressSchema = z.object({
   progressPercentage: z.number().int().min(0).max(100),
@@ -34,7 +61,6 @@ const submissionSchema = z
 const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res) => {
   const userId = req.auth!.userId;
   const now = new Date();
-  const cycleActive = isCycleActive();
 
   const challengeTemplates = await prisma.challenge.findMany({
     where: {
@@ -81,7 +107,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
 
     let finalStatus = userChallenge?.status || 'not_started';
     if (latestSubmission && finalStatus !== 'COMPLETED') {
-      finalStatus = latestSubmission.status;
+      finalStatus = latestSubmission.rewardAwarded ? 'completed' : latestSubmission.status;
     }
 
     // Re-fetch latest challenge state with fresh availableQuantity
@@ -102,7 +128,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
         submissionId: latestSubmission?.id,
         submission: latestSubmission ? {
           id: latestSubmission.id,
-          status: latestSubmission.status,
+          status: latestSubmission.rewardAwarded ? 'completed' : latestSubmission.status,
           proofUrl: latestSubmission.proofUrl,
           afterProofUrl: latestSubmission.afterProofUrl,
           detectedQuantity: latestSubmission.detectedQuantity,
@@ -117,7 +143,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
         } : undefined,
         submissions: submissions.map(sub => ({
           id: sub.id,
-          status: sub.status,
+          status: sub.rewardAwarded ? 'completed' : sub.status,
           proofUrl: sub.proofUrl,
           afterProofUrl: sub.afterProofUrl,
           detectedQuantity: sub.detectedQuantity,
@@ -135,7 +161,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     });
   }
 
-  return res.json({ items, isCycleActive: cycleActive });
+  return res.json({ items, isCycleActive: true });
 });
 
 challengeRoutes.get('/', authenticateRequest, requireUserAccess, handleGetChallenges);
@@ -146,9 +172,6 @@ challengeRoutes.post(
   authenticateRequest,
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    if (!isCycleActive()) {
-      throw new HttpError(403, 'Challenges are disabled during weekends.');
-    }
     const payload = progressSchema.parse(req.body);
     const userId = req.auth!.userId;
     const instance = await resolveInstance(req.params.challengeInstanceId);
@@ -191,11 +214,9 @@ challengeRoutes.post(
   '/:challengeInstanceId/analyze',
   authenticateRequest,
   requireUserAccess,
+  analyzeLimiter,
   analyzeUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    if (!isCycleActive()) {
-      throw new HttpError(403, 'Challenges are disabled during weekends.');
-    }
     if (!req.file) {
       throw new HttpError(400, 'Image file is required');
     }
@@ -315,9 +336,8 @@ challengeRoutes.post(
             reason = `No ${targets.join(' or ')} detected in the image`;
           }
 
-          const expRewardMultiplier = detectedCount > 0 ? detectedCount : 1;
-          const calculatedExpReward = challenge.expReward * expRewardMultiplier;
-          const calculatedEcoCoins = challenge.ecoCoinReward * expRewardMultiplier;
+          const calculatedExpReward = challenge.expReward;
+          const calculatedEcoCoins = challenge.ecoCoinReward;
 
           if (passed) {
             const ext = path.extname(req.file!.originalname) || '.jpg';
@@ -338,7 +358,7 @@ challengeRoutes.post(
                   passed: true,
                   object: matchedObject,
                   confidence: Math.round(maxConfidence),
-                  detectedCount,
+                  detectedCount: 1,
                   calculatedExpReward,
                   calculatedEcoCoins,
                   proofUrl: publicUrl,
@@ -411,14 +431,9 @@ challengeRoutes.post(
   '/:challengeInstanceId/upload-proof',
   authenticateRequest,
   requireUserAccess,
+  uploadProofLimiter,
   challengeUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    if (!isCycleActive()) {
-      if (req.file && fs.existsSync(req.file.path)) {
-        try { fs.unlinkSync(req.file.path); } catch {}
-      }
-      throw new HttpError(403, 'Challenges are disabled during weekends.');
-    }
     if (!req.file) {
       throw new HttpError(400, 'Image file is required');
     }
@@ -483,9 +498,6 @@ challengeRoutes.post(
   authenticateRequest,
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    if (!isCycleActive()) {
-      throw new HttpError(403, 'Submitting new Before photos is only permitted during the active Monday to Friday cycle window.');
-    }
     const payload = submissionSchema.parse(req.body);
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const challenge = instance?.challenge;
@@ -495,48 +507,40 @@ challengeRoutes.post(
     }
 
     const actualInstanceId = instance!.id;
-    const requestedQuantity = payload.detectedQuantity || 1;
 
-    // Atomically reserve quantity and create a new submission row
-    const result = await prisma.$transaction(async (tx) => {
-      // Lock and re-read challenge available quantity
-      const freshChallenge = await tx.challenge.findUnique({
-        where: { id: challenge.id }
-      });
-
-      if (!freshChallenge) {
-        throw new HttpError(404, 'Challenge not found.');
-      }
-
-      if (freshChallenge.availableQuantity < requestedQuantity) {
-        throw new HttpError(400, `Not enough items available in current cycle. Remaining available: ${freshChallenge.availableQuantity}`);
-      }
-
-      // Deduct from available quantity
-      await tx.challenge.update({
-        where: { id: challenge.id },
-        data: {
-          availableQuantity: { decrement: requestedQuantity }
-        }
-      });
-
-      // Always create a new submission for multi-submission support
-      const submission = await tx.challengeSubmission.create({
-        data: {
-          userId: req.auth!.userId,
-          challengeInstanceId: actualInstanceId,
-          proofText: payload.proofText,
-          proofUrl: payload.proofUrl,
-          detectedQuantity: requestedQuantity,
-          reservedQuantity: requestedQuantity,
-          status: 'pending',
-        },
-      });
-
-      return submission;
+    const submission = await prisma.challengeSubmission.create({
+      data: {
+        userId: req.auth!.userId,
+        challengeInstanceId: actualInstanceId,
+        proofText: payload.proofText || null,
+        proofUrl: payload.proofUrl || null,
+        afterProofUrl: payload.afterProofUrl || null,
+        status: 'pending',
+        detectedQuantity: 1,
+        reservedQuantity: 1,
+      },
     });
 
-    return res.status(201).json({ submission: result });
+    await prisma.userChallenge.upsert({
+      where: {
+        userId_challengeInstanceId: {
+          userId: req.auth!.userId,
+          challengeInstanceId: actualInstanceId,
+        },
+      },
+      create: {
+        userId: req.auth!.userId,
+        challengeInstanceId: actualInstanceId,
+        status: 'IN_PROGRESS',
+        progressPercentage: 50,
+      },
+      update: {
+        status: 'IN_PROGRESS',
+        progressPercentage: 50,
+      },
+    });
+
+    return res.status(201).json(submission);
   }),
 );
 
@@ -544,11 +548,10 @@ challengeRoutes.post(
   '/:challengeInstanceId/verify-qr',
   authenticateRequest,
   requireUserAccess,
+  qrVerificationLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    const { qrData, latitude, longitude, submissionId } = req.body;
     const userId = req.auth!.userId;
-    const instance = await resolveInstance(req.params.challengeInstanceId);
-    const actualInstanceId = instance?.id || req.params.challengeInstanceId;
+    const { qrData, submissionId, latitude, longitude } = req.body;
 
     if (!qrData) {
       throw new HttpError(400, 'QR data is required.');
@@ -561,19 +564,23 @@ challengeRoutes.post(
       throw new HttpError(400, 'Invalid QR code format.');
     }
 
+    const instance = await resolveInstance(req.params.challengeInstanceId);
+    const actualInstanceId = instance?.id || req.params.challengeInstanceId;
+
     let submission;
     if (submissionId) {
       submission = await prisma.challengeSubmission.findUnique({
         where: { id: submissionId },
+        include: { challengeInstance: { include: { challenge: true } } }
       });
     } else {
-      // Find latest submission that is in approved_collection / preliminary approved status
       submission = await prisma.challengeSubmission.findFirst({
         where: {
           userId,
           challengeInstanceId: actualInstanceId,
         },
-        orderBy: { createdAt: 'desc' },
+        include: { challengeInstance: { include: { challenge: true } } },
+        orderBy: { createdAt: 'desc' }
       });
     }
 
@@ -586,8 +593,8 @@ challengeRoutes.post(
       throw new HttpError(403, 'You do not own this challenge submission.');
     }
 
-    if (submission.status !== 'approved_collection' && !submission.adminPreliminaryApproved) {
-      throw new HttpError(400, 'Submission has not received preliminary Admin approval for collection.');
+    if (!submission.afterProofUrl) {
+      throw new HttpError(400, 'You must submit your After Photo before verifying the QR code.');
     }
 
     // Verify submission token or ID matches if specified
@@ -599,20 +606,28 @@ challengeRoutes.post(
       throw new HttpError(400, 'QR code belongs to a different user.');
     }
 
-    // If a secure token was issued in qrToken, verify that the scanned token matches
+    // Replay attack prevention: Ensure QR code has not already been verified
+    if (submission.qrVerified) {
+      throw new HttpError(400, 'This QR code has already been verified and processed.');
+    }
+
+    if (submission.rewardAwarded) {
+      throw new HttpError(400, 'This challenge has already been completed.');
+    }
+
+    // Strict validation of the cryptographically random QR token
     if (submission.qrToken) {
       try {
         const storedTokenObj = JSON.parse(submission.qrToken);
-        if (storedTokenObj.token && parsedQr.token && storedTokenObj.token !== parsedQr.token) {
-          throw new HttpError(400, 'Invalid or expired QR verification token.');
+        if (!parsedQr.token || storedTokenObj.token !== parsedQr.token) {
+          throw new HttpError(400, 'Invalid, counterfeit, or expired QR verification token.');
         }
       } catch (err: any) {
         if (err instanceof HttpError) throw err;
-        // Non-JSON qrToken fallback string compare
-        if (submission.qrToken !== qrData && !qrData.includes(submission.id)) {
-          throw new HttpError(400, 'Invalid QR verification token.');
-        }
+        throw new HttpError(400, 'Invalid QR verification token.');
       }
+    } else {
+      throw new HttpError(400, 'No active QR token generated for this submission. Please submit your After Photo first.');
     }
 
     const updated = await prisma.challengeSubmission.update({
@@ -622,11 +637,14 @@ challengeRoutes.post(
         qrVerifiedAt: new Date(),
         locationVerified: Boolean(latitude && longitude),
         locationVerifiedAt: latitude && longitude ? new Date() : null,
+        status: 'approved',
+        adminFinalApproved: true,
+        adminFinalApprovedAt: new Date(),
       },
     });
 
     return res.json({
-      message: 'QR code verified successfully. You may now take your After Photo.',
+      message: 'QR code verified successfully. Challenge auto-approved! You can now collect your rewards.',
       submission: updated,
     });
   }),
@@ -649,7 +667,8 @@ challengeRoutes.post(
     let submission;
     if (submissionId) {
       submission = await prisma.challengeSubmission.findUnique({
-        where: { id: submissionId }
+        where: { id: submissionId },
+        include: { challengeInstance: { include: { challenge: true } } }
       });
     } else {
       submission = await prisma.challengeSubmission.findFirst({
@@ -657,6 +676,7 @@ challengeRoutes.post(
           userId,
           challengeInstanceId: actualInstanceId,
         },
+        include: { challengeInstance: { include: { challenge: true } } },
         orderBy: { createdAt: 'desc' }
       });
     }
@@ -665,10 +685,13 @@ challengeRoutes.post(
       throw new HttpError(404, 'Submission not found.');
     }
 
-    if (!submission.qrVerified) {
-      throw new HttpError(400, 'You must scan and verify the collection QR code before submitting the After photo.');
-    }
+    const challenge = submission.challengeInstance?.challenge;
 
+    // Generate a cryptographically secure random token with HMAC signature to prevent spoofing
+    const randomNonce = crypto.randomBytes(16).toString('hex').toUpperCase();
+    const tokenPayload = `${submission.id}:${submission.userId}:${randomNonce}`;
+    const tokenSecret = process.env.JWT_SECRET || 'ecobud_secure_qr_salt_2026';
+    const signature = crypto.createHmac('sha256', tokenSecret).update(tokenPayload).digest('hex').substring(0, 16).toUpperCase();
     const updated = await prisma.challengeSubmission.update({
       where: { id: submission.id },
       data: {
@@ -678,22 +701,45 @@ challengeRoutes.post(
     });
 
     return res.json({
-      message: 'After photo submitted successfully! It is now pending final review.',
+      message: 'After photo submitted successfully! Awaiting final admin approval.',
       submission: updated
     });
   }),
 );
 
+const claimLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many claim attempts. Please wait a moment.' },
+});
+
 challengeRoutes.post(
   '/:challengeInstanceId/claim',
   authenticateRequest,
   requireUserAccess,
+  claimLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
+    const { submissionId } = req.body || {};
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const actualInstanceId = instance?.id || req.params.challengeInstanceId;
 
-    const result = await gamificationService.claimChallenge(userId, actualInstanceId);
+    if (submissionId) {
+      const submission = await prisma.challengeSubmission.findUnique({
+        where: { id: submissionId },
+        select: { userId: true },
+      });
+      if (!submission) {
+        throw new HttpError(404, 'Submission not found.');
+      }
+      if (submission.userId !== userId) {
+        throw new HttpError(403, 'You do not own this challenge submission.');
+      }
+    }
+
+    const result = await gamificationService.claimChallenge(userId, actualInstanceId, submissionId);
 
     return res.json({ message: 'Reward claimed successfully!', ...result });
   }),

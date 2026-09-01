@@ -648,11 +648,10 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
   const isPending = currentStatus === 'pending';
   const isApproved = currentStatus === 'approved' || currentStatus === 'unclaimed';
   const isApprovedCollection = currentStatus === 'approved_collection';
-  const isWeekendLocked = !model.isCycleActive && !isApproved && !isApprovedCollection;
-  const shouldPulse = isAI && !isCompleted && !isPending && !isApproved && !isWeekendLocked;
+  const shouldPulse = isAI && !isCompleted && !isPending && !isApproved;
 
   const handlePress = (e: any) => {
-    if (isPending || isCompleted || isWeekendLocked) {
+    if (isPending || isCompleted) {
       return;
     }
     setIsPressing(true);
@@ -675,31 +674,27 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
       <TouchableOpacity 
         activeOpacity={0.8}
         onPress={handlePress}
-        disabled={isPressing || isPending || isCompleted || isWeekendLocked}
+        disabled={isPressing || isPending || isCompleted}
         style={
           isApproved 
             ? [styles.featuredProgramBtn, { backgroundColor: '#F59E0B', borderColor: '#D97706' }] 
             : isApprovedCollection 
               ? [styles.featuredProgramBtn, { backgroundColor: '#1D4ED8', borderColor: '#1E40AF' }]
-              : isWeekendLocked
-                ? [styles.featuredProgramBtn, { backgroundColor: '#94A3B8', borderColor: '#64748B', opacity: 0.85 }]
-                : (isAI ? localStyles.pulseBtn : styles.featuredProgramBtn)
+              : (isAI ? localStyles.pulseBtn : styles.featuredProgramBtn)
         }
       >
-        <Text style={isApproved ? [styles.featuredProgramBtnText, { color: '#FFFFFF' }] : (isAI && !isWeekendLocked ? localStyles.pulseBtnText : styles.featuredProgramBtnText)}>
+        <Text style={isApproved ? [styles.featuredProgramBtnText, { color: '#FFFFFF' }] : (isAI ? localStyles.pulseBtnText : styles.featuredProgramBtnText)}>
           {isCompleted 
             ? 'CHALLENGE FINISHED' 
             : isApprovedCollection
-              ? 'SCAN WEEKEND QR'
-              : isWeekendLocked
-                ? 'LOCKED (WEEKEND - MON-FRI ONLY)'
-                : isPending
-                  ? 'PENDING APPROVAL'
-                  : isApproved
-                    ? (isPressing ? 'CLAIMING...' : 'CLAIM REWARD')
-                    : isAI
-                      ? (model.viewedMissionIds.includes(challenge.id) ? (isPressing ? 'CONTINUING...' : 'CONTINUE MISSION') : (isPressing ? 'STARTING...' : 'START MISSION'))
-                      : 'MARK AS COMPLETE'}
+              ? (challenge.progress?.submission?.afterProofUrl ? 'PENDING AFTER REVIEW' : 'TAKE AFTER PHOTO')
+              : isPending
+                ? 'PENDING APPROVAL'
+                : isApproved
+                  ? (isPressing ? 'CLAIMING...' : 'CLAIM REWARD')
+                  : isAI
+                    ? (model.viewedMissionIds.includes(challenge.id) ? (isPressing ? 'CONTINUING...' : 'CONTINUE MISSION') : (isPressing ? 'STARTING...' : 'START MISSION'))
+                    : 'MARK AS COMPLETE'}
         </Text>
       </TouchableOpacity>
     </Animated.View>
@@ -722,7 +717,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [viewMode, setViewMode] = useState<'Discover' | 'My Tasks' | 'History'>('Discover');
+  const viewMode = model.challengesViewMode;
+  const setViewMode = model.setChallengesViewMode;
 
   const [rejectionModal, setRejectionModal] = useState<{ visible: boolean; reason: string; challengeId: string | null; challengeObj: ChallengeWithProgress | null }>({
     visible: false,
@@ -790,6 +786,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
       rejectionReason?: string;
       detectedQuantity?: number;
       reservedQuantity?: number;
+      afterProofUrl?: string;
       qrVerified?: boolean;
       adminPreliminaryApproved?: boolean;
     }>;
@@ -799,8 +796,30 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     rejectedCount: number;
   }
 
+  interface CompletedGroup {
+    challenge: ChallengeWithProgress;
+    submissions: Array<{
+      sub: any;
+      uniqueId: string;
+      status: string;
+      rejectionReason?: string;
+      detectedQuantity?: number;
+      reservedQuantity?: number;
+      isClaimed: boolean;
+      isApproved: boolean;
+      earnedExp: number;
+      earnedCoins: number;
+      fullChallengeItem: ChallengeWithProgress;
+    }>;
+    totalQuantity: number;
+    totalEarnedExp: number;
+    totalEarnedCoins: number;
+    unclaimedCount: number;
+    claimedCount: number;
+  }
+
   const inProgressGroups: InProgressGroup[] = [];
-  const completedChallenges: any[] = [];
+  const completedGroups: CompletedGroup[] = [];
 
   for (const c of filteredActiveRaw) {
     const rawSubs = c.progress?.submissions && c.progress.submissions.length > 0 
@@ -808,20 +827,44 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
       : (c.progress?.submission ? [c.progress.submission] : []);
 
     const activeSubsForChallenge: InProgressGroup['submissions'] = [];
+    const completedSubsForChallenge: CompletedGroup['submissions'] = [];
 
     for (const sub of rawSubs) {
       const status = sub.status?.toLowerCase();
+      const isClaimed = Boolean(sub.rewardAwarded || status === 'completed');
+      const isApproved = !isClaimed && (status === 'approved' || status === 'unclaimed');
+
       if (status === 'completed' || status === 'approved' || status === 'unclaimed') {
-        completedChallenges.push({
+        const earnedExp = sub.expAwarded || c.expReward;
+        const earnedCoins = sub.ecoCoinsAwarded !== undefined 
+          ? sub.ecoCoinsAwarded 
+          : c.ecoCoinReward;
+
+        const fullChallengeItem: ChallengeWithProgress = {
           ...c,
           uniqueId: `${c.id}-${sub.id}`,
           progress: {
+            progressPercentage: c.progress?.progressPercentage ?? 100,
             ...c.progress,
-            status: sub.status,
+            status: isClaimed ? 'completed' : sub.status,
             rejectionReason: sub.rejectionReason,
             submissionId: sub.id,
             submission: sub,
           }
+        };
+
+        completedSubsForChallenge.push({
+          sub,
+          uniqueId: `${c.id}-${sub.id}`,
+          status: isClaimed ? 'completed' : sub.status,
+          rejectionReason: sub.rejectionReason,
+          detectedQuantity: sub.detectedQuantity,
+          reservedQuantity: sub.reservedQuantity,
+          isClaimed,
+          isApproved,
+          earnedExp,
+          earnedCoins,
+          fullChallengeItem,
         });
       } else if (status) {
         activeSubsForChallenge.push({
@@ -831,6 +874,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           rejectionReason: sub.rejectionReason,
           detectedQuantity: sub.detectedQuantity,
           reservedQuantity: sub.reservedQuantity,
+          afterProofUrl: sub.afterProofUrl,
           qrVerified: sub.qrVerified,
           adminPreliminaryApproved: sub.adminPreliminaryApproved,
         });
@@ -850,6 +894,24 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         approvedCollectionCount,
         pendingCount,
         rejectedCount,
+      });
+    }
+
+    if (completedSubsForChallenge.length > 0) {
+      const totalQuantity = completedSubsForChallenge.reduce((sum, s) => sum + (s.detectedQuantity || s.reservedQuantity || 1), 0);
+      const totalEarnedExp = completedSubsForChallenge.reduce((sum, s) => sum + s.earnedExp, 0);
+      const totalEarnedCoins = completedSubsForChallenge.reduce((sum, s) => sum + s.earnedCoins, 0);
+      const unclaimedCount = completedSubsForChallenge.filter(s => s.isApproved).length;
+      const claimedCount = completedSubsForChallenge.filter(s => s.isClaimed).length;
+
+      completedGroups.push({
+        challenge: c,
+        submissions: completedSubsForChallenge,
+        totalQuantity,
+        totalEarnedExp,
+        totalEarnedCoins,
+        unclaimedCount,
+        claimedCount,
       });
     }
   }
@@ -876,52 +938,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* Weekend Cycle Status Banner */}
-        {!model.isCycleActive && (
-          <View style={{
-            backgroundColor: '#FEF3C7',
-            borderColor: '#F59E0B',
-            borderWidth: 1.5,
-            borderRadius: 16,
-            padding: 14,
-            marginBottom: 16,
-            shadowColor: '#B45309',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 6,
-            elevation: 2,
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <View style={{ backgroundColor: '#FDE68A', padding: 6, borderRadius: 10 }}>
-                <Ionicons name="calendar" size={18} color="#B45309" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: '#92400E', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Weekend Cycle Active (Sat & Sun)
-                </Text>
-              </View>
-              <View style={{ backgroundColor: '#FBBF24', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                <Text style={{ fontSize: 11, fontWeight: '900', color: '#78350F' }}>COLLECTION DAYS</Text>
-              </View>
-            </View>
-
-            <Text style={{ fontSize: 13, color: '#78350F', lineHeight: 18, marginBottom: 8 }}>
-              {viewMode === 'Discover' 
-                ? 'Challenge submissions are only open Monday to Friday. You can explore available missions now and submit when the cycle opens on Monday.'
-                : viewMode === 'My Tasks'
-                ? 'Only physical drop-offs with QR verification are active today at the designated collection points.'
-                : 'Review your past and completed challenges. New submissions resume this coming Monday.'}
-            </Text>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 6, borderWidth: 1, borderColor: '#FDE68A' }}>
-              <Ionicons name="information-circle" size={16} color="#B45309" />
-              <Text style={{ fontSize: 12, color: '#92400E', fontWeight: '600', flex: 1 }}>
-                Submissions: <Text style={{ fontWeight: '800' }}>Mon - Fri</Text> • Drop-off / QR: <Text style={{ fontWeight: '800' }}>Sat - Sun</Text>
-              </Text>
-            </View>
-          </View>
-        )}
 
         {/* Discovery & Filtering Section */}
         <View style={localStyles.challengeSearch}>
@@ -983,7 +999,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         )}
 
         {/* Headings */}
-        {((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedChallenges.length > 0)) && (
+        {((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedGroups.length > 0)) && (
           <View style={localStyles.challengeListHeading}>
             <View>
               <Text style={localStyles.challengeListTitle}>
@@ -993,19 +1009,20 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   ? 'New missions for you' 
                   : viewMode === 'My Tasks' 
                   ? 'In progress (Grouped by Mission)' 
-                  : 'Completed challenges'}
+                  : 'Completed challenges (Grouped by Mission)'}
               </Text>
               {viewMode === 'Discover' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap a mission to see how you can help.</Text>}
               {viewMode === 'My Tasks' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap any mission card to expand or collapse active submissions.</Text>}
+              {viewMode === 'History' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap any completed mission card to view past completed submissions.</Text>}
             </View>
             <Text style={localStyles.challengeListCount}>
-              {viewMode === 'Discover' ? currentActiveList.length : viewMode === 'My Tasks' ? inProgressGroups.length : completedChallenges.length}
+              {viewMode === 'Discover' ? currentActiveList.length : viewMode === 'My Tasks' ? inProgressGroups.length : completedGroups.length}
             </Text>
           </View>
         )}
 
         {/* Empty States */}
-        {((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedChallenges.length === 0)) && (
+        {((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedGroups.length === 0)) && (
           <View style={{
             alignItems: 'center',
             justifyContent: 'center',
@@ -1032,89 +1049,19 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             <Text style={{ fontSize: responsiveFontSize(17), fontWeight: '800', color: '#17231B', marginBottom: 6, textAlign: 'center' }}>
               {isFiltering ? 'No matching missions found' : viewMode === 'My Tasks' ? 'No active tasks yet' : viewMode === 'History' ? 'No completed tasks yet' : 'No missions available'}
             </Text>
-            <Text style={{ fontSize: responsiveFontSize(13), color: '#6B7A75', textAlign: 'center', paddingHorizontal: 16, lineHeight: 19, marginBottom: 18 }}>
-              {isFiltering
-                ? 'Try clearing your search or category filters to explore all available eco missions.'
-                : viewMode === 'My Tasks'
-                ? 'Pick an eco mission from the Discover tab to start reducing waste and earning Eco Points.'
-                : viewMode === 'History'
-                ? 'Your finished missions and verified eco rewards will be displayed right here.'
-                : 'Check back soon for exciting new environmental challenges!'}
+            <Text style={{ fontSize: responsiveFontSize(13), color: '#6B7A75', textAlign: 'center', lineHeight: 20 }}>
+              {isFiltering ? 'Try searching for a different keyword or category.' : viewMode === 'My Tasks' ? 'Select a mission from the Discover tab to start contributing!' : viewMode === 'History' ? 'Complete eco-challenges to earn points, build streaks, and unlock achievements.' : 'Check back later for newly announced community missions.'}
             </Text>
-
-            {isFiltering ? (
-              <TouchableOpacity
-                onPress={() => {
-                  triggerSelectionHaptic();
-                  setSearchQuery('');
-                  setSelectedCategory('All');
-                }}
-                activeOpacity={0.85}
-                style={{
-                  backgroundColor: '#126027',
-                  paddingHorizontal: 20,
-                  paddingVertical: 12,
-                  borderRadius: moderateScale(14),
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <Ionicons name="refresh" size={16} color="#FFFFFF" />
-                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: responsiveFontSize(13) }}>Reset Filters</Text>
-              </TouchableOpacity>
-            ) : viewMode === 'My Tasks' ? (
-              <TouchableOpacity
-                onPress={() => {
-                  triggerSelectionHaptic();
-                  setViewMode('Discover');
-                }}
-                activeOpacity={0.85}
-                style={{
-                  backgroundColor: '#126027',
-                  paddingHorizontal: 22,
-                  paddingVertical: 12,
-                  borderRadius: moderateScale(14),
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <Ionicons name="compass-outline" size={18} color="#FFFFFF" />
-                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: responsiveFontSize(13) }}>Explore Discover Missions</Text>
-              </TouchableOpacity>
-            ) : viewMode === 'History' ? (
-              <TouchableOpacity
-                onPress={() => {
-                  triggerSelectionHaptic();
-                  setViewMode('Discover');
-                }}
-                activeOpacity={0.85}
-                style={{
-                  backgroundColor: '#126027',
-                  paddingHorizontal: 22,
-                  paddingVertical: 12,
-                  borderRadius: moderateScale(14),
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <Ionicons name="flash-outline" size={18} color="#FFFFFF" />
-                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: responsiveFontSize(13) }}>Start a Challenge</Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
         )}
 
-        {/* === VIEW MODE 1: DISCOVER TAB === */}
+        {/* === VIEW MODE 1: DISCOVER TAB (ALL AVAILABLE CHALLENGES) === */}
         {viewMode === 'Discover' && (
           <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
             {currentActiveList.map((challenge) => (
               <DiscoverChallengeCard
                 key={challenge.uniqueId || challenge.id}
                 challenge={challenge}
-                isCycleActive={model.isCycleActive}
                 isTablet={isTablet}
                 onPress={() => {
                   model.openChallengeMission(challenge);
@@ -1124,13 +1071,13 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           </View>
         )}
 
-        {/* === VIEW MODE 2: MY TASKS TAB (ACCORDION GROUPED) === */}
+        {/* === VIEW MODE 2: MY TASKS TAB (GROUPED BY CHALLENGE TEMPLATE) === */}
         {viewMode === 'My Tasks' && (
-          <View style={{ gap: 16 }}>
+          <View style={{ gap: 14 }}>
             {inProgressGroups.map((group) => {
               const { challenge, submissions, totalQuantity, approvedCollectionCount, pendingCount, rejectedCount } = group;
-              const isExpanded = expandedTaskGroups[challenge.id] !== false; // default expanded (true)
-              const isImageMission = challenge.type === 'AI Image Recognition Challenge';
+              const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
+              const isExpanded = expandedTaskGroups[challenge.id] !== false; // default true
 
               return (
                 <View 
@@ -1139,9 +1086,9 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     backgroundColor: '#FFFFFF',
                     borderRadius: 20,
                     borderWidth: 1.5,
-                    borderColor: approvedCollectionCount > 0 ? '#BFDBFE' : '#E5E7EB',
+                    borderColor: '#E6F4EC',
                     overflow: 'hidden',
-                    shadowColor: '#000',
+                    shadowColor: '#126027',
                     shadowOffset: { width: 0, height: 3 },
                     shadowOpacity: 0.06,
                     shadowRadius: 8,
@@ -1332,16 +1279,17 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                                 </Text>
                               </View>
                             )}
-
-                            {/* Action Button for this specific sub-item */}
+                              {/* Action Button for this specific sub-item */}
                             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
-                              {isApprovedCollection ? (
+                              {isApprovedCollection && !item.afterProofUrl ? (
                                 <TouchableOpacity 
                                   style={{ backgroundColor: '#1D4ED8', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                                   onPress={() => model.openChallengeMission(fullChallengeItem)}
                                 >
-                                  <Ionicons name="qr-code" size={15} color="#FFFFFF" />
-                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>SCAN WEEKEND QR</Text>
+                                  <Ionicons name="camera" size={15} color="#FFFFFF" />
+                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>
+                                    TAKE AFTER PHOTO
+                                  </Text>
                                 </TouchableOpacity>
                               ) : isRejected ? (
                                 <TouchableOpacity 
@@ -1361,12 +1309,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                               ) : isPending ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 }}>
                                   <Ionicons name="time-outline" size={14} color="#B45309" />
-                                  <Text style={{ fontSize: 12, color: '#B45309', fontWeight: '600' }}>Admin reviewing photo proof</Text>
+                                  <Text style={{ fontSize: 12, color: '#B45309', fontWeight: '600' }}>Admin reviewing Before photo</Text>
                                 </View>
-                              ) : isFinalReview ? (
+                              ) : (isFinalReview || (isApprovedCollection && item.afterProofUrl)) ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 }}>
                                   <Ionicons name="hourglass-outline" size={14} color="#7E22CE" />
-                                  <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '600' }}>Admin verifying drop-off proof</Text>
+                                  <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '600' }}>Admin reviewing After photo</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -1381,96 +1329,209 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
           </View>
         )}
 
-        {/* === VIEW MODE 3: HISTORY TAB (COMPLETED CARDS) === */}
+        {/* === VIEW MODE 3: HISTORY TAB (GROUPED COMPLETED CHALLENGES) === */}
         {viewMode === 'History' && (
-          <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : { gap: 14 }}>
-            {completedChallenges.map((challenge) => {
-              const currentStatus = challenge.progress?.status?.toLowerCase();
-              const isApproved = currentStatus === 'approved' || currentStatus === 'unclaimed';
-              const submissionQuantity = challenge.progress?.submission?.detectedQuantity || challenge.progress?.submission?.reservedQuantity;
+          <View style={{ gap: 14 }}>
+            {completedGroups.map((group) => {
+              const { challenge, submissions, totalQuantity, totalEarnedExp, totalEarnedCoins, unclaimedCount, claimedCount } = group;
+              const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
+              const isExpanded = expandedTaskGroups[`history-${challenge.id}`] !== false; // default true
 
               return (
                 <View 
-                  key={challenge.uniqueId || challenge.id} 
-                  style={[
-                    localStyles.premiumTaskCard,
-                    isTablet && { width: '48%' }
-                  ]}
+                  key={challenge.id}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 20,
+                    borderWidth: 1.5,
+                    borderColor: '#E6F4EC',
+                    overflow: 'hidden',
+                    shadowColor: '#126027',
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.06,
+                    shadowRadius: 8,
+                    elevation: 3,
+                  }}
                 >
-                  <View style={localStyles.premiumTaskImgWrap}>
-                    {challenge.imageUrl ? (
-                      <Image 
-                        source={{ uri: getValidImageUrl(challenge.imageUrl) }} 
-                        style={localStyles.premiumTaskImg} 
-                      />
-                    ) : (
-                      <View style={[localStyles.premiumTaskImg, { backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center' }]}>
-                        <Ionicons name="trophy" size={40} color="#126027" style={{ opacity: 0.5 }} />
-                      </View>
-                    )}
-                    <View style={{ ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(0,0,0,0.1)' }} />
-                  </View>
-
-                  <View style={localStyles.premiumTaskBody}>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-                      <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
-                      <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="leaf" size={13} color="#15803D" />
-                        <Text style={styles.taskMetaValue}>+{challenge.expReward} Eco Points</Text>
-                      </View>
-                      {challenge.ecoCoinReward > 0 && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
-                          <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
-                          <Text style={{ fontSize: 9, fontWeight: '800', color: '#B45309' }}>+{challenge.ecoCoinReward} COINS</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <Text style={localStyles.premiumTaskTitle} numberOfLines={2}>{challenge.title}</Text>
-                    <Text style={{ fontSize: 13, color: '#6B7A75', marginTop: 4, lineHeight: 18 }} numberOfLines={2}>{challenge.description}</Text>
-
-                    {/* Show user's proof picture for completed task */}
-                    {challenge.progress?.submission?.proofUrl && (
-                      <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(challenge.progress!.submission!.proofUrl)} style={{ marginTop: 12, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
-                        <Image 
-                          source={{ uri: challenge.progress.submission.proofUrl }}
-                          style={{ width: '100%', height: 100 }}
-                          resizeMode="cover"
-                        />
-                        <View style={{ position: 'absolute', top: 6, left: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                          <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '800' }}>YOUR PROOF</Text>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                        {isApproved ? (
-                          <TouchableOpacity 
-                            style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                            onPress={(e) => void model.handleClaimChallengeReward(challenge.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }, challenge.progress?.submissionId)}
-                          >
-                            <Ionicons name="gift" size={15} color="#FFF" />
-                            <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFF' }}>CLAIM REWARD</Text>
-                          </TouchableOpacity>
+                  {/* Group Header Card (Click to expand/collapse) */}
+                  <Pressable 
+                    onPress={() => toggleTaskGroup(`history-${challenge.id}`)}
+                    style={({ pressed }) => [
+                      { padding: 16, backgroundColor: pressed ? '#F9FAFB' : '#FFFFFF' }
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+                      {/* Image Thumbnail */}
+                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: '#E8F5E9' }}>
+                        {challenge.imageUrl ? (
+                          <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                         ) : (
-                          <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Ionicons name="checkmark-circle" size={16} color="#059669" />
-                            <Text style={{ fontSize: 12, fontWeight: '800', color: '#059669' }}>COMPLETED</Text>
+                          <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="trophy" size={30} color="#126027" />
                           </View>
                         )}
                       </View>
 
-                      {submissionQuantity && (
-                        <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          <Ionicons name="cube-outline" size={11} color="#047857" />
-                          <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
-                            {submissionQuantity} {challenge.quantityUnit || 'items'}
-                          </Text>
+                      {/* Main Group Content */}
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
+                            <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              <Ionicons name="leaf" size={12} color="#15803D" />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#15803D' }}>+{totalEarnedExp} Pts</Text>
+                            </View>
+                            {totalEarnedCoins > 0 && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5, gap: 3 }}>
+                                <Image source={require('../../../assets/coin.png')} style={{ width: 10, height: 10, resizeMode: 'contain' }} />
+                                <Text style={{ fontSize: 9, fontWeight: '800', color: '#B45309' }}>+{totalEarnedCoins}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color="#126027" />
                         </View>
-                      )}
+
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A211D', marginBottom: 6 }} numberOfLines={1}>
+                          {challenge.title}
+                        </Text>
+
+                        {/* Summary Badges */}
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                          <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="checkmark-circle-outline" size={12} color="#166534" />
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#166534' }}>
+                              {submissions.length} Completed {submissions.length === 1 ? 'Submission' : 'Submissions'}
+                            </Text>
+                          </View>
+
+                          {totalQuantity > 0 && (
+                            <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="cube-outline" size={12} color="#047857" />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
+                                {totalQuantity} {challenge.quantityUnit || 'items'} Total
+                              </Text>
+                            </View>
+                          )}
+
+                          {unclaimedCount > 0 && (
+                            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="gift-outline" size={12} color="#B45309" />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
+                                {unclaimedCount} Unclaimed Reward{unclaimedCount === 1 ? '' : 's'}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
                     </View>
-                  </View>
+                  </Pressable>
+
+                  {/* Expandable Completed Sub-items List */}
+                  {isExpanded && (
+                    <View style={{ backgroundColor: '#F8FAFC', borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 12, gap: 10 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, marginBottom: 2 }}>
+                        Completed Submissions ({submissions.length})
+                      </Text>
+
+                      {submissions.map((item, subIndex) => {
+                        const quantity = item.detectedQuantity || item.reservedQuantity || 1;
+
+                        return (
+                          <View 
+                            key={item.uniqueId}
+                            style={{
+                              backgroundColor: '#FFFFFF',
+                              borderRadius: 14,
+                              padding: 12,
+                              borderWidth: 1,
+                              borderColor: item.isApproved ? '#FDE68A' : '#E2E8F0',
+                              shadowColor: '#000',
+                              shadowOffset: { width: 0, height: 1 },
+                              shadowOpacity: 0.03,
+                              shadowRadius: 3,
+                              elevation: 1,
+                            }}
+                          >
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, flexWrap: 'wrap' }}>
+                                <View style={{ backgroundColor: '#E2E8F0', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569' }}>#{subIndex + 1}</Text>
+                                </View>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
+                                  Entry {subIndex + 1}
+                                </Text>
+                                <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="cube-outline" size={11} color="#475569" />
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569' }}>
+                                    {quantity} {challenge.quantityUnit || 'items'}
+                                  </Text>
+                                </View>
+                              </View>
+
+                              {/* Status Pill */}
+                              {item.isApproved ? (
+                                <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>APPROVED (READY TO CLAIM)</Text>
+                                </View>
+                              ) : (
+                                <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#059669' }}>COMPLETED & CLAIMED</Text>
+                                </View>
+                              )}
+                            </View>
+
+                            {/* Submission Proof Image */}
+                            {item.sub?.proofUrl && (
+                              <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
+                                <Image 
+                                  source={{ uri: item.sub.proofUrl }}
+                                  style={{ width: '100%', height: 140 }}
+                                  resizeMode="cover"
+                                />
+                                <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                  <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>YOUR PROOF</Text>
+                                </View>
+                              </TouchableOpacity>
+                            )}
+
+                            {/* Rewards / Claim Button */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="leaf" size={13} color="#15803D" />
+                                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803D' }}>+{item.earnedExp} Eco Points</Text>
+                                </View>
+                                {item.earnedCoins > 0 && (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
+                                    <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
+                                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#B45309' }}>+{item.earnedCoins} COINS</Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              {item.isApproved ? (
+                                <TouchableOpacity 
+                                  style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                  onPress={(e) => {
+                                    void model.handleClaimChallengeReward(challenge.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }, item.sub?.id);
+                                  }}
+                                >
+                                  <Ionicons name="gift" size={14} color="#FFFFFF" />
+                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>CLAIM REWARD</Text>
+                                </TouchableOpacity>
+                              ) : (
+                                <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="checkmark-circle" size={14} color="#059669" />
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#059669' }}>CLAIMED</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -1495,7 +1556,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         title="Submission Rejected"
         reason={rejectionModal.reason}
         onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
-        onResubmit={rejectionModal.challengeObj && model.isCycleActive ? () => {
+        onResubmit={rejectionModal.challengeObj ? () => {
           model.openChallengeMission(rejectionModal.challengeObj!);
         } : undefined}
       />
@@ -2511,7 +2572,12 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               (model.rewards?.badges || []).map((badge) => {
                 const isUnlocked = badge.unlocked;
                 return (
-                  <View key={badge.id} style={[profileStyles.badgeCard, !isUnlocked && { opacity: 0.75 }]}>
+                  <TouchableOpacity
+                    key={badge.id}
+                    activeOpacity={0.8}
+                    onPress={() => model.openBadgeOverlay(badge)}
+                    style={[profileStyles.badgeCard, !isUnlocked && { opacity: 0.75 }]}
+                  >
                     <View style={[profileStyles.badgeIconRing, { borderColor: isUnlocked ? (badge.accentColor || '#10B981') : '#B0C4B8' }]}>
                       {isUnlocked ? (
                         <LinearGradient
@@ -2554,7 +2620,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                         Unlocks at {badge.requiredPoints} pts
                       </Text>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             ) : (

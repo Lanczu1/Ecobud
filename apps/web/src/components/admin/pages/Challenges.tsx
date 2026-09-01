@@ -2,11 +2,10 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
-  Loader2, UploadCloud, Power, Star, CheckCircle, XCircle, ShieldCheck, 
-  QrCode, ChevronDown, ChevronRight, User, Layers, Filter, 
+  Loader2, UploadCloud, Power, Star, XCircle, ShieldCheck, 
+  ChevronDown, ChevronRight, User, Layers, Filter, 
   RefreshCw, CheckCircle2, Clock, MapPin
 } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 
@@ -40,7 +39,9 @@ interface Challenge {
 interface ChallengeSubmission {
   id: string;
   userId: string;
-  challengeId: string;
+  challengeId?: string;
+  challengeInstanceId?: string;
+  challengeInstance?: { challengeId: string; challenge?: { id: string; title: string; type: string; quantityUnit?: string } };
   proofUrl: string | null;
   afterProofUrl: string | null;
   status: 'pending' | 'approved' | 'approved_collection' | 'rejected' | 'completed' | 'final_review';
@@ -150,12 +151,10 @@ interface FormData {
   aiDetectionTargets: string[];
   aiMinimumConfidence: number;
   isFeatured: boolean;
-  availableQuantity: number;
-  weeklyIncrementQuantity: number;
-  quantityUnit: string;
   collectionPointName: string;
 }
-const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', startDate: null, endDate: null, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80, isFeatured: false, availableQuantity: 50, weeklyIncrementQuantity: 50, quantityUnit: 'bottles', collectionPointName: 'Municipal Waste Collection Center' };
+
+const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', startDate: null, endDate: null, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80, isFeatured: false, collectionPointName: 'Barangay Collection Point' };
 
 interface ModalProps {
   onClose: () => void;
@@ -166,7 +165,7 @@ interface ModalProps {
 function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormData>(
     initial
-      ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', startDate: initial.startDate || null, endDate: initial.endDate || null, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false, availableQuantity: initial.availableQuantity ?? 50, weeklyIncrementQuantity: initial.weeklyIncrementQuantity ?? 50, quantityUnit: initial.quantityUnit || 'bottles', collectionPointName: initial.collectionPointName || 'Municipal Waste Collection Center' }
+      ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', startDate: initial.startDate || null, endDate: initial.endDate || null, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false, collectionPointName: initial.collectionPointName || 'Barangay Collection Point' }
       : emptyForm
   );
   const [saving, setSaving] = useState(false);
@@ -305,7 +304,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Collection Point Name</label>
-              <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" placeholder="e.g. Municipal Waste Collection Center" />
+              <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" placeholder="e.g. Barangay Collection Point" />
             </div>
             
             <div className="h-2 w-full shrink-0" />
@@ -335,32 +334,16 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Badge Label (optional)</label>
                 <input value={form.badgeLabel} onChange={e => setForm(f => ({ ...f, badgeLabel: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all bg-white" placeholder="e.g. Eco Warrior" />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Available Qty</label>
-                  <input type="number" min={0} value={form.availableQuantity} onChange={e => setForm(f => ({ ...f, availableQuantity: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all bg-white" placeholder="e.g. 50" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Weekly +Add</label>
-                  <input type="number" min={0} value={form.weeklyIncrementQuantity} onChange={e => setForm(f => ({ ...f, weeklyIncrementQuantity: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all bg-white" placeholder="e.g. 50" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Unit</label>
-                <input value={form.quantityUnit} onChange={e => setForm(f => ({ ...f, quantityUnit: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all bg-white" placeholder="e.g. bottles, kg, units" />
-              </div>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Points / Item</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Points (EXP)</label>
                   <input type="number" min={0} value={form.expReward} onChange={e => setForm(f => ({ ...f, expReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Coin / Item</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">EcoCoins</label>
                   <input type="number" min={0} value={form.ecoCoinReward} onChange={e => setForm(f => ({ ...f, ecoCoinReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
                 </div>
               </div>
@@ -414,7 +397,6 @@ export function Challenges() {
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedQr, setSelectedQr] = useState<ChallengeSubmission | null>(null);
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
   const [selectedUserIdFilter, setSelectedUserIdFilter] = useState<string>('All');
@@ -444,10 +426,22 @@ export function Challenges() {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    if (activeTab === 'submissions') loadSubmissions();
+    if (activeTab === 'submissions') {
+      loadSubmissions();
+      const interval = setInterval(() => {
+        // Silently reload submissions in the background
+        adminGet('/admin/submissions')
+          .then((res: any) => {
+            const raw = res.data || res.items || res;
+            if (Array.isArray(raw)) setSubmissions(raw);
+          })
+          .catch(() => {});
+      }, 4000);
+      return () => clearInterval(interval);
+    }
   }, [activeTab]);
 
-  // Preliminary approval: sends approved_collection status
+  // Preliminary approval: approves Before Photo and prompts user to take After Photo
   const handlePreliminaryApprove = async (id: string) => {
     setProcessingSubId(id);
     try {
@@ -457,15 +451,16 @@ export function Challenges() {
     finally { setProcessingSubId(null); }
   };
 
-  // Final approval: sends approved status (rewards granted)
+  // Final approval: approves After Photo and enables Reward Claim
   const handleFinalApprove = async (id: string) => {
     setProcessingSubId(id);
     try {
       await adminPost(`/admin/submissions/${id}/review`, { status: 'approved' });
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
-    } catch (err: any) { alert(err.message || 'Failed to approve'); }
+    } catch (err: any) { alert(err.message || 'Failed to approve submission'); }
     finally { setProcessingSubId(null); }
   };
+
 
   const handleRejectSubmission = async (id: string) => {
     const notes = window.prompt('Enter reason for rejection (optional):');
@@ -512,9 +507,13 @@ export function Challenges() {
     });
 
     // 2. Compute true chronological submission numbering per (userId + challengeId)
+    const getSubChallengeId = (sub: ChallengeSubmission) =>
+      sub.challenge?.id || (sub as any).challengeInstance?.challengeId || (sub as any).challengeInstanceId || sub.challengeId || 'unknown-challenge';
+
     const userChallengeSortedMap = new Map<string, ChallengeSubmission[]>();
     submissions.forEach(sub => {
-      const key = `${sub.userId}___${sub.challengeId}`;
+      const chId = getSubChallengeId(sub);
+      const key = `${sub.userId}___${chId}`;
       if (!userChallengeSortedMap.has(key)) {
         userChallengeSortedMap.set(key, []);
       }
@@ -526,7 +525,8 @@ export function Challenges() {
     });
 
     const getSubmissionIndex = (sub: ChallengeSubmission) => {
-      const key = `${sub.userId}___${sub.challengeId}`;
+      const chId = getSubChallengeId(sub);
+      const key = `${sub.userId}___${chId}`;
       const list = userChallengeSortedMap.get(key) || [];
       const idx = list.findIndex(s => s.id === sub.id);
       return idx >= 0 ? idx + 1 : 1;
@@ -583,7 +583,7 @@ export function Challenges() {
         ? (sub.user.profile.avatarUrl.startsWith('/') ? `${API_HOST}${sub.user.profile.avatarUrl}` : sub.user.profile.avatarUrl)
         : null;
       
-      const challengeId = sub.challengeId || 'unknown-challenge';
+      const challengeId = sub.challenge?.id || (sub as any).challengeInstance?.challengeId || sub.challengeInstanceId || sub.challengeId || 'unknown-challenge';
       const challengeTitle = sub.challenge?.title || (sub as any).challengeInstance?.challenge?.title || 'Eco Challenge';
       const quantityUnit = sub.challenge?.quantityUnit || 'items';
       const quantity = sub.detectedQuantity || sub.reservedQuantity || 1;
@@ -896,8 +896,7 @@ export function Challenges() {
             <tr className="bg-gray-50/70">
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-4">Challenge</th>
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Difficulty</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Reward / Item</th>
-              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Available Qty</th>
+              <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Rewards</th>
               <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-4">Status</th>
               <th className="px-4 py-4"></th>
             </tr>
@@ -909,7 +908,6 @@ export function Challenges() {
                   <td className="px-6 py-4"><div className="space-y-1.5"><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-24" /></div></td>
                   <td className="px-4 py-4"><Skeleton className="h-6 w-14 rounded-full" /></td>
                   <td className="px-4 py-4"><Skeleton className="h-4 w-12" /></td>
-                  <td className="px-4 py-4"><Skeleton className="h-4 w-8" /></td>
                   <td className="px-4 py-4"><Skeleton className="h-6 w-16 rounded-full" /></td>
                   <td className="px-4 py-4"><Skeleton className="h-8 w-20 rounded-xl" /></td>
                 </tr>
@@ -939,12 +937,6 @@ export function Challenges() {
                       <span className="text-sm font-bold text-orange-500 flex items-center gap-1"><Trophy className="w-3.5 h-3.5" />{c.expReward} EXP</span>
                       {c.ecoCoinReward > 0 && <span className="text-sm font-bold text-green-600 flex items-center gap-1"><Coins className="w-3.5 h-3.5" />{c.ecoCoinReward} Coins</span>}
                     </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className={`text-sm font-bold ${c.availableQuantity > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {c.availableQuantity} {c.quantityUnit || 'items'}
-                    </span>
-                    <p className="text-[10px] text-gray-400">+{c.weeklyIncrementQuantity || 50}/wk</p>
                   </td>
                   <td className="px-4 py-4">
                     {(() => {
@@ -1094,33 +1086,35 @@ export function Challenges() {
             </div>
 
             {/* Status pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 border-t border-gray-100 dark:border-gray-800 text-xs">
-              <span className="text-gray-400 font-medium shrink-0 flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 text-xs">
+              <span className="text-gray-400 font-medium shrink-0 flex items-center gap-1.5 mr-1 self-center">
                 <Filter className="w-3.5 h-3.5" /> Filter Status:
               </span>
-              {[
-                { key: 'All', label: 'All Submissions' },
-                { key: 'pending', label: 'Pending Review' },
-                { key: 'approved_collection', label: 'Approved Collection' },
-                { key: 'final_review', label: 'Final Review' },
-                { key: 'approved', label: 'Completed / Approved' },
-                { key: 'rejected', label: 'Rejected' },
-              ].map(f => {
-                const isActive = subStatusFilter === f.key;
-                return (
-                  <button
-                    key={f.key}
-                    onClick={() => setSubStatusFilter(f.key)}
-                    className={`px-3 py-1.5 rounded-lg font-medium transition-all shrink-0 ${
-                      isActive 
-                        ? 'bg-green-600 text-white shadow-sm' 
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                );
-              })}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { key: 'All', label: 'All Submissions' },
+                  { key: 'pending', label: 'Pending Review' },
+                  { key: 'approved_collection', label: 'Approved Collection' },
+                  { key: 'final_review', label: 'Final Review' },
+                  { key: 'approved', label: 'Completed / Approved' },
+                  { key: 'rejected', label: 'Rejected' },
+                ].map(f => {
+                  const isActive = subStatusFilter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => setSubStatusFilter(f.key)}
+                      className={`inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-medium text-xs transition-all shrink-0 ${
+                        isActive 
+                          ? 'bg-green-600 text-white shadow-sm font-semibold' 
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -1301,10 +1295,8 @@ export function Challenges() {
                                               <thead>
                                                 <tr className="border-b border-gray-100 dark:border-gray-800 text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-white dark:bg-gray-900">
                                                   <th className="px-5 py-3 w-36">Submission #</th>
-                                                  <th className="px-4 py-3">Quantity</th>
                                                   <th className="px-4 py-3">Photos (Before / After)</th>
                                                   <th className="px-4 py-3">Stage / Status</th>
-                                                  <th className="px-4 py-3">Municipal QR</th>
                                                   <th className="px-4 py-3">Date Submitted</th>
                                                   <th className="px-5 py-3 text-right">Review Action</th>
                                                 </tr>
@@ -1331,13 +1323,6 @@ export function Challenges() {
                                                             Submission #{submissionNumber}
                                                           </span>
                                                         </div>
-                                                      </td>
-
-                                                      {/* Count / Quantity */}
-                                                      <td className="px-4 py-4">
-                                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                                                          {sub.detectedQuantity || sub.reservedQuantity || 1} {sub.challenge?.quantityUnit || challengeGroup.quantityUnit || 'items'}
-                                                        </span>
                                                       </td>
 
                                                       {/* Photos */}
@@ -1379,28 +1364,23 @@ export function Challenges() {
 
                                                       {/* Stage / Status */}
                                                       <td className="px-4 py-4">
-                                                        <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full border ${statusBg[sub.status] || 'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-400'}`}>
-                                                          {sub.status === 'approved_collection' ? '📦 Approved for Collection' : sub.status === 'final_review' ? '🔍 Final Review (Weekend)' : sub.status === 'approved' ? '✅ Completed / Approved' : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+                                                        <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border ${statusBg[sub.status] || 'bg-gray-50 text-gray-600 border-gray-100 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                                          {sub.status === 'pending'
+                                                            ? '⏳ Pending Before Review'
+                                                            : sub.status === 'approved_collection' && !sub.afterProofUrl
+                                                            ? '📸 Awaiting User After Photo'
+                                                            : (sub.status === 'approved_collection' || sub.status === 'final_review') && sub.afterProofUrl
+                                                            ? '🔍 After Photo Ready for Review'
+                                                            : sub.status === 'approved'
+                                                            ? (sub.rewardAwarded ? '🎉 Completed & Claimed' : '✅ Approved (Ready to Claim)')
+                                                            : sub.status === 'rejected'
+                                                            ? '❌ Rejected'
+                                                            : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
                                                         </span>
                                                         {sub.moderatorNotes && (
                                                           <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-44 truncate" title={sub.moderatorNotes}>
                                                             Note: {sub.moderatorNotes}
                                                           </p>
-                                                        )}
-                                                      </td>
-
-                                                      {/* QR */}
-                                                      <td className="px-4 py-4">
-                                                        {sub.qrToken ? (
-                                                          <button
-                                                            onClick={() => setSelectedQr(sub)}
-                                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
-                                                          >
-                                                            <QrCode className="w-3.5 h-3.5" />
-                                                            {sub.qrVerified ? 'Verified ✓' : 'View QR'}
-                                                          </button>
-                                                        ) : (
-                                                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                                                         )}
                                                       </td>
 
@@ -1414,41 +1394,62 @@ export function Challenges() {
                                                       {/* Actions */}
                                                       <td className="px-5 py-4 text-right">
                                                         <div className="flex items-center gap-1.5 justify-end">
+                                                          {/* Step 1: Admin review Before Photo */}
                                                           {sub.status === 'pending' && (
-                                                            <button
-                                                              onClick={() => handlePreliminaryApprove(sub.id)}
-                                                              disabled={processingSubId === sub.id}
-                                                              title="Preliminary Approve → Approved for Collection & Generate QR"
-                                                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-all shadow-xs active:scale-95 disabled:opacity-50"
-                                                            >
-                                                              {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                                                              Prelim. Approve
-                                                            </button>
+                                                            <>
+                                                              <button
+                                                                onClick={() => handlePreliminaryApprove(sub.id)}
+                                                                disabled={processingSubId === sub.id}
+                                                                title="Approve Before Photo → Prompts User to Take After Photo"
+                                                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                                                              >
+                                                                {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                                                Approve Before
+                                                              </button>
+                                                              <button
+                                                                onClick={() => handleRejectSubmission(sub.id)}
+                                                                disabled={processingSubId === sub.id}
+                                                                title="Reject Submission"
+                                                                className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
+                                                              >
+                                                                {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                                              </button>
+                                                            </>
                                                           )}
-                                                          {(sub.status === 'final_review' || (sub.status === 'approved_collection' && sub.afterProofUrl)) && (
-                                                            <button
-                                                              onClick={() => handleFinalApprove(sub.id)}
-                                                              disabled={processingSubId === sub.id}
-                                                              title="Final Approve → Grant linear YOLO rewards"
-                                                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white hover:bg-green-700 rounded-lg transition-all shadow-xs active:scale-95 disabled:opacity-50"
-                                                            >
-                                                              {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                                                              Final Approve
-                                                            </button>
+
+                                                          {/* Step 2: User has submitted After Photo -> Admin reviews and approves to grant reward claim */}
+                                                          {(sub.status === 'approved_collection' || sub.status === 'final_review') && sub.afterProofUrl && (
+                                                            <>
+                                                              <button
+                                                                onClick={() => handleFinalApprove(sub.id)}
+                                                                disabled={processingSubId === sub.id}
+                                                                title="Approve After Photo → User can now Claim Rewards"
+                                                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                                                              >
+                                                                {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                                                Approve After Photo
+                                                              </button>
+                                                              <button
+                                                                onClick={() => handleRejectSubmission(sub.id)}
+                                                                disabled={processingSubId === sub.id}
+                                                                title="Reject Submission"
+                                                                className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
+                                                              >
+                                                                {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                                              </button>
+                                                            </>
                                                           )}
-                                                          {(sub.status === 'pending' || sub.status === 'final_review') && (
-                                                            <button
-                                                              onClick={() => handleRejectSubmission(sub.id)}
-                                                              disabled={processingSubId === sub.id}
-                                                              title="Reject & Return Reserved Quantity"
-                                                              className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
-                                                            >
-                                                              {processingSubId === sub.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                                                            </button>
+
+                                                          {/* Step 2 (waiting): User hasn't uploaded after photo yet */}
+                                                          {sub.status === 'approved_collection' && !sub.afterProofUrl && (
+                                                            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                                              ⏳ Waiting for user After photo
+                                                            </span>
                                                           )}
+
                                                           {sub.status === 'approved' && (
                                                             <span className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
-                                                              <CheckCircle2 className="w-4 h-4" /> Approved
+                                                              <CheckCircle2 className="w-4 h-4" /> {sub.rewardAwarded ? 'Reward Claimed' : 'Approved (Claim Ready)'}
                                                             </span>
                                                           )}
                                                           {sub.status === 'rejected' && (
@@ -1481,41 +1482,6 @@ export function Challenges() {
             </div>
           )}
         </div>
-      )}
-
-      {/* QR Code Modal for Verification */}
-      {selectedQr && createPortal(
-        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setSelectedQr(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full flex flex-col items-center shadow-2xl relative animate-modal" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedQr(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-              <X className="w-5 h-5" />
-            </button>
-            <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-              <QrCode className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 text-center">Municipal Collection QR</h3>
-            <p className="text-xs text-gray-500 text-center mt-1 mb-4">
-              Scan this QR at the collection point on the weekend to unlock the After photo step.
-            </p>
-            
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-center mb-4">
-              <QRCodeCanvas
-                value={selectedQr.qrToken || JSON.stringify({ subId: selectedQr.id, userId: selectedQr.userId })}
-                size={200}
-                level="H"
-                includeMargin
-              />
-            </div>
-
-            <div className="w-full bg-gray-50 rounded-xl p-3 text-xs space-y-1 text-gray-600 border border-gray-200">
-              <p><strong>User:</strong> {selectedQr.user?.profile?.displayName || selectedQr.user?.name}</p>
-              <p><strong>Challenge:</strong> {selectedQr.challenge?.title}</p>
-              <p><strong>Quantity:</strong> {selectedQr.detectedQuantity || selectedQr.reservedQuantity || 1} items</p>
-              <p><strong>Status:</strong> {selectedQr.qrVerified ? '✅ QR Verified' : '⏳ Awaiting Scan'}</p>
-            </div>
-          </div>
-        </div>,
-        document.body
       )}
 
       {/* Image preview modal */}

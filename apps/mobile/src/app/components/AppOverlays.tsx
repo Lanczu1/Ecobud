@@ -62,6 +62,7 @@ import {
   AvatarBubble,
   BadgeCard,
   SecondaryButton,
+  ProgressBar,
 } from './CommonComponents';
 import { UpcomingEventCard } from './UpcomingEventCard';
 import { FireStreak } from './FireStreak';
@@ -72,24 +73,26 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const submission = challenge?.progress?.submission;
   const isSubmissionCompleted = submission?.status === 'completed' || submission?.rewardAwarded;
   const isPreliminaryApproved = !isSubmissionCompleted && (challenge?.progress?.status === 'approved_collection' || submission?.status === 'approved_collection' || submission?.adminPreliminaryApproved);
-  const isQrVerified = !isSubmissionCompleted && Boolean(submission?.qrVerified);
+  const isFinalApproved = !isSubmissionCompleted && (challenge?.progress?.status === 'approved' || submission?.status === 'approved' || submission?.adminFinalApproved);
 
-  // Check if current day is weekend (Saturday = 6, Sunday = 0)
-  const currentDay = new Date().getDay();
-  const isWeekend = currentDay === 0 || currentDay === 6;
+  // Dynamic user barangay collection point
+  const userBarangay = model.profile?.profile?.city?.trim();
+  const collectionPointName = userBarangay
+    ? `Barangay ${userBarangay} Collection Point`
+    : (challenge?.collectionPointName || 'Barangay Collection Point');
+
+  const isReadyForAfterPhoto = !isSubmissionCompleted && Boolean(submission?.proofUrl) && isPreliminaryApproved;
 
   // Determine initial step
-  const getInitialStep = (): 'details' | 'capture' | 'result' | 'scan_qr' | 'capture_after' => {
-    if (isPreliminaryApproved && isWeekend) {
-      // Always show QR code scanning page first as requested
-      return 'scan_qr';
+  const getInitialStep = (): 'details' | 'capture' | 'result' | 'capture_after' => {
+    if (isReadyForAfterPhoto && !submission?.afterProofUrl) {
+      return 'capture_after';
     }
     return 'details';
   };
 
-  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'scan_qr' | 'capture_after'>(getInitialStep);
+  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'capture_after'>(getInitialStep);
   const [processing, setProcessing] = React.useState(false);
-  const [qrScanned, setQrScanned] = React.useState(false);
   const [mockResult, setMockResult] = React.useState<{
     passed: boolean;
     object: string;
@@ -108,12 +111,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
   // Sync step whenever challenge or overlay reopens
   React.useEffect(() => {
-    setQrScanned(false);
     setCapturedImage(null);
     setMockResult(null);
     setBeforeProofUrl(submission?.proofUrl || null);
     setStep(getInitialStep());
-  }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.qrVerified]);
+  }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.afterProofUrl]);
 
   React.useEffect(() => {
     Animated.timing(entryFadeAnim, {
@@ -139,6 +141,13 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = React.useRef<any>(null);
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
+
+  // Automatically request camera permission when entering a camera step if not granted yet
+  React.useEffect(() => {
+    if ((step === 'capture' || step === 'capture_after') && !permission?.granted) {
+      void requestPermission();
+    }
+  }, [step, permission?.granted]);
 
   if (!challenge) {
     return null;
@@ -191,32 +200,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     if (!beforeProofUrl || !mockResult) return;
     setProcessing(true);
     try {
-      const detectedCount = mockResult.detectedCount || 1;
-      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedCount);
+      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, 1);
       Alert.alert(
         'Before Photo Submitted!',
-        `Your mission with ${detectedCount} ${mockResult.object || 'items'} has been submitted. The admin will review it shortly.`,
+        `Your mission proof has been submitted. The admin will review it shortly.`,
         [{ text: 'OK', onPress: handleClose }]
       );
     } catch (err: any) {
       Alert.alert('Submission Error', err.message || 'Failed to submit challenge proof.');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (qrScanned || processing) return;
-    setQrScanned(true);
-    setProcessing(true);
-    try {
-      await model.handleVerifyChallengeQr(challenge.id, data, undefined, undefined, challenge.progress?.submissionId);
-      Alert.alert('QR Verified!', 'You have successfully verified your presence at the collection point. Now take your After Photo!', [
-        { text: 'Take After Photo', onPress: () => setStep('capture_after') }
-      ]);
-    } catch (err: any) {
-      Alert.alert('QR Verification Error', err.message || 'Invalid or unmatched QR code.');
-      setQrScanned(false);
     } finally {
       setProcessing(false);
     }
@@ -229,8 +220,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
       await model.handleSubmitChallengeAfterPhoto(challenge.id, uploadResult.proofUrl, challenge.progress?.submissionId);
       Alert.alert(
-        'Mission Completed!',
-        'Your After photo was submitted and is now in Final Review. You will be awarded your Eco Points & Coins once finalized by the admin!',
+        'After Photo Submitted!',
+        'Your After photo was uploaded successfully and is now sent to the Admin for final verification. Once approved, you can claim your rewards!',
         [{ text: 'OK', onPress: handleClose }]
       );
     } catch (err: any) {
@@ -292,129 +283,179 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setStep('capture');
   };
 
-  if (step === 'scan_qr') {
-    return (
-      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold title="Scan Municipal QR" subtitle="Weekend Collection Step" onBack={handleClose}>
-          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>
-              Verify Collection Point
-            </Text>
-            <Text style={{ fontSize: 14, color: '#6B7A75', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
-              Please scan the QR code at <Text style={{ fontWeight: 'bold', color: '#047857' }}>{challenge.collectionPointName || 'Municipal Waste Collection Center'}</Text> to verify your drop-off.
-            </Text>
-
-            <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#000', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
-              {permission?.granted ? (
-                <CameraView
-                  style={{ width: '100%', height: '100%' }}
-                  facing="back"
-                  barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                  onBarcodeScanned={handleBarcodeScanned}
-                />
-              ) : (
-                <Text style={{ color: '#FFF' }}>Camera permission required to scan QR.</Text>
-              )}
-
-              {processing && (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }]}>
-                  <ActivityIndicator size="large" color="#10B981" />
-                  <Text style={{ color: '#FFF', fontWeight: 'bold', marginTop: 12 }}>Verifying QR Code...</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={{ backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, width: '100%', borderWidth: 1, borderColor: '#BBF7D0' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                <Ionicons name="location" size={14} color="#166534" />
-                <Text style={{ fontSize: 13, color: '#166534', fontWeight: '700' }}>
-                  Collection Note:
-                </Text>
-              </View>
-              <Text style={{ fontSize: 13, color: '#15803D', lineHeight: 18 }}>
-                Once verified, the camera will automatically unlock for your "AFTER" proof photo.
-              </Text>
-            </View>
-          </ScrollView>
-        </OverlayScaffold>
-      </Animated.View>
-    );
-  }
-
   if (step === 'result' && mockResult) {
-    const count = mockResult.detectedCount ?? 1;
-    const expAward = mockResult.calculatedExpReward ?? (challenge.expReward * count);
-    const coinsAward = mockResult.calculatedEcoCoins ?? (challenge.ecoCoinReward * count);
+    const expAward = mockResult.calculatedExpReward ?? challenge.expReward;
+    const coinsAward = mockResult.calculatedEcoCoins ?? challenge.ecoCoinReward;
 
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
         <OverlayScaffold title="Result Page" subtitle="Detection Result" onBack={handleClose}>
-          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
+          <ScrollView contentContainerStyle={[styles.overlayScroll, { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, alignItems: 'center' }]}>
             <Animated.View style={{ opacity: fadeAnim, width: '100%', alignItems: 'center' }}>
-              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>Detection Result</Text>
+              {/* Header Title with horizontal decorative lines */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20, gap: 12 }}>
+                <View style={{ width: 28, height: 3, backgroundColor: '#10B981', borderRadius: 2 }} />
+                <Text style={{ fontSize: 22, fontWeight: '800', color: '#064E3B', letterSpacing: -0.3 }}>Detection Result</Text>
+                <View style={{ width: 28, height: 3, backgroundColor: '#10B981', borderRadius: 2 }} />
+              </View>
 
-              <View style={{ width: '100%', backgroundColor: '#F8FAF9', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#E8F0EA' }}>
-                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Object Detected:</Text>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.object}</Text>
+              {/* Detection Result Card */}
+              <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 14, marginBottom: 24, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 }}>
+                {/* Object Detected */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: '#D1FAE5' }}>
+                    <Ionicons name="water-outline" size={22} color="#059669" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Object Detected:</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: '#064E3B' }}>{mockResult.object}</Text>
+                  </View>
+                </View>
 
-                {mockResult.passed && (
-                  <>
-                    <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Quantity Detected by YOLO:</Text>
-                    <Text style={{ fontSize: 20, fontWeight: '900', color: '#10B981', marginBottom: 16 }}>
-                      {count} {count === 1 ? 'item' : 'items'}
+                <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+
+                {/* Confidence */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: '#D1FAE5' }}>
+                    <Ionicons name="shield-outline" size={22} color="#059669" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Confidence:</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: '#064E3B' }}>{mockResult.confidence}%</Text>
+                  </View>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+
+                {/* Status */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: mockResult.passed ? '#ECFDF5' : '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: mockResult.passed ? '#D1FAE5' : '#FEE2E2' }}>
+                    <Ionicons name={mockResult.passed ? "checkmark-circle" : "close-circle"} size={24} color={mockResult.passed ? "#059669" : "#EF4444"} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Status:</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: mockResult.passed ? '#059669' : '#EF4444' }}>
+                      {mockResult.passed ? 'Passed' : 'Failed'}
                     </Text>
-                  </>
-                )}
+                  </View>
+                </View>
 
-                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Confidence:</Text>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: '#126027', marginBottom: 16 }}>{mockResult.confidence}%</Text>
-
-                <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Status:</Text>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: mockResult.passed ? '#4ADE80' : '#F87171', marginBottom: mockResult.passed ? 0 : 16 }}>
-                  {mockResult.passed ? 'Passed' : 'Failed'}
-                </Text>
-
-                {!mockResult.passed && (
+                {!mockResult.passed && mockResult.reason && (
                   <>
-                    <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 4 }}>Reason:</Text>
-                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#F87171' }}>{mockResult.reason}</Text>
+                    <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                        <Ionicons name="alert-circle-outline" size={22} color="#EF4444" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Reason:</Text>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: '#EF4444' }}>{mockResult.reason}</Text>
+                      </View>
+                    </View>
                   </>
                 )}
               </View>
 
               {mockResult.passed && (
-                <View style={{ alignItems: 'center', marginBottom: 32, width: '100%' }}>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#126027', marginBottom: 8, textAlign: 'center' }}>Step 1: Before Photo Ready</Text>
-                  <Text style={{ fontSize: 15, color: '#6B7A75', textAlign: 'center', marginBottom: 16, lineHeight: 22 }}>
-                    We detected <Text style={{ fontWeight: 'bold', color: '#10B981' }}>{count} {mockResult.object}</Text>. Submitting this will reserve {count} units for your mission.
+                <View style={{ alignItems: 'center', marginBottom: 28, width: '100%' }}>
+                  {/* Step Description */}
+                  <Text style={{ fontSize: 19, fontWeight: '800', color: '#064E3B', marginBottom: 6, textAlign: 'center' }}>Step 1: Before Photo Ready</Text>
+                  <Text style={{ fontSize: 14, color: '#4B5563', textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
+                    We detected <Text style={{ fontWeight: '800', color: '#059669' }}>{mockResult.object}</Text>. You can now submit your mission proof.
                   </Text>
-                  <View style={{ backgroundColor: '#F0FDF4', padding: 14, borderRadius: 14, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#BBF7D0', marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: '#15803D', fontWeight: '700', marginBottom: 6 }}>Reward upon weekend completion:</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Ionicons name="leaf" size={16} color="#10B981" />
-                      <Text style={{ fontSize: 16, color: '#10B981', fontWeight: 'bold' }}>+{expAward} Eco Points</Text>
+
+                  {/* Reward Card */}
+                  <View style={{ width: '100%', backgroundColor: '#F0FDF4', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 16, borderWidth: 1, borderColor: '#A7F3D0', marginBottom: 18, flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                      <Ionicons name="gift" size={28} color="#059669" />
                     </View>
-                    {coinsAward > 0 && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                        <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
-                        <Text style={{ fontSize: 16, color: '#F59E0B', fontWeight: 'bold' }}>+{coinsAward} Eco Coins</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: '#064E3B', fontWeight: '700', marginBottom: 6 }}>Reward upon mission completion:</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <Ionicons name="leaf" size={17} color="#10B981" />
+                        <Text style={{ fontSize: 17, color: '#059669', fontWeight: '800' }}>+{expAward} Eco Points</Text>
                       </View>
-                    )}
+                      {coinsAward > 0 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          <Image source={require('../../../assets/coin.png')} style={{ width: 18, height: 18, resizeMode: 'contain' }} />
+                          <Text style={{ fontSize: 17, color: '#D97706', fontWeight: '800' }}>+{coinsAward} Eco Coins</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
 
-                  <View style={{ backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, width: '100%', borderWidth: 1, borderColor: '#FDE68A' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
-                      <Ionicons name="information-circle-outline" size={16} color="#92400E" style={{ marginTop: 2 }} />
-                      <Text style={{ flex: 1, fontSize: 12, color: '#92400E', lineHeight: 18 }}>
-                        After preliminary admin review, bring your items to the collection point on the weekend to scan the QR code and submit the final After photo!
-                      </Text>
+                  {/* Important Reminder Card */}
+                  <View style={{ width: '100%', backgroundColor: '#FEF9C3', borderRadius: 18, padding: 16, borderWidth: 1.5, borderColor: '#FDE047' }}>
+                    {/* Top Row: Warning Icon + Main Message */}
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                      <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: '#FEF08A', alignItems: 'center', justifyContent: 'center', shadowColor: '#B45309', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 }}>
+                        <Ionicons name="warning" size={28} color="#B45309" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: '#78350F', marginBottom: 4 }}>
+                          Important Reminder!
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#78350F', lineHeight: 18 }}>
+                          After preliminary admin review, bring your collectible items to the <Text style={{ fontWeight: '800', color: '#451A03' }}>{collectionPointName}</Text> to submit the final.
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#78350F', lineHeight: 18, marginTop: 2 }}>
+                          After photo, scan the QR code to receive your rewards!
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Dotted Divider */}
+                    <View style={{ borderStyle: 'dashed', borderWidth: 0.8, borderColor: '#FACC15', marginVertical: 4, width: '100%' }} />
+
+                    {/* Bottom Row: Barangay Collection */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 10, flexShrink: 0 }}>
+                        <Ionicons name="location-outline" size={18} color="#92400E" />
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: '#78350F' }}>Barangay Center</Text>
+                      </View>
+
+                      {/* Vertical Divider */}
+                      <View style={{ width: 1.5, height: 38, backgroundColor: '#D97706', marginHorizontal: 8, opacity: 0.6 }} />
+
+                      <View style={{ flex: 1, paddingLeft: 2 }}>
+                        <Text style={{ fontSize: 11, color: '#78350F', lineHeight: 16 }}>
+                          Bring your recyclables to the barangay collection desk to verify and claim your rewards.
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
               )}
 
+              {/* Submit Button */}
               {mockResult.passed ? (
-                <PrimaryButton label={processing ? "Submitting..." : "Submit Before Photo"} onPress={handleSubmitBeforeProof} />
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  disabled={processing}
+                  onPress={handleSubmitBeforeProof}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#047857',
+                    borderRadius: 28,
+                    paddingVertical: 15,
+                    paddingHorizontal: 20,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: '#047857',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 10,
+                    elevation: 5,
+                    gap: 10,
+                  }}
+                >
+                  <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 }}>
+                    {processing ? "Submitting..." : "Submit Before Photo"}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                </TouchableOpacity>
               ) : (
                 <PrimaryButton label="Try Again" onPress={handleTryAgain} />
               )}
@@ -428,7 +469,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   if (step === 'capture' || step === 'capture_after') {
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"} subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"} onBack={() => setStep(step === 'capture_after' ? 'scan_qr' : 'details')}>
+        <OverlayScaffold
+          title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"}
+          subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"}
+          onBack={() => {
+            setCapturedImage(null);
+            setStep('details');
+          }}
+        >
           <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
             <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
               <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
@@ -503,16 +551,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
               <View>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Available Quantity:</Text>
-                <Text style={{ fontSize: 16, color: '#15803D', fontWeight: '700' }}>
-                  {challenge.availableQuantity ?? 50} items left
-                </Text>
-              </View>
-
-              <View style={{ alignItems: 'flex-end' }}>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Collection Point:</Text>
-                <Text style={{ fontSize: 14, color: '#6B7A75', maxWidth: 180, textAlign: 'right' }}>
-                  {challenge.collectionPointName || 'Municipal Waste Collection Center'}
+                <Text style={{ fontSize: 14, color: '#6B7A75', maxWidth: 180 }}>
+                  {collectionPointName}
                 </Text>
               </View>
             </View>
@@ -540,11 +581,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
 
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Schedule & Workflow:</Text>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Mission Workflow:</Text>
             <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 16, lineHeight: 22 }}>
-              1. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Mon-Fri</Text>: Capture Before photo with YOLO detection.{'\n'}
+              1. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Before Photo</Text>: Capture items with YOLO AI detection.{'\n'}
               2. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Admin Review</Text>: Preliminary approval for drop-off.{'\n'}
-              3. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Weekend</Text>: Visit collection center, scan QR, & upload After photo to claim reward!
+              3. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Barangay Drop-off</Text>: Bring collectible items to the {collectionPointName}, scan QR, & upload After photo to claim reward!
             </Text>
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
@@ -553,16 +594,16 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
 
             {isPreliminaryApproved ? (
-              isWeekend ? (
-                <PrimaryButton label="Scan Weekend Collection QR" onPress={() => setStep('scan_qr')} />
+              !submission?.afterProofUrl ? (
+                <PrimaryButton label="Take After Photo" onPress={() => setStep('capture_after')} />
               ) : (
-                <View style={{ backgroundColor: '#FEF3C7', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#FDE68A', alignItems: 'center' }}>
-                  <Ionicons name="calendar-outline" size={24} color="#B45309" style={{ marginBottom: 6 }} />
-                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#92400E', textAlign: 'center', marginBottom: 4 }}>
-                    Approved for Collection!
+                <View style={{ backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#BBF7D0', alignItems: 'center' }}>
+                  <Ionicons name="time-outline" size={24} color="#166534" style={{ marginBottom: 6 }} />
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#166534', textAlign: 'center', marginBottom: 4 }}>
+                    After Photo Submitted
                   </Text>
-                  <Text style={{ fontSize: 13, color: '#78350F', textAlign: 'center', lineHeight: 18 }}>
-                    QR scanning and After photo upload will automatically unlock this coming <Text style={{ fontWeight: 'bold' }}>Saturday & Sunday</Text> at the collection point.
+                  <Text style={{ fontSize: 13, color: '#15803D', textAlign: 'center', lineHeight: 18 }}>
+                    Your submission is awaiting final admin review. Once approved, you can claim your rewards in the History tab!
                   </Text>
                 </View>
               )
@@ -782,6 +823,8 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <StreakUnlockedOverlay model={model} />;
     case 'streakRewards':
       return <StreakRewardsOverlay model={model} />;
+    case 'badgeUnlocked':
+      return <BadgeUnlockedOverlay model={model} />;
     case 'eventApproved':
       return <EventApprovedOverlay model={model} />;
     case 'settings':
@@ -3750,6 +3793,391 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
           </Animated.View>
         ))}
       </View>
+    </View>
+  );
+}
+
+export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
+  const badge = model.selectedBadge || (model.newlyUnlockedBadges && model.newlyUnlockedBadges.length > 0 ? model.newlyUnlockedBadges[0] : null);
+  const isUnlocked = badge ? badge.unlocked !== false : true;
+
+  const contentScale = React.useRef(new Animated.Value(0.8)).current;
+  const contentOpacity = React.useRef(new Animated.Value(0)).current;
+  const badgeScale = React.useRef(new Animated.Value(0)).current;
+  const checkRotate = React.useRef(new Animated.Value(0)).current;
+  const glowScale = React.useRef(new Animated.Value(0.9)).current;
+  const shineAnim = React.useRef(new Animated.Value(-150)).current;
+  const btnOpacity = React.useRef(new Animated.Value(1)).current;
+  const bgOpacity = React.useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    triggerSuccessHaptic();
+
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(contentScale, {
+          toValue: 1,
+          friction: 5,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(badgeScale, {
+          toValue: 1,
+          friction: 3,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shineAnim, {
+          toValue: 350,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    // Rotating dashed outer ring
+    Animated.loop(
+      Animated.timing(checkRotate, {
+        toValue: 1,
+        duration: 8000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    // Breathing glow animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowScale, {
+          toValue: 1.15,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowScale, {
+          toValue: 0.9,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [contentScale, contentOpacity, badgeScale, shineAnim, checkRotate, glowScale]);
+
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(22), []);
+  const embers = React.useMemo(() => generateEmbers(8), []);
+
+  const handleClose = () => {
+    triggerSelectionHaptic();
+    Animated.parallel([
+      Animated.timing(contentOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+      Animated.timing(bgOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => {
+      model.setSelectedBadge(null);
+      // If there are newly unlocked badges queued, clear them or close overlay
+      model.setNewlyUnlockedBadges([]);
+      model.setActiveOverlay(null);
+    });
+  };
+
+  const accentColor = badge?.accentColor || '#10B981';
+
+  return (
+    <View style={[StyleSheet.absoluteFill, { zIndex: 99999, backgroundColor: '#06231E' }]}>
+      {/* Immersive Deep Gradient Background */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]}>
+        <LinearGradient
+          colors={['#06231E', '#093B32', '#126027']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      {/* Ambient background orbs */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgOpacity }]} pointerEvents="none">
+        <View style={{
+          position: 'absolute',
+          top: -60,
+          right: -60,
+          width: 280,
+          height: 280,
+          borderRadius: 140,
+          backgroundColor: 'rgba(74, 222, 128, 0.12)',
+        }} />
+        <View style={{
+          position: 'absolute',
+          bottom: -80,
+          left: -80,
+          width: 320,
+          height: 320,
+          borderRadius: 160,
+          backgroundColor: 'rgba(23, 160, 126, 0.08)',
+        }} />
+      </Animated.View>
+
+      {/* Floating bio-luminescent embers */}
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', zIndex: 5 }, { opacity: bgOpacity }]} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill}>
+          {embers.map((ember) => (
+            <FloatingEmber key={ember.id} ember={ember} />
+          ))}
+        </View>
+      </Animated.View>
+
+      {/* Confetti container (shown when unlocked) */}
+      {isUnlocked && (
+        <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', zIndex: 10 }, { opacity: bgOpacity }]} pointerEvents="none">
+          <View style={StyleSheet.absoluteFill}>
+            {confettiPieces.map((piece) => (
+              <ConfettiParticle key={piece.id} piece={piece} />
+            ))}
+          </View>
+        </Animated.View>
+      )}
+
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: scale(20),
+          paddingVertical: verticalScale(30),
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View
+          style={{
+            opacity: contentOpacity,
+            transform: [{ scale: contentScale }],
+            alignItems: 'center',
+            width: '100%',
+            maxWidth: 480,
+          }}
+        >
+          {/* Glassmorphic Container Card */}
+          <View style={{
+            width: '100%',
+            backgroundColor: 'rgba(255, 255, 255, 0.09)',
+            borderRadius: moderateScale(32),
+            borderWidth: 1.5,
+            borderColor: 'rgba(255, 255, 255, 0.14)',
+            paddingHorizontal: scale(24),
+            paddingVertical: verticalScale(32),
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 16 },
+            shadowOpacity: 0.25,
+            shadowRadius: 24,
+            elevation: 12,
+            overflow: 'hidden',
+          }}>
+
+            {/* Shimmer sweep effect */}
+            <Animated.View
+              style={{
+                position: 'absolute',
+                top: -150,
+                bottom: -150,
+                width: 60,
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                transform: [
+                  { translateX: shineAnim },
+                  { rotate: '25deg' },
+                ],
+              }}
+            />
+
+            {/* Concentric rings around badge */}
+            <View style={{ position: 'relative', marginBottom: verticalScale(24) }}>
+              {/* Outer breathing glow */}
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  top: -14,
+                  left: -14,
+                  right: -14,
+                  bottom: -14,
+                  borderRadius: 70,
+                  backgroundColor: isUnlocked ? `${accentColor}33` : 'rgba(255, 255, 255, 0.08)',
+                  transform: [{ scale: Animated.multiply(badgeScale, glowScale) }]
+                }}
+              />
+
+              {/* Dash rotating ring */}
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  top: -5,
+                  left: -5,
+                  right: -5,
+                  bottom: -5,
+                  borderRadius: 60,
+                  borderWidth: 2,
+                  borderColor: isUnlocked ? `${accentColor}99` : 'rgba(255, 255, 255, 0.3)',
+                  borderStyle: 'dashed',
+                  transform: [{
+                    rotate: checkRotate.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '360deg'],
+                    })
+                  }]
+                }}
+              />
+
+              {/* Main Badge Graphic */}
+              <Animated.View
+                style={{
+                  width: scale(104),
+                  height: scale(104),
+                  borderRadius: scale(52),
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  transform: [{ scale: badgeScale }],
+                  shadowColor: isUnlocked ? accentColor : '#000',
+                  shadowOffset: { width: 0, height: 10 },
+                  shadowOpacity: 0.45,
+                  shadowRadius: 18,
+                  elevation: 10,
+                  borderWidth: 4,
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                  backgroundColor: isUnlocked ? accentColor : '#374151',
+                  overflow: 'hidden',
+                }}
+              >
+                <LinearGradient
+                  colors={isUnlocked ? [accentColor, `${accentColor}CC`] : ['#4B5563', '#1F2937']}
+                  style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
+                >
+                  {badge?.iconUrl && resolveMediaUrl(badge.iconUrl) ? (
+                    <Image
+                      source={{ uri: resolveMediaUrl(badge.iconUrl)! }}
+                      style={{ width: scale(54), height: scale(54) }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Ionicons name={isUnlocked ? "ribbon" : "lock-closed"} size={scale(48)} color="#FFFFFF" />
+                  )}
+                </LinearGradient>
+              </Animated.View>
+            </View>
+
+            {/* Sparkle pill badge */}
+            <View style={{
+              backgroundColor: isUnlocked ? 'rgba(251, 191, 36, 0.16)' : 'rgba(255, 255, 255, 0.1)',
+              paddingHorizontal: scale(14),
+              paddingVertical: verticalScale(6),
+              borderRadius: moderateScale(20),
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: scale(6),
+              marginBottom: verticalScale(14),
+              borderWidth: 1,
+              borderColor: isUnlocked ? 'rgba(251, 191, 36, 0.3)' : 'rgba(255, 255, 255, 0.15)',
+            }}>
+              <Ionicons name={isUnlocked ? "sparkles" : "lock-closed"} size={scale(14)} color={isUnlocked ? "#FBBF24" : "#9CA3AF"} />
+              <Text style={{ fontSize: responsiveFontSize(11), fontWeight: '900', color: isUnlocked ? '#FBBF24' : '#E5E7EB', letterSpacing: 1, textTransform: 'uppercase' }}>
+                {isUnlocked ? 'Collectible Badge Unlocked' : 'Locked Badge'}
+              </Text>
+            </View>
+
+            {/* Badge Title */}
+            <Text style={{ fontSize: responsiveFontSize(26), fontWeight: '900', color: '#FFFFFF', marginBottom: verticalScale(8), textAlign: 'center', letterSpacing: -0.5 }}>
+              {badge?.name || 'Eco Warrior Badge'}
+            </Text>
+
+            {/* Badge Description */}
+            <Text style={{ fontSize: responsiveFontSize(14), color: '#C2D9CE', marginBottom: verticalScale(20), textAlign: 'center', lineHeight: responsiveFontSize(21), paddingHorizontal: scale(8) }}>
+              {badge?.description || 'Earned by contributing actively to eco-friendly programs and sustainable community missions.'}
+            </Text>
+
+            {/* Progress or Requirement Pill */}
+            {!isUnlocked && badge?.targetProgress ? (
+              <View style={{ width: '100%', backgroundColor: 'rgba(0,0,0,0.2)', padding: scale(14), borderRadius: moderateScale(16), borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', marginBottom: verticalScale(10) }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: verticalScale(6) }}>
+                  <Text style={{ color: '#9CA3AF', fontSize: responsiveFontSize(12), fontWeight: '700' }}>Progress</Text>
+                  <Text style={{ color: '#34D399', fontSize: responsiveFontSize(12), fontWeight: '800' }}>{badge.currentProgress ?? 0} / {badge.targetProgress}</Text>
+                </View>
+                <ProgressBar progress={(badge.currentProgress ?? 0) / badge.targetProgress} />
+              </View>
+            ) : !isUnlocked && badge?.requiredPoints ? (
+              <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: moderateScale(14), borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                <Text style={{ color: '#E5E7EB', fontSize: responsiveFontSize(13), fontWeight: '700' }}>
+                  Unlocks at <Text style={{ color: '#FBBF24', fontWeight: '900' }}>{badge.requiredPoints} Eco Points</Text>
+                </Text>
+              </View>
+            ) : (
+              <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: scale(16), paddingVertical: verticalScale(8), borderRadius: moderateScale(14), borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)', flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                <Ionicons name="checkmark-circle" size={scale(16)} color="#10B981" />
+                <Text style={{ color: '#6EE7B7', fontSize: responsiveFontSize(12), fontWeight: '800' }}>
+                  Added to your Profile Showcase
+                </Text>
+              </View>
+            )}
+
+          </View>
+        </Animated.View>
+      </ScrollView>
+
+      {/* Footer with Done / Close button */}
+      <Animated.View style={{
+        width: '100%',
+        maxWidth: 480,
+        alignSelf: 'center',
+        paddingHorizontal: scale(20),
+        paddingBottom: verticalScale(36),
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        opacity: btnOpacity,
+      }}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={handleClose}
+          style={{
+            width: '100%',
+            height: Math.max(52, verticalScale(56)),
+            borderRadius: moderateScale(20),
+            overflow: 'hidden',
+            shadowColor: '#10b981',
+            shadowOpacity: 0.35,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 8,
+          }}
+        >
+          <LinearGradient
+            colors={['#10b981', '#059669']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              flex: 1,
+              width: '100%',
+              height: '100%',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: scale(8),
+            }}
+          >
+            <Text style={{
+              color: '#FFFFFF',
+              fontSize: responsiveFontSize(16),
+              fontWeight: '800',
+              letterSpacing: 0.5,
+              textAlign: 'center',
+              includeFontPadding: false,
+            }}>
+              Awesome!
+            </Text>
+            <Ionicons name="checkmark-sharp" size={scale(18)} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }

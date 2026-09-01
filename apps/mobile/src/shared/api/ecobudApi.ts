@@ -528,6 +528,15 @@ export const ecobudApi = {
       method: 'POST',
       body: { email, password },
     }),
+  googleLogin: (payload: { idToken?: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
+    request<SessionPayload>('/auth/google', {
+      method: 'POST',
+      body: payload,
+    }),
+  checkEmailExists: (email: string) =>
+    request<{ exists: boolean; hasCity: boolean; city?: string | null }>(
+      `/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    ),
   checkUsernameAvailability: (displayName: string) =>
     request<{ available: boolean; message: string }>(
       `/auth/check-username?displayName=${encodeURIComponent(displayName.trim())}`,
