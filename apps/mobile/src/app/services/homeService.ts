@@ -39,10 +39,13 @@ export const homeService = {
     ecobudApi.fetchDashboard(token),
 
   getLessons: (token: string) =>
-    ecobudApi.fetchLessons(token).then((res: any) => res.items || res),
+    ecobudApi.fetchLessons(token).then((res: any) => (Array.isArray(res) ? res : res?.items || [])),
 
   getChallenges: (token: string) =>
-    ecobudApi.fetchChallenges(token),
+    ecobudApi.fetchChallenges(token).then((res: any) => ({
+      items: Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [],
+      isCycleActive: res?.isCycleActive ?? true,
+    })),
 
   getHabitsToday: (token: string) =>
     ecobudApi.fetchHabitsToday(token),
@@ -60,7 +63,7 @@ export const homeService = {
     ecobudApi.fetchLeaderboard(token),
 
   getEvents: (token?: string) =>
-    ecobudApi.fetchEvents(token).then(res => res.items),
+    ecobudApi.fetchEvents(token).then((res: any) => (Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [])),
 
   getTransparency: (token: string) =>
     ecobudApi.fetchTransparency(token),
@@ -155,17 +158,17 @@ export const homeService = {
     ]);
 
     return {
-      dashboard,
-      lessons,
-      challenges: challenges.items,
-      isCycleActive: challenges.isCycleActive,
-      habitsToday,
-      tracker,
-      profile,
-      rewards,
-      leaderboard,
-      events,
-      transparency,
+      dashboard: dashboard || null,
+      lessons: Array.isArray(lessons) ? lessons : lessons?.items || [],
+      challenges: Array.isArray(challenges?.items) ? challenges.items : Array.isArray(challenges) ? challenges : [],
+      isCycleActive: challenges?.isCycleActive ?? true,
+      habitsToday: habitsToday || null,
+      tracker: tracker || null,
+      profile: profile || null,
+      rewards: rewards || null,
+      leaderboard: leaderboard || null,
+      events: Array.isArray(events) ? events : events?.items || [],
+      transparency: transparency || null,
     };
   }
 };

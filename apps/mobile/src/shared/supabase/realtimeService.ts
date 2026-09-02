@@ -85,12 +85,17 @@ const bindPresence = (
     return null;
   }
 
+  const userId = session?.user?.id;
+  if (!userId) {
+    return null;
+  }
+
   const channel = supabaseClient
     .channel(channelName, {
       config: {
         presence: {
           enabled: true,
-          key: session.user.id,
+          key: userId,
         },
       },
     })
@@ -98,7 +103,7 @@ const bindPresence = (
       if (status === 'SUBSCRIBED') {
         await channel.track({
           timestamp: new Date().toISOString(),
-          userId: session.user.id,
+          userId,
         });
       }
     });

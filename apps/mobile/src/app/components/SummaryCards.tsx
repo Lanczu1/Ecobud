@@ -1,19 +1,21 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { type SummaryCardsProps } from '../types/home';
-import { FireStreak } from './FireStreak';
 import { getVisibleStreak } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
-export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSevenDays, completedDays }: SummaryCardsProps) {
+export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, onOpenStreakOverlay, lastSevenDays, completedDays, style }: SummaryCardsProps) {
 
   // Visual placeholder for streak progress if real data is not provided
   const visibleStreak = getVisibleStreak(currentStreak);
   const cycleDay = visibleStreak > 0 ? (visibleStreak - 1) % 7 + 1 : 0;
   const maxVisualStreak = cycleDay;
   const todayIndex = cycleDay === 0 ? 0 : cycleDay - 1;
+
+  const isStreakActive = currentStreak >= 3;
 
   const dots = lastSevenDays && completedDays
     ? lastSevenDays.map((date, index) => {
@@ -29,27 +31,37 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
       }));
 
   return (
-    <View style={{ marginBottom: verticalScale(20), paddingHorizontal: 0 }}>
-      <LinearGradient
-        colors={['#0B5F58', '#169070', '#22A77B']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.streakCard}
-      >
+    <LinearGradient
+      colors={['#0B5F58', '#169070', '#22A77B']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.streakCard, { marginBottom: verticalScale(20) }, style]}
+    >
         <View style={styles.streakGlow} />
         <View style={styles.streakHeader}>
-          <View style={styles.flameCircle}>
-            <FireStreak
-              streakCount={visibleStreak}
-              isActive={currentStreak >= 3}
-              size={28}
-              mode="badge"
-            />
-          </View>
+          <TouchableOpacity 
+            activeOpacity={onOpenStreakOverlay ? 0.7 : 1}
+            onPress={onOpenStreakOverlay}
+            style={styles.flameCircle}
+          >
+            {isStreakActive ? (
+              <LottieView
+                source={require('../../../assets/Fire.lottie')}
+                autoPlay
+                loop
+                style={{ width: scale(42), height: scale(42) }}
+              />
+            ) : (
+              <Image
+                source={require('../../../assets/Unfire.png')}
+                style={{ width: scale(34), height: scale(34), resizeMode: 'contain' }}
+              />
+            )}
+          </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.streakLabel}>YOUR ECO STREAK</Text>
             <Text style={styles.streakTagline} numberOfLines={2}>
-              {currentStreak < 3
+              {!isStreakActive
                 ? currentStreak === 0
                   ? 'Log a habit to start your streak!'
                   : `${3 - currentStreak} more days to unlock your streak!`
@@ -94,7 +106,6 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, lastSev
           ))}
         </View>
       </LinearGradient>
-    </View>
   );
 }
 
@@ -197,5 +208,25 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     height: verticalScale(10),
     backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  fireOverlayTestBtn: {
+    marginTop: verticalScale(14),
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 222, 0, 0.4)',
+    borderRadius: moderateScale(14),
+    paddingVertical: verticalScale(8),
+    paddingHorizontal: scale(14),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scale(8),
+    zIndex: 2,
+  },
+  fireOverlayTestBtnText: {
+    color: '#FFF',
+    fontWeight: '800',
+    fontSize: responsiveFontSize(12),
+    letterSpacing: 0.5,
   },
 });

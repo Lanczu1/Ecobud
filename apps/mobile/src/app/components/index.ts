@@ -11,6 +11,8 @@ export { CommunityImpactCard } from './CommunityImpactCard';
 export { LevelCard } from './LevelCard';
 export { MilestoneBadgePreview } from './MilestoneBadgePreview';
 export { EcoLevelsOverlay } from './EcoLevelsOverlay';
+export { CoachMarksOverlay } from './CoachMarksOverlay';
+export { CoachMarkTarget, SpotlightRect } from './CoachMarkTarget';
 // Re-export common components
 export * from './CommonComponents';
 // Re-export views and overlays

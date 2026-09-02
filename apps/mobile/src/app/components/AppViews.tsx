@@ -43,6 +43,7 @@ import {
   SurfaceCard,
   SecondaryButton,
 } from './CommonComponents';
+import { CoachMarkTarget } from './CoachMarkTarget';
 import { RejectionModal } from './RejectionModal';
 import { FireStreak } from './FireStreak';
 import { LevelCard, getLevelFromPoints } from './LevelCard';
@@ -350,23 +351,8 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
 }
 
 function getDisplayStreak(model: EcoBudMobileModel): number {
-  const completedDays = model.tracker?.completedDays ?? [];
-  const trackerMonth = model.tracker?.month ?? getPhMonthKey();
-  const calendarCells = buildCalendarCells(trackerMonth, completedDays);
-  let calcStreak = 0;
-  const todayIdx = calendarCells.findIndex(c => c.isToday);
-  let startIdx = calendarCells.length - 1;
-  if (todayIdx !== -1) startIdx = todayIdx;
-  let i = startIdx;
-  if (todayIdx !== -1 && i >= 0 && !calendarCells[i].completed) i--;
-  for (; i >= 0; i--) {
-    const c = calendarCells[i];
-    if (!c.dateKey) continue;
-    if (c.completed) calcStreak++;
-    else break;
-  }
   const backendStreak = model.dashboard?.streak ?? model.tracker?.currentStreak ?? model.session?.user.currentStreak ?? 0;
-  return Math.max(backendStreak, calcStreak);
+  return backendStreak;
 }
 
 export function HomeView({ model }: { model: EcoBudMobileModel }) {
@@ -380,18 +366,54 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
     ).start();
   }, [pulseAnim]);
 
+  const hour = new Date().getHours();
+  const greetingInfo = hour >= 5 && hour < 12 
+    ? { text: 'Good morning', icon: 'sunny' as const, color: '#F59E0B' }
+    : hour >= 12 && hour < 18 
+    ? { text: 'Good afternoon', icon: 'partly-sunny' as const, color: '#F97316' }
+    : { text: 'Good evening', icon: 'moon' as const, color: '#6366F1' };
+
   return (
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
-        <Text style={styles.welcomeLabel}>WELCOME BACK</Text>
-        <Text style={styles.welcomeTitle}>Hello, {model.userDisplayName.split(' ')[0]}!</Text>
-        <Text style={styles.welcomeSubtitle}>Let's keep your green streak going and make a positive impact today!</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
+          <View style={{ flex: 1, paddingRight: scale(8) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+              <Ionicons name={greetingInfo.icon} size={scale(18)} color={greetingInfo.color} />
+              <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: '#6B7A75', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                {greetingInfo.text}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
+              <Text style={[styles.welcomeTitle, { marginTop: 0 }]}>
+                {model.userDisplayName.split(' ')[0]}
+              </Text>
+              <MaterialCommunityIcons name="hand-wave" size={scale(26)} color="#F59E0B" style={{ transform: [{ rotate: '-10deg' }] }} />
+            </View>
+          </View>
+          <View
+            style={{
+              width: scale(44),
+              height: scale(44),
+              borderRadius: scale(22),
+              backgroundColor: '#E8F5E9',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: '#C8E6C9',
+            }}
+          >
+            <Ionicons name="leaf" size={scale(22)} color="#126027" />
+          </View>
+        </View>
+        <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(14) }]}>Let's keep your green streak going and make a positive impact today!</Text>
 
         <SummaryCards
           currentStreak={getDisplayStreak(model)}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
           onPressRewards={() => model.setActiveOverlay('streakRewards')}
+          onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
         />
 
         <QuickActions model={model} />
@@ -512,36 +534,46 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
       <View style={styles.homeContent}>
 
         {featuredLesson ? (
-          <ImageBackground source={{ uri: featuredLesson.imageUrl ? `${ecobudApiOrigin}${featuredLesson.imageUrl}` : 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=800&auto=format&fit=crop' }} style={styles.featuredProgramCard} imageStyle={{ borderRadius: 24 }}>
-            <View style={styles.featuredProgramOverlay} />
-            <View style={styles.featuredProgramContent}>
-              <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-                <View style={styles.tagLight}><Text style={styles.tagLightText}>FEATURED COURSE</Text></View>
-              </View>
-              <Text style={styles.featuredProgramTitle}>{featuredLesson.title}</Text>
-              <Text style={styles.featuredProgramDesc}>{featuredLesson.description}</Text>
+          <CoachMarkTarget
+            name="featuredLesson"
+            borderRadius={moderateScale(24)}
+            active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
+            onMeasure={(rect) => {
+              model.setSpotlightTargetRect?.(rect);
+            }}
+            style={{ marginBottom: verticalScale(24) }}
+          >
+            <ImageBackground source={{ uri: featuredLesson.imageUrl ? `${ecobudApiOrigin}${featuredLesson.imageUrl}` : 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=800&auto=format&fit=crop' }} style={[styles.featuredProgramCard, { marginBottom: 0 }]} imageStyle={{ borderRadius: moderateScale(24) }}>
+              <View style={styles.featuredProgramOverlay} />
+              <View style={styles.featuredProgramContent}>
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  <View style={styles.tagLight}><Text style={styles.tagLightText}>FEATURED COURSE</Text></View>
+                </View>
+                <Text style={styles.featuredProgramTitle}>{featuredLesson.title}</Text>
+                <Text style={styles.featuredProgramDesc}>{featuredLesson.description}</Text>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <TouchableOpacity onPress={() => void model.openLesson(featuredLesson.id)} style={styles.featuredProgramBtn}>
-                  <Ionicons name="play-circle" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.featuredProgramBtnText}>Start Lesson</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <TouchableOpacity onPress={() => void model.openLesson(featuredLesson.id)} style={styles.featuredProgramBtn}>
+                    <Ionicons name="play-circle" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.featuredProgramBtnText}>Start Lesson</Text>
+                  </TouchableOpacity>
 
-                <View style={{ flexDirection: 'row', gap: -8 }}>
-                  {['Mia', 'Noah', 'Sage'].map((name) => (
-                    <AvatarBubble
-                      key={name}
-                      label={name}
-                      size={28}
-                      style={styles.nftAvatar}
-                      textStyle={styles.nftAvatarText}
-                    />
-                  ))}
-                  <View style={[styles.nftAvatar, { backgroundColor: '#1E4C31' }]}><Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>+12k</Text></View>
+                  <View style={{ flexDirection: 'row', gap: -8 }}>
+                    {['Mia', 'Noah', 'Sage'].map((name) => (
+                      <AvatarBubble
+                        key={name}
+                        label={name}
+                        size={28}
+                        style={styles.nftAvatar}
+                        textStyle={styles.nftAvatarText}
+                      />
+                    ))}
+                    <View style={[styles.nftAvatar, { backgroundColor: '#1E4C31' }]}><Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>+12k</Text></View>
+                  </View>
                 </View>
               </View>
-            </View>
-          </ImageBackground>
+            </ImageBackground>
+          </CoachMarkTarget>
         ) : (
           <SurfaceCard style={styles.publicInfoCard}>
             <Text style={styles.sectionHeadline}>No courses available</Text>
@@ -922,19 +954,73 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
-        <Text style={localStyles.headerEyebrow}>YOUR ECO JOURNEY</Text>
-        <Text style={localStyles.headerTitle}>Choose your next impact</Text>
-        <Text style={localStyles.headerSubtitle}>Small actions add up. Pick a mission that fits your day and start making a difference.</Text>
+        <View style={{ marginBottom: verticalScale(4) }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
+            <View style={{ flex: 1, paddingRight: scale(8) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+                <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
+                <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: '#6B7A75', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                  YOUR ECO JOURNEY
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
+                <Text style={[styles.welcomeTitle, { marginTop: 0 }]}>
+                  Tasks & Challenges
+                </Text>
+                <MaterialCommunityIcons name="target" size={scale(26)} color="#126027" />
+              </View>
+            </View>
+            <View
+              style={{
+                width: scale(44),
+                height: scale(44),
+                borderRadius: scale(22),
+                backgroundColor: '#E8F5E9',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: '#C8E6C9',
+              }}
+            >
+              <Ionicons name="trophy" size={scale(22)} color="#126027" />
+            </View>
+          </View>
+          <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(4), color: '#6B7A75', fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(19) }]}>
+            Small actions add up. Pick a mission that fits your day and start making a difference.
+          </Text>
+        </View>
 
         {/* View Mode Tabs */}
-        <View style={{ flexDirection: 'row', backgroundColor: '#F0F5F2', borderRadius: 12, padding: 4, marginTop: 20, marginBottom: 10 }}>
-          {['Discover', 'My Tasks', 'History'].map(tab => (
+        <View style={{ flexDirection: 'row', backgroundColor: '#F0F5F2', borderRadius: 14, padding: 4, marginTop: verticalScale(10), marginBottom: verticalScale(10) }}>
+          {[
+            { key: 'Discover', label: 'Discover', icon: 'compass-outline' as const },
+            { key: 'My Tasks', label: 'My Tasks', icon: 'list-circle-outline' as const },
+            { key: 'History', label: 'History', icon: 'time-outline' as const }
+          ].map(tab => (
             <TouchableOpacity 
-              key={tab} 
-              style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: viewMode === tab ? '#FFFFFF' : 'transparent', shadowColor: viewMode === tab ? '#000' : 'transparent', shadowOpacity: 0.05, shadowRadius: 3, elevation: viewMode === tab ? 2 : 0 }}
-              onPress={() => setViewMode(tab as any)}
+              key={tab.key} 
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+                borderRadius: 10,
+                backgroundColor: viewMode === tab.key ? '#FFFFFF' : 'transparent',
+                shadowColor: viewMode === tab.key ? '#000' : 'transparent',
+                shadowOpacity: 0.06,
+                shadowRadius: 4,
+                elevation: viewMode === tab.key ? 2 : 0
+              }}
+              onPress={() => setViewMode(tab.key as any)}
             >
-              <Text style={{ fontWeight: '700', color: viewMode === tab ? '#126027' : '#6B7A75', fontSize: 13 }}>{tab}</Text>
+              <Ionicons 
+                name={tab.icon} 
+                size={16} 
+                color={viewMode === tab.key ? '#126027' : '#6B7A75'} 
+              />
+              <Text style={{ fontWeight: '700', color: viewMode === tab.key ? '#126027' : '#6B7A75', fontSize: 13 }}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -1058,16 +1144,45 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         {/* === VIEW MODE 1: DISCOVER TAB (ALL AVAILABLE CHALLENGES) === */}
         {viewMode === 'Discover' && (
           <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
-            {currentActiveList.map((challenge) => (
-              <DiscoverChallengeCard
-                key={challenge.uniqueId || challenge.id}
-                challenge={challenge}
-                isTablet={isTablet}
-                onPress={() => {
-                  model.openChallengeMission(challenge);
-                }}
-              />
-            ))}
+            {currentActiveList.map((challenge, index) => {
+              if (index === 0) {
+                return (
+                  <CoachMarkTarget
+                    key={challenge.uniqueId || challenge.id}
+                    name="featuredChallenge"
+                    borderRadius={moderateScale(22)}
+                    active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
+                    onMeasure={(rect) => {
+                      model.setSpotlightTargetRect?.(rect);
+                    }}
+                    style={[
+                      { marginBottom: verticalScale(16) },
+                      isTablet ? { width: '48%' } : undefined
+                    ]}
+                  >
+                    <DiscoverChallengeCard
+                      challenge={challenge}
+                      isTablet={isTablet}
+                      style={{ marginBottom: 0 }}
+                      onPress={() => {
+                        model.openChallengeMission(challenge);
+                      }}
+                    />
+                  </CoachMarkTarget>
+                );
+              }
+
+              return (
+                <DiscoverChallengeCard
+                  key={challenge.uniqueId || challenge.id}
+                  challenge={challenge}
+                  isTablet={isTablet}
+                  onPress={() => {
+                    model.openChallengeMission(challenge);
+                  }}
+                />
+              );
+            })}
           </View>
         )}
 
@@ -1720,12 +1835,24 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
       <TopNavbar model={model} showBack={false} title="Tracker" />
 
       <View style={styles.homeContent}>
-        {/* ── Current Streak Card ─────────────────────────────────────────── */}
-        <SummaryCards
-          currentStreak={getDisplayStreak(model)}
-          ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
-          onPressRewards={() => model.setActiveOverlay('streakRewards')}
-        />
+        {/* ── Current Streak Card wrapped in CoachMarkTarget ── */}
+        <CoachMarkTarget
+          name="ecoStreak"
+          borderRadius={moderateScale(24)}
+          active={model.coachMarksVisible && model.coachMarksCurrentStep === 2}
+          onMeasure={(rect) => {
+            model.setSpotlightTargetRect?.(rect);
+          }}
+          style={{ marginBottom: verticalScale(20) }}
+        >
+          <SummaryCards
+            currentStreak={getDisplayStreak(model)}
+            ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
+            onPressRewards={() => model.setActiveOverlay('streakRewards')}
+            onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
+            style={{ marginBottom: 0 }}
+          />
+        </CoachMarkTarget>
 
 
         {/* ── Level Progress Card ────────────────────────────────────────── */}
@@ -1800,33 +1927,19 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               </TouchableOpacity>
               <View style={{ alignItems: 'center' }}>
                 {(() => {
-                  let calcStreak = 0;
-                  const todayIdx = calendarCells.findIndex(c => c.isToday);
-                  let startIdx = calendarCells.length - 1;
-                  if (todayIdx !== -1) {
-                    startIdx = todayIdx;
-                  }
-                  let i = startIdx;
-                  if (todayIdx !== -1 && i >= 0 && !calendarCells[i].completed) {
-                    i--; // allow today to be empty without breaking streak
-                  }
-                  for (; i >= 0; i--) {
-                    const c = calendarCells[i];
-                    if (!c.dateKey) continue;
-                    if (c.completed) calcStreak++;
-                    else break;
-                  }
+                  const currentStreak = getDisplayStreak(model);
+                  const isStreakActive = currentStreak >= 3;
                   
-                  return calcStreak >= 3 ? (
+                  return isStreakActive ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
                       <Text style={{ fontSize: 12, fontWeight: '800', color: '#169070', letterSpacing: 0.5 }}>
-                        BUILDING STREAK: {calcStreak}
+                        BUILDING STREAK: {currentStreak}
                       </Text>
                       <Ionicons name="flame" size={14} color="#F97316" />
                     </View>
                   ) : (
                     <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7A75', marginBottom: 6 }}>
-                      Count {calcStreak}/3 to show the streak
+                      Count {currentStreak}/3 to show the streak
                     </Text>
                   );
                 })()}
@@ -2272,42 +2385,51 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
             </View>
           </View>
 
-          {/* Integrated Horizontal Coin Balance Glass Bar */}
-          <TouchableOpacity 
-            style={[
-              profileStyles.coinCardHorizontal,
-              isSmallDevice && { paddingHorizontal: scale(10), paddingVertical: verticalScale(8), borderRadius: moderateScale(12) }
-            ]}
-            onPress={() => model.setActiveOverlay('coinsHistory')}
-            activeOpacity={0.85}
+          {/* Integrated Horizontal Coin Balance Glass Bar wrapped in CoachMarkTarget */}
+          <CoachMarkTarget
+            name="ecoCoins"
+            borderRadius={isSmallDevice ? moderateScale(12) : moderateScale(16)}
+            active={model.coachMarksVisible && model.coachMarksCurrentStep === 1}
+            onMeasure={(rect) => {
+              model.setSpotlightTargetRect?.(rect);
+            }}
           >
-            <View style={[profileStyles.coinCardLeft, isSmallDevice && { gap: scale(8) }]}>
-              <Image
-                source={require('../../../assets/coin.png')}
-                style={[profileStyles.coinBalanceIconHoriz, isSmallDevice && { width: scale(22), height: scale(22) }]}
-                resizeMode="contain"
-              />
-              <View style={{ justifyContent: 'center', flexShrink: 1 }}>
-                <Text style={[profileStyles.coinBalanceLabelHoriz, isSmallDevice && { fontSize: responsiveFontSize(9) }]}>
-                  Eco Coins
-                </Text>
-                <Text
-                  style={[profileStyles.coinBalanceAmountHoriz, isSmallDevice && { fontSize: responsiveFontSize(15), lineHeight: responsiveFontSize(18) }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                >
-                  {model.dashboard?.ecoCoins ?? 0}
-                </Text>
+            <TouchableOpacity 
+              style={[
+                profileStyles.coinCardHorizontal,
+                isSmallDevice && { paddingHorizontal: scale(10), paddingVertical: verticalScale(8), borderRadius: moderateScale(12) }
+              ]}
+              onPress={() => model.setActiveOverlay('coinsHistory')}
+              activeOpacity={0.85}
+            >
+              <View style={[profileStyles.coinCardLeft, isSmallDevice && { gap: scale(8) }]}>
+                <Image
+                  source={require('../../../assets/coin.png')}
+                  style={[profileStyles.coinBalanceIconHoriz, isSmallDevice && { width: scale(22), height: scale(22) }]}
+                  resizeMode="contain"
+                />
+                <View style={{ justifyContent: 'center', flexShrink: 1 }}>
+                  <Text style={[profileStyles.coinBalanceLabelHoriz, isSmallDevice && { fontSize: responsiveFontSize(9) }]}>
+                    Eco Coins
+                  </Text>
+                  <Text
+                    style={[profileStyles.coinBalanceAmountHoriz, isSmallDevice && { fontSize: responsiveFontSize(15), lineHeight: responsiveFontSize(18) }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    {model.dashboard?.ecoCoins ?? 0}
+                  </Text>
+                </View>
               </View>
-            </View>
-            <View style={[profileStyles.coinHistoryChip, isSmallDevice && { paddingHorizontal: scale(8), paddingVertical: verticalScale(4) }]}>
-              <Text style={[profileStyles.coinHistoryChipText, isSmallDevice && { fontSize: responsiveFontSize(10) }]}>
-                Coins History
-              </Text>
-              <Ionicons name="chevron-forward" size={isSmallDevice ? scale(12) : scale(14)} color="#FDE68A" />
-            </View>
-          </TouchableOpacity>
+              <View style={[profileStyles.coinHistoryChip, isSmallDevice && { paddingHorizontal: scale(8), paddingVertical: verticalScale(4) }]}>
+                <Text style={[profileStyles.coinHistoryChipText, isSmallDevice && { fontSize: responsiveFontSize(10) }]}>
+                  Coins History
+                </Text>
+                <Ionicons name="chevron-forward" size={isSmallDevice ? scale(12) : scale(14)} color="#FDE68A" />
+              </View>
+            </TouchableOpacity>
+          </CoachMarkTarget>
         </LinearGradient>
 
         {/* Progress Bar Info */}
@@ -2413,6 +2535,25 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               <View style={profileStyles.actionTextCol}>
                 <Text style={profileStyles.actionLabel}>Settings & Security</Text>
                 <Text style={profileStyles.actionSub}>Manage account security & password</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+            </TouchableOpacity>
+
+            <View style={profileStyles.divider} />
+
+            <TouchableOpacity
+              style={profileStyles.actionItem}
+              onPress={() => {
+                model.setActiveTab('home');
+                model.showCoachMarks();
+              }}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="help-buoy-outline" size={20} color="#059669" />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: '#059669' }]}>Replay Tutorial</Text>
+                <Text style={profileStyles.actionSub}>Re-watch the app walkthrough guide</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
             </TouchableOpacity>

@@ -1,9 +1,8 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { ActivityIndicator, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import LottieView from 'lottie-react-native';
 
-const loadingGif = require('../../../assets/Loading.gif');
+const loadingAnimation = require('../../../assets/Loading.json');
 
 const isAndroid = Platform.OS === 'android';
 const isLegacyAndroid = isAndroid && typeof Platform.Version === 'number' && Platform.Version < 29;
@@ -27,14 +26,14 @@ function getGlyphSize(size: LoadingGlyphSize): number {
   }
 
   if (size === 'lg') {
-    return isLegacyAndroid ? 124 : 156;
+    return isLegacyAndroid ? 140 : 180;
   }
 
   return isLegacyAndroid ? 64 : 80;
 }
 
 export function LoadingScreenVisual({ label, message, style }: LoadingScreenVisualProps) {
-  const gifSize = getGlyphSize('lg');
+  const lottieSize = getGlyphSize('lg');
 
   return (
     <View
@@ -44,11 +43,11 @@ export function LoadingScreenVisual({ label, message, style }: LoadingScreenVisu
     >
 
       <View style={[styles.contentWrap, isLegacyAndroid && styles.contentWrapLegacy]}>
-        <Image
-          source={loadingGif}
-          style={{ width: '100%', height: gifSize, alignSelf: 'center' }}
-          contentFit="contain"
-          transition={0}
+        <LottieView
+          source={loadingAnimation}
+          autoPlay
+          loop
+          style={{ width: lottieSize, height: lottieSize, alignSelf: 'center' }}
         />
         {label ? <Text style={styles.title}>{label}</Text> : null}
         {message ? <Text style={styles.message}>{message}</Text> : null}

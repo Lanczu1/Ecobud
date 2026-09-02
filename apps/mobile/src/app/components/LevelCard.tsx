@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
@@ -8,6 +8,8 @@ import { triggerImpactLight } from '../utils/haptics';
 export interface LevelCardProps {
   ecoPoints: number;
   onPress?: () => void;
+  /** Called after layout with the progress bar's absolute screen position */
+  onProgressBarMeasured?: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
 const LEVELS = [
@@ -38,7 +40,9 @@ export function getLevelFromPoints(points: number) {
   return { currentLevelObj, nextLevelObj };
 }
 
-export function LevelCard({ ecoPoints, onPress }: LevelCardProps) {
+export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCardProps) {
+  const progressBarRef = React.useRef<View>(null);
+
   const [displayPoints, setDisplayPoints] = React.useState(ecoPoints);
 
   React.useEffect(() => {
@@ -144,7 +148,18 @@ export function LevelCard({ ecoPoints, onPress }: LevelCardProps) {
                 </>
               )}
             </View>
-            <View style={styles.progressBarBackground}>
+            <View
+              ref={progressBarRef}
+              style={styles.progressBarBackground}
+              onLayout={(_e: LayoutChangeEvent) => {
+                // Use measureInWindow for absolute screen coords (works across overlays)
+                progressBarRef.current?.measureInWindow((x, y, width, height) => {
+                  if (width > 0 && height > 0 && onProgressBarMeasured) {
+                    onProgressBarMeasured({ x, y, width, height });
+                  }
+                });
+              }}
+            >
               <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
             </View>
             {!isMaxLevel && (

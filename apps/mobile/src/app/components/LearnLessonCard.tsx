@@ -15,6 +15,7 @@ import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
   onPress: () => void;
+  style?: any;
 }
 
 const getActionLabel = (status: LessonWithProgress['status']) => {
@@ -41,7 +42,7 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
   return 'Not Started';
 };
 
-export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
+export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps) {
   const { isSmall } = useResponsive();
   const [imgError, setImgError] = React.useState(false);
   const animatedProgress = React.useRef(new Animated.Value(0)).current;
@@ -72,7 +73,7 @@ export function LearnLessonCard({ lesson, onPress }: LearnLessonCardProps) {
   const starIconSize = isSmall ? clampFontSize(9.5, 8, 10) : clampFontSize(11, 10, 12);
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={styles.card}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, style]}>
       <View style={styles.imageWrapper}>
         {resolvedImageUrl && !imgError ? (
           <Image 

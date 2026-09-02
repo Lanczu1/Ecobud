@@ -57,8 +57,8 @@ const toPresenceRequest = (input: PresenceSyncInput): PresenceSyncRequest => ({
 });
 
 const unwrapPresence = (
-  response: { presence: PresenceSessionPayload | null },
-) => response.presence ?? null;
+  response?: { presence?: PresenceSessionPayload | null } | null,
+) => response?.presence ?? null;
 
 const getDefaultPersistedState = (): PersistedPresenceState => ({
   pendingIntent: null,
