@@ -129,6 +129,30 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [newlyUnlockedBadges, setNewlyUnlockedBadges] = useState<EcoBadge[]>([]);
   const [selectedBadge, setSelectedBadge] = useState<EcoBadge | null>(null);
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
+  const [coachMarksCurrentStep, setCoachMarksCurrentStep] = useState(0);
+  const [coachMarksVisible, setCoachMarksVisible] = useState(false);
+  const [spotlightTargetRect, setSpotlightTargetRectState] = useState<{ x: number; y: number; width: number; height: number; borderRadius?: number } | null>(null);
+
+  const setSpotlightTargetRect = useCallback((rect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null) => {
+    setSpotlightTargetRectState((prev) => {
+      if (!prev && !rect) return prev;
+      if (
+        prev &&
+        rect &&
+        Math.round(prev.x) === Math.round(rect.x) &&
+        Math.round(prev.y) === Math.round(rect.y) &&
+        Math.round(prev.width) === Math.round(rect.width) &&
+        Math.round(prev.height) === Math.round(rect.height) &&
+        prev.borderRadius === rect.borderRadius
+      ) {
+        return prev;
+      }
+      return rect;
+    });
+  }, []);
+
+  const [progressBarLayout, setProgressBarLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
   const presence = usePresence(session);
 
   const openBadgeOverlay = useCallback((badge: EcoBadge) => {
@@ -170,7 +194,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [learnSearch, learnFilter, learnCategory, lessons]);
 
   const todaysCompletedHabits = useMemo(
-    () => habitsToday?.items.filter((item) => item.completedToday).length ?? 0,
+    () => (Array.isArray(habitsToday?.items) ? habitsToday.items.filter((item) => item.completedToday).length : 0),
     [habitsToday],
   );
 
@@ -415,44 +439,48 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   const hydrateApp = useCallback(
-    async (existingSession: SessionPayload, silent = false) => {
+    async (existingSession: SessionPayload | null | undefined, silent = false) => {
+      if (!existingSession?.token) {
+        return;
+      }
+
       if (!silent) {
         setRefreshing(true);
       }
 
       try {
-
         const data = await homeService.getFullHydrationData(existingSession.token);
 
-        if (data.lessons) {
-          data.lessons.sort((a: any, b: any) => {
-            if (a.featured && !b.featured) return -1;
-            if (!a.featured && b.featured) return 1;
-            return 0;
-          });
-        }
+        const safeLessons = Array.isArray(data?.lessons) ? [...data.lessons] : [];
+        safeLessons.sort((a: any, b: any) => {
+          if (a.featured && !b.featured) return -1;
+          if (!a.featured && b.featured) return 1;
+          return 0;
+        });
 
         // Initialize baseline refs on first hydration if not yet set
-        if (previousStreakRef.current === null && data.dashboard) {
+        if (previousStreakRef.current === null && data?.dashboard) {
           previousStreakRef.current = data.dashboard.streak;
         }
-        if (previousUnlockedBadgeIdsRef.current === null && data.rewards?.badges) {
+        if (previousUnlockedBadgeIdsRef.current === null && data?.rewards?.badges) {
           const unlockedIds = new Set<string>(data.rewards.badges.filter((b: any) => b.unlocked).map((b: any) => String(b.id)));
           previousUnlockedBadgeIdsRef.current = unlockedIds;
         }
 
-        setDashboard(data.dashboard);
-        setLessons(data.lessons);
-        setChallenges(data.challenges);
-        setIsCycleActive(data.isCycleActive ?? true);
-        setHabitsToday(data.habitsToday);
-        setTracker(data.tracker);
-        setProfile(data.profile);
-        setRewards(data.rewards);
-        setLeaderboard(data.leaderboard);
-        setEvents(data.events);
-        setTransparency(data.transparency);
-        setSelectedLessonId((current) => current ?? data.lessons[0]?.id ?? null);
+        setDashboard(data?.dashboard ?? null);
+        setLessons(safeLessons);
+        setChallenges(Array.isArray(data?.challenges) ? data.challenges : []);
+        setIsCycleActive(data?.isCycleActive ?? true);
+        setHabitsToday(data?.habitsToday ?? null);
+        setTracker(data?.tracker ?? null);
+        setProfile(data?.profile ?? null);
+        setRewards(data?.rewards ?? null);
+        setLeaderboard(data?.leaderboard ?? null);
+        setEvents(Array.isArray(data?.events) ? data.events : []);
+        setTransparency(data?.transparency ?? null);
+        setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
+        const userDisplayName = existingSession?.user?.displayName || existingSession?.user?.name || 'Eco Warrior';
+        const firstName = userDisplayName.split(' ')[0] || 'Eco Warrior';
         setAssistantMessages((current) =>
           current.length > 0
             ? current
@@ -460,7 +488,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               {
                 id: 'assistant-welcome',
                 role: 'assistant',
-                text: `Hello ${existingSession.user.displayName.split(' ')[0]}! I can help with composting, eco points, local events, or finding the right challenge for today.`,
+                text: `Hello ${firstName}! I can help with composting, eco points, local events, or finding the right challenge for today.`,
                 time: formatChatTime(new Date().toISOString()),
               },
             ],
@@ -541,10 +569,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
         if (savedSession) {
           try {
             const parsed = JSON.parse(savedSession) as SessionPayload;
-            setSession(parsed);
-            await hydrateApp(parsed, true);
+            if (parsed && typeof parsed === 'object' && parsed.token && parsed.user) {
+              setSession(parsed);
+              await hydrateApp(parsed, true);
+            } else {
+              await mobileStorage.removeItem(SESSION_STORAGE_KEY);
+            }
           } catch (e) {
             console.error('Failed to parse saved session', e);
+            await mobileStorage.removeItem(SESSION_STORAGE_KEY);
           }
         }
       } catch (error) {
@@ -622,23 +655,33 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, []);
 
-  // Auto-sync polling for Challenges, Events & Real-time status updates
+  // Auto-sync polling for Lessons, Challenges, Events & Real-time status updates
   useEffect(() => {
     if (!session?.token) return;
 
     const interval = setInterval(() => {
       if (AppState.currentState === 'active' && presence.hasUsableInternet) {
-        // Silently fetch latest challenges and events without blocking UI
+        // Silently fetch latest lessons, challenges and events without blocking UI
         Promise.all([
+          homeService.getLessons(session.token).catch(() => null),
           homeService.getChallenges(session.token).catch(() => null),
           homeService.getEvents(session.token).catch(() => null),
-        ]).then(([challengesRes, newEvents]) => {
+        ]).then(([lessonsRes, challengesRes, newEvents]) => {
+          if (lessonsRes && Array.isArray(lessonsRes)) {
+            const safeLessons = [...lessonsRes];
+            safeLessons.sort((a: any, b: any) => {
+              if (a.featured && !b.featured) return -1;
+              if (!a.featured && b.featured) return 1;
+              return 0;
+            });
+            setLessons(safeLessons);
+          }
           if (challengesRes) {
-            setChallenges(challengesRes.items || []);
-            setIsCycleActive(challengesRes.isCycleActive ?? false);
+            setChallenges(Array.isArray(challengesRes?.items) ? challengesRes.items : Array.isArray(challengesRes) ? challengesRes : []);
+            setIsCycleActive(challengesRes?.isCycleActive ?? true);
           }
           if (newEvents) {
-            setEvents(newEvents);
+            setEvents(Array.isArray(newEvents) ? newEvents : Array.isArray((newEvents as any)?.items) ? (newEvents as any).items : []);
           }
         }).catch(() => {});
       }
@@ -692,6 +735,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, []);
 
+  const completeCoachMarks = useCallback(() => {
+    setCoachMarksVisible(false);
+    setCoachMarksCurrentStep(0);
+  }, []);
+
+  const showCoachMarks = useCallback(() => {
+    setCoachMarksCurrentStep(0);
+    setCoachMarksVisible(true);
+  }, []);
+
   const continueWithReadOnlyAccess = useCallback(async () => {
     await runWithActionLoader('Opening public viewer...', async () => {
       await presence.disconnectPresence({ clearSessionId: true });
@@ -724,7 +777,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       try {
         const nextSession = await homeService.login(email.trim(), pass);
 
-        if (nextSession.user.role === 'admin' || nextSession.user.role === 'moderator') {
+        if (nextSession?.user?.role === 'admin' || nextSession?.user?.role === 'moderator') {
           throw new Error('Administrators and moderators cannot log in via the mobile app. Please use the web portal.');
         }
 
@@ -885,7 +938,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               city: selectedCity || existingCity || undefined,
             });
 
-            if (nextSession.user.role === 'admin' || nextSession.user.role === 'moderator') {
+            if (nextSession?.user?.role === 'admin' || nextSession?.user?.role === 'moderator') {
               throw new Error('Administrators and moderators cannot log in via the mobile app.');
             }
 
@@ -932,6 +985,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setSession(nextSession);
         await persistSession(nextSession);
         await hydrateApp(nextSession);
+        // Automatically trigger tour for newly registered users right after verification loading
+        setTimeout(() => {
+          setCoachMarksCurrentStep(0);
+          setCoachMarksVisible(true);
+        }, 400);
       } catch (error) {
         setAuthError(error instanceof Error ? error.message : 'Sign up failed.');
       } finally {
@@ -1973,5 +2031,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleUpdateProfileImage,
     handleUpdateProfile,
     handleUpdateSecuritySettings,
+    coachMarksCurrentStep,
+    setCoachMarksCurrentStep,
+    coachMarksVisible,
+    completeCoachMarks,
+    showCoachMarks,
+    spotlightTargetRect,
+    setSpotlightTargetRect,
+    progressBarLayout,
+    setProgressBarLayout,
   };
+
 }

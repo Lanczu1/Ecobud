@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
@@ -8,7 +8,7 @@ import { type EcoBudMobileModel } from '../types/home';
 export interface QuickActionsProps {
   model?: EcoBudMobileModel;
   onPressHabits?: () => void;
-  onPressRewards?: () => void;
+  onPressRedeemCoins?: () => void;
   onPressMarketplace?: () => void;
   onPressEvents?: () => void;
 }
@@ -17,8 +17,9 @@ interface ActionItem {
   id: string;
   label: string;
   subLabel: string;
-  iconType: 'ionicons' | 'material';
-  iconName: string;
+  iconType: 'ionicons' | 'material' | 'image';
+  iconName?: string;
+  imageSource?: any;
   bgColor: string;
   iconColor: string;
   borderColor: string;
@@ -29,7 +30,7 @@ interface ActionItem {
 export function QuickActions({
   model,
   onPressHabits,
-  onPressRewards,
+  onPressRedeemCoins,
   onPressMarketplace,
   onPressEvents,
 }: QuickActionsProps) {
@@ -45,12 +46,12 @@ export function QuickActions({
     }
   };
 
-  const handleRewards = () => {
+  const handleRedeemCoins = () => {
     triggerImpactLight();
-    if (onPressRewards) {
-      onPressRewards();
+    if (onPressRedeemCoins) {
+      onPressRedeemCoins();
     } else if (model) {
-      model.setActiveOverlay('rewards');
+      model.setActiveOverlay('redeemPoints');
     }
   };
 
@@ -85,15 +86,15 @@ export function QuickActions({
       onPress: handleHabits,
     },
     {
-      id: 'rewards',
-      label: 'Rewards',
-      subLabel: 'Redeem coins',
-      iconType: 'ionicons',
-      iconName: 'gift',
+      id: 'redeem_coins',
+      label: 'Redeem Coins',
+      subLabel: 'Get rewards',
+      iconType: 'image',
+      imageSource: require('../../../assets/coin.png'),
       bgColor: '#FEF3C7',
       iconColor: '#D97706',
       borderColor: '#FDE68A',
-      onPress: handleRewards,
+      onPress: handleRedeemCoins,
     },
     {
       id: 'give_and_get',
@@ -133,7 +134,13 @@ export function QuickActions({
             ]}
           >
             <View style={[styles.iconCircle, { backgroundColor: action.bgColor }]}>
-              {action.iconType === 'material' ? (
+              {action.iconType === 'image' ? (
+                <Image
+                  source={action.imageSource}
+                  style={{ width: scale(22), height: scale(22) }}
+                  resizeMode="contain"
+                />
+              ) : action.iconType === 'material' ? (
                 <MaterialCommunityIcons
                   name={action.iconName as any}
                   size={scale(22)}

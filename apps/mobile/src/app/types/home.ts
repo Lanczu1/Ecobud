@@ -80,8 +80,10 @@ export interface SummaryCardsProps {
   currentStreak: number;
   ecoPoints: number;
   onPressRewards?: () => void;
+  onOpenStreakOverlay?: () => void;
   lastSevenDays?: Date[];
   completedDays?: string[];
+  style?: any;
 }
 
 export interface ActiveChallengeCardProps {
@@ -236,4 +238,14 @@ export interface EcoBudMobileModel {
   handleUpdateProfileImage: (uri: string) => Promise<any>;
   handleUpdateProfile: (payload: { displayName?: string; email?: string; city?: string }) => Promise<void>;
   handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => Promise<void>;
+  coachMarksCurrentStep: number;
+  setCoachMarksCurrentStep: (step: number) => void;
+  coachMarksVisible: boolean;
+  completeCoachMarks: () => void;
+  showCoachMarks: () => void;
+  spotlightTargetRect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null;
+  setSpotlightTargetRect: (rect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null) => void;
+  /** Real measured screen position of the LevelCard progress bar, for accurate particle targeting */
+  progressBarLayout: { x: number; y: number; width: number; height: number } | null;
+  setProgressBarLayout: (layout: { x: number; y: number; width: number; height: number } | null) => void;
 }

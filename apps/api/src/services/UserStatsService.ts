@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { HttpError } from '../http/errorResponder';
 import { prisma } from '../prismaClient';
 import { apiCache } from '../lib/cache';
+import { resolveLiveStreak } from '../utils/gamificationUtils';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -34,19 +35,28 @@ export class UserStatsService {
 
   async getHomeDashboard(userId: string): Promise<HomeDashboardPayload> {
     return apiCache.getOrSet(`user_dashboard_${userId}`, 15, async () => {
-      const [stats, weeklyGoal, totalLessons, completedLessons] = await Promise.all([
+      const [stats, weeklyGoal, totalLessons, completedLessons, user] = await Promise.all([
         this.ensureStats(this.database, userId),
         this.ensureWeeklyGoal(this.database, userId),
         apiCache.getOrSet('total_lessons_count', 60, () => this.database.lesson.count()),
         this.database.userLessonProgress.count({
           where: { userId, status: 'completed' }
+        }),
+        this.database.user.findUnique({
+          where: { id: userId },
+          select: { lastActionDate: true, currentStreak: true }
         })
       ]);
+
+      const resolvedStreak = resolveLiveStreak(
+        stats.currentStreak,
+        user?.lastActionDate
+      );
 
       const learningProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
       return {
-        streak: stats.currentStreak,
+        streak: resolvedStreak,
         ecoPoints: stats.ecoPoints,
         ecoCoins: stats.ecoCoins,
         weeklyGoal: weeklyGoal.weeklyGoal,

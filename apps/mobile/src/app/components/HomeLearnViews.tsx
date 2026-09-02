@@ -7,6 +7,7 @@ import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard } from './DiscoverChallengeCard';
 import { TopNavbar, SurfaceCard, AvatarBubble } from './CommonComponents';
 import { LearnLessonCard } from './LearnLessonCard';
+import { CoachMarkTarget } from './CoachMarkTarget';
 import { QuickActions } from './QuickActions';
 import { SummaryCards } from './SummaryCards';
 import { LevelCard } from './LevelCard';
@@ -19,21 +20,22 @@ import { HomeViewSkeleton, LearnViewSkeleton } from '../../shared/ui/SkeletonLoa
 
 export { getCategoryDetails };
 
-const getGreetingPHT = (): string => {
+const getGreetingInfo = (): { text: string; icon: keyof typeof Ionicons.glyphMap; iconColor: string } => {
   try {
     const timeString = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour12: false, hour: 'numeric' });
     const hour = parseInt(timeString, 10);
     
     if (!isNaN(hour)) {
-      if (hour >= 5 && hour < 12) return 'Good morning';
-      if (hour >= 12 && hour < 18) return 'Good afternoon';
-      return 'Good evening';
+      if (hour >= 5 && hour < 12) return { text: 'Good morning', icon: 'sunny', iconColor: '#F59E0B' };
+      if (hour >= 12 && hour < 18) return { text: 'Good afternoon', icon: 'partly-sunny', iconColor: '#F97316' };
+      return { text: 'Good evening', icon: 'moon', iconColor: '#6366F1' };
     }
   } catch (e) {
     // Fallback if Intl is not fully supported
   }
-  return 'Hello';
+  return { text: 'Hello', icon: 'sparkles', iconColor: '#10B981' };
 };
+
 
 
 const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
@@ -100,12 +102,44 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const firstDiscoverChallenge = model.challenges?.slice().sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))[0] || null;
   const featuredLesson = model.lessons?.find((l: any) => l.featured) || (model.lessons && model.lessons.length > 0 ? model.lessons[0] : null);
 
+  const greeting = getGreetingInfo();
+  const firstName = model.userDisplayName.split(' ')[0] || 'Eco-Warrior';
+
   return (
     <>
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
-        <Text style={styles.welcomeTitle}>{getGreetingPHT()}, {model.userDisplayName.split(' ')[0]}!</Text>
-        <Text style={[styles.welcomeSubtitle, { marginBottom: verticalScale(14) }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
+          <View style={{ flex: 1, paddingRight: scale(8) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+              <Ionicons name={greeting.icon} size={scale(18)} color={greeting.iconColor} />
+              <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: '#6B7A75', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                {greeting.text}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
+              <Text style={[styles.welcomeTitle, { marginTop: 0 }]}>
+                {firstName}
+              </Text>
+              <MaterialCommunityIcons name="hand-wave" size={scale(26)} color="#F59E0B" style={{ transform: [{ rotate: '-10deg' }] }} />
+            </View>
+          </View>
+          <View
+            style={{
+              width: scale(44),
+              height: scale(44),
+              borderRadius: scale(22),
+              backgroundColor: '#E8F5E9',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: '#C8E6C9',
+            }}
+          >
+            <Ionicons name="leaf" size={scale(22)} color="#126027" />
+          </View>
+        </View>
+        <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(14) }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
 
         <TouchableOpacity
           onPress={() => model.setActiveOverlay('assistant')}
@@ -149,6 +183,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
               <LevelCard
                 ecoPoints={ecoPoints}
                 onPress={() => model.setActiveOverlay('ecoLevels')}
+                onProgressBarMeasured={model.setProgressBarLayout}
               />
               <MilestoneBadgePreview
                 ecoPoints={ecoPoints}
@@ -156,7 +191,11 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
               />
             </View>
             <View style={{ flex: 1 }}>
-              <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
+              <SummaryCards
+                currentStreak={currentStreak}
+                ecoPoints={ecoPoints}
+                onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
+              />
             </View>
           </View>
         ) : (
@@ -164,12 +203,17 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             <LevelCard
               ecoPoints={ecoPoints}
               onPress={() => model.setActiveOverlay('ecoLevels')}
+              onProgressBarMeasured={model.setProgressBarLayout}
             />
             <MilestoneBadgePreview
               ecoPoints={ecoPoints}
               onPress={() => model.setActiveOverlay('ecoLevels')}
             />
-            <SummaryCards currentStreak={currentStreak} ecoPoints={ecoPoints} />
+            <SummaryCards
+              currentStreak={currentStreak}
+              ecoPoints={ecoPoints}
+              onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
+            />
           </>
         )}
 
@@ -279,8 +323,37 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
       <TopNavbar model={model} />
       <View style={styles.homeContent}>
         <View style={{ marginBottom: verticalScale(12) }}>
-          <Text style={styles.pageTitle}>Learn & Grow</Text>
-          <Text style={[styles.pageSubtitle, { color: '#6B7A75', fontSize: responsiveFontSize(13), marginTop: verticalScale(4), lineHeight: responsiveFontSize(19) }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
+            <View style={{ flex: 1, paddingRight: scale(8) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+                <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
+                <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: '#6B7A75', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                  ECO ACADEMY
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
+                <Text style={[styles.welcomeTitle, { marginTop: 0 }]}>
+                  Learn & Grow
+                </Text>
+                <MaterialCommunityIcons name="school" size={scale(26)} color="#126027" />
+              </View>
+            </View>
+            <View
+              style={{
+                width: scale(44),
+                height: scale(44),
+                borderRadius: scale(22),
+                backgroundColor: '#E8F5E9',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: '#C8E6C9',
+              }}
+            >
+              <MaterialCommunityIcons name="book-open-page-variant" size={scale(22)} color="#126027" />
+            </View>
+          </View>
+          <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(6), color: '#6B7A75', fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(19) }]}>
             Master eco-friendly living with bite-sized lessons, complete quizzes, and build sustainable habits.
           </Text>
         </View>
@@ -507,14 +580,38 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
             </SurfaceCard>
           ) : (
             <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) } : {}}>
-              {model.filteredLessons.map((lesson) => (
-                <View key={lesson.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
-                  <LearnLessonCard
-                    lesson={lesson}
-                    onPress={() => void model.openLesson(lesson.id)}
-                  />
-                </View>
-              ))}
+              {model.filteredLessons.map((lesson, index) => {
+                if (index === 0) {
+                  return (
+                    <View key={lesson.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                      <CoachMarkTarget
+                        name="firstLearnLesson"
+                        borderRadius={moderateScale(22)}
+                        active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
+                        onMeasure={(rect) => {
+                          model.setSpotlightTargetRect?.(rect);
+                        }}
+                        style={{ marginBottom: verticalScale(14) }}
+                      >
+                        <LearnLessonCard
+                          lesson={lesson}
+                          style={{ marginBottom: 0 }}
+                          onPress={() => void model.openLesson(lesson.id)}
+                        />
+                      </CoachMarkTarget>
+                    </View>
+                  );
+                }
+
+                return (
+                  <View key={lesson.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                    <LearnLessonCard
+                      lesson={lesson}
+                      onPress={() => void model.openLesson(lesson.id)}
+                    />
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>

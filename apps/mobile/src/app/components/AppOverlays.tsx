@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAudioPlayer } from 'expo-audio';
+import LottieView from 'lottie-react-native';
 import {
   View,
   Text,
@@ -583,9 +584,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Mission Workflow:</Text>
             <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 16, lineHeight: 22 }}>
-              1. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Before Photo</Text>: Capture items with YOLO AI detection.{'\n'}
-              2. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Admin Review</Text>: Preliminary approval for drop-off.{'\n'}
-              3. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Barangay Drop-off</Text>: Bring collectible items to the {collectionPointName}, scan QR, & upload After photo to claim reward!
+              1. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Before Picture (User)</Text>: Capture items with AI waste recognition.{'\n'}
+              2. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Manual Review (Admin)</Text>: Preliminary review & approval of your submitted items.{'\n'}
+              3. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Accept Mission</Text>: Receive approval to proceed with the drop-off.{'\n'}
+              4. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Barangay Drop-off</Text>: Bring the approved recyclable items to {collectionPointName}.{'\n'}
+              5. <Text style={{ fontWeight: 'bold', color: '#166534' }}>After Picture</Text>: Take and upload a photo at the drop-off location.{'\n'}
+              6. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Final Approval (Admin)</Text>: Final verification to release your Eco Points & Coins!
             </Text>
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
@@ -618,7 +622,24 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isTablet = width >= 600;
+
+  // Use real measured layout from LevelCard's progress bar (via onProgressBarMeasured -> model.progressBarLayout)
+  // Falls back to a best-guess estimate if the layout hasn't been captured yet
+  const layout = model.progressBarLayout;
+  const topSafeArea = insets.top || 44;
+  const fallbackY =
+    topSafeArea +
+    verticalScale(64) +
+    verticalScale(38) +
+    verticalScale(52) +
+    verticalScale(68) +
+    verticalScale(114) +
+    verticalScale(218);
+  const targetProgressBarX = layout ? layout.x + layout.width * 0.5 - 15 : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
+  const targetProgressBarY = layout ? layout.y + layout.height * 0.5 - 15 : fallbackY - 15;
 
   // Calculate how many of each particle type to spawn
   const hasCoins = model.claimRewardData ? model.claimRewardData.coins > 0 : true;
@@ -692,9 +713,10 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
         Animated.delay(120),
         Animated.parallel([
           Animated.timing(particle.pos, {
-            toValue: type === 'leaf'
-              ? { x: -50, y: 130 + (Math.random() * 60 - 30) }
-              : { x: width + 50, y: 150 + (Math.random() * 60 - 30) },
+            toValue: {
+              x: targetProgressBarX + (Math.random() * scale(60) - scale(30)),
+              y: targetProgressBarY + (Math.random() * verticalScale(12) - verticalScale(6)),
+            }, // Target directly the green LevelCard Progress to Eco Leader bar line
             duration: 650,
             easing: Easing.bezier(0.25, 1, 0.5, 1),
             useNativeDriver: true,
@@ -2805,20 +2827,20 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   const insets = useSafeAreaInsets();
   const isTablet = width >= 600;
 
-  // Dynamically compute exact center position of LevelCard progress bar across any device size
-  const targetProgressBarX = isTablet
-    ? scale(16) + (width - scale(32)) * 0.25 - 15
-    : (width / 2) - 15;
+  // Use real measured layout from LevelCard's progress bar
+  const layout2 = model.progressBarLayout;
+  const topSafeArea2 = insets.top || 44;
+  const fallbackY2 =
+    topSafeArea2 +
+    verticalScale(64) +
+    verticalScale(38) +
+    verticalScale(52) +
+    verticalScale(68) +
+    verticalScale(114) +
+    verticalScale(218);
+  const targetProgressBarX = layout2 ? layout2.x + layout2.width * 0.5 - 15 : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
+  const targetProgressBarY = layout2 ? layout2.y + layout2.height * 0.5 - 15 : fallbackY2 - 15;
 
-  const topSafeArea = insets.top || 44;
-  const targetProgressBarY =
-    topSafeArea +
-    verticalScale(64) + // TopNavbar
-    verticalScale(38) + // Welcome title
-    verticalScale(52) + // Welcome subtitle + margin
-    verticalScale(68) + // AI Search bar + margin
-    verticalScale(114) + // QuickActions grid + margin
-    verticalScale(218); // LevelCard top down directly onto the green Progress to Eco Learner bar line
 
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
@@ -3323,20 +3345,20 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const insets = useSafeAreaInsets();
   const isTablet = width >= 600;
 
-  // Dynamically compute exact center position of LevelCard progress bar across any device size
-  const targetProgressBarX = isTablet
-    ? scale(16) + (width - scale(32)) * 0.25 - 15
-    : (width / 2) - 15;
+  // Use real measured layout from LevelCard's progress bar
+  const layout3 = model.progressBarLayout;
+  const topSafeArea3 = insets.top || 44;
+  const fallbackY3 =
+    topSafeArea3 +
+    verticalScale(64) +
+    verticalScale(38) +
+    verticalScale(52) +
+    verticalScale(68) +
+    verticalScale(114) +
+    verticalScale(218);
+  const targetProgressBarX = layout3 ? layout3.x + layout3.width * 0.5 - 15 : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
+  const targetProgressBarY = layout3 ? layout3.y + layout3.height * 0.5 - 15 : fallbackY3 - 15;
 
-  const topSafeArea = insets.top || 44;
-  const targetProgressBarY =
-    topSafeArea +
-    verticalScale(64) + // TopNavbar
-    verticalScale(38) + // Welcome title
-    verticalScale(52) + // Welcome subtitle + margin
-    verticalScale(68) + // AI Search bar + margin
-    verticalScale(114) + // QuickActions grid + margin
-    verticalScale(218); // LevelCard top down directly onto the green Progress to Eco Learner bar line
 
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
@@ -4636,22 +4658,14 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
             zIndex: 10 
           }}
         >
-          {/* Ambient fire glow aura behind the flame */}
-          <Animated.View style={{
-            position: 'absolute',
-            top: 10,
-            width: 180,
-            height: 180,
-            borderRadius: 90,
-            backgroundColor: 'rgba(244, 144, 0, 0.15)',
-            transform: [{ scale: pulseAnim as any }],
-            filter: 'blur(20px)',
-            zIndex: -1,
-          }} />
-
-          {/* Large Animated Duolingo Flame */}
-          <View style={{ width: 150, height: 150, alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-            <FireStreak streakCount={streakVal} isActive={true} size={140} mode="hero" />
+          {/* Lottie Fire Animation (Fire.lottie) */}
+          <View style={{ width: 180, height: 180, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+            <LottieView
+              source={require('../../../assets/Fire.lottie')}
+              autoPlay
+              loop
+              style={{ width: 180, height: 180 }}
+            />
           </View>
 
           {/* Active Streak Label Badge */}

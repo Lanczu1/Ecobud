@@ -202,6 +202,7 @@ export function MarketplaceHubView({
             setScreen('chat');
           }}
           onRefreshConversations={loadConversations}
+          model={model}
         />
         </ScreenTransition>
       )}

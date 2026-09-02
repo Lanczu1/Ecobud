@@ -24,6 +24,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
+import { CoachMarksOverlay } from '../../app/components/CoachMarksOverlay';
+import { mobileStorage } from '../../shared/storage/mobileStorage';
 
 type AuthModeType = 'signin' | 'signup' | 'verify';
 type FieldName = 'username' | 'email' | 'password' | 'verificationCode' | 'city';

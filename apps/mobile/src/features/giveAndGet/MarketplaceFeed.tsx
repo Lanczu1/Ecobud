@@ -22,6 +22,8 @@ import { swapService } from './swapService';
 import type { SwapListing, SwapCategory, MeetupMethod, SwapConversation } from './types';
 import { CATEGORY_LABELS, CATEGORY_ICON, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
+import { CoachMarkTarget } from '../../app/components/CoachMarkTarget';
+import type { EcoBudMobileModel } from '../../app/types/home';
 
 type SortOption = 'newest' | 'nearest' | 'active';
 type FeedTab = 'browse' | 'chats' | 'mylistings';
@@ -36,6 +38,7 @@ export function MarketplaceFeed({
   conversations,
   onSelectConversation,
   onRefreshConversations,
+  model,
 }: {
   currentUserId?: string;
   onSelectListing: (listing: SwapListing) => void;
@@ -46,6 +49,7 @@ export function MarketplaceFeed({
   conversations: SwapConversation[];
   onSelectConversation: (conversation: SwapConversation) => void;
   onRefreshConversations?: () => void;
+  model?: EcoBudMobileModel;
 }) {
   const [listings, setListings] = useState<SwapListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,28 +189,47 @@ export function MarketplaceFeed({
     >
       <View>
         {/* Compact page header — TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
-        <LinearGradient colors={['#0D5B2A', '#198A48']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.hubHero}>
-          <View style={localStyles.heroGlow} />
-          <View style={localStyles.heroIcon}>
-            <Ionicons name="swap-horizontal" size={25} color="#D9F99D" />
-          </View>
-          <Text style={localStyles.heroEyebrow}>COMMUNITY REUSE MARKET</Text>
-          <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
-          <Text style={localStyles.headerSubtitle}>Find useful items, offer what you no longer need, and keep good things in circulation.</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Create a new listing"
-            onPress={onCreateListing}
-            onPressIn={handleCreatePressIn}
-            onPressOut={handleCreatePressOut}
+        <CoachMarkTarget
+          name="giveAndGetHero"
+          borderRadius={moderateScale(22)}
+          active={Boolean(model?.coachMarksVisible && model?.coachMarksCurrentStep === 5)}
+          onMeasure={(rect) => {
+            model?.setSpotlightTargetRect?.(rect);
+          }}
+          style={{
+            marginHorizontal: scale(16),
+            marginTop: verticalScale(10),
+            marginBottom: verticalScale(14),
+          }}
+        >
+          <LinearGradient
+            colors={['#0D5B2A', '#198A48']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[localStyles.hubHero, { marginHorizontal: 0, marginTop: 0, marginBottom: 0 }]}
           >
-            <Animated.View style={[localStyles.createButton, { transform: [{ scale: createBtnScale }] }]}>
-              <Ionicons name="add-circle" size={19} color="#126027" />
-              <Text style={localStyles.createButtonText}>Create a listing</Text>
-              <Ionicons name="arrow-forward" size={16} color="#126027" />
-            </Animated.View>
-          </Pressable>
-        </LinearGradient>
+            <View style={localStyles.heroGlow} />
+            <View style={localStyles.heroIcon}>
+              <Ionicons name="swap-horizontal" size={25} color="#D9F99D" />
+            </View>
+            <Text style={localStyles.heroEyebrow}>COMMUNITY REUSE MARKET</Text>
+            <Text style={localStyles.headerTitle}>Give & Get Hub</Text>
+            <Text style={localStyles.headerSubtitle}>Find useful items, offer what you no longer need, and keep good things in circulation.</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create a new listing"
+              onPress={onCreateListing}
+              onPressIn={handleCreatePressIn}
+              onPressOut={handleCreatePressOut}
+            >
+              <Animated.View style={[localStyles.createButton, { transform: [{ scale: createBtnScale }] }]}>
+                <Ionicons name="add-circle" size={19} color="#126027" />
+                <Text style={localStyles.createButtonText}>Create a listing</Text>
+                <Ionicons name="arrow-forward" size={16} color="#126027" />
+              </Animated.View>
+            </Pressable>
+          </LinearGradient>
+        </CoachMarkTarget>
 
         {/* Search bar */}
         <View style={localStyles.searchBar}>

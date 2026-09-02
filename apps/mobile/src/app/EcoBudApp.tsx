@@ -45,6 +45,7 @@ import {
   BottomTabBar,
   ActionOverlayWrapper,
   MarketplaceView,
+  CoachMarksOverlay,
 } from './components';
 import { HomeView, LearnView } from './components/HomeLearnViews';
 import { styles } from './styles/appStyles';
@@ -152,6 +153,17 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         </View>
       )}
+      <CoachMarksOverlay
+        visible={Boolean(model.session && model.coachMarksVisible)}
+        onFinish={model.completeCoachMarks}
+        onSkip={model.completeCoachMarks}
+        activeTab={model.activeTab}
+        onTabChange={model.setActiveTab}
+        onScrollTo={(y, animated = true) => {
+          scrollRef.current?.scrollTo({ y, animated });
+        }}
+        model={model}
+      />
       <ActionOverlayWrapper visible={model.actionOverlayVisible} label={model.actionOverlayLabel} />
     </View>
   );
