@@ -4,6 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
 import { type EcoBudMobileModel } from '../types/home';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 export interface QuickActionsProps {
   model?: EcoBudMobileModel;
@@ -34,6 +35,7 @@ export function QuickActions({
   onPressMarketplace,
   onPressEvents,
 }: QuickActionsProps) {
+  const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
@@ -130,10 +132,15 @@ export function QuickActions({
             onPress={action.onPress}
             style={[
               styles.card,
-              { borderColor: action.borderColor, width: isTablet ? '23.5%' : '23%' },
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: isDark ? theme.colors.cardBorder : action.borderColor,
+                width: isTablet ? '23.5%' : '23%',
+                shadowOpacity: isDark ? 0.2 : 0.05,
+              },
             ]}
           >
-            <View style={[styles.iconCircle, { backgroundColor: action.bgColor }]}>
+            <View style={[styles.iconCircle, { backgroundColor: isDark ? theme.colors.surfaceMuted : action.bgColor }]}>
               {action.iconType === 'image' ? (
                 <Image
                   source={action.imageSource}
@@ -144,20 +151,20 @@ export function QuickActions({
                 <MaterialCommunityIcons
                   name={action.iconName as any}
                   size={scale(22)}
-                  color={action.iconColor}
+                  color={isDark ? theme.colors.primary : action.iconColor}
                 />
               ) : (
                 <Ionicons
                   name={action.iconName as any}
                   size={scale(20)}
-                  color={action.iconColor}
+                  color={isDark ? theme.colors.primary : action.iconColor}
                 />
               )}
             </View>
-            <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            <Text style={[styles.actionLabel, { color: theme.colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
               {action.label}
             </Text>
-            <Text style={styles.actionSub} numberOfLines={1}>
+            <Text style={[styles.actionSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
               {action.subLabel}
             </Text>
           </TouchableOpacity>

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
 import { PublicProfileModal } from './PublicProfileModal';
@@ -78,12 +78,13 @@ export function SwapChatList({
   currentUserId: string;
   onSelectConversation: (conversation: SwapConversation) => void;
 }) {
+  const { theme, isDark } = useTheme();
   if (conversations.length === 0) {
     return (
       <View style={localStyles.emptyState}>
-        <Ionicons name="chatbubbles-outline" size={56} color="#A7D5BA" />
-        <Text style={localStyles.emptyTitle}>No conversations yet</Text>
-        <Text style={localStyles.emptySubtitle}>
+        <Ionicons name="chatbubbles-outline" size={56} color={isDark ? theme.colors.primary : "#A7D5BA"} />
+        <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>No conversations yet</Text>
+        <Text style={[localStyles.emptySubtitle, { color: theme.colors.textMuted }]}>
           Start a swap request to begin chatting with other users.
         </Text>
       </View>
@@ -96,7 +97,7 @@ export function SwapChatList({
         <TouchableOpacity
           key={conv.id}
           onPress={() => onSelectConversation(conv)}
-          style={localStyles.chatItem}
+          style={[localStyles.chatItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
         >
           <View style={localStyles.chatAvatar}>
             {conv.otherUser.avatarUrl ? (
@@ -114,16 +115,16 @@ export function SwapChatList({
 
           <View style={localStyles.chatContent}>
             <View style={localStyles.chatHeader}>
-              <Text style={localStyles.chatName} numberOfLines={1}>
+              <Text style={[localStyles.chatName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                 {conv.otherUser.displayName}
               </Text>
               {conv.lastMessage && (
-                <Text style={localStyles.chatTime}>
+                <Text style={[localStyles.chatTime, { color: theme.colors.textMuted }]}>
                   {formatMessageTime(conv.lastMessage.timestamp)}
                 </Text>
               )}
             </View>
-            <Text style={localStyles.chatPreview} numberOfLines={1}>
+            <Text style={[localStyles.chatPreview, { color: theme.colors.textMuted }]} numberOfLines={1}>
               {conv.listing.title} → {conv.listing.lookingFor}
             </Text>
             <View style={localStyles.chatStatusRow}>
@@ -132,7 +133,7 @@ export function SwapChatList({
                   {getStatusLabel(conv.status)}
                 </Text>
               </View>
-              <Text style={localStyles.meetupType}>
+              <Text style={[localStyles.meetupType, { color: theme.colors.textMuted }]}>
                 {MEETUP_LABELS[conv.meetupMethod]}
               </Text>
             </View>
@@ -164,6 +165,7 @@ export function SwapChatView({
   onDeclineSwap: () => void;
   onMarkCompleted: () => void;
 }) {
+  const { theme, isDark } = useTheme();
   const [messages, setMessages] = useState<SwapChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -239,8 +241,8 @@ export function SwapChatView({
   const status = conversation.status;
 
   return (
-    <SafeAreaView style={localStyles.safeArea}>
-      <View style={localStyles.header}>
+    <SafeAreaView style={[localStyles.safeArea, { backgroundColor: isDark ? theme.colors.background : ecoTheme.colors.primaryDark }]}>
+      <View style={[localStyles.header, isDark && { backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={onBack} style={localStyles.backBtn}>
           <Feather name="arrow-left" size={22} color="#FFF" />
         </TouchableOpacity>
@@ -266,17 +268,17 @@ export function SwapChatView({
         </TouchableOpacity>
       </View>
 
-      <View style={localStyles.swapInfoBar}>
+      <View style={[localStyles.swapInfoBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
         <View style={localStyles.swapInfoItem}>
-          <Text style={localStyles.swapInfoLabel}>Offering</Text>
-          <Text style={localStyles.swapInfoValue} numberOfLines={1}>
+          <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Offering</Text>
+          <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {conversation.listing.quantity} {conversation.listing.title}
           </Text>
         </View>
-        <View style={localStyles.swapInfoDivider} />
+        <View style={[localStyles.swapInfoDivider, { backgroundColor: theme.colors.border }]} />
         <View style={localStyles.swapInfoItem}>
-          <Text style={localStyles.swapInfoLabel}>Looking For</Text>
-          <Text style={localStyles.swapInfoValue} numberOfLines={1}>
+          <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Looking For</Text>
+          <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {conversation.listing.lookingFor}
           </Text>
         </View>
@@ -305,14 +307,14 @@ export function SwapChatView({
       )}
 
       {loading ? (
-        <View style={localStyles.loadingWrap}>
-          <ActivityIndicator size="large" color={ecoTheme.colors.primaryDark} />
+        <View style={[localStyles.loadingWrap, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       ) : (
         <ScrollView
           ref={scrollRef}
-          style={localStyles.messagesScroll}
-          contentContainerStyle={localStyles.messagesContent}
+          style={[localStyles.messagesScroll, { backgroundColor: theme.colors.background }]}
+          contentContainerStyle={[localStyles.messagesContent, { backgroundColor: theme.colors.background }]}
           showsVerticalScrollIndicator={false}
         >
           {messages.map((msg) => {
@@ -320,23 +322,28 @@ export function SwapChatView({
             return (
               <View
                 key={msg.id}
-                style={[localStyles.messageBubble, isMine ? localStyles.messageBubbleMine : localStyles.messageBubbleTheirs]}
+                style={[
+                  localStyles.messageBubble,
+                  isMine
+                    ? [localStyles.messageBubbleMine, isDark && { backgroundColor: theme.colors.primary }]
+                    : [localStyles.messageBubbleTheirs, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }],
+                ]}
               >
                 {msg.imageUrl && (
                   <Image source={{ uri: msg.imageUrl }} style={localStyles.messageImage} />
                 )}
-                <Text style={[localStyles.messageText, isMine && localStyles.messageTextMine]}>
+                <Text style={[localStyles.messageText, isMine ? [localStyles.messageTextMine, isDark && { color: '#0E1512' }] : { color: theme.colors.textPrimary }]}>
                   {msg.text}
                 </Text>
                 <View style={localStyles.messageFooter}>
-                  <Text style={[localStyles.messageTime, isMine && localStyles.messageTimeMine]}>
+                  <Text style={[localStyles.messageTime, isMine ? [localStyles.messageTimeMine, isDark && { color: 'rgba(14,21,18,0.7)' }] : { color: theme.colors.textMuted }]}>
                     {formatMessageTime(msg.timestamp)}
                   </Text>
                   {isMine && (
                     <Ionicons
                       name={msg.read ? 'checkmark-done' : 'checkmark'}
                       size={14}
-                      color={msg.read ? '#4ADE80' : '#9CA3AF'}
+                      color={isDark ? '#064E3B' : (msg.read ? '#4ADE80' : '#9CA3AF')}
                       style={{ marginLeft: 4 }}
                     />
                   )}
@@ -348,11 +355,11 @@ export function SwapChatView({
       )}
 
       {status !== 'completed' && status !== 'cancelled' && status !== 'declined' && (
-        <View style={localStyles.inputBar}>
+        <View style={[localStyles.inputBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
           <TextInput
-            style={localStyles.chatInput}
+            style={[localStyles.chatInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
             placeholder="Type a message..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.textMuted}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -361,9 +368,9 @@ export function SwapChatView({
           <TouchableOpacity
             onPress={handleSend}
             disabled={!inputText.trim() || sending}
-            style={[localStyles.sendBtn, (!inputText.trim() || sending) && { opacity: 0.5 }]}
+            style={[localStyles.sendBtn, isDark && { backgroundColor: theme.colors.primary }, (!inputText.trim() || sending) && { opacity: 0.5 }]}
           >
-            <Ionicons name="send" size={18} color="#FFF" />
+            <Ionicons name="send" size={18} color={isDark ? '#0E1512' : '#FFF'} />
           </TouchableOpacity>
         </View>
       )}

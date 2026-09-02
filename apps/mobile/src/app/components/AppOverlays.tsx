@@ -34,7 +34,7 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { styles } from '../styles/appStyles';
 import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
@@ -861,6 +861,7 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const scrollViewRef = React.useRef<ScrollView>(null);
@@ -897,7 +898,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 
   return (
-    <View style={styles.fullscreenOverlay}>
+    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} title="AI Assistant" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -942,7 +943,9 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   key={message.id}
                   style={[
                     styles.chatBubble,
-                    isUser ? styles.chatBubbleUser : styles.chatBubbleBot,
+                    isUser
+                      ? [styles.chatBubbleUser, isDark && { backgroundColor: theme.colors.primaryDark }]
+                      : [styles.chatBubbleBot, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }],
                     {
                       maxWidth: bubbleMaxWidth as any,
                       padding: bubblePadding,
@@ -965,18 +968,18 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   ) : (
                     <SimpleMarkdown
                       baseStyle={{
-                        color: '#1A211D',
+                        color: theme.colors.textPrimary,
                         fontSize: textFontSize,
                         lineHeight: textLineHeight,
                       }}
-                      boldStyle={{ fontWeight: '700' }}
+                      boldStyle={{ fontWeight: '700', color: theme.colors.textPrimary }}
                     >
                       {message.text}
                     </SimpleMarkdown>
                   )}
                   <Text
                     style={[
-                      isUser ? styles.chatTimeUser : styles.chatTimeBot,
+                      isUser ? styles.chatTimeUser : [styles.chatTimeBot, { color: theme.colors.textMuted }],
                       { fontSize: timeFontSize, marginTop: isSmall ? 4 : 6 },
                     ]}
                   >
@@ -1012,13 +1015,15 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                         borderRadius: quickReplyRadius,
                         justifyContent: 'center',
                         alignItems: 'center',
+                        backgroundColor: theme.colors.card,
+                        borderColor: theme.colors.border,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.categoryOutlineBtnText,
-                        { fontSize: quickReplyFontSize, paddingHorizontal: 0 },
+                        { fontSize: quickReplyFontSize, paddingHorizontal: 0, color: isDark ? theme.colors.primary : '#126027' },
                       ]}
                     >
                       {reply}
@@ -1037,6 +1042,8 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                 paddingBottom: composerBottomPadding,
                 paddingTop: isSmall ? 6 : 8,
                 gap: isSmall ? 8 : 10,
+                backgroundColor: theme.colors.card,
+                borderTopColor: theme.colors.border,
               },
             ]}
           >
@@ -1044,7 +1051,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
               value={model.assistantInput}
               onChangeText={model.setAssistantInput}
               placeholder="Message ECOBUD..."
-              placeholderTextColor="#6B7A75"
+              placeholderTextColor={theme.colors.textMuted}
               style={[
                 styles.assistantInput,
                 {
@@ -1053,6 +1060,9 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   fontSize: composerInputFontSize,
                   paddingHorizontal: isSmall ? 14 : 18,
                   paddingVertical: isSmall ? 6 : 8,
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                  color: theme.colors.textPrimary,
                 },
               ]}
             />
@@ -1064,10 +1074,11 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   width: composerMinHeight,
                   height: composerMinHeight,
                   borderRadius: composerRadius,
+                  backgroundColor: isDark ? theme.colors.primary : '#126027',
                 },
               ]}
             >
-              <Ionicons name="send" size={isSmall ? 16 : 18} color="#FFFFFF" />
+              <Ionicons name="send" size={isSmall ? 16 : 18} color={isDark ? '#0E1512' : '#FFFFFF'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1371,6 +1382,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 }
 
 export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past'>('browse');
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
@@ -1439,43 +1451,44 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   });
 
   return (
-    <View style={styles.fullscreenOverlay}>
+    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
       <ScrollView
-        contentContainerStyle={styles.homeContent}
+        style={{ backgroundColor: theme.colors.background }}
+        contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
         refreshControl={
           <RefreshControl
             refreshing={model.refreshing}
             onRefresh={() => void model.refreshEverything()}
-            tintColor='#126027'
+            tintColor={isDark ? theme.colors.primary : '#126027'}
           />
         }
       >
-        <Text style={styles.welcomeLabel}>DIRECTORY</Text>
+        <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>DIRECTORY</Text>
         <View style={styles.rowBetween}>
-          <Text style={styles.pageTitle}>Eco Events</Text>
-          <View style={styles.filterPillGroup}>
-            <TouchableOpacity onPress={() => setViewMode('list')} style={viewMode === 'list' ? styles.filterPillActive : styles.filterPillInactive}>
-              <MaterialCommunityIcons name="view-list" size={16} color={viewMode === 'list' ? "#126027" : "#6B7A75"} />
-              <Text style={viewMode === 'list' ? styles.filterPillActiveText : styles.filterPillInactiveText}> List</Text>
+          <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Eco Events</Text>
+          <View style={[styles.filterPillGroup, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border, borderWidth: 1 }]}>
+            <TouchableOpacity onPress={() => setViewMode('list')} style={[viewMode === 'list' ? styles.filterPillActive : styles.filterPillInactive, viewMode === 'list' && isDark && { backgroundColor: theme.colors.card }]}>
+              <MaterialCommunityIcons name="view-list" size={16} color={viewMode === 'list' ? (isDark ? theme.colors.primary : "#126027") : theme.colors.textMuted} />
+              <Text style={[viewMode === 'list' ? styles.filterPillActiveText : styles.filterPillInactiveText, { color: viewMode === 'list' ? (isDark ? theme.colors.primary : '#1A211D') : theme.colors.textMuted }]}> List</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setViewMode('map')} style={viewMode === 'map' ? styles.filterPillActive : styles.filterPillInactive}>
-              <MaterialCommunityIcons name="map" size={16} color={viewMode === 'map' ? "#126027" : "#6B7A75"} />
-              <Text style={viewMode === 'map' ? styles.filterPillActiveText : styles.filterPillInactiveText}> Map</Text>
+            <TouchableOpacity onPress={() => setViewMode('map')} style={[viewMode === 'map' ? styles.filterPillActive : styles.filterPillInactive, viewMode === 'map' && isDark && { backgroundColor: theme.colors.card }]}>
+              <MaterialCommunityIcons name="map" size={16} color={viewMode === 'map' ? (isDark ? theme.colors.primary : "#126027") : theme.colors.textMuted} />
+              <Text style={[viewMode === 'map' ? styles.filterPillActiveText : styles.filterPillInactiveText, { color: viewMode === 'map' ? (isDark ? theme.colors.primary : '#1A211D') : theme.colors.textMuted }]}> Map</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {viewMode === 'list' && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 12, marginBottom: 16 }}>
-            <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? '#126027' : '#6B7A75' }}>Browse</Text>
+            <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: activeTab === 'browse' ? (isDark ? theme.colors.primary : '#126027') : 'transparent', paddingBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }}>Browse</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab('joined')} style={{ borderBottomWidth: activeTab === 'joined' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: activeTab === 'joined' ? '700' : '500', color: activeTab === 'joined' ? '#126027' : '#6B7A75' }}>My Events</Text>
+            <TouchableOpacity onPress={() => setActiveTab('joined')} style={{ borderBottomWidth: activeTab === 'joined' ? 2 : 0, borderBottomColor: activeTab === 'joined' ? (isDark ? theme.colors.primary : '#126027') : 'transparent', paddingBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: activeTab === 'joined' ? '700' : '500', color: activeTab === 'joined' ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }}>My Events</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab('past')} style={{ borderBottomWidth: activeTab === 'past' ? 2 : 0, borderBottomColor: '#126027', paddingBottom: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: activeTab === 'past' ? '700' : '500', color: activeTab === 'past' ? '#126027' : '#6B7A75' }}>Past</Text>
+            <TouchableOpacity onPress={() => setActiveTab('past')} style={{ borderBottomWidth: activeTab === 'past' ? 2 : 0, borderBottomColor: activeTab === 'past' ? (isDark ? theme.colors.primary : '#126027') : 'transparent', paddingBottom: 6 }}>
+              <Text style={{ fontSize: 16, fontWeight: activeTab === 'past' ? '700' : '500', color: activeTab === 'past' ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }}>Past</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1487,11 +1500,11 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         ) : (
           <>
             {displayedEvents.length === 0 && (
-              <SurfaceCard style={styles.publicInfoCard}>
-                <Text style={styles.sectionHeadline}>
+              <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+                <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>
                   {activeTab === 'joined' ? "You haven't joined any events" : `No ${activeTab === 'past' ? 'past' : 'public'} events yet`}
                 </Text>
-                <Text style={styles.metaTextSmallDark}>
+                <Text style={[styles.metaTextSmallDark, { color: theme.colors.textMuted }]}>
                   {activeTab === 'joined' ? 'Events you join or await approval for will appear here.' : 'Check back soon for new clean-ups, workshops, and community eco campaigns.'}
                 </Text>
               </SurfaceCard>
@@ -1510,6 +1523,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                   key={event.id}
                   style={[
                     styles.eventListCard,
+                    { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.06 },
                     event.isFeatured && {
                       borderColor: '#FCD34D',
                       borderWidth: 1.5,
@@ -1560,31 +1574,31 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.dateTagRight}>
-                      <Text style={styles.dateTagRightText}>{formatEventDateTag(event.startDatetime)}</Text>
+                    <View style={[styles.dateTagRight, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: isDark ? 1 : 0 }]}>
+                      <Text style={[styles.dateTagRightText, { color: theme.colors.textPrimary }]}>{formatEventDateTag(event.startDatetime)}</Text>
                     </View>
                   </ImageBackground>
                   <View style={styles.eventListBody}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                       {event.isFeatured && <Ionicons name="star" size={12} color="#F59E0B" />}
-                      <Text style={[styles.welcomeLabel, event.isFeatured && { color: '#D97706', marginBottom: 0 }]}>
+                      <Text style={[styles.welcomeLabel, { color: event.isFeatured ? '#D97706' : (isDark ? theme.colors.primary : '#126027') }, event.isFeatured && { marginBottom: 0 }]}>
                         {event.isFeatured ? 'FEATURED EVENT' : 'PUBLIC EVENT'}
                       </Text>
                     </View>
-                    <Text style={styles.cardTitle}>{event.title}</Text>
-                    <Text style={styles.metaTextSmallDark}>{event.description}</Text>
+                    <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
+                    <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>{event.description}</Text>
                     <View style={[styles.rowMeta, { marginTop: 12 }]}>
-                      <Ionicons name="location" size={14} color="#6B7A75" />
-                      <Text style={styles.metaTextSmallDark}> {event.location}</Text>
+                      <Ionicons name="location" size={14} color={theme.colors.textMuted} />
+                      <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.location}</Text>
                     </View>
                     <View style={[styles.rowMeta, { marginBottom: event.ecoCoinsReward ? 4 : 12 }]}>
-                      <Ionicons name="leaf-outline" size={14} color="#10B981" />
-                      <Text style={styles.metaTextSmallDark}> {event.expReward} ECO points reward</Text>
+                      <Ionicons name="leaf-outline" size={14} color={isDark ? theme.colors.primary : '#10B981'} />
+                      <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.expReward} ECO points reward</Text>
                     </View>
                     {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
                       <View style={[styles.rowMeta, { marginBottom: 12 }]}>
                         <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
-                        <Text style={styles.metaTextSmallDark}> {event.ecoCoinsReward} ECO coins reward</Text>
+                        <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.ecoCoinsReward} ECO coins reward</Text>
                       </View>
                     )}
 
@@ -1593,37 +1607,37 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                         style={{
                           marginTop: 10,
                           marginBottom: 14,
-                          backgroundColor: '#F7FAF8',
+                          backgroundColor: isDark ? theme.colors.surfaceMuted : '#F7FAF8',
                           padding: 10,
                           borderRadius: 12,
                           borderWidth: 1,
-                          borderColor: '#EAF0EC',
+                          borderColor: isDark ? theme.colors.border : '#EAF0EC',
                         }}
                       >
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Ionicons name="people-outline" size={14} color="#6B7A75" />
-                            <Text style={{ fontSize: 12, color: '#6B7A75', fontWeight: '500' }}>
-                              Capacity: <Text style={{ fontWeight: '700', color: '#1A211D' }}>{joinedCount}/{capacity}</Text>{' '}
-                              <Text style={{ fontSize: 11, color: '#6B7A75' }}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
+                            <Ionicons name="people-outline" size={14} color={theme.colors.textMuted} />
+                            <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontWeight: '500' }}>
+                              Capacity: <Text style={{ fontWeight: '700', color: theme.colors.textPrimary }}>{joinedCount}/{capacity}</Text>{' '}
+                              <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
                             </Text>
                           </View>
                           <Text
                             style={{
                               fontSize: 12,
                               fontWeight: '800',
-                              color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : '#126027',
+                              color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : (isDark ? theme.colors.primary : '#126027'),
                             }}
                           >
                             {progressPercent}%
                           </Text>
                         </View>
-                        <View style={{ height: 6, width: '100%', backgroundColor: '#E2EAE5', borderRadius: 3, overflow: 'hidden' }}>
+                        <View style={{ height: 6, width: '100%', backgroundColor: isDark ? theme.colors.card : '#E2EAE5', borderRadius: 3, overflow: 'hidden' }}>
                           <View
                             style={{
                               height: '100%',
                               width: `${progressPercent}%`,
-                              backgroundColor: isFull ? '#DC2626' : progressPercent >= 80 ? '#F59E0B' : '#126027',
+                              backgroundColor: isFull ? '#DC2626' : progressPercent >= 80 ? '#F59E0B' : (isDark ? theme.colors.primary : '#126027'),
                               borderRadius: 3,
                             }}
                           />
@@ -1634,8 +1648,8 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                     {(() => {
                       if (lc === 'ended' && !event.userStatus) {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Ended</Text>
+                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Ended</Text>
                           </View>
                         );
                       }
@@ -1658,9 +1672,9 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                       }
                       if (event.userStatus === 'reward_claimed') {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: 'rgba(18,96,39,0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
-                            <Ionicons name="checkmark-circle" size={14} color="#126027" />
-                            <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Reward Claimed</Text>
+                          <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: 'rgba(18,96,39,0.15)' }, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
+                            <Ionicons name="checkmark-circle" size={14} color={isDark ? theme.colors.primary : '#126027'} />
+                            <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Reward Claimed</Text>
                           </View>
                         );
                       }
@@ -1676,8 +1690,8 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                       }
                       if (event.userStatus === 'pending_approval') {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: '#FEF3C7' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#92400E' }]}>Waiting for Approval</Text>
+                          <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: '#3D2C0C' } : { backgroundColor: '#FEF3C7' }]}>
+                            <Text style={[styles.quickJoinBtnText, { color: isDark ? '#FBBF24' : '#92400E' }]}>Waiting for Approval</Text>
                           </View>
                         );
                       }
@@ -1685,16 +1699,16 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                         if (lc === 'ongoing') {
                           return (
                             <TouchableOpacity
-                              style={[styles.quickJoinBtn, { backgroundColor: '#126027' }]}
+                              style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.primary } : { backgroundColor: '#126027' }]}
                               onPress={() => setAttendanceEvent(event.id)}
                             >
-                              <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Record Attendance</Text>
+                              <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>Record Attendance</Text>
                             </TouchableOpacity>
                           );
                         } else {
                           return (
-                            <View style={[styles.quickJoinBtn, { backgroundColor: '#E0EBE4' }]}>
-                              <Text style={[styles.quickJoinBtnText, { color: '#126027' }]}>Joined - Starts Soon</Text>
+                            <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: '#E0EBE4' }]}>
+                              <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Joined - Starts Soon</Text>
                             </View>
                           );
                         }
@@ -1702,30 +1716,30 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
                       if (lc === 'ongoing') {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Registration Closed</Text>
+                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Registration Closed</Text>
                           </View>
                         );
                       }
                       if (lc === 'ended') {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Ended</Text>
+                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Ended</Text>
                           </View>
                         );
                       }
 
                       if (isFull) {
                         return (
-                          <View style={[styles.quickJoinBtn, { backgroundColor: '#F0F0F0' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: '#999' }]}>Event Full</Text>
+                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Full</Text>
                           </View>
                         );
                       }
 
                       return (
-                        <TouchableOpacity style={styles.quickJoinBtn} onPress={() => void model.handleJoinEvent(event.id)}>
-                          <Text style={styles.quickJoinBtnText}>Join Event</Text>
+                        <TouchableOpacity style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.primary }]} onPress={() => void model.handleJoinEvent(event.id)}>
+                          <Text style={[styles.quickJoinBtnText, isDark && { color: '#0E1512' }]}>Join Event</Text>
                         </TouchableOpacity>
                       );
                     })()}
@@ -4887,6 +4901,7 @@ export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const currentDisplayName = model.profile?.profile?.displayName ?? model.session?.user.displayName ?? '';
   const currentEmail = model.session?.user.email ?? '';
   const currentCity = model.profile?.profile?.city ?? '';
@@ -4941,38 +4956,58 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled">
           
-          <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Username</Text>
-          <SurfaceCard style={{ padding: 16 }}>
+          <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Username</Text>
+          <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
             <TextInput
-              style={localStyles.formInput}
+              style={[
+                localStyles.formInput,
+                isDark && {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                  color: theme.colors.textPrimary,
+                },
+              ]}
               value={displayName}
               onChangeText={setDisplayName}
               autoCapitalize="words"
               placeholder="Enter your username"
-              placeholderTextColor="#8CA397"
+              placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
 
-          <Text style={styles.sectionHeadline}>Email Address</Text>
-          <SurfaceCard style={{ padding: 16 }}>
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Email Address</Text>
+          <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
             <TextInput
-              style={localStyles.formInput}
+              style={[
+                localStyles.formInput,
+                isDark && {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                  color: theme.colors.textPrimary,
+                },
+              ]}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
               placeholder="Enter your email"
-              placeholderTextColor="#8CA397"
+              placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
 
-          <Text style={styles.sectionHeadline}>Location (Barangay)</Text>
-          <SurfaceCard style={{ padding: 16 }}>
-            <Text style={{ fontSize: 13, color: '#6B7A75', marginBottom: 10 }}>
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Location (Barangay)</Text>
+          <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
+            <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginBottom: 10 }}>
               Select your registered barangay to represent your community in Eco-Challenges.
             </Text>
             <TouchableOpacity
-              style={localStyles.selectTrigger}
+              style={[
+                localStyles.selectTrigger,
+                isDark && {
+                  backgroundColor: theme.colors.inputBackground,
+                  borderColor: theme.colors.inputBorder,
+                },
+              ]}
               onPress={() => {
                 setBarangaySearchQuery('');
                 setIsBarangayPickerOpen(true);
@@ -4980,18 +5015,18 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
               activeOpacity={0.8}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                <Ionicons name="location-sharp" size={20} color="#126027" />
+                <Ionicons name="location-sharp" size={20} color={isDark ? theme.colors.primary : "#126027"} />
                 <Text
                   style={[
                     localStyles.selectTriggerText,
-                    !selectedBarangay && { color: '#8CA397' },
+                    { color: selectedBarangay ? theme.colors.textPrimary : theme.colors.textMuted },
                   ]}
                   numberOfLines={1}
                 >
                   {selectedBarangay ? `Brgy. ${selectedBarangay}` : 'Select Barangay'}
                 </Text>
               </View>
-              <Ionicons name="chevron-down" size={18} color="#4A6956" />
+              <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </SurfaceCard>
 
@@ -5009,34 +5044,34 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
             activeOpacity={1} 
             onPress={() => setIsBarangayPickerOpen(false)} 
           />
-          <View style={localStyles.modalContainer}>
-            <View style={localStyles.modalHeader}>
+          <View style={[localStyles.modalContainer, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}>
+            <View style={[localStyles.modalHeader, isDark && { borderBottomColor: theme.colors.border }]}>
               <View>
-                <Text style={localStyles.modalTitle}>Select Barangay</Text>
-                <Text style={localStyles.modalSub}>Choose your local community</Text>
+                <Text style={[localStyles.modalTitle, { color: theme.colors.textPrimary }]}>Select Barangay</Text>
+                <Text style={[localStyles.modalSub, { color: theme.colors.textMuted }]}>Choose your local community</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setIsBarangayPickerOpen(false)}
-                style={localStyles.modalCloseBtn}
+                style={[localStyles.modalCloseBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
               >
-                <Ionicons name="close" size={20} color="#334155" />
+                <Ionicons name="close" size={20} color={isDark ? theme.colors.textPrimary : "#334155"} />
               </TouchableOpacity>
             </View>
 
             {/* Search Filter Input */}
-            <View style={localStyles.modalSearchWrap}>
-              <Ionicons name="search" size={18} color="#6B7A75" />
+            <View style={[localStyles.modalSearchWrap, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder }]}>
+              <Ionicons name="search" size={18} color={theme.colors.textMuted} />
               <TextInput
-                style={localStyles.modalSearchInput}
+                style={[localStyles.modalSearchInput, { color: theme.colors.textPrimary }]}
                 placeholder="Search barangay..."
-                placeholderTextColor="#8CA397"
+                placeholderTextColor={theme.colors.textMuted}
                 value={barangaySearchQuery}
                 onChangeText={setBarangaySearchQuery}
                 autoCorrect={false}
               />
               {barangaySearchQuery ? (
                 <TouchableOpacity onPress={() => setBarangaySearchQuery('')}>
-                  <Ionicons name="close-circle" size={16} color="#94A3B8" />
+                  <Ionicons name="close-circle" size={16} color={theme.colors.textMuted} />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -5050,7 +5085,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
                     key={barangay}
                     style={[
                       localStyles.barangayOption,
-                      isSelected && localStyles.barangayOptionSelected,
+                      isSelected && (isDark ? { backgroundColor: theme.colors.surfaceMuted } : localStyles.barangayOptionSelected),
                     ]}
                     onPress={() => {
                       setSelectedBarangay(barangay);
@@ -5061,27 +5096,27 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
                       <Ionicons
                         name={isSelected ? 'radio-button-on' : 'radio-button-off'}
                         size={20}
-                        color={isSelected ? '#126027' : '#94A3B8'}
+                        color={isSelected ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted}
                       />
                       <Text
                         style={[
                           localStyles.barangayOptionText,
-                          isSelected && localStyles.barangayOptionTextSelected,
+                          { color: isSelected ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textPrimary },
                         ]}
                       >
                         {barangay}
                       </Text>
                     </View>
                     {isSelected && (
-                      <Ionicons name="checkmark-circle" size={20} color="#126027" />
+                      <Ionicons name="checkmark-circle" size={20} color={isDark ? theme.colors.primary : "#126027"} />
                     )}
                   </TouchableOpacity>
                 );
               })}
               {filteredBarangays.length === 0 && (
                 <View style={{ padding: 24, alignItems: 'center' }}>
-                  <Ionicons name="search-outline" size={32} color="#94A3B8" />
-                  <Text style={{ color: '#64748B', marginTop: 8, fontSize: 14, fontWeight: '500' }}>
+                  <Ionicons name="search-outline" size={32} color={theme.colors.textMuted} />
+                  <Text style={{ color: theme.colors.textMuted, marginTop: 8, fontSize: 14, fontWeight: '500' }}>
                     No barangay found
                   </Text>
                 </View>
@@ -5095,6 +5130,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark, setThemeMode } = useTheme();
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
@@ -5136,48 +5172,100 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <OverlayScaffold
       title="Settings & Security"
-      subtitle="Update your account password and security"
+      subtitle="Update your appearance and account security"
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.overlayScroll}>
-          <Text style={[styles.sectionHeadline, { marginTop: 0 }]}>Change Password</Text>
+          {/* App Appearance Section */}
+          <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>App Appearance</Text>
+          <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? '#262626' : '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={isDark ? '#FBBF24' : '#7C3AED'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>
+                  {isDark ? 'Dark Mode' : 'Light Mode'}
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                  {isDark ? 'Easier on the eyes in low light' : 'Crisp and bright theme'}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 20, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
+              <TouchableOpacity
+                onPress={() => setThemeMode('light')}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  backgroundColor: !isDark ? '#126027' : 'transparent',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <Ionicons name="sunny" size={13} color={!isDark ? '#FFF' : theme.colors.textMuted} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: !isDark ? '#FFF' : theme.colors.textMuted }}>Light</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setThemeMode('dark')}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  backgroundColor: isDark ? theme.colors.primary : 'transparent',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <Ionicons name="moon" size={13} color={isDark ? '#0E1512' : theme.colors.textMuted} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+              </TouchableOpacity>
+            </View>
+          </SurfaceCard>
+
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Change Password</Text>
           <SurfaceCard style={{ padding: 16 }}>
             <TextInput
-              style={[localStyles.formInput, { marginBottom: 16 }]}
+              style={[localStyles.formInput, { marginBottom: 16, backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
               placeholder="New Password"
-              placeholderTextColor="#8CA397"
+              placeholderTextColor={theme.colors.textMuted}
             />
             <TextInput
-              style={localStyles.formInput}
+              style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
               placeholder="Confirm New Password"
-              placeholderTextColor="#8CA397"
+              placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
 
-          <Text style={styles.sectionHeadline}>Confirm Changes</Text>
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Confirm Changes</Text>
           <SurfaceCard style={{ padding: 16 }}>
-            <Text style={{ marginBottom: 12, fontSize: 13, color: '#6B7A75' }}>
+            <Text style={{ marginBottom: 12, fontSize: 13, color: theme.colors.textMuted }}>
               Please enter your current password to authorize changing your password.
             </Text>
             <TextInput
-              style={localStyles.formInput}
+              style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               secureTextEntry
               placeholder="Current Password"
-              placeholderTextColor="#8CA397"
+              placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
         </ScrollView>
 
-        <View style={{ padding: 16, paddingBottom: 32, backgroundColor: '#FFF' }}>
+        <View style={{ padding: 16, paddingBottom: 32, backgroundColor: theme.colors.card, borderTopWidth: 1, borderColor: theme.colors.border }}>
           <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
         </View>
       </KeyboardAvoidingView>
@@ -5314,26 +5402,40 @@ const localStyles = StyleSheet.create({
 });
 
 export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const logs = model.profile?.recentLogs ?? [];
 
   return (
-    <View style={styles.fullscreenOverlay}>
+    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
-      <ScrollView contentContainerStyle={styles.homeContent}>
-        <Text style={styles.welcomeLabel}>HISTORY</Text>
-        <Text style={styles.pageTitle}>Coins & Points</Text>
+      <ScrollView
+        style={{ backgroundColor: theme.colors.background }}
+        contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
+      >
+        <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>HISTORY</Text>
+        <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Coins & Points</Text>
 
         <View style={{ marginTop: 24, gap: 12 }}>
           {logs.length > 0 ? (
             logs.map((log) => (
-              <SurfaceCard key={log.id} style={{ padding: 16, borderRadius: 16, backgroundColor: '#FFF' }}>
+              <SurfaceCard
+                key={log.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 16,
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.cardBorder,
+                  borderWidth: 1,
+                  shadowOpacity: isDark ? 0.2 : 0.05,
+                }}
+              >
                 <View style={styles.rowBetween}>
-                  <Text style={[styles.cardTitle, { flex: 1 }]}>{model.userDisplayName}</Text>
+                  <Text style={[styles.cardTitle, { flex: 1, color: theme.colors.textPrimary }]}>{model.userDisplayName}</Text>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     {log.pointsAwarded > 0 && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="leaf" size={14} color="#10B981" />
-                        <Text style={{ color: '#10B981', fontWeight: 'bold', fontSize: 16 }}>+{log.pointsAwarded} points</Text>
+                        <Ionicons name="leaf" size={14} color={isDark ? theme.colors.primary : '#10B981'} />
+                        <Text style={{ color: isDark ? theme.colors.primary : '#10B981', fontWeight: 'bold', fontSize: 16 }}>+{log.pointsAwarded} points</Text>
                       </View>
                     )}
                     {typeof log.metadata?.ecoCoinsAwarded === 'number' && log.metadata.ecoCoinsAwarded > 0 && (
@@ -5344,14 +5446,14 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
                     )}
                   </View>
                 </View>
-                <Text style={[styles.metaTextSmallDark, { marginTop: 4 }]}>Action: {log.actionType}</Text>
-                <Text style={[styles.metaTextSmallDark, { marginTop: 4 }]}>Date: {formatLongDate(log.timestamp)}</Text>
+                <Text style={[styles.metaTextSmallDark, { marginTop: 4, color: theme.colors.textSecondary }]}>Action: {log.actionType}</Text>
+                <Text style={[styles.metaTextSmallDark, { marginTop: 4, color: theme.colors.textMuted }]}>Date: {formatLongDate(log.timestamp)}</Text>
               </SurfaceCard>
             ))
           ) : (
-            <SurfaceCard style={styles.publicInfoCard}>
-              <Text style={styles.sectionHeadline}>No history yet</Text>
-              <Text style={styles.metaTextSmallDark}>Complete missions to earn points and coins!</Text>
+            <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+              <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>No history yet</Text>
+              <Text style={[styles.metaTextSmallDark, { color: theme.colors.textMuted }]}>Complete missions to earn points and coins!</Text>
             </SurfaceCard>
           )}
         </View>
@@ -5362,6 +5464,7 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const [displayCoins, setDisplayCoins] = React.useState(model.dashboard?.ecoCoins ?? 0);
   const token = model.session?.token || '';
   const [items, setItems] = React.useState<any[]>([]);
@@ -5473,11 +5576,14 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   return (
-    <View style={styles.fullscreenOverlay}>
+    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
-      <ScrollView contentContainerStyle={styles.homeContent}>
-        <Text style={styles.welcomeLabel}>REDEEM</Text>
-        <Text style={styles.pageTitle}>Redeem Coins</Text>
+      <ScrollView
+        style={{ backgroundColor: theme.colors.background }}
+        contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
+      >
+        <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>REDEEM</Text>
+        <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Redeem Coins</Text>
 
         {/* Balance Card */}
         <LinearGradient
@@ -5531,11 +5637,21 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                 flex: 1,
                 paddingVertical: 10,
                 borderRadius: 12,
-                backgroundColor: activeTab === tab ? '#126027' : '#F3F4F6',
+                backgroundColor: activeTab === tab 
+                  ? (isDark ? theme.colors.primary : '#126027') 
+                  : (isDark ? theme.colors.surfaceMuted : '#F3F4F6'),
                 alignItems: 'center',
+                borderWidth: isDark ? 1 : 0,
+                borderColor: isDark ? (activeTab === tab ? theme.colors.primary : theme.colors.border) : 'transparent',
               }}
             >
-              <Text style={{ color: activeTab === tab ? '#FFF' : '#6B7280', fontWeight: '700', fontSize: 13 }}>
+              <Text style={{ 
+                color: activeTab === tab 
+                  ? (isDark ? '#0E1512' : '#FFF') 
+                  : (isDark ? theme.colors.textMuted : '#6B7280'), 
+                fontWeight: '700', 
+                fontSize: 13 
+              }}>
                 {tab === 'shop' ? 'Shop' : `My Requests${myRequests.length > 0 ? ` (${myRequests.length})` : ''}`}
               </Text>
             </TouchableOpacity>
@@ -5544,14 +5660,14 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
 
         {loading ? (
           <View style={{ padding: 40, alignItems: 'center' }}>
-            <ActivityIndicator size="large" color="#126027" />
+            <ActivityIndicator size="large" color={isDark ? theme.colors.primary : '#126027'} />
           </View>
         ) : activeTab === 'shop' ? (
           /* ─── Shop Tab ─── */
           items.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center' }}>
-              <Ionicons name="gift-outline" size={48} color="#A7D5BA" />
-              <Text style={{ fontSize: 15, color: '#9CA3AF', marginTop: 12 }}>No items available yet</Text>
+              <Ionicons name="gift-outline" size={48} color={isDark ? theme.colors.primary : '#A7D5BA'} />
+              <Text style={{ fontSize: 15, color: theme.colors.textMuted, marginTop: 12 }}>No items available yet</Text>
             </View>
           ) : (
             <View style={{ gap: 12, marginTop: 12 }}>
@@ -5559,7 +5675,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                 const canAfford = displayCoins >= item.coinCost;
                 const isRedeeming = redeeming === item.id;
                 return (
-                  <View key={item.id} style={{ backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+                  <View key={item.id} style={{ backgroundColor: theme.colors.card, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.cardBorder, overflow: 'hidden' }}>
                     {item.imageUrl ? (
                       <Image
                         source={{ uri: item.imageUrl.startsWith('http') ? item.imageUrl : `${ecobudApiOrigin}${item.imageUrl}` }}
@@ -5567,27 +5683,29 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                         resizeMode="cover"
                       />
                     ) : (
-                      <View style={{ width: '100%', height: 140, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center' }}>
-                        <Ionicons name="gift-outline" size={48} color="#126027" />
+                      <View style={{ width: '100%', height: 140, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', justifyContent: 'center', alignItems: 'center' }}>
+                        <Ionicons name="gift-outline" size={48} color={isDark ? theme.colors.primary : '#126027'} />
                       </View>
                     )}
                     <View style={{ padding: 16 }}>
-                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A2E28' }}>{item.title}</Text>
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary }}>{item.title}</Text>
                       {item.description ? (
-                        <Text style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }} numberOfLines={2}>{item.description}</Text>
+                        <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 4 }} numberOfLines={2}>{item.description}</Text>
                       ) : null}
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
                         <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14 }} resizeMode="contain" />
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#D97706' }}>{item.coinCost} Coins</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: isDark ? '#FBBF24' : '#D97706' }}>{item.coinCost} Coins</Text>
                         {item.stock > 0 && (
-                          <Text style={{ fontSize: 11, color: '#9CA3AF', marginLeft: 8 }}>Stock: {item.stock}</Text>
+                          <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginLeft: 8 }}>Stock: {item.stock}</Text>
                         )}
                       </View>
                       <TouchableOpacity
                         onPress={() => handleRedeem(item)}
                         disabled={!canAfford || isRedeeming}
                         style={{
-                          backgroundColor: canAfford ? '#126027' : '#E5E7EB',
+                          backgroundColor: canAfford 
+                            ? (isDark ? theme.colors.primary : '#126027') 
+                            : (isDark ? theme.colors.surfaceMuted : '#E5E7EB'),
                           borderRadius: 20,
                           paddingVertical: 12,
                           alignItems: 'center',
@@ -5595,9 +5713,9 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                         }}
                       >
                         {isRedeeming ? (
-                          <ActivityIndicator size="small" color="#FFF" />
+                          <ActivityIndicator size="small" color={isDark ? '#0E1512' : '#FFF'} />
                         ) : (
-                          <Text style={{ color: canAfford ? '#FFF' : '#9CA3AF', fontWeight: '700', fontSize: 14 }}>
+                          <Text style={{ color: canAfford ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted, fontWeight: '700', fontSize: 14 }}>
                             {canAfford ? 'Redeem' : 'Not Enough Coins'}
                           </Text>
                         )}
@@ -5612,66 +5730,66 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
           /* ─── My Requests Tab ─── */
           myRequests.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center' }}>
-              <Ionicons name="receipt-outline" size={48} color="#A7D5BA" />
-              <Text style={{ fontSize: 15, color: '#9CA3AF', marginTop: 12 }}>No requests yet</Text>
+              <Ionicons name="receipt-outline" size={48} color={isDark ? theme.colors.primary : '#A7D5BA'} />
+              <Text style={{ fontSize: 15, color: theme.colors.textMuted, marginTop: 12 }}>No requests yet</Text>
             </View>
           ) : (
             <View style={{ gap: 10, marginTop: 12 }}>
               {myRequests.map((req) => (
-                <View key={req.id} style={{ backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+                <View key={req.id} style={{ backgroundColor: theme.colors.card, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.cardBorder, overflow: 'hidden' }}>
                   {/* Item Header */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, paddingBottom: req.status === 'ready_to_claim' ? 12 : 16 }}>
-                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
                       {req.itemImage ? (
                         <Image source={{ uri: req.itemImage.startsWith('http') ? req.itemImage : `${ecobudApiOrigin}${req.itemImage}` }} style={{ width: 48, height: 48, borderRadius: 12 }} resizeMode="cover" />
                       ) : (
-                        <Ionicons name="gift-outline" size={24} color="#126027" />
+                        <Ionicons name="gift-outline" size={24} color={isDark ? theme.colors.primary : '#126027'} />
                       )}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A2E28' }}>{req.itemTitle}</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textPrimary }}>{req.itemTitle}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
                         <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12 }} resizeMode="contain" />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#D97706' }}>{req.coinCost} Coins</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#FBBF24' : '#D97706' }}>{req.coinCost} Coins</Text>
                       </View>
                     </View>
-                    <View style={{ backgroundColor: statusColor(req.status) + '18', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 }}>
+                    <View style={{ backgroundColor: statusColor(req.status) + '22', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 }}>
                       <Text style={{ color: statusColor(req.status), fontSize: 11, fontWeight: '700' }}>{statusLabel(req.status)}</Text>
                     </View>
                   </View>
 
                   {/* Ready to Claim / Claimed Card */}
                   {(req.status === 'ready_to_claim' || req.status === 'claimed') && req.claimCode && (
-                    <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: req.status === 'claimed' ? '#F9FAFB' : '#F0FDF4', borderRadius: 14, borderWidth: 1, borderColor: req.status === 'claimed' ? '#E5E7EB' : '#D1FAE5', padding: 16 }}>
+                    <View style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: req.status === 'claimed' ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : (isDark ? '#162D1F' : '#F0FDF4'), borderRadius: 14, borderWidth: 1, borderColor: req.status === 'claimed' ? (isDark ? theme.colors.border : '#E5E7EB') : (isDark ? '#234430' : '#D1FAE5'), padding: 16 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: req.status === 'claimed' ? '#6B7280' : '#059669', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: req.status === 'claimed' ? theme.colors.textMuted : (isDark ? theme.colors.primary : '#059669'), textTransform: 'uppercase', letterSpacing: 0.5 }}>
                           {req.status === 'claimed' ? 'Claimed' : 'Ready to Claim'}
                         </Text>
                         {req.status === 'claimed' && (
-                          <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                          <Ionicons name="checkmark-circle" size={20} color={isDark ? theme.colors.primary : '#10B981'} />
                         )}
                       </View>
 
                       {/* Claim Code */}
-                      <View style={{ backgroundColor: '#FFF', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1.5, borderColor: '#126027', borderStyle: 'dashed', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 1 }}>Claim Code</Text>
-                        <Text style={{ fontSize: 22, fontWeight: '900', color: '#126027', marginTop: 4, letterSpacing: 2 }}>{req.claimCode}</Text>
+                      <View style={{ backgroundColor: isDark ? theme.colors.card : '#FFF', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1.5, borderColor: isDark ? theme.colors.primary : '#126027', borderStyle: 'dashed', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 }}>Claim Code</Text>
+                        <Text style={{ fontSize: 22, fontWeight: '900', color: isDark ? theme.colors.primary : '#126027', marginTop: 4, letterSpacing: 2 }}>{req.claimCode}</Text>
                       </View>
 
                       {/* Claim Details */}
                       <View style={{ gap: 8 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                          <Ionicons name="location" size={14} color="#126027" style={{ marginTop: 1 }} />
+                          <Ionicons name="location" size={14} color={isDark ? theme.colors.primary : '#126027'} style={{ marginTop: 1 }} />
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' }}>Claim Location</Text>
-                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A2E28', marginTop: 1 }}>{req.claimLocation}</Text>
+                            <Text style={{ fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase' }}>Claim Location</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 1 }}>{req.claimLocation}</Text>
                           </View>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                          <Ionicons name="calendar" size={14} color="#126027" style={{ marginTop: 1 }} />
+                          <Ionicons name="calendar" size={14} color={isDark ? theme.colors.primary : '#126027'} style={{ marginTop: 1 }} />
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 10, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' }}>Claim Until</Text>
-                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A2E28', marginTop: 1 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '600', color: theme.colors.textMuted, textTransform: 'uppercase' }}>Claim Until</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary, marginTop: 1 }}>
                               {req.claimUntil ? new Date(req.claimUntil).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}
                             </Text>
                           </View>
@@ -5680,10 +5798,10 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
 
                       {/* Instructions */}
                       {req.claimInstructions && (
-                        <View style={{ marginTop: 10, backgroundColor: '#FFF', borderRadius: 8, padding: 10 }}>
-                          <Text style={{ fontSize: 10, fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', marginBottom: 4 }}>Instructions</Text>
+                        <View style={{ marginTop: 10, backgroundColor: isDark ? theme.colors.card : '#FFF', borderRadius: 8, padding: 10, borderWidth: isDark ? 1 : 0, borderColor: isDark ? theme.colors.border : 'transparent' }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Instructions</Text>
                           {req.claimInstructions.split('\n').map((line: string, i: number) => (
-                            <Text key={i} style={{ fontSize: 12, color: '#374151', lineHeight: 18 }}>
+                            <Text key={i} style={{ fontSize: 12, color: theme.colors.textSecondary, lineHeight: 18 }}>
                               {'• '}{line.replace(/^[•]\s*/, '')}
                             </Text>
                           ))}
@@ -5694,9 +5812,9 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                       {req.status === 'ready_to_claim' && (
                         <TouchableOpacity
                           onPress={() => handleClaim(req)}
-                          style={{ backgroundColor: '#126027', borderRadius: 20, paddingVertical: 12, alignItems: 'center', marginTop: 12 }}
+                          style={{ backgroundColor: isDark ? theme.colors.primary : '#126027', borderRadius: 20, paddingVertical: 12, alignItems: 'center', marginTop: 12 }}
                         >
-                          <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Claim Now</Text>
+                          <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontWeight: '700', fontSize: 14 }}>Claim Now</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -5710,7 +5828,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                   )}
 
                   {/* Date */}
-                  <Text style={{ fontSize: 10, color: '#D1D5DB', paddingHorizontal: 16, paddingBottom: 12 }}>
+                  <Text style={{ fontSize: 10, color: theme.colors.textMuted, paddingHorizontal: 16, paddingBottom: 12 }}>
                     {new Date(req.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </View>

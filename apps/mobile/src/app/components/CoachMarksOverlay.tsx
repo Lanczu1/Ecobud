@@ -13,6 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 import LottieView from 'lottie-react-native';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
@@ -63,6 +64,7 @@ export function CoachMarksOverlay({
   onScrollTo,
   model,
 }: CoachMarksOverlayProps) {
+  const { theme, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState(initialStep);
@@ -548,10 +550,21 @@ export function CoachMarksOverlay({
                 ]}
               >
                 {/* Arrow pointing UP when tooltip is below target */}
-                {placeTooltipBelow && <View style={styles.tooltipArrowUp} />}
+                {placeTooltipBelow && (
+                  <View style={[styles.tooltipArrowUp, isDark && { borderBottomColor: theme.colors.card }]} />
+                )}
 
                 {/* Tooltip Content Body */}
-                <View style={styles.tooltipInner}>
+                <View
+                  style={[
+                    styles.tooltipInner,
+                    isDark && {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.cardBorder,
+                      borderWidth: 1,
+                    },
+                  ]}
+                >
                   {/* Step Badge + Settings Icon */}
                   <View style={styles.cardHeaderRow}>
                     <View style={styles.stepBadge}>
@@ -559,22 +572,26 @@ export function CoachMarksOverlay({
                         STEP {currentStepData.stepNumber} OF {currentStepData.totalSteps}
                       </Text>
                     </View>
-                    <View style={styles.cardSettingsIconWrap}>
-                      <Ionicons name="settings-sharp" size={scale(15)} color="#9CA3AF" />
+                    <View style={[styles.cardSettingsIconWrap, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                      <Ionicons name="settings-sharp" size={scale(15)} color={isDark ? theme.colors.textMuted : '#9CA3AF'} />
                     </View>
                   </View>
 
-                  <Text style={styles.tooltipTitle}>
+                  <Text style={[styles.tooltipTitle, isDark && { color: theme.colors.textPrimary }]}>
                     {currentStepData.title} {currentStepData.titleIcon || ''}
                   </Text>
-                  <Text style={styles.tooltipDesc}>
+                  <Text style={[styles.tooltipDesc, isDark && { color: theme.colors.textMuted }]}>
                     {currentStepData.description}
                   </Text>
 
                   {/* Navigation Buttons */}
                   <View style={styles.tooltipBtnsRow}>
-                    <TouchableOpacity onPress={handleBack} activeOpacity={0.7} style={styles.backBtn}>
-                      <Text style={styles.backBtnText}>Back</Text>
+                    <TouchableOpacity
+                      onPress={handleBack}
+                      activeOpacity={0.7}
+                      style={[styles.backBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
+                    >
+                      <Text style={[styles.backBtnText, isDark && { color: theme.colors.textPrimary }]}>Back</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleNext} activeOpacity={0.88} style={styles.nextBtn}>
                       <Text style={styles.nextBtnText}>Next</Text>
@@ -584,7 +601,9 @@ export function CoachMarksOverlay({
                 </View>
 
                 {/* Arrow pointing DOWN when tooltip is above target */}
-                {!placeTooltipBelow && <View style={styles.tooltipArrowBottom} />}
+                {!placeTooltipBelow && (
+                  <View style={[styles.tooltipArrowBottom, isDark && { borderTopColor: theme.colors.card }]} />
+                )}
               </Animated.View>
             );
           })()}
@@ -658,6 +677,11 @@ export function CoachMarksOverlay({
                 style={[
                   styles.speechCard,
                   { opacity: cardFade, transform: [{ translateY: cardSlide }] },
+                  isDark && {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.cardBorder,
+                    borderWidth: 1,
+                  },
                 ]}
               >
                 {/* Top Row: Step Pill Header + Settings Icon */}
@@ -667,15 +691,15 @@ export function CoachMarksOverlay({
                       STEP {currentStepData.stepNumber} OF {currentStepData.totalSteps}
                     </Text>
                   </View>
-                  <View style={styles.cardSettingsIconWrap}>
-                    <Ionicons name="settings-sharp" size={scale(15)} color="#9CA3AF" />
+                  <View style={[styles.cardSettingsIconWrap, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                    <Ionicons name="settings-sharp" size={scale(15)} color={isDark ? theme.colors.textMuted : '#9CA3AF'} />
                   </View>
                 </View>
 
-                <Text style={styles.cardTitle}>
+                <Text style={[styles.cardTitle, isDark && { color: theme.colors.textPrimary }]}>
                   {currentStepData.title} {currentStepData.titleIcon || ''}
                 </Text>
-                <Text style={styles.cardDesc}>{currentStepData.description}</Text>
+                <Text style={[styles.cardDesc, isDark && { color: theme.colors.textMuted }]}>{currentStepData.description}</Text>
 
                 {currentStepData.stepNumber === 7 ? (
                   <TouchableOpacity onPress={handleNext} activeOpacity={0.88} style={styles.startExploringBtn}>
@@ -686,11 +710,15 @@ export function CoachMarksOverlay({
                   <View style={styles.buttonsRow}>
                     {currentStep === 0 ? (
                       <TouchableOpacity onPress={handleSkip} activeOpacity={0.7} style={styles.skipBtn}>
-                        <Text style={styles.skipBtnText}>Skip</Text>
+                        <Text style={[styles.skipBtnText, isDark && { color: theme.colors.textMuted }]}>Skip</Text>
                       </TouchableOpacity>
                     ) : (
-                      <TouchableOpacity onPress={handleBack} activeOpacity={0.7} style={styles.backBtn}>
-                        <Text style={styles.backBtnText}>Back</Text>
+                      <TouchableOpacity
+                        onPress={handleBack}
+                        activeOpacity={0.7}
+                        style={[styles.backBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
+                      >
+                        <Text style={[styles.backBtnText, isDark && { color: theme.colors.textPrimary }]}>Back</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity onPress={handleNext} activeOpacity={0.88} style={styles.nextBtn}>
@@ -705,6 +733,7 @@ export function CoachMarksOverlay({
                   <View
                     style={[
                       styles.speechArrowTop,
+                      isDark && { borderBottomColor: theme.colors.card },
                       currentStepData.mascotPosition === 'left'
                         ? { left: scale(50), alignSelf: 'flex-start' }
                         : currentStepData.mascotPosition === 'right'
@@ -717,6 +746,7 @@ export function CoachMarksOverlay({
                   <View
                     style={[
                       styles.speechArrowBottom,
+                      isDark && { borderTopColor: theme.colors.card },
                       currentStepData.mascotPosition === 'left'
                         ? { left: scale(50), alignSelf: 'flex-start' }
                         : currentStepData.mascotPosition === 'right'

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import LottieView from 'lottie-react-native';
+import { useTheme } from '../theme/ecoTheme';
 
 const loadingAnimation = require('../../../assets/Loading.json');
 
@@ -33,30 +34,60 @@ function getGlyphSize(size: LoadingGlyphSize): number {
 }
 
 export function LoadingScreenVisual({ label, message, style }: LoadingScreenVisualProps) {
+  const { theme, isDark } = useTheme();
   const lottieSize = getGlyphSize('lg');
 
   return (
     <View
-      style={[styles.screenRoot, style]}
+      style={[
+        styles.screenRoot,
+        { backgroundColor: isDark ? theme.colors.background : '#FFFFFF' },
+        style,
+      ]}
       renderToHardwareTextureAndroid={isAndroid}
       shouldRasterizeIOS
     >
-
       <View style={[styles.contentWrap, isLegacyAndroid && styles.contentWrapLegacy]}>
-        <LottieView
-          source={loadingAnimation}
-          autoPlay
-          loop
-          style={{ width: lottieSize, height: lottieSize, alignSelf: 'center' }}
-        />
-        {label ? <Text style={styles.title}>{label}</Text> : null}
-        {message ? <Text style={styles.message}>{message}</Text> : null}
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          {isDark && (
+            <View
+              style={{
+                position: 'absolute',
+                width: lottieSize * 0.95,
+                height: lottieSize * 0.95,
+                borderRadius: lottieSize * 0.5,
+                backgroundColor: 'rgba(34, 167, 123, 0.14)',
+                shadowColor: '#22A77B',
+                shadowOpacity: 0.35,
+                shadowRadius: 24,
+                elevation: 6,
+              }}
+            />
+          )}
+          <LottieView
+            source={loadingAnimation}
+            autoPlay
+            loop
+            style={{ width: lottieSize, height: lottieSize, alignSelf: 'center' }}
+          />
+        </View>
+        {label ? (
+          <Text style={[styles.title, isDark && { color: theme.colors.textPrimary }]}>
+            {label}
+          </Text>
+        ) : null}
+        {message ? (
+          <Text style={[styles.message, isDark && { color: theme.colors.textMuted }]}>
+            {message}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
 }
 
 export function LoadingGlyph({ size = 'md', style }: LoadingGlyphProps) {
+  const { theme, isDark } = useTheme();
   const dimension = getGlyphSize(size);
 
   return (
@@ -65,8 +96,20 @@ export function LoadingGlyph({ size = 'md', style }: LoadingGlyphProps) {
       renderToHardwareTextureAndroid={isAndroid}
       shouldRasterizeIOS
     >
-      <View style={[styles.inlineGlyph, { width: dimension, height: dimension }]}>
-        <ActivityIndicator size={dimension >= 72 ? 'large' : 'small'} color="#126027" />
+      <View
+        style={[
+          styles.inlineGlyph,
+          { width: dimension, height: dimension },
+          isDark && {
+            backgroundColor: theme.colors.surfaceMuted,
+            borderColor: theme.colors.border,
+          },
+        ]}
+      >
+        <ActivityIndicator
+          size={dimension >= 72 ? 'large' : 'small'}
+          color={isDark ? theme.colors.primary : '#126027'}
+        />
       </View>
     </View>
   );
@@ -75,7 +118,6 @@ export function LoadingGlyph({ size = 'md', style }: LoadingGlyphProps) {
 const styles = StyleSheet.create({
   screenRoot: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,

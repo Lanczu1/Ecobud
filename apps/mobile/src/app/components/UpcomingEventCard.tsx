@@ -13,6 +13,7 @@ import { type UpcomingEventCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { formatEventDateTag, getEventLifecycleStatus } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 export function UpcomingEventCard({
   event,
@@ -22,6 +23,7 @@ export function UpcomingEventCard({
   onRecordAttendance,
   onClaimReward,
 }: UpcomingEventCardProps) {
+  const { theme, isDark } = useTheme();
   const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string }>({
     visible: false,
     reason: '',
@@ -151,7 +153,7 @@ export function UpcomingEventCard({
   };
 
   return (
-    <View style={[styles.eventListCard, event.isFeatured && styles.featuredCardBorder]}>
+    <View style={[styles.eventListCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, shadowOpacity: isDark ? 0.2 : 0.06 }, event.isFeatured && styles.featuredCardBorder]}>
       <ImageBackground
         source={{ uri: imageUrl }}
         style={styles.eventListImg}
@@ -177,24 +179,24 @@ export function UpcomingEventCard({
             <Text style={styles.statusBadgeText}>{statusText}</Text>
           </View>
         </View>
-        <View style={styles.dateTagRight}>
-          <Text style={styles.dateTagRightText}>{formatEventDateTag(event.startDatetime)}</Text>
+        <View style={[styles.dateTagRight, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.dateTagRightText, { color: theme.colors.textPrimary }]}>{formatEventDateTag(event.startDatetime)}</Text>
         </View>
       </ImageBackground>
 
       <View style={styles.eventListBody}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: verticalScale(2) }}>
           {event.isFeatured && <Ionicons name="star" size={scale(11)} color="#F59E0B" />}
-          <Text style={[styles.welcomeLabel, event.isFeatured && styles.welcomeLabelFeatured, { marginBottom: 0 }]}>
+          <Text style={[styles.welcomeLabel, event.isFeatured && styles.welcomeLabelFeatured, { marginBottom: 0, color: event.isFeatured ? '#F59E0B' : isDark ? theme.colors.primary : '#126027' }]}>
             {event.isFeatured ? 'FEATURED EVENT' : 'PUBLIC EVENT'}
           </Text>
         </View>
-        <Text style={styles.cardTitle}>{event.title}</Text>
-        <Text style={styles.metaTextSmallDark}>{event.description}</Text>
+        <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
+        <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>{event.description}</Text>
 
         <View style={[styles.rowMeta, { marginTop: verticalScale(10) }]}>
-          <Ionicons name="location" size={scale(14)} color="#6B7A75" />
-          <Text style={styles.metaTextSmallDark}> {event.location}</Text>
+          <Ionicons name="location" size={scale(14)} color={theme.colors.textMuted} />
+          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.location}</Text>
         </View>
 
         <View
@@ -206,8 +208,8 @@ export function UpcomingEventCard({
             },
           ]}
         >
-          <Ionicons name="leaf-outline" size={scale(14)} color="#10B981" />
-          <Text style={styles.metaTextSmallDark}> {event.expReward} ECO points reward</Text>
+          <Ionicons name="leaf-outline" size={scale(14)} color={theme.colors.primary} />
+          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.expReward} ECO points reward</Text>
         </View>
 
         {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
@@ -216,24 +218,24 @@ export function UpcomingEventCard({
               source={require('../../../assets/coin.png')}
               style={{ width: scale(14), height: scale(14), resizeMode: 'contain' }}
             />
-            <Text style={styles.metaTextSmallDark}> {event.ecoCoinsReward} ECO coins reward</Text>
+            <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.ecoCoinsReward} ECO coins reward</Text>
           </View>
         )}
 
         {capacity > 0 && (
-          <View style={styles.capacitySection}>
+          <View style={[styles.capacitySection, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F7FAF8', borderColor: isDark ? theme.colors.border : '#EAF0EC' }]}>
             <View style={styles.capacityRow}>
               <View style={styles.capacityLeft}>
-                <Ionicons name="people-outline" size={scale(14)} color="#6B7A75" />
-                <Text style={styles.capacityText}>
-                  Capacity: <Text style={styles.capacityCountText}>{joinedCount}/{capacity}</Text>{' '}
-                  <Text style={styles.spotsLeftText}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
+                <Ionicons name="people-outline" size={scale(14)} color={theme.colors.textMuted} />
+                <Text style={[styles.capacityText, { color: theme.colors.textMuted }]}>
+                  Capacity: <Text style={[styles.capacityCountText, { color: theme.colors.textPrimary }]}>{joinedCount}/{capacity}</Text>{' '}
+                  <Text style={[styles.spotsLeftText, { color: theme.colors.textMuted }]}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
                 </Text>
               </View>
               <Text
                 style={[
                   styles.capacityPercentText,
-                  { color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : '#126027' },
+                  { color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : isDark ? theme.colors.primary : '#126027' },
                 ]}
               >
                 {progressPercent}%

@@ -1,26 +1,28 @@
-import { typography, spacing } from '../../app/utils/responsive';
+import {
+  lightTheme,
+  darkTheme,
+  lightColors,
+  darkColors,
+  ThemeProvider,
+  ThemeContext,
+  useTheme,
+  type ThemeMode,
+  type ThemeColors,
+  type EcoTheme,
+} from './ThemeContext';
 
-export const ecoTheme = {
-  colors: {
-    background: '#F7F9F7',
-    surface: '#FFFFFF',
-    surfaceMuted: '#EDF6F1',
-    text: '#1A211D',
-    textSoft: '#6B7A75',
-    primary: '#4ADE80', // Lighter green for active pills/icons
-    primaryDark: '#126027', // Signature dark forest green from the mockup
-    accent: '#D4F7D4',
-    outline: '#E5E9E7',
-    warning: '#F59E0B',
-    badge: '#F0F5F2',
-    shadow: 'rgba(18, 96, 39, 0.08)',
-  },
-  radius: {
-    xl: 36,
-    lg: 24,
-    md: 16,
-    sm: 12,
-  },
-  typography,
-  spacing,
+export {
+  lightTheme,
+  darkTheme,
+  lightColors,
+  darkColors,
+  ThemeProvider,
+  ThemeContext,
+  useTheme,
+  type ThemeMode,
+  type ThemeColors,
+  type EcoTheme,
 };
+
+// Default backward-compatible theme instance (Light mode by default)
+export const ecoTheme = lightTheme;

@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import type { SwapListing } from './types';
 import { CATEGORY_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
@@ -27,6 +27,7 @@ export function SwapRequestDialog({
   onClose: () => void;
   onConfirm: (message: string) => Promise<void>;
 }) {
+  const { theme, isDark } = useTheme();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -53,42 +54,42 @@ export function SwapRequestDialog({
           activeOpacity={1}
           onPress={onClose}
         >
-          <View style={localStyles.dialog} onStartShouldSetResponder={() => true}>
+          <View style={[localStyles.dialog, { backgroundColor: theme.colors.card }]} onStartShouldSetResponder={() => true}>
             <View style={localStyles.iconWrap}>
               <Ionicons name="swap-horizontal" size={28} color="#FFF" />
             </View>
 
-            <Text style={localStyles.title}>Request Swap?</Text>
-            <Text style={localStyles.subtitle}>
+            <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>Request Swap?</Text>
+            <Text style={[localStyles.subtitle, { color: theme.colors.textMuted }]}>
               Do you want to request this item swap?
             </Text>
 
-            <View style={localStyles.previewCard}>
+            <View style={[localStyles.previewCard, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
               <View style={localStyles.previewRow}>
-                <Text style={localStyles.previewLabel}>Offering:</Text>
-                <Text style={localStyles.previewValue}>
+                <Text style={[localStyles.previewLabel, { color: theme.colors.textMuted }]}>Offering:</Text>
+                <Text style={[localStyles.previewValue, { color: theme.colors.textPrimary }]}>
                   {listing.quantity} {listing.title}
                 </Text>
               </View>
-              <View style={localStyles.previewDivider} />
+              <View style={[localStyles.previewDivider, { backgroundColor: theme.colors.border }]} />
               <View style={localStyles.previewRow}>
-                <Text style={localStyles.previewLabel}>Looking For:</Text>
-                <Text style={localStyles.previewValue}>{listing.lookingFor}</Text>
+                <Text style={[localStyles.previewLabel, { color: theme.colors.textMuted }]}>Looking For:</Text>
+                <Text style={[localStyles.previewValue, { color: theme.colors.textPrimary }]}>{listing.lookingFor}</Text>
               </View>
-              <View style={localStyles.previewDivider} />
+              <View style={[localStyles.previewDivider, { backgroundColor: theme.colors.border }]} />
               <View style={localStyles.previewRow}>
-                <Text style={localStyles.previewLabel}>Meetup:</Text>
-                <Text style={localStyles.previewValue}>
+                <Text style={[localStyles.previewLabel, { color: theme.colors.textMuted }]}>Meetup:</Text>
+                <Text style={[localStyles.previewValue, { color: theme.colors.textPrimary }]}>
                   {MEETUP_LABELS[listing.meetupMethod]}
                 </Text>
               </View>
             </View>
 
-            <Text style={localStyles.messageLabel}>Add a message (optional):</Text>
+            <Text style={[localStyles.messageLabel, { color: theme.colors.textPrimary }]}>Add a message (optional):</Text>
             <TextInput
-              style={localStyles.messageInput}
+              style={[localStyles.messageInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               placeholder="Hi! I'm interested in swapping..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.colors.textMuted}
               value={message}
               onChangeText={setMessage}
               multiline
@@ -99,20 +100,20 @@ export function SwapRequestDialog({
             <View style={localStyles.actions}>
               <TouchableOpacity
                 onPress={onClose}
-                style={localStyles.cancelBtn}
+                style={[localStyles.cancelBtn, { borderColor: theme.colors.border }]}
                 disabled={sending}
               >
-                <Text style={localStyles.cancelBtnText}>Cancel</Text>
+                <Text style={[localStyles.cancelBtnText, { color: theme.colors.textMuted }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleConfirm}
-                style={[localStyles.confirmBtn, sending && { opacity: 0.7 }]}
+                style={[localStyles.confirmBtn, isDark && { backgroundColor: theme.colors.primary }, sending && { opacity: 0.7 }]}
                 disabled={sending}
               >
                 {sending ? (
-                  <ActivityIndicator color="#FFF" size="small" />
+                  <ActivityIndicator color={isDark ? '#0E1512' : '#FFF'} size="small" />
                 ) : (
-                  <Text style={localStyles.confirmBtnText}>Send Request</Text>
+                  <Text style={[localStyles.confirmBtnText, isDark && { color: '#0E1512' }]}>Send Request</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -136,6 +137,7 @@ export function SwapAcceptedDialog({
   onClose: () => void;
   onChat: () => void;
 }) {
+  const { theme, isDark } = useTheme();
   if (!listing) return null;
 
   return (
@@ -146,54 +148,54 @@ export function SwapAcceptedDialog({
           activeOpacity={1}
           onPress={onClose}
         >
-          <View style={localStyles.dialog} onStartShouldSetResponder={() => true}>
+          <View style={[localStyles.dialog, { backgroundColor: theme.colors.card }]} onStartShouldSetResponder={() => true}>
             <View style={[localStyles.iconWrap, { backgroundColor: '#059669' }]}>
               <Ionicons name="checkmark-circle" size={32} color="#FFF" />
             </View>
 
-            <Text style={localStyles.title}>Swap Accepted!</Text>
-            <Text style={localStyles.subtitle}>
+            <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>Swap Accepted!</Text>
+            <Text style={[localStyles.subtitle, { color: theme.colors.textMuted }]}>
               Both users have agreed to the swap. You can now continue chatting to coordinate the exchange.
             </Text>
 
             {meetupMethod === 'public' && listing.meetupLocation && (
-              <View style={localStyles.infoBox}>
-                <Ionicons name="location" size={18} color={ecoTheme.colors.primaryDark} />
+              <View style={[localStyles.infoBox, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                <Ionicons name="location" size={18} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                 <View style={{ flex: 1 }}>
-                  <Text style={localStyles.infoBoxTitle}>Meetup Location</Text>
-                  <Text style={localStyles.infoBoxText}>{listing.meetupLocation}</Text>
+                  <Text style={[localStyles.infoBoxTitle, isDark && { color: theme.colors.primary }]}>Meetup Location</Text>
+                  <Text style={[localStyles.infoBoxText, { color: theme.colors.textPrimary }]}>{listing.meetupLocation}</Text>
                   {listing.meetupLandmark && (
-                    <Text style={localStyles.infoBoxSubtext}>Landmark: {listing.meetupLandmark}</Text>
+                    <Text style={[localStyles.infoBoxSubtext, { color: theme.colors.textMuted }]}>Landmark: {listing.meetupLandmark}</Text>
                   )}
                 </View>
               </View>
             )}
 
             {meetupMethod === 'pickup' && (
-              <View style={localStyles.infoBox}>
+              <View style={[localStyles.infoBox, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                 <Ionicons name="arrow-down" size={18} color="#2563EB" />
-                <Text style={localStyles.infoBoxText}>
+                <Text style={[localStyles.infoBoxText, { color: theme.colors.textPrimary }]}>
                   Pickup address has been shared in the chat.
                 </Text>
               </View>
             )}
 
             {meetupMethod === 'dropoff' && (
-              <View style={localStyles.infoBox}>
+              <View style={[localStyles.infoBox, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                 <Ionicons name="arrow-up" size={18} color="#2563EB" />
-                <Text style={localStyles.infoBoxText}>
+                <Text style={[localStyles.infoBoxText, { color: theme.colors.textPrimary }]}>
                   Delivery address has been shared in the chat.
                 </Text>
               </View>
             )}
 
             <View style={localStyles.actions}>
-              <TouchableOpacity onPress={onClose} style={localStyles.cancelBtn}>
-                <Text style={localStyles.cancelBtnText}>Later</Text>
+              <TouchableOpacity onPress={onClose} style={[localStyles.cancelBtn, { borderColor: theme.colors.border }]}>
+                <Text style={[localStyles.cancelBtnText, { color: theme.colors.textMuted }]}>Later</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={onChat} style={localStyles.confirmBtn}>
-                <Ionicons name="chatbubble" size={16} color="#FFF" />
-                <Text style={localStyles.confirmBtnText}>Open Chat</Text>
+              <TouchableOpacity onPress={onChat} style={[localStyles.confirmBtn, isDark && { backgroundColor: theme.colors.primary }]}>
+                <Ionicons name="chatbubble" size={16} color={isDark ? '#0E1512' : '#FFF'} />
+                <Text style={[localStyles.confirmBtnText, isDark && { color: '#0E1512' }]}>Open Chat</Text>
               </TouchableOpacity>
             </View>
           </View>

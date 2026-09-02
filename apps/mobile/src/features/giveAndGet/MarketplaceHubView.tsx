@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import type { EcoBudMobileModel } from '../../app/types/home';
 import { TopNavbar } from '../../app/components/CommonComponents';
 import { MarketplaceFeed } from './MarketplaceFeed';
@@ -25,6 +25,7 @@ export function MarketplaceHubView({
   model: EcoBudMobileModel;
   onScreenStateChange?: (isSubScreen: boolean) => void;
 }) {
+  const { theme } = useTheme();
   const [screen, setScreen] = useState<HubScreen>('feed');
   const [feedTab, setFeedTab] = useState<FeedTab>('browse');
   const [selectedListing, setSelectedListing] = useState<SwapListing | null>(null);
@@ -181,7 +182,7 @@ export function MarketplaceHubView({
   const isRootScreen = screen === 'feed';
 
   return (
-    <View style={localStyles.container}>
+    <View style={[localStyles.container, { backgroundColor: theme.colors.background }]}>
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (

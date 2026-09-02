@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { type ChallengeWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { resolveMediaUrl } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 export interface DiscoverChallengeCardProps {
   challenge: ChallengeWithProgress;
@@ -26,6 +27,7 @@ export function DiscoverChallengeCard({
   style,
   isTablet,
 }: DiscoverChallengeCardProps) {
+  const { theme, isDark } = useTheme();
   const category = ((challenge as any).category || 'General').toUpperCase();
   const isImageMission = challenge.type === 'AI Image Recognition Challenge';
   const imageUrl = resolveMediaUrl(challenge.imageUrl, ecobudApiOrigin);
@@ -36,6 +38,11 @@ export function DiscoverChallengeCard({
       accessibilityLabel={`Start ${challenge.title}`}
       style={({ pressed }) => [
         cardStyles.discoverCard,
+        {
+          backgroundColor: theme.colors.card,
+          borderColor: theme.colors.cardBorder,
+          shadowOpacity: isDark ? 0.2 : 0.07,
+        },
         pressed && cardStyles.discoverCardPressed,
         isTablet && { width: '48%' },
         style,
@@ -46,11 +53,11 @@ export function DiscoverChallengeCard({
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={cardStyles.discoverImage} resizeMode="cover" />
         ) : (
-          <View style={[cardStyles.discoverImage, cardStyles.discoverImageFallback]}>
+          <View style={[cardStyles.discoverImage, cardStyles.discoverImageFallback, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }]}>
             <Ionicons
               name={isImageMission ? 'camera-outline' : 'leaf-outline'}
               size={scale(28)}
-              color="#126027"
+              color={isDark ? theme.colors.primary : '#126027'}
             />
           </View>
         )}
@@ -69,47 +76,47 @@ export function DiscoverChallengeCard({
 
       <View style={cardStyles.discoverBody}>
         <View style={cardStyles.discoverMetaRow}>
-          <View style={cardStyles.discoverCategoryBadge}>
-            <Text style={cardStyles.discoverCategoryText}>{category}</Text>
+          <View style={[cardStyles.discoverCategoryBadge, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
+            <Text style={[cardStyles.discoverCategoryText, { color: isDark ? theme.colors.primary : '#126027' }]}>{category}</Text>
           </View>
           {challenge.difficulty && (
-            <Text style={cardStyles.discoverDifficulty}>
+            <Text style={[cardStyles.discoverDifficulty, { color: theme.colors.textMuted }]}>
               {challenge.difficulty.toUpperCase()}
             </Text>
           )}
         </View>
 
-        <Text style={cardStyles.discoverTitle} numberOfLines={2}>
+        <Text style={[cardStyles.discoverTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
           {challenge.title}
         </Text>
-        <Text style={cardStyles.discoverDescription} numberOfLines={2}>
+        <Text style={[cardStyles.discoverDescription, { color: theme.colors.textSecondary }]} numberOfLines={2}>
           {challenge.description}
         </Text>
 
-        <View style={cardStyles.discoverFooter}>
+        <View style={[cardStyles.discoverFooter, { borderTopColor: isDark ? theme.colors.border : '#F0FDF4' }]}>
           <View style={cardStyles.rewardSection}>
-            <Text style={cardStyles.discoverRewardLabel}>REWARD</Text>
+            <Text style={[cardStyles.discoverRewardLabel, { color: theme.colors.textMuted }]}>REWARD</Text>
             <View style={cardStyles.discoverRewardRow}>
-              <Ionicons name="leaf" size={scale(14)} color="#15803D" />
-              <Text style={cardStyles.discoverReward}>{challenge.expReward} points</Text>
+              <Ionicons name="leaf" size={scale(14)} color={theme.colors.primary} />
+              <Text style={[cardStyles.discoverReward, { color: isDark ? theme.colors.primary : '#15803D' }]}>{challenge.expReward} points</Text>
               {challenge.ecoCoinReward > 0 && (
                 <View style={cardStyles.coinRow}>
                   <Image
                     source={require('../../../assets/coin.png')}
                     style={cardStyles.coinIcon}
                   />
-                  <Text style={cardStyles.coinText}>+{challenge.ecoCoinReward}</Text>
+                  <Text style={[cardStyles.coinText, { color: isDark ? '#FBBF24' : '#B45309' }]}>+{challenge.ecoCoinReward}</Text>
                 </View>
               )}
             </View>
           </View>
 
           <View style={cardStyles.footerRight}>
-            <View style={cardStyles.discoverStartButton}>
-              <Text style={cardStyles.discoverStartText}>
+            <View style={[cardStyles.discoverStartButton, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}>
+              <Text style={[cardStyles.discoverStartText, { color: isDark ? '#0E1512' : '#FFFFFF' }]}>
                 {isImageMission ? 'OPEN' : 'START'}
               </Text>
-              <Ionicons name="arrow-forward" size={scale(15)} color="#FFFFFF" />
+              <Ionicons name="arrow-forward" size={scale(15)} color={isDark ? '#0E1512' : '#FFFFFF'} />
             </View>
           </View>
         </View>
