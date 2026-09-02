@@ -18,6 +18,7 @@ import { responsiveFontSize, moderateScale, scale } from '../utils/responsive';
 import { type HeaderProps } from '../types/home';
 import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndicator';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 function initialsFromLabel(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || 'E';
@@ -56,6 +57,7 @@ export function Header({
   onTrackerPress,
   onNotificationsPress,
 }: HeaderProps) {
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isSmallDevice = height <= 680 || width < 375;
@@ -84,18 +86,19 @@ export function Header({
   const iconSize = isSmallDevice ? 22 : isTablet ? 26 : 24;
   const actionGap = isSmallDevice ? 10 : isTablet ? 20 : 14;
   const logoSize = isSmallDevice ? scale(42) : isTablet ? scale(52) : scale(46);
+  const actionIconColor = isDark ? theme.colors.primary : '#126027';
 
   return (
     <>
       <View style={[
         styles.topNavbar,
-        { paddingTop: topPadding },
+        { paddingTop: topPadding, backgroundColor: theme.colors.navBackground },
         isSmallDevice && { paddingHorizontal: scale(16), paddingBottom: scale(12) }
       ]}>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' }}>
           {showBack ? (
             <TouchableOpacity onPress={onBack} style={{ marginRight: isSmallDevice ? 8 : 12, padding: 4 }}>
-              <Feather name="arrow-left" size={iconSize} color="#1A211D" />
+              <Feather name="arrow-left" size={iconSize} color={theme.colors.icon} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -114,13 +117,13 @@ export function Header({
               {avatarSource ? (
                 <Image
                   source={avatarSource}
-                  style={[styles.topNavAvatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
+                  style={[styles.topNavAvatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderColor: theme.colors.primary }]}
                 />
               ) : (
                 <AvatarBubble
                   label={userDisplayName}
                   size={avatarSize}
-                  style={styles.topNavAvatar}
+                  style={[styles.topNavAvatar, { borderColor: theme.colors.primary }]}
                   textStyle={styles.topNavAvatarText}
                 />
               )}
@@ -143,16 +146,16 @@ export function Header({
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: actionGap }}>
           {onTrackerPress && (
             <TouchableOpacity onPress={onTrackerPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-              <Ionicons name="bar-chart-outline" size={iconSize} color="#126027" />
+              <Ionicons name="bar-chart-outline" size={iconSize} color={actionIconColor} />
             </TouchableOpacity>
           )}
           {onEventsPress && (
             <TouchableOpacity onPress={onEventsPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-              <Ionicons name="calendar-outline" size={iconSize} color="#126027" />
+              <Ionicons name="calendar-outline" size={iconSize} color={actionIconColor} />
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onNotificationsPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-            <Ionicons name="notifications" size={iconSize} color="#126027" />
+            <Ionicons name="notifications" size={iconSize} color={actionIconColor} />
             {notificationCount > 0 && (
               <View style={[
                 styles.topNavBadge,

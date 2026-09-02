@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
 import { PublicProfileModal } from './PublicProfileModal';
@@ -75,6 +75,7 @@ export function SwapListingDetail({
   onReport?: () => void;
   onUpdated?: (updated: SwapListing) => void;
 }) {
+  const { theme, isDark } = useTheme();
   const [listing, setListing] = useState<SwapListing>(initialListing);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showActions, setShowActions] = useState(false);
@@ -199,10 +200,10 @@ export function SwapListingDetail({
   };
 
   return (
-    <Animated.View style={[localStyles.container, { transform: [{ translateX: slideAnim }] }]}>
-      <SafeAreaView style={localStyles.safeArea} edges={['top']}>
+    <Animated.View style={[localStyles.container, { transform: [{ translateX: slideAnim }], backgroundColor: theme.colors.background }]}>
+      <SafeAreaView style={[localStyles.safeArea, { backgroundColor: isDark ? theme.colors.background : '#0D5B2A' }]} edges={['top']}>
         {/* Header Bar */}
-        <View style={localStyles.header}>
+        <View style={[localStyles.header, isDark && { backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
           <TouchableOpacity onPress={handleBack} style={localStyles.backBtn} activeOpacity={0.7}>
             <Feather name="arrow-left" size={22} color="#FFF" />
           </TouchableOpacity>
@@ -214,13 +215,13 @@ export function SwapListingDetail({
 
         <ScrollView
           ref={scrollRef}
-          style={localStyles.scroll}
-          contentContainerStyle={localStyles.scrollContent}
+          style={[localStyles.scroll, { backgroundColor: theme.colors.background }]}
+          contentContainerStyle={[localStyles.scrollContent, { backgroundColor: theme.colors.background }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Main Gallery Carousel */}
           {images.length > 0 ? (
-            <View style={localStyles.imageSection}>
+            <View style={[localStyles.imageSection, isDark && { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
               <View style={localStyles.imageContainer}>
                 <ScrollView
                   ref={mainImageScrollRef}
@@ -260,8 +261,8 @@ export function SwapListingDetail({
 
               {/* Thumbnails Row for fast browsing all photos */}
               {images.length > 1 && (
-                <View style={localStyles.thumbnailContainer}>
-                  <Text style={localStyles.thumbnailHeaderTitle}>
+                <View style={[localStyles.thumbnailContainer, isDark && { backgroundColor: theme.colors.card }]}>
+                  <Text style={[localStyles.thumbnailHeaderTitle, { color: theme.colors.textMuted }]}>
                     Photos ({images.length})
                   </Text>
                   <ScrollView
@@ -295,9 +296,9 @@ export function SwapListingDetail({
               )}
             </View>
           ) : (
-            <View style={[localStyles.imageContainer, localStyles.imageContainerFallback]}>
-              <Ionicons name="image-outline" size={60} color="#A7D5BA" />
-              <Text style={{ color: ecoTheme.colors.textSoft, fontSize: responsiveFontSize(13), marginTop: 8 }}>
+            <View style={[localStyles.imageContainer, localStyles.imageContainerFallback, isDark && { backgroundColor: theme.colors.card }]}>
+              <Ionicons name="image-outline" size={60} color={isDark ? theme.colors.primary : "#A7D5BA"} />
+              <Text style={{ color: theme.colors.textMuted, fontSize: responsiveFontSize(13), marginTop: 8 }}>
                 No photos available
               </Text>
             </View>
@@ -305,21 +306,21 @@ export function SwapListingDetail({
 
           {/* Details Card Content */}
           <View style={localStyles.content}>
-            <View style={localStyles.cardBox}>
+            <View style={[localStyles.cardBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
               <View style={localStyles.titleRow}>
-                <View style={localStyles.categoryTag}>
-                  <Ionicons name="pricetag-outline" size={13} color={ecoTheme.colors.primaryDark} />
-                  <Text style={localStyles.categoryTagText}>
+                <View style={[localStyles.categoryTag, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                  <Ionicons name="pricetag-outline" size={13} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                  <Text style={[localStyles.categoryTagText, isDark && { color: theme.colors.primary }]}>
                     {CATEGORY_LABELS[listing.category] || listing.category}
                   </Text>
                 </View>
                 <View style={localStyles.timeBadge}>
-                  <Ionicons name="time-outline" size={13} color={ecoTheme.colors.textSoft} />
-                  <Text style={localStyles.timeText}>{getTimeAgo(listing.postedAt)}</Text>
+                  <Ionicons name="time-outline" size={13} color={theme.colors.textMuted} />
+                  <Text style={[localStyles.timeText, { color: theme.colors.textMuted }]}>{getTimeAgo(listing.postedAt)}</Text>
                 </View>
               </View>
 
-              <Text style={localStyles.title}>{listing.title}</Text>
+              <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>{listing.title}</Text>
 
               {/* Status Banner */}
               {isOwnListing && listing.approvalStatus && listing.approvalStatus !== 'approved' && (
@@ -351,78 +352,78 @@ export function SwapListingDetail({
               )}
 
               {/* Offering vs Looking For */}
-              <View style={localStyles.offerLookingCard}>
-                <View style={localStyles.offerSection}>
-                  <Text style={localStyles.sectionLabel}>Offering</Text>
-                  <Text style={localStyles.sectionValue} numberOfLines={2}>
+              <View style={[localStyles.offerLookingCard, isDark && { borderColor: theme.colors.border }]}>
+                <View style={[localStyles.offerSection, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[localStyles.sectionLabel, { color: theme.colors.textMuted }]}>Offering</Text>
+                  <Text style={[localStyles.sectionValue, { color: theme.colors.textPrimary }]} numberOfLines={2}>
                     {listing.quantity} {listing.title}
                   </Text>
                 </View>
                 <View style={localStyles.offerDivider}>
-                  <Ionicons name="swap-horizontal" size={18} color={ecoTheme.colors.primaryDark} />
+                  <Ionicons name="swap-horizontal" size={18} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                 </View>
-                <View style={localStyles.lookingSection}>
-                  <Text style={localStyles.sectionLabel}>Looking For</Text>
-                  <Text style={localStyles.sectionValue} numberOfLines={2}>{listing.lookingFor}</Text>
+                <View style={[localStyles.lookingSection, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[localStyles.sectionLabel, { color: theme.colors.textMuted }]}>Looking For</Text>
+                  <Text style={[localStyles.sectionValue, { color: theme.colors.textPrimary }]} numberOfLines={2}>{listing.lookingFor}</Text>
                 </View>
               </View>
 
               {/* Badges / Meta Grid */}
               <View style={localStyles.metaGrid}>
-                <View style={localStyles.metaItem}>
-                  <Ionicons name="fitness-outline" size={15} color={ecoTheme.colors.primaryDark} />
-                  <Text style={localStyles.metaLabel}>Condition:</Text>
-                  <Text style={localStyles.metaValue}>{CONDITION_LABELS[listing.condition] || listing.condition}</Text>
+                <View style={[localStyles.metaItem, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                  <Ionicons name="fitness-outline" size={15} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                  <Text style={[localStyles.metaLabel, { color: theme.colors.textMuted }]}>Condition:</Text>
+                  <Text style={[localStyles.metaValue, { color: theme.colors.textPrimary }]}>{CONDITION_LABELS[listing.condition] || listing.condition}</Text>
                 </View>
-                <View style={localStyles.metaItem}>
-                  <Ionicons name="location-outline" size={15} color={ecoTheme.colors.primaryDark} />
-                  <Text style={localStyles.metaLabel}>Meetup:</Text>
-                  <Text style={localStyles.metaValue}>{MEETUP_LABELS[listing.meetupMethod] || listing.meetupMethod}</Text>
+                <View style={[localStyles.metaItem, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                  <Ionicons name="location-outline" size={15} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                  <Text style={[localStyles.metaLabel, { color: theme.colors.textMuted }]}>Meetup:</Text>
+                  <Text style={[localStyles.metaValue, { color: theme.colors.textPrimary }]}>{MEETUP_LABELS[listing.meetupMethod] || listing.meetupMethod}</Text>
                 </View>
                 {listing.city && (
-                  <View style={localStyles.metaItem}>
-                    <Ionicons name="map-outline" size={15} color={ecoTheme.colors.primaryDark} />
-                    <Text style={localStyles.metaLabel}>Location:</Text>
-                    <Text style={localStyles.metaValue}>
+                  <View style={[localStyles.metaItem, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                    <Ionicons name="map-outline" size={15} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                    <Text style={[localStyles.metaLabel, { color: theme.colors.textMuted }]}>Location:</Text>
+                    <Text style={[localStyles.metaValue, { color: theme.colors.textPrimary }]}>
                       {listing.city}{listing.province ? `, ${listing.province}` : ''}
                     </Text>
                   </View>
                 )}
                 {listing.distanceKm != null && (
-                  <View style={localStyles.metaItem}>
-                    <Ionicons name="navigate-outline" size={15} color={ecoTheme.colors.primaryDark} />
-                    <Text style={localStyles.metaLabel}>Distance:</Text>
-                    <Text style={localStyles.metaValue}>{listing.distanceKm.toFixed(1)} km</Text>
+                  <View style={[localStyles.metaItem, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                    <Ionicons name="navigate-outline" size={15} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                    <Text style={[localStyles.metaLabel, { color: theme.colors.textMuted }]}>Distance:</Text>
+                    <Text style={[localStyles.metaValue, { color: theme.colors.textPrimary }]}>{listing.distanceKm.toFixed(1)} km</Text>
                   </View>
                 )}
               </View>
 
               {/* Meetup Information Card */}
               {listing.meetupMethod === 'public' && listing.meetupLocation && (
-                <View style={localStyles.meetupInfoCard}>
-                  <Ionicons name="location" size={20} color={ecoTheme.colors.primaryDark} />
+                <View style={[localStyles.meetupInfoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                  <Ionicons name="location" size={20} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                   <View style={{ flex: 1 }}>
-                    <Text style={localStyles.meetupInfoTitle}>{listing.meetupLocation}</Text>
+                    <Text style={[localStyles.meetupInfoTitle, { color: theme.colors.textPrimary }]}>{listing.meetupLocation}</Text>
                     {listing.meetupLandmark && (
-                      <Text style={localStyles.meetupInfoSubtitle}>Landmark: {listing.meetupLandmark}</Text>
+                      <Text style={[localStyles.meetupInfoSubtitle, { color: theme.colors.textMuted }]}>Landmark: {listing.meetupLandmark}</Text>
                     )}
                   </View>
                 </View>
               )}
 
               {listing.meetupMethod === 'pickup' && (
-                <View style={localStyles.meetupInfoCard}>
+                <View style={[localStyles.meetupInfoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                   <Ionicons name="information-circle" size={20} color="#2563EB" />
-                  <Text style={localStyles.meetupInfoText}>
+                  <Text style={[localStyles.meetupInfoText, isDark && { color: '#93C5FD' }]}>
                     Pickup address will be shared after both users confirm the swap.
                   </Text>
                 </View>
               )}
 
               {listing.meetupMethod === 'dropoff' && (
-                <View style={localStyles.meetupInfoCard}>
+                <View style={[localStyles.meetupInfoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                   <Ionicons name="information-circle" size={20} color="#2563EB" />
-                  <Text style={localStyles.meetupInfoText}>
+                  <Text style={[localStyles.meetupInfoText, isDark && { color: '#93C5FD' }]}>
                     Delivery address will be shared after both users confirm the swap.
                   </Text>
                 </View>
@@ -430,27 +431,27 @@ export function SwapListingDetail({
 
               {/* Description */}
               {listing.description ? (
-                <View style={localStyles.sectionWrapper}>
-                  <Text style={localStyles.sectionTitle}>Description</Text>
-                  <Text style={localStyles.descriptionText}>{listing.description}</Text>
+                <View style={[localStyles.sectionWrapper, { borderTopColor: theme.colors.border }]}>
+                  <Text style={[localStyles.sectionTitle, { color: theme.colors.textPrimary }]}>Description</Text>
+                  <Text style={[localStyles.descriptionText, { color: theme.colors.textMuted }]}>{listing.description}</Text>
                 </View>
               ) : null}
 
               {/* Meetup Notes */}
               {listing.meetupNotes ? (
-                <View style={localStyles.sectionWrapper}>
-                  <Text style={localStyles.sectionTitle}>Meetup Notes</Text>
-                  <Text style={localStyles.descriptionText}>{listing.meetupNotes}</Text>
+                <View style={[localStyles.sectionWrapper, { borderTopColor: theme.colors.border }]}>
+                  <Text style={[localStyles.sectionTitle, { color: theme.colors.textPrimary }]}>Meetup Notes</Text>
+                  <Text style={[localStyles.descriptionText, { color: theme.colors.textMuted }]}>{listing.meetupNotes}</Text>
                 </View>
               ) : null}
             </View>
 
             {/* Poster Info Card */}
-            <Text style={[localStyles.sectionTitle, { marginLeft: scale(4), marginBottom: verticalScale(8) }]}>
+            <Text style={[localStyles.sectionTitle, { marginLeft: scale(4), marginBottom: verticalScale(8), color: theme.colors.textPrimary }]}>
               Posted By
             </Text>
             <TouchableOpacity
-              style={localStyles.userCard}
+              style={[localStyles.userCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
               activeOpacity={0.8}
               onPress={() => setShowProfileModal(true)}
             >
@@ -468,7 +469,7 @@ export function SwapListingDetail({
               </View>
               <View style={localStyles.userInfo}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={localStyles.userName}>{listing.user.displayName}</Text>
+                  <Text style={[localStyles.userName, { color: theme.colors.textPrimary }]}>{listing.user.displayName}</Text>
                   {listing.user.isVerified && (
                     <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
                   )}
@@ -478,15 +479,15 @@ export function SwapListingDetail({
                     <Ionicons name="star" size={13} color="#F59E0B" />
                     <Text style={localStyles.userStatText}>{listing.user.rating.toFixed(1)}</Text>
                   </View>
-                  <View style={localStyles.userStatDivider} />
+                  <View style={[localStyles.userStatDivider, { backgroundColor: theme.colors.border }]} />
                   <View style={localStyles.userStat}>
-                    <Ionicons name="swap-horizontal" size={13} color={ecoTheme.colors.primaryDark} />
-                    <Text style={localStyles.userStatText}>{listing.user.successfulSwaps} swaps</Text>
+                    <Ionicons name="swap-horizontal" size={13} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                    <Text style={[localStyles.userStatText, { color: theme.colors.textMuted }]}>{listing.user.successfulSwaps} swaps</Text>
                   </View>
                 </View>
               </View>
               <View style={localStyles.profileArrow}>
-                <Ionicons name="chevron-forward" size={18} color="#6B7A75" />
+                <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
               </View>
             </TouchableOpacity>
           </View>
@@ -494,7 +495,7 @@ export function SwapListingDetail({
 
         {/* Bottom CTA for Requesting Swap or Editing own Listing */}
         {!isOwnListing ? (
-          <View style={localStyles.bottomBar}>
+          <View style={[localStyles.bottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
             <TouchableOpacity onPress={onRequestSwap} style={localStyles.swapBtn} activeOpacity={0.85}>
               <LinearGradient
                 colors={['#0B5F58', '#126027', '#169070']}
@@ -514,7 +515,7 @@ export function SwapListingDetail({
             </TouchableOpacity>
           </View>
         ) : isApproved ? (
-          <View style={localStyles.bottomBar}>
+          <View style={[localStyles.bottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
             <TouchableOpacity
               onPress={() => setShowEditModal(true)}
               style={localStyles.swapBtn}
@@ -540,8 +541,8 @@ export function SwapListingDetail({
             activeOpacity={1}
             onPress={() => setShowActions(false)}
           >
-            <View style={localStyles.actionSheet}>
-              <View style={localStyles.actionHandle} />
+            <View style={[localStyles.actionSheet, { backgroundColor: theme.colors.card }]}>
+              <View style={[localStyles.actionHandle, isDark && { backgroundColor: theme.colors.border }]} />
               {isOwnListing ? (
                 <>
                   {isApproved && (

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { SwapListingCard, SwapListingSkeleton } from './SwapListingCard';
 import { SwapChatList } from './SwapChatView';
 import { swapService } from './swapService';
@@ -51,6 +51,7 @@ export function MarketplaceFeed({
   onRefreshConversations?: () => void;
   model?: EcoBudMobileModel;
 }) {
+  const { theme, isDark } = useTheme();
   const [listings, setListings] = useState<SwapListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -167,8 +168,8 @@ export function MarketplaceFeed({
 
   return (
     <ScrollView 
-      style={localStyles.container}
-      contentContainerStyle={{ paddingBottom: verticalScale(96) }}
+      style={[localStyles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={{ paddingBottom: verticalScale(96), backgroundColor: theme.colors.background }}
       stickyHeaderIndices={[1]}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -176,13 +177,15 @@ export function MarketplaceFeed({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor={ecoTheme.colors.primaryDark}
+            tintColor={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark}
+            colors={[isDark ? theme.colors.primary : ecoTheme.colors.primaryDark]}
           />
         ) : activeTab === 'mylistings' ? (
           <RefreshControl
             refreshing={myListingsLoading}
             onRefresh={loadMyListings}
-            tintColor={ecoTheme.colors.primaryDark}
+            tintColor={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark}
+            colors={[isDark ? theme.colors.primary : ecoTheme.colors.primaryDark]}
           />
         ) : undefined
       }
@@ -232,26 +235,26 @@ export function MarketplaceFeed({
         </CoachMarkTarget>
 
         {/* Search bar */}
-        <View style={localStyles.searchBar}>
-          <Ionicons name="search-outline" size={18} color="#9CA3AF" />
+        <View style={[localStyles.searchBar, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+          <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
           <TextInput
-            style={localStyles.searchInput}
+            style={[localStyles.searchInput, { color: theme.colors.textPrimary }]}
             placeholder="Search items to swap..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.textMuted}
             value={searchQuery}
             onChangeText={handleSearch}
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
             </TouchableOpacity>
           )}
           <TouchableOpacity
             onPress={() => setShowFilters(true)}
-            style={localStyles.filterButton}
+            style={[localStyles.filterButton, isDark && { backgroundColor: theme.colors.primary }]}
           >
-            <Ionicons name="filter" size={16} color="#FFF" />
+            <Ionicons name="filter" size={16} color={isDark ? '#0E1512' : '#FFF'} />
             {(selectedCategory !== 'all' || selectedMeetup !== 'all') && (
               <View style={localStyles.filterDot} />
             )}
@@ -270,18 +273,20 @@ export function MarketplaceFeed({
               onPress={() => setSelectedCategory(cat.key)}
               style={[
                 localStyles.categoryPill,
-                selectedCategory === cat.key && localStyles.categoryPillActive,
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                selectedCategory === cat.key && [localStyles.categoryPillActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }],
               ]}
             >
               <Ionicons
                 name={(cat.key === 'all' ? 'apps-outline' : CATEGORY_ICON[cat.key]) as any}
                 size={14}
-                color={selectedCategory === cat.key ? '#FFFFFF' : '#547060'}
+                color={selectedCategory === cat.key ? (isDark ? '#0E1512' : '#FFFFFF') : theme.colors.textMuted}
               />
               <Text
                 style={[
                   localStyles.categoryPillText,
-                  selectedCategory === cat.key && localStyles.categoryPillTextActive,
+                  { color: theme.colors.textMuted },
+                  selectedCategory === cat.key && [localStyles.categoryPillTextActive, { color: isDark ? '#0E1512' : '#FFFFFF' }],
                 ]}
               >
                 {cat.label}
@@ -291,7 +296,7 @@ export function MarketplaceFeed({
         </ScrollView>
       </View>
 
-      <View style={{ backgroundColor: ecoTheme.colors.background, zIndex: 10, paddingVertical: 4 }}>
+      <View style={{ backgroundColor: theme.colors.background, zIndex: 10, paddingVertical: 4 }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -299,20 +304,20 @@ export function MarketplaceFeed({
           contentContainerStyle={localStyles.tabScrollContent}
         >
           <TouchableOpacity
-            style={[localStyles.tabPill, activeTab === 'browse' && localStyles.tabPillActive]}
+            style={[localStyles.tabPill, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeTab === 'browse' && [localStyles.tabPillActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }]]}
             onPress={() => onTabChange('browse')}
           >
             <Ionicons
               name={activeTab === 'browse' ? 'storefront' : 'storefront-outline'}
               size={16}
-              color={activeTab === 'browse' ? '#FFF' : '#6B7A75'}
+              color={activeTab === 'browse' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted}
             />
-            <Text style={[localStyles.tabPillText, activeTab === 'browse' && localStyles.tabPillTextActive]}>
+            <Text style={[localStyles.tabPillText, { color: theme.colors.textMuted }, activeTab === 'browse' && [localStyles.tabPillTextActive, { color: isDark ? '#0E1512' : '#FFF' }]]}>
               Browse
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[localStyles.tabPill, activeTab === 'chats' && localStyles.tabPillActive]}
+            style={[localStyles.tabPill, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeTab === 'chats' && [localStyles.tabPillActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }]]}
             onPress={() => {
               onTabChange('chats');
               onRefreshConversations?.();
@@ -322,7 +327,7 @@ export function MarketplaceFeed({
               <Ionicons
                 name={activeTab === 'chats' ? 'chatbubbles' : 'chatbubbles-outline'}
                 size={16}
-                color={activeTab === 'chats' ? '#FFF' : '#6B7A75'}
+                color={activeTab === 'chats' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted}
               />
               {conversations.length > 0 && (
                 <View style={localStyles.tabBadge}>
@@ -332,12 +337,12 @@ export function MarketplaceFeed({
                 </View>
               )}
             </View>
-            <Text style={[localStyles.tabPillText, activeTab === 'chats' && localStyles.tabPillTextActive]}>
+            <Text style={[localStyles.tabPillText, { color: theme.colors.textMuted }, activeTab === 'chats' && [localStyles.tabPillTextActive, { color: isDark ? '#0E1512' : '#FFF' }]]}>
               Chats ({conversations.length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[localStyles.tabPill, activeTab === 'mylistings' && localStyles.tabPillActive]}
+            style={[localStyles.tabPill, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeTab === 'mylistings' && [localStyles.tabPillActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }]]}
             onPress={() => {
               onTabChange('mylistings');
               loadMyListings();
@@ -346,9 +351,9 @@ export function MarketplaceFeed({
             <Ionicons
               name={activeTab === 'mylistings' ? 'clipboard' : 'clipboard-outline'}
               size={16}
-              color={activeTab === 'mylistings' ? '#FFF' : '#6B7A75'}
+              color={activeTab === 'mylistings' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted}
             />
-            <Text style={[localStyles.tabPillText, activeTab === 'mylistings' && localStyles.tabPillTextActive]}>
+            <Text style={[localStyles.tabPillText, { color: theme.colors.textMuted }, activeTab === 'mylistings' && [localStyles.tabPillTextActive, { color: isDark ? '#0E1512' : '#FFF' }]]}>
               My Listings
             </Text>
           </TouchableOpacity>
@@ -361,11 +366,11 @@ export function MarketplaceFeed({
             {!loading && listings.length > 0 && (
               <View style={localStyles.resultsHeader}>
                 <View>
-                  <Text style={localStyles.resultsTitle}>{searchQuery ? 'Matches for your search' : 'Fresh from the community'}</Text>
-                  <Text style={localStyles.resultsSubtitle}>Browse items ready for a second life.</Text>
+                  <Text style={[localStyles.resultsTitle, { color: theme.colors.textPrimary }]}>{searchQuery ? 'Matches for your search' : 'Fresh from the community'}</Text>
+                  <Text style={[localStyles.resultsSubtitle, { color: theme.colors.textMuted }]}>Browse items ready for a second life.</Text>
                 </View>
-                <View style={localStyles.resultsCount}>
-                  <Text style={localStyles.resultsCountText}>{listings.length}</Text>
+                <View style={[localStyles.resultsCount, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[localStyles.resultsCountText, isDark && { color: theme.colors.primary }]}>{listings.length}</Text>
                 </View>
               </View>
             )}
@@ -377,16 +382,16 @@ export function MarketplaceFeed({
               </>
             ) : listings.length === 0 ? (
               <View style={localStyles.emptyState}>
-                <Ionicons name="leaf-outline" size={64} color="#A7D5BA" />
-                <Text style={localStyles.emptyTitle}>No listings found</Text>
-                <Text style={localStyles.emptySubtitle}>
+                <Ionicons name="leaf-outline" size={64} color={isDark ? theme.colors.primary : "#A7D5BA"} />
+                <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>No listings found</Text>
+                <Text style={[localStyles.emptySubtitle, { color: theme.colors.textMuted }]}>
                   {searchQuery || selectedCategory !== 'all' || selectedMeetup !== 'all'
                     ? 'Try adjusting your filters or search terms.'
                     : 'Be the first to create a swap listing!'}
                 </Text>
                 {!searchQuery && selectedCategory === 'all' && selectedMeetup === 'all' && (
-                  <TouchableOpacity onPress={onCreateListing} style={localStyles.emptyButton}>
-                    <Text style={localStyles.emptyButtonText}>Create Listing</Text>
+                  <TouchableOpacity onPress={onCreateListing} style={[localStyles.emptyButton, isDark && { backgroundColor: theme.colors.primary }]}>
+                    <Text style={[localStyles.emptyButtonText, isDark && { color: '#0E1512' }]}>Create Listing</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -399,7 +404,7 @@ export function MarketplaceFeed({
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' }} />
                         <Text style={{ fontSize: 12, fontWeight: '700', color: '#10B981' }}>Available</Text>
                       </View>
-                      <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
+                      <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>
                         {listing.meetupMethod === 'public' ? 'Public Meetup' : listing.meetupMethod === 'pickup' ? 'Door Pickup' : 'Door Drop-off'}
                       </Text>
                     </View>
@@ -433,13 +438,13 @@ export function MarketplaceFeed({
               </>
             ) : myListings.length === 0 ? (
               <View style={localStyles.emptyState}>
-                <Ionicons name="clipboard-outline" size={64} color="#A7D5BA" />
-                <Text style={localStyles.emptyTitle}>No listings yet</Text>
-                <Text style={localStyles.emptySubtitle}>
+                <Ionicons name="clipboard-outline" size={64} color={isDark ? theme.colors.primary : "#A7D5BA"} />
+                <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>No listings yet</Text>
+                <Text style={[localStyles.emptySubtitle, { color: theme.colors.textMuted }]}>
                   Create a listing to see it here with its approval status.
                 </Text>
-                <TouchableOpacity onPress={onCreateListing} style={localStyles.emptyButton}>
-                  <Text style={localStyles.emptyButtonText}>Create Listing</Text>
+                <TouchableOpacity onPress={onCreateListing} style={[localStyles.emptyButton, isDark && { backgroundColor: theme.colors.primary }]}>
+                  <Text style={[localStyles.emptyButtonText, isDark && { color: '#0E1512' }]}>Create Listing</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -481,11 +486,11 @@ export function MarketplaceFeed({
         onRequestClose={() => setShowFilters(false)}
       >
         <View style={localStyles.modalOverlay}>
-          <View style={localStyles.modalContent}>
-            <View style={localStyles.modalHandle} />
-            <Text style={localStyles.modalTitle}>Filters</Text>
+          <View style={[localStyles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={[localStyles.modalHandle, isDark && { backgroundColor: theme.colors.border }]} />
+            <Text style={[localStyles.modalTitle, { color: theme.colors.textPrimary }]}>Filters</Text>
 
-            <Text style={localStyles.filterSectionLabel}>Category</Text>
+            <Text style={[localStyles.filterSectionLabel, { color: theme.colors.textPrimary }]}>Category</Text>
             <View style={localStyles.filterGrid}>
               {categories.map((cat) => (
                 <TouchableOpacity
@@ -493,13 +498,15 @@ export function MarketplaceFeed({
                   onPress={() => setSelectedCategory(cat.key)}
                   style={[
                     localStyles.filterChip,
-                    selectedCategory === cat.key && localStyles.filterChipActive,
+                    { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border },
+                    selectedCategory === cat.key && [localStyles.filterChipActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }],
                   ]}
                 >
                   <Text
                     style={[
                       localStyles.filterChipText,
-                      selectedCategory === cat.key && localStyles.filterChipTextActive,
+                      { color: theme.colors.textMuted },
+                      selectedCategory === cat.key && [localStyles.filterChipTextActive, { color: isDark ? '#0E1512' : '#FFFFFF' }],
                     ]}
                   >
                     {cat.label}
@@ -508,7 +515,7 @@ export function MarketplaceFeed({
               ))}
             </View>
 
-            <Text style={[localStyles.filterSectionLabel, { marginTop: 18 }]}>Meetup Method</Text>
+            <Text style={[localStyles.filterSectionLabel, { marginTop: 18, color: theme.colors.textPrimary }]}>Meetup Method</Text>
             <View style={localStyles.filterGrid}>
               {meetupOptions.map((opt) => (
                 <TouchableOpacity
@@ -516,18 +523,20 @@ export function MarketplaceFeed({
                   onPress={() => setSelectedMeetup(opt.key)}
                   style={[
                     localStyles.filterChip,
-                    selectedMeetup === opt.key && localStyles.filterChipActive,
+                    { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border },
+                    selectedMeetup === opt.key && [localStyles.filterChipActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }],
                   ]}
                 >
                   <Ionicons
                     name={opt.icon as any}
                     size={14}
-                    color={selectedMeetup === opt.key ? '#FFF' : ecoTheme.colors.textSoft}
+                    color={selectedMeetup === opt.key ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted}
                   />
                   <Text
                     style={[
                       localStyles.filterChipText,
-                      selectedMeetup === opt.key && localStyles.filterChipTextActive,
+                      { color: theme.colors.textMuted },
+                      selectedMeetup === opt.key && [localStyles.filterChipTextActive, { color: isDark ? '#0E1512' : '#FFFFFF' }],
                     ]}
                   >
                     {opt.label}
@@ -542,15 +551,15 @@ export function MarketplaceFeed({
                   setSelectedCategory('all');
                   setSelectedMeetup('all');
                 }}
-                style={localStyles.resetButton}
+                style={[localStyles.resetButton, { borderColor: theme.colors.border }]}
               >
-                <Text style={localStyles.resetButtonText}>Reset All</Text>
+                <Text style={[localStyles.resetButtonText, { color: theme.colors.textMuted }]}>Reset All</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setShowFilters(false)}
-                style={localStyles.applyButton}
+                style={[localStyles.applyButton, isDark && { backgroundColor: theme.colors.primary }]}
               >
-                <Text style={localStyles.applyButtonText}>Apply Filters</Text>
+                <Text style={[localStyles.applyButtonText, isDark && { color: '#0E1512' }]}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
           </View>

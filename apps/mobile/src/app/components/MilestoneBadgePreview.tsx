@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { getLevelFromPoints } from './LevelCard';
 import { triggerImpactLight } from '../utils/haptics';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 export interface MilestoneBadgePreviewProps {
   ecoPoints: number;
@@ -25,6 +26,7 @@ const LEVEL_PERKS: Record<number, string> = {
 };
 
 export function MilestoneBadgePreview({ ecoPoints, onPress }: MilestoneBadgePreviewProps) {
+  const { theme, isDark } = useTheme();
   const { currentLevelObj, nextLevelObj } = getLevelFromPoints(ecoPoints);
   const isMaxLevel = currentLevelObj.level === 10;
 
@@ -49,22 +51,29 @@ export function MilestoneBadgePreview({ ecoPoints, onPress }: MilestoneBadgePrev
         style={styles.cardWrapper}
       >
         <LinearGradient
-          colors={['#FFFFFF', '#F6FBF8']}
+          colors={isDark ? [theme.colors.card, theme.colors.cardAlt] : ['#FFFFFF', '#F6FBF8']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.cardGradient}
+          style={[
+            styles.cardGradient,
+            {
+              borderColor: theme.colors.cardBorder,
+              borderWidth: 1,
+              shadowOpacity: isDark ? 0.2 : 0.08,
+            },
+          ]}
         >
           {/* Header Row */}
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
-              <View style={styles.tag}>
-                <Ionicons name="ribbon-outline" size={scale(12)} color="#126027" />
-                <Text style={styles.tagText}>NEXT MILESTONE</Text>
+              <View style={[styles.tag, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }]}>
+                <Ionicons name="ribbon-outline" size={scale(12)} color={isDark ? theme.colors.primary : '#126027'} />
+                <Text style={[styles.tagText, { color: isDark ? theme.colors.primary : '#126027' }]}>NEXT MILESTONE</Text>
               </View>
             </View>
             <View style={styles.headerRight}>
-              <Text style={styles.viewDetailsText}>View All Levels</Text>
-              <Ionicons name="chevron-forward" size={scale(12)} color="#126027" />
+              <Text style={[styles.viewDetailsText, { color: isDark ? theme.colors.primary : '#126027' }]}>View All Levels</Text>
+              <Ionicons name="chevron-forward" size={scale(12)} color={isDark ? theme.colors.primary : '#126027'} />
             </View>
           </View>
 
@@ -73,13 +82,13 @@ export function MilestoneBadgePreview({ ecoPoints, onPress }: MilestoneBadgePrev
             {/* Badge Icon */}
             <View style={styles.badgeContainer}>
               <LinearGradient
-                colors={isMaxLevel ? ['#F59E0B', '#D97706'] : ['#E8F5E9', '#C8E6C9']}
-                style={styles.badgeCircle}
+                colors={isMaxLevel ? ['#F59E0B', '#D97706'] : isDark ? ['#224630', '#183323'] : ['#E8F5E9', '#C8E6C9']}
+                style={[styles.badgeCircle, { borderColor: isDark ? theme.colors.border : '#FFFFFF' }]}
               >
                 <MaterialCommunityIcons
                   name={(isMaxLevel ? currentLevelObj.icon : nextLevelObj.icon) as any}
                   size={scale(26)}
-                  color={isMaxLevel ? '#FFFFFF' : '#126027'}
+                  color={isMaxLevel ? '#FFFFFF' : isDark ? theme.colors.primary : '#126027'}
                 />
               </LinearGradient>
               {!isMaxLevel && (
@@ -92,15 +101,15 @@ export function MilestoneBadgePreview({ ecoPoints, onPress }: MilestoneBadgePrev
             {/* Target Badge Info */}
             <View style={styles.infoCol}>
               <View style={styles.titleRow}>
-                <Text style={styles.badgeTitle} numberOfLines={1}>
+                <Text style={[styles.badgeTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                   {isMaxLevel ? 'Eco Legend (Max Tier)' : nextLevelObj.name}
                 </Text>
-                <View style={styles.levelPill}>
-                  <Text style={styles.levelPillText}>Lv. {isMaxLevel ? 10 : nextLevelObj.level}</Text>
+                <View style={[styles.levelPill, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1', borderColor: isDark ? theme.colors.border : '#D4E8DC' }]}>
+                  <Text style={[styles.levelPillText, { color: isDark ? theme.colors.primary : '#126027' }]}>Lv. {isMaxLevel ? 10 : nextLevelObj.level}</Text>
                 </View>
               </View>
 
-              <Text style={styles.perkText} numberOfLines={1}>
+              <Text style={[styles.perkText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                 {isMaxLevel ? '🏆 You reached the highest eco status!' : `🎁 Unlocks: ${nextPerk}`}
               </Text>
             </View>

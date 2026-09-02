@@ -14,6 +14,7 @@ import { type ActiveChallengeCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { styles } from '../styles/appStyles';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 const getValidImageUrl = (url: string | null | undefined) => {
   if (!url) return undefined;
@@ -27,6 +28,7 @@ const getValidImageUrl = (url: string | null | undefined) => {
 };
 
 export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isViewed, isCycleActive = true }: ActiveChallengeCardProps) {
+  const { theme, isDark } = useTheme();
   const status = dailyChallenge.progress?.status?.toLowerCase() || 'not_started';
   
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -63,7 +65,6 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
   }
 
   const handlePress = (e: any) => {
-    // Capture the click coordinates to emit particles from the exact location
     const { pageX, pageY } = e.nativeEvent;
     
     setIsPressing(true);
@@ -84,7 +85,7 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
   const shouldPulse = isAI && !isCompleted && !isPending && !isApproved;
 
   return (
-    <Animated.View style={localStyles.cardContainer}>
+    <Animated.View style={[localStyles.cardContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, shadowOpacity: isDark ? 0.2 : 0.08 }]}>
       {/* Header Banner / Thumbnail */}
       <View style={localStyles.bannerContainer}>
         {dailyChallenge.imageUrl ? (
@@ -108,44 +109,44 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
 
         {/* Gradient Overlay for Top Contrast */}
         <LinearGradient
-          colors={['rgba(0,0,0,0.6)', 'transparent', 'rgba(0,0,0,0.5)']}
+          colors={['rgba(0,0,0,0.65)', 'transparent']}
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Top Badges Row */}
+        {/* Top Badges: Category/Type & Status */}
         <View style={localStyles.bannerTopRow}>
-          <View style={localStyles.badgeRowLeft}>
-            {dailyChallenge.isFeatured ? (
-              <View style={[localStyles.pillPrimary, { backgroundColor: '#F59E0B' }]}>
-                <Ionicons name="star" size={scale(11)} color="#FFF" style={{ marginRight: 4 }} />
-                <Text style={localStyles.pillPrimaryText}>FEATURED</Text>
-              </View>
-            ) : (
-              <View style={localStyles.pillPrimary}>
-                <Ionicons name="flash" size={scale(11)} color="#FFF" style={{ marginRight: 4 }} />
-                <Text style={localStyles.pillPrimaryText}>TODAY</Text>
-              </View>
-            )}
-            {dailyChallenge.difficulty && (
-              <View style={localStyles.pillGlass}>
-                <Ionicons
-                  name="shield-checkmark"
-                  size={scale(10)}
-                  color={dailyChallenge.difficulty.toLowerCase() === 'easy' ? '#4ADE80' : dailyChallenge.difficulty.toLowerCase() === 'medium' ? '#FBBF24' : '#F87171'}
-                  style={{ marginRight: 3 }}
-                />
-                <Text style={localStyles.pillGlassText}>
-                  {dailyChallenge.difficulty.toUpperCase()}
-                </Text>
-              </View>
-            )}
+          <View style={localStyles.pillPrimary}>
+            <Ionicons
+              name={isAI ? 'camera' : 'shield-checkmark'}
+              size={scale(12)}
+              color="#FFF"
+              style={{ marginRight: 4 }}
+            />
+            <Text style={localStyles.pillPrimaryText}>
+              {isAI ? 'AI MISSION' : 'COMMUNITY'}
+            </Text>
           </View>
 
           <View style={localStyles.badgeRowRight}>
-            {isViewed ? (
+            {isApproved ? (
+              <View style={[localStyles.pillGlass, { backgroundColor: 'rgba(234, 179, 8, 0.45)' }]}>
+                <Ionicons name="gift" size={scale(12)} color="#FEF08A" style={{ marginRight: 4 }} />
+                <Text style={[localStyles.pillGlassText, { color: '#FEF08A', fontWeight: '800' }]}>UNCLAIMED</Text>
+              </View>
+            ) : isCompleted ? (
+              <View style={[localStyles.pillGlass, { backgroundColor: 'rgba(34, 197, 94, 0.4)' }]}>
+                <Ionicons name="checkmark-circle" size={scale(12)} color="#BBF7D0" style={{ marginRight: 4 }} />
+                <Text style={[localStyles.pillGlassText, { color: '#BBF7D0', fontWeight: '800' }]}>DONE</Text>
+              </View>
+            ) : isPending ? (
+              <View style={[localStyles.pillGlass, { backgroundColor: 'rgba(245, 158, 11, 0.4)' }]}>
+                <Ionicons name="time" size={scale(12)} color="#FDE68A" style={{ marginRight: 4 }} />
+                <Text style={[localStyles.pillGlassText, { color: '#FDE68A', fontWeight: '800' }]}>REVIEWING</Text>
+              </View>
+            ) : isViewed ? (
               <View style={[localStyles.pillGlass, { backgroundColor: 'rgba(59, 130, 246, 0.45)' }]}>
-                <Ionicons name="eye-outline" size={scale(11)} color="#FFF" style={{ marginRight: 4 }} />
-                <Text style={localStyles.pillGlassText}>Viewed</Text>
+                <Ionicons name="flash" size={scale(12)} color="#BFDBFE" style={{ marginRight: 4 }} />
+                <Text style={[localStyles.pillGlassText, { color: '#BFDBFE', fontWeight: '800' }]}>ACTIVE</Text>
               </View>
             ) : (
               <View style={[localStyles.pillGlass, { backgroundColor: 'rgba(239, 68, 68, 0.55)' }]}>
@@ -160,49 +161,49 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
       <View style={localStyles.bodyContent}>
         {/* Category Pill Tag above Title */}
         {(dailyChallenge as any).category && (
-          <View style={localStyles.categoryChip}>
-            <Text style={localStyles.categoryChipText}>
+          <View style={[localStyles.categoryChip, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
+            <Text style={[localStyles.categoryChipText, { color: isDark ? theme.colors.primary : '#126027' }]}>
               {((dailyChallenge as any).category).toUpperCase()}
             </Text>
           </View>
         )}
 
         {/* Title */}
-        <Text style={localStyles.titleText}>{dailyChallenge.title}</Text>
+        <Text style={[localStyles.titleText, { color: theme.colors.textPrimary }]}>{dailyChallenge.title}</Text>
 
         {/* Description */}
-        <Text style={localStyles.descriptionText} numberOfLines={3}>
+        <Text style={[localStyles.descriptionText, { color: theme.colors.textSecondary }]} numberOfLines={3}>
           {dailyChallenge.description}
         </Text>
 
         {/* Reward Badges */}
         <View style={localStyles.rewardRow}>
-          <View style={localStyles.xpBadge}>
-            <Ionicons name="leaf" size={scale(13)} color="#15803D" />
-            <Text style={localStyles.xpBadgeText}>+{dailyChallenge.expReward} XP</Text>
+          <View style={[localStyles.xpBadge, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#DCFCE7' }]}>
+            <Ionicons name="leaf" size={scale(13)} color={isDark ? theme.colors.primary : '#15803D'} />
+            <Text style={[localStyles.xpBadgeText, { color: isDark ? theme.colors.primary : '#15803D' }]}>+{dailyChallenge.expReward} XP</Text>
           </View>
 
           {dailyChallenge.ecoCoinReward > 0 && (
-            <View style={localStyles.coinBadge}>
+            <View style={[localStyles.coinBadge, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#FEF3C7' }]}>
               <Image
                 source={require('../../../assets/coin.png')}
                 style={{ width: scale(14), height: scale(14), resizeMode: 'contain' }}
               />
-              <Text style={localStyles.coinBadgeText}>+{dailyChallenge.ecoCoinReward} Coins</Text>
+              <Text style={[localStyles.coinBadgeText, { color: isDark ? '#FBBF24' : '#B45309' }]}>+{dailyChallenge.ecoCoinReward} Coins</Text>
             </View>
           )}
         </View>
 
         {/* AI Mission Box (if AI challenge) */}
         {isAI && dailyChallenge.aiDetectionTargets && dailyChallenge.aiDetectionTargets.length > 0 && (
-          <View style={localStyles.aiBox}>
+          <View style={[localStyles.aiBox, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', borderColor: isDark ? theme.colors.border : '#DCFCE7' }]}>
             <View style={localStyles.aiHeaderRow}>
-              <Ionicons name="scan-circle" size={scale(16)} color="#15803D" />
-              <Text style={localStyles.aiLabel}>AI CAMERA MISSION</Text>
+              <Ionicons name="scan-circle" size={scale(16)} color={isDark ? theme.colors.primary : '#15803D'} />
+              <Text style={[localStyles.aiLabel, { color: isDark ? theme.colors.primary : '#15803D' }]}>AI CAMERA MISSION</Text>
             </View>
-            <Text style={localStyles.aiTargetText}>
+            <Text style={[localStyles.aiTargetText, { color: theme.colors.textSecondary }]}>
               Snap photo of:{' '}
-              <Text style={localStyles.aiTargetHighlight}>
+              <Text style={[localStyles.aiTargetHighlight, { color: theme.colors.textPrimary }]}>
                 {dailyChallenge.aiDetectionTargets.join(', ')}
               </Text>
             </Text>

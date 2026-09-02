@@ -6,17 +6,28 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
-export function DailyTipCard({ title, description }: { title?: string, description?: string }) {
+export function DailyTipCard({ title, description }: { title?: string; description?: string }) {
+  const { theme, isDark } = useTheme();
+
   return (
-    <View style={styles.dailyTipCard}>
+    <View style={[
+      styles.dailyTipCard,
+      {
+        backgroundColor: theme.colors.card,
+        borderColor: theme.colors.cardBorder,
+        borderWidth: 1,
+        shadowOpacity: isDark ? 0.2 : 0.08,
+      },
+    ]}>
       <View style={{ flex: 1, paddingRight: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-          <MaterialCommunityIcons name="lightbulb-on" size={12} color="#126027" />
-          <Text style={[styles.welcomeLabel, { marginLeft: 4 }]}>DAILY TIP</Text>
+          <MaterialCommunityIcons name="lightbulb-on" size={12} color={isDark ? theme.colors.primary : '#126027'} />
+          <Text style={[styles.welcomeLabel, { marginLeft: 4, color: theme.colors.textMuted }]}>DAILY TIP</Text>
         </View>
-        <Text style={styles.tipTitle}>{title || "Cold Wash Advantage"}</Text>
-        <Text style={styles.tipDesc}>{description || "Washing clothes at 30°C instead of 40°C can save up to 40% of energy usage over a year."}</Text>
+        <Text style={[styles.tipTitle, { color: theme.colors.textPrimary }]}>{title || 'Cold Wash Advantage'}</Text>
+        <Text style={[styles.tipDesc, { color: theme.colors.textMuted }]}>{description || 'Washing clothes at 30°C instead of 40°C can save up to 40% of energy usage over a year.'}</Text>
       </View>
       <Image source={{ uri: 'https://images.unsplash.com/photo-1582735689369-dbcf0e2c8a7b?q=80&w=400&auto=format&fit=crop' }} style={styles.tipImage} />
     </View>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Modal, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
@@ -37,14 +38,15 @@ type PublicProfileModalProps = {
 };
 
 export function PublicProfileModal({ visible, onClose, user }: PublicProfileModalProps) {
+  const { theme } = useTheme();
   if (!user) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color="#6B7A75" />
+            <Ionicons name="close" size={24} color={theme.colors.textMuted} />
           </TouchableOpacity>
           
           <View style={styles.avatarContainer}>
@@ -58,15 +60,15 @@ export function PublicProfileModal({ visible, onClose, user }: PublicProfileModa
           </View>
           
           <View style={styles.nameRow}>
-            <Text style={styles.userName}>{user.displayName}</Text>
+            <Text style={[styles.userName, { color: theme.colors.textPrimary }]}>{user.displayName}</Text>
             {user.isVerified && (
               <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
             )}
           </View>
           
           <View style={styles.infoRow}>
-            <Ionicons name="person-circle-outline" size={16} color="#6B7A75" />
-            <Text style={styles.infoText}>EcoBud Community Member</Text>
+            <Ionicons name="person-circle-outline" size={16} color={theme.colors.textMuted} />
+            <Text style={[styles.infoText, { color: theme.colors.textMuted }]}>EcoBud Community Member</Text>
           </View>
         </View>
       </View>

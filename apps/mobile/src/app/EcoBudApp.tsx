@@ -31,7 +31,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   type EcoBudMobileModel,
 } from './types/home';
-import { ecoTheme } from '../shared/theme/ecoTheme';
+import { ecoTheme, ThemeProvider, useTheme } from '../shared/theme/ecoTheme';
 import { AuthView } from '../features/auth/AuthView';
 import {
   BootView,
@@ -64,12 +64,15 @@ export default function App() {
 
   return (
     <SafeAreaProvider style={{ flex: 1 }}>
-      <MobileShell model={model} />
+      <ThemeProvider>
+        <MobileShell model={model} />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const scrollRef = React.useRef<ScrollView>(null);
   const [hideMarketplaceChrome, setHideMarketplaceChrome] = useState(false);
 
@@ -105,8 +108,8 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     );
   } else {
     content = (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="dark" />
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         {model.activeTab === 'marketplace' ? (
           <ScreenTransition key="marketplace">
             <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
@@ -119,8 +122,8 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
                 <RefreshControl
                   refreshing={model.refreshing}
                   onRefresh={() => void model.refreshEverything()}
-                  tintColor={ecoTheme.colors.primaryDark}
-                  colors={[ecoTheme.colors.primaryDark, '#4ADE80']}
+                  tintColor={theme.colors.primary}
+                  colors={[theme.colors.primary, theme.colors.primaryLight]}
                 />
               }
               contentContainerStyle={styles.mainScrollContent}
@@ -144,7 +147,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   }
 
   return (
-    <View style={styles.actionHost}>
+    <View style={[styles.actionHost, { backgroundColor: theme.colors.background }]}>
       {content}
       {model.activeOverlay && (
         <View style={StyleSheet.absoluteFill}>

@@ -20,7 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { styles } from '../styles/appStyles';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LoadingGlyph, LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
 import { initialsFromLabel, usePressScale } from '../utils/appUtils';
@@ -286,8 +286,9 @@ export function OverlayScaffold({
   topProgressBar?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { theme } = useTheme();
   return (
-    <View style={styles.overlayShell}>
+    <View style={[styles.overlayShell, { backgroundColor: theme.colors.background }]}>
       {headerImage ? (
         <ImageBackground
           source={{ uri: headerImage }}
@@ -324,7 +325,7 @@ export function OverlayScaffold({
           </SafeAreaView>
         </LinearGradient>
       )}
-      <View style={styles.overlayBody}>{children}</View>
+      <View style={[styles.overlayBody, { backgroundColor: theme.colors.background }]}>{children}</View>
     </View>
   );
 }
@@ -342,17 +343,17 @@ export function PrimaryButton({
 }) {
   return (
     <TouchableOpacity
+      activeOpacity={0.88}
       onPress={onPress}
       disabled={disabled}
-      style={[styles.primaryButton, disabled && styles.primaryButtonDisabled, style]}
+      style={[styles.primaryButton, disabled && { opacity: 0.5 }, style]}
     >
       <LinearGradient
-        colors={['#0B5F58', '#169070', '#69CDA8']}
+        colors={['#126027', '#17A07E']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.primaryButtonGradient}
       >
-        <View style={styles.primaryButtonGlow} />
         <Text style={styles.primaryButtonText}>{label}</Text>
       </LinearGradient>
     </TouchableOpacity>
@@ -362,14 +363,21 @@ export function PrimaryButton({
 export function SecondaryButton({
   label,
   onPress,
+  disabled,
   style,
 }: {
   label: string;
   onPress: () => void;
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.secondaryButton, style]}>
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.secondaryButton, disabled && { opacity: 0.5 }, style]}
+    >
       <View style={styles.secondaryButtonGradient}>
         <Text style={styles.secondaryButtonText}>{label}</Text>
       </View>
@@ -378,10 +386,12 @@ export function SecondaryButton({
 }
 
 export function SurfaceCard({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.surfaceCard, style]}>{children}</View>;
+  const { theme } = useTheme();
+  return <View style={[styles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, style]}>{children}</View>;
 }
 
 export function ProgressBar({ progress }: { progress: number }) {
+  const { theme, isDark } = useTheme();
   const widthAnim = React.useRef(new Animated.Value(progress)).current;
 
   React.useEffect(() => {
@@ -399,8 +409,8 @@ export function ProgressBar({ progress }: { progress: number }) {
   });
 
   return (
-    <View style={styles.progressTrack}>
-      <Animated.View style={[styles.progressFill, { width }]} />
+    <View style={[styles.progressTrack, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+      <Animated.View style={[styles.progressFill, { width }, isDark && { backgroundColor: theme.colors.primary }]} />
     </View>
   );
 }
@@ -492,19 +502,20 @@ export function AvatarBubble({
 }
 
 export function BadgeCard({ badge, fullWidth = false }: { badge: EcoBadge & { unlocked?: boolean }; fullWidth?: boolean }) {
+  const { theme, isDark } = useTheme();
   const unlocked = Boolean(badge.unlocked);
 
   return (
-    <View style={[styles.badgeCard, fullWidth && styles.badgeCardFull, !unlocked && styles.badgeCardLocked]}>
+    <View style={[styles.badgeCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, fullWidth && styles.badgeCardFull, !unlocked && [styles.badgeCardLocked, { backgroundColor: theme.colors.surfaceMuted }]]}>
       <View style={[styles.badgeIconWrap, !unlocked && styles.badgeIconWrapLocked]}>
         <Ionicons
           name={unlocked ? 'ribbon' : 'lock-closed'}
           size={28}
-          color={unlocked ? ecoTheme.colors.primaryDark : '#777777'}
+          color={unlocked ? (isDark ? theme.colors.primary : theme.colors.primaryDark) : (isDark ? '#5A6B62' : '#777777')}
         />
       </View>
-      <Text style={styles.badgeName}>{badge.name}</Text>
-      <Text style={styles.badgeRequirement}>
+      <Text style={[styles.badgeName, { color: theme.colors.textPrimary }]}>{badge.name}</Text>
+      <Text style={[styles.badgeRequirement, { color: theme.colors.textMuted }]}>
         {unlocked ? `${badge.requiredPoints} pts unlocked` : `Requires ${badge.requiredPoints} ECO Points`}
       </Text>
     </View>
@@ -522,10 +533,11 @@ export function ProgressRing({ value }: { value: number }) {
 }
 
 export function ProfileMetric({ label, value }: { label: string; value: string }) {
+  const { theme } = useTheme();
   return (
     <View style={styles.profileMetric}>
-      <Text style={styles.profileMetricValue}>{value}</Text>
-      <Text style={styles.profileMetricLabel}>{label}</Text>
+      <Text style={[styles.profileMetricValue, { color: theme.colors.textPrimary }]}>{value}</Text>
+      <Text style={[styles.profileMetricLabel, { color: theme.colors.textMuted }]}>{label}</Text>
     </View>
   );
 }
@@ -537,6 +549,7 @@ export function BottomTabBar({
   activeTab: AppTab;
   onChange: (tab: AppTab) => void;
 }) {
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
 
@@ -617,6 +630,8 @@ export function BottomTabBar({
             width: barWidth,
             height: barHeight,
             paddingHorizontal: 4,
+            backgroundColor: theme.colors.tabBarBackground,
+            borderColor: theme.colors.tabBarBorder,
           },
         ]}
       >
@@ -632,6 +647,8 @@ export function BottomTabBar({
               borderRadius: moderateScale(16),
               opacity: opacityAnim,
               transform: [{ translateX }],
+              backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1',
+              borderColor: isDark ? theme.colors.border : 'rgba(18, 96, 39, 0.14)',
             },
           ]}
         />
@@ -669,6 +686,7 @@ function TabItem({
   isNarrow?: boolean;
   isVeryNarrow?: boolean;
 }) {
+  const { theme, isDark } = useTheme();
   const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
   const activeIconName = isActive
     ? (item.icon.replace('-outline', '') as any)
@@ -685,6 +703,8 @@ function TabItem({
 
   const iconSize = isVeryNarrow ? 18 : isNarrow ? 20 : 22;
   const fontSize = isVeryNarrow ? 8.5 : isNarrow ? 9.5 : 11;
+  const activeColor = isDark ? theme.colors.primary : theme.colors.primaryDark;
+  const inactiveColor = isDark ? theme.colors.textMuted : '#8A959F';
 
   return (
     <TouchableOpacity
@@ -703,12 +723,13 @@ function TabItem({
         <Ionicons
           name={activeIconName}
           size={iconSize}
-          color={isActive ? ecoTheme.colors.primaryDark : '#8A959F'}
+          color={isActive ? activeColor : inactiveColor}
         />
         <Text
           style={[
             styles.bottomBarLabel,
-            isActive && styles.bottomBarLabelActive,
+            { color: inactiveColor },
+            isActive && [styles.bottomBarLabelActive, { color: activeColor }],
             { fontSize },
           ]}
           numberOfLines={1}

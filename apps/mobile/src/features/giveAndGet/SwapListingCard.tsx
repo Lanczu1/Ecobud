@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapListing } from './types';
@@ -88,6 +88,7 @@ function SwapListingCardComponent({
   onSwap?: () => void;
   isOwnListing?: boolean;
 }) {
+  const { theme, isDark } = useTheme();
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeCardImage, setActiveCardImage] = useState(0);
   const images = listing.images.length > 0
@@ -122,7 +123,7 @@ function SwapListingCardComponent({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
-      <Animated.View style={[localStyles.card, { transform: [{ scale: scaleValue }] }]}>
+      <Animated.View style={[localStyles.card, { transform: [{ scale: scaleValue }], backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
       {images.length > 0 ? (
         <View style={localStyles.cardImageWrapper}>
           <Image
@@ -183,45 +184,45 @@ function SwapListingCardComponent({
               {CATEGORY_LABELS[listing.category] || listing.category}
             </Text>
           </View>
-          <Text style={localStyles.timeText}>{getTimeAgo(listing.postedAt)}</Text>
+          <Text style={[localStyles.timeText, { color: theme.colors.textMuted }]}>{getTimeAgo(listing.postedAt)}</Text>
         </View>
 
-        <Text style={localStyles.cardTitle} numberOfLines={1}>
+        <Text style={[localStyles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
           {listing.title}
         </Text>
 
         <View style={localStyles.offerLookingRow}>
-          <View style={localStyles.offerBadge}>
-            <Text style={localStyles.offerBadgeLabel}>Offering</Text>
-            <Text style={localStyles.offerBadgeValue} numberOfLines={1}>
+          <View style={[localStyles.offerBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+            <Text style={[localStyles.offerBadgeLabel, { color: theme.colors.textMuted }]}>Offering</Text>
+            <Text style={[localStyles.offerBadgeValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {listing.quantity} {listing.title}
             </Text>
           </View>
-          <Ionicons name="swap-horizontal" size={18} color={ecoTheme.colors.primaryDark} style={{ marginHorizontal: 4 }} />
-          <View style={localStyles.lookingBadge}>
-            <Text style={localStyles.lookingBadgeLabel}>Looking For</Text>
-            <Text style={localStyles.lookingBadgeValue} numberOfLines={1}>
+          <Ionicons name="swap-horizontal" size={18} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} style={{ marginHorizontal: 4 }} />
+          <View style={[localStyles.lookingBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+            <Text style={[localStyles.lookingBadgeLabel, { color: theme.colors.textMuted }]}>Looking For</Text>
+            <Text style={[localStyles.lookingBadgeValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {listing.lookingFor}
             </Text>
           </View>
         </View>
 
         <View style={localStyles.metaRow}>
-          <View style={localStyles.conditionBadge}>
+          <View style={[localStyles.conditionBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
             <Text style={[localStyles.conditionText, { color: getConditionColor(listing.condition) }]}>
               {CONDITION_LABELS[listing.condition]}
             </Text>
           </View>
-          <View style={localStyles.meetupBadge}>
-            <Ionicons name={getMeetupIcon(listing.meetupMethod) as any} size={12} color={ecoTheme.colors.textSoft} />
-            <Text style={localStyles.meetupText}>
+          <View style={[localStyles.meetupBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+            <Ionicons name={getMeetupIcon(listing.meetupMethod) as any} size={12} color={theme.colors.textMuted} />
+            <Text style={[localStyles.meetupText, { color: theme.colors.textMuted }]}>
               {MEETUP_LABELS[listing.meetupMethod]}
             </Text>
           </View>
           {listing.city && (
-            <View style={localStyles.locationBadge}>
-              <Ionicons name="location-sharp" size={11} color={ecoTheme.colors.textSoft} />
-              <Text style={localStyles.locationText} numberOfLines={1}>
+            <View style={[localStyles.locationBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+              <Ionicons name="location-sharp" size={11} color={theme.colors.textMuted} />
+              <Text style={[localStyles.locationText, { color: theme.colors.textMuted }]} numberOfLines={1}>
                 {listing.city}
                 {listing.province ? `, ${listing.province}` : ''}
               </Text>
@@ -229,7 +230,7 @@ function SwapListingCardComponent({
           )}
         </View>
 
-        <View style={localStyles.userRow}>
+        <View style={[localStyles.userRow, { borderTopColor: theme.colors.border }]}>
           <TouchableOpacity 
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }} 
             onPress={(e) => {
@@ -248,17 +249,17 @@ function SwapListingCardComponent({
               )}
             </View>
             <View style={localStyles.userInfo}>
-              <Text style={localStyles.userName} numberOfLines={1}>{user.displayName}</Text>
+              <Text style={[localStyles.userName, { color: theme.colors.textPrimary }]} numberOfLines={1}>{user.displayName}</Text>
               <View style={localStyles.userStatsRow}>
                 <Ionicons name="star" size={11} color="#F59E0B" />
                 <Text style={localStyles.userRating}>{user.rating.toFixed(1)}</Text>
-                <Text style={localStyles.userSwaps}>{user.successfulSwaps} swaps</Text>
+                <Text style={[localStyles.userSwaps, { color: theme.colors.textMuted }]}>{user.successfulSwaps} swaps</Text>
               </View>
             </View>
           </TouchableOpacity>
           {!isOwnListing && onSwap && (
-            <TouchableOpacity style={localStyles.swapButton} onPress={onSwap}>
-              <Text style={localStyles.swapButtonText}>
+            <TouchableOpacity style={[localStyles.swapButton, isDark && { backgroundColor: theme.colors.primary }]} onPress={onSwap}>
+              <Text style={[localStyles.swapButtonText, isDark && { color: '#0E1512' }]}>
                 {listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Request' : 'Swap Now'}
               </Text>
             </TouchableOpacity>

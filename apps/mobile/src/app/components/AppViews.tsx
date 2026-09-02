@@ -24,7 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { styles } from '../styles/appStyles';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LoadingScreenVisual, LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { EcoBudMobileModel } from '../types/home';
 import {
@@ -71,6 +71,7 @@ const getValidImageUrl = (url: string | null | undefined) => {
 
 // Local components used in Views
 export function BootView() {
+  const { theme, isDark } = useTheme();
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeIn, {
@@ -80,8 +81,8 @@ export function BootView() {
     }).start();
   }, [fadeIn]);
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style='dark' />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
@@ -100,15 +101,17 @@ export function BootView() {
 }
 
 export function LaunchBackdrop() {
+  const { theme, isDark } = useTheme();
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style='dark' />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <LoadingScreenVisual label="Preparing your EcoBud welcome" />
     </SafeAreaView>
   );
 }
 
 export function OnboardingView({ onComplete }: { onComplete: () => void }) {
+  const { theme, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
   const [step, setStep] = useState(0);
   const isLandscape = width > height;
@@ -198,8 +201,8 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
   const logoWidth = isSmallDevice ? scale(120) : scale(150);
 
   return (
-    <Animated.View style={[styles.newOnboardingContainer, { opacity: screenFadeAnim }]}>
-      <StatusBar style="dark" />
+    <Animated.View style={[styles.newOnboardingContainer, { opacity: screenFadeAnim }, isDark && { backgroundColor: theme.colors.background }]}>
+      <StatusBar style={isDark ? "light" : "dark"} />
       <SafeAreaView style={[styles.newOnboardingSafeArea, isLandscape && { flexDirection: 'row', alignItems: 'center' }]}>
         {!isLandscape && (
           <View style={[
@@ -210,7 +213,8 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
               source={require('../../../assets/ecobud_wordmark.png')}
               style={[
                 styles.newOnboardingLogo,
-                { width: logoWidth, height: logoWidth * (238 / 691) }
+                { width: logoWidth, height: logoWidth * (238 / 691) },
+                isDark && { tintColor: '#F3F7F5' }
               ]}
               resizeMode="contain"
             />
@@ -228,7 +232,14 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
           <View
             style={[
               styles.heroCircleWrapper,
-              { width: heroMaxSize, height: heroMaxSize, maxWidth: heroMaxSize }
+              { width: heroMaxSize, height: heroMaxSize, maxWidth: heroMaxSize },
+              isDark && {
+                backgroundColor: 'rgba(31, 51, 39, 0.75)',
+                shadowColor: '#22A77B',
+                shadowOpacity: 0.35,
+                borderWidth: 1.5,
+                borderColor: 'rgba(93, 223, 135, 0.25)',
+              },
             ]}
           >
             <Image
@@ -259,7 +270,8 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
                   lineHeight: moderateScale(26),
                   marginBottom: verticalScale(6)
                 },
-                isLandscape && { textAlign: 'left' }
+                isLandscape && { textAlign: 'left' },
+                isDark && { color: theme.colors.textPrimary },
               ]}
               adjustsFontSizeToFit
               minimumFontScale={0.75}
@@ -275,7 +287,8 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
                   lineHeight: moderateScale(18),
                   paddingHorizontal: scale(4)
                 },
-                isLandscape && { textAlign: 'left', paddingHorizontal: 0 }
+                isLandscape && { textAlign: 'left', paddingHorizontal: 0 },
+                isDark && { color: theme.colors.textMuted },
               ]}
               adjustsFontSizeToFit
               minimumFontScale={0.8}
@@ -303,7 +316,7 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
                 ]}
               >
                 <LinearGradient
-                  colors={['#0B5F58', '#169070', '#69CDA8']}
+                  colors={isDark ? ['#126027', '#17A07E', '#4ADE80'] : ['#0B5F58', '#169070', '#69CDA8']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={[
@@ -338,7 +351,14 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
                   style={[
                     styles.newOnboardingDot,
                     isSmallDevice && { width: scale(6), height: verticalScale(6) },
-                    i === step && (isSmallDevice ? { width: scale(18), backgroundColor: '#519E59' } : styles.newOnboardingDotActive)
+                    isDark && { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
+                    i === step && (
+                      isDark
+                        ? { width: scale(22), backgroundColor: theme.colors.primary }
+                        : isSmallDevice
+                          ? { width: scale(18), backgroundColor: '#519E59' }
+                          : styles.newOnboardingDotActive
+                    )
                   ]}
                 />
               ))}
@@ -734,6 +754,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
 };
 
 export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
@@ -959,15 +980,15 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             <View style={{ flex: 1, paddingRight: scale(8) }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
                 <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
-                <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: '#6B7A75', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
                   YOUR ECO JOURNEY
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
-                <Text style={[styles.welcomeTitle, { marginTop: 0 }]}>
+                <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
                   Tasks & Challenges
                 </Text>
-                <MaterialCommunityIcons name="target" size={scale(26)} color="#126027" />
+                <MaterialCommunityIcons name="target" size={scale(26)} color={isDark ? theme.colors.primary : '#126027'} />
               </View>
             </View>
             <View
@@ -975,23 +996,23 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 width: scale(44),
                 height: scale(44),
                 borderRadius: scale(22),
-                backgroundColor: '#E8F5E9',
+                backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9',
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderWidth: 1,
-                borderColor: '#C8E6C9',
+                borderColor: isDark ? theme.colors.border : '#C8E6C9',
               }}
             >
-              <Ionicons name="trophy" size={scale(22)} color="#126027" />
+              <Ionicons name="trophy" size={scale(22)} color={isDark ? theme.colors.primary : '#126027'} />
             </View>
           </View>
-          <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(4), color: '#6B7A75', fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(19) }]}>
+          <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(4), color: theme.colors.textMuted, fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(19) }]}>
             Small actions add up. Pick a mission that fits your day and start making a difference.
           </Text>
         </View>
 
         {/* View Mode Tabs */}
-        <View style={{ flexDirection: 'row', backgroundColor: '#F0F5F2', borderRadius: 14, padding: 4, marginTop: verticalScale(10), marginBottom: verticalScale(10) }}>
+        <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 4, marginTop: verticalScale(10), marginBottom: verticalScale(10) }}>
           {[
             { key: 'Discover', label: 'Discover', icon: 'compass-outline' as const },
             { key: 'My Tasks', label: 'My Tasks', icon: 'list-circle-outline' as const },
@@ -1007,9 +1028,9 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 flexDirection: 'row',
                 gap: 6,
                 borderRadius: 10,
-                backgroundColor: viewMode === tab.key ? '#FFFFFF' : 'transparent',
+                backgroundColor: viewMode === tab.key ? theme.colors.card : 'transparent',
                 shadowColor: viewMode === tab.key ? '#000' : 'transparent',
-                shadowOpacity: 0.06,
+                shadowOpacity: viewMode === tab.key ? (isDark ? 0.2 : 0.06) : 0,
                 shadowRadius: 4,
                 elevation: viewMode === tab.key ? 2 : 0
               }}
@@ -1018,26 +1039,26 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               <Ionicons 
                 name={tab.icon} 
                 size={16} 
-                color={viewMode === tab.key ? '#126027' : '#6B7A75'} 
+                color={viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted} 
               />
-              <Text style={{ fontWeight: '700', color: viewMode === tab.key ? '#126027' : '#6B7A75', fontSize: 13 }}>{tab.label}</Text>
+              <Text style={{ fontWeight: '700', color: viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted, fontSize: 13 }}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Discovery & Filtering Section */}
-        <View style={localStyles.challengeSearch}>
-          <Ionicons name="search-outline" size={20} color="#52715D" style={{ marginRight: 10 }} />
+        <View style={[localStyles.challengeSearch, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder }]}>
+          <Ionicons name="search-outline" size={20} color={theme.colors.textMuted} style={{ marginRight: 10 }} />
           <TextInput
-            style={{ flex: 1, fontSize: 16, color: '#1A211D' }}
+            style={{ flex: 1, fontSize: 16, color: theme.colors.textPrimary }}
             placeholder="Search challenges..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear challenge search" onPress={() => setSearchQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={20} color="#8AA092" />
+              <Ionicons name="close-circle" size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -1047,19 +1068,19 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             <TouchableOpacity 
               key={index} 
               style={{
-                backgroundColor: selectedCategory === cat ? '#126027' : '#FFFFFF',
+                backgroundColor: selectedCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.card,
                 paddingHorizontal: 16,
                 paddingVertical: 8,
                 borderRadius: 20,
                 marginRight: 10,
                 borderWidth: 1,
-                borderColor: selectedCategory === cat ? '#126027' : '#E5E7EB',
+                borderColor: selectedCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.border,
                 alignSelf: 'center',
               }}
               onPress={() => setSelectedCategory(cat)}
             >
               <Text style={{
-                color: selectedCategory === cat ? '#FFFFFF' : '#4B5563',
+                color: selectedCategory === cat ? (isDark ? '#0E1512' : '#FFFFFF') : theme.colors.textMuted,
                 fontWeight: '600',
               }}>
                 {cat}
@@ -1088,7 +1109,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         {((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedGroups.length > 0)) && (
           <View style={localStyles.challengeListHeading}>
             <View>
-              <Text style={localStyles.challengeListTitle}>
+              <Text style={[localStyles.challengeListTitle, { color: theme.colors.textPrimary }]}>
                 {isFiltering 
                   ? 'Search results' 
                   : viewMode === 'Discover' 
@@ -1097,11 +1118,11 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   ? 'In progress (Grouped by Mission)' 
                   : 'Completed challenges (Grouped by Mission)'}
               </Text>
-              {viewMode === 'Discover' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap a mission to see how you can help.</Text>}
-              {viewMode === 'My Tasks' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap any mission card to expand or collapse active submissions.</Text>}
-              {viewMode === 'History' && !isFiltering && <Text style={localStyles.challengeListSubtitle}>Tap any completed mission card to view past completed submissions.</Text>}
+              {viewMode === 'Discover' && !isFiltering && <Text style={[localStyles.challengeListSubtitle, { color: theme.colors.textMuted }]}>Tap a mission to see how you can help.</Text>}
+              {viewMode === 'My Tasks' && !isFiltering && <Text style={[localStyles.challengeListSubtitle, { color: theme.colors.textMuted }]}>Tap any mission card to expand or collapse active submissions.</Text>}
+              {viewMode === 'History' && !isFiltering && <Text style={[localStyles.challengeListSubtitle, { color: theme.colors.textMuted }]}>Tap any completed mission card to view past completed submissions.</Text>}
             </View>
-            <Text style={localStyles.challengeListCount}>
+            <Text style={[localStyles.challengeListCount, isDark && { backgroundColor: theme.colors.surfaceMuted, color: theme.colors.primary }]}>
               {viewMode === 'Discover' ? currentActiveList.length : viewMode === 'My Tasks' ? inProgressGroups.length : completedGroups.length}
             </Text>
           </View>
@@ -1115,27 +1136,27 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             paddingVertical: 36,
             paddingHorizontal: 24,
             marginTop: 16,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: theme.colors.card,
             borderRadius: moderateScale(24),
             borderWidth: 1,
-            borderColor: '#E6F4EC',
+            borderColor: theme.colors.cardBorder,
             shadowColor: '#126027',
-            shadowOpacity: 0.05,
+            shadowOpacity: isDark ? 0.2 : 0.05,
             shadowRadius: 12,
             shadowOffset: { width: 0, height: 4 },
             elevation: 2,
           }}>
-            <View style={{ width: scale(64), height: scale(64), borderRadius: scale(32), backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <View style={{ width: scale(64), height: scale(64), borderRadius: scale(32), backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
               <Ionicons
                 name={isFiltering ? 'search' : viewMode === 'My Tasks' ? 'clipboard-outline' : viewMode === 'History' ? 'trophy-outline' : 'leaf-outline'}
                 size={scale(30)}
-                color="#126027"
+                color={isDark ? theme.colors.primary : '#126027'}
               />
             </View>
-            <Text style={{ fontSize: responsiveFontSize(17), fontWeight: '800', color: '#17231B', marginBottom: 6, textAlign: 'center' }}>
+            <Text style={{ fontSize: responsiveFontSize(17), fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6, textAlign: 'center' }}>
               {isFiltering ? 'No matching missions found' : viewMode === 'My Tasks' ? 'No active tasks yet' : viewMode === 'History' ? 'No completed tasks yet' : 'No missions available'}
             </Text>
-            <Text style={{ fontSize: responsiveFontSize(13), color: '#6B7A75', textAlign: 'center', lineHeight: 20 }}>
+            <Text style={{ fontSize: responsiveFontSize(13), color: theme.colors.textMuted, textAlign: 'center', lineHeight: 20 }}>
               {isFiltering ? 'Try searching for a different keyword or category.' : viewMode === 'My Tasks' ? 'Select a mission from the Discover tab to start contributing!' : viewMode === 'History' ? 'Complete eco-challenges to earn points, build streaks, and unlock achievements.' : 'Check back later for newly announced community missions.'}
             </Text>
           </View>
@@ -1694,6 +1715,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function TrackerView({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   // ── Real-time Philippines (PHT) month ──────────────────────────────────────
   // Re-evaluate every minute so the calendar's "today" highlight rolls over
   // live at local midnight and the month auto-advances at the turn of the month,
@@ -1811,7 +1833,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
   const intensityStyle = (cell: (typeof calendarCells)[number]) => {
     if (!cell.dateKey || !cell.completed) {
-      return trackerStyles.cellEmpty;
+      return [trackerStyles.cellEmpty, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0F5F2', borderColor: isDark ? theme.colors.border : '#E8F0EC' }];
     }
     return trackerStyles.cellActive;
   };
@@ -1863,13 +1885,14 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
         {/* ── Segmented Switch ─────────────────────────────────────────────── */}
         <View style={trackerStyles.segmentWrap}>
           <View
-            style={trackerStyles.segmentTrack}
+            style={[trackerStyles.segmentTrack, { backgroundColor: theme.colors.surfaceMuted }]}
             onLayout={(event) => setSegmentWidth(event.nativeEvent.layout.width)}
           >
             <Animated.View
               style={[
                 trackerStyles.segmentThumb,
                 {
+                  backgroundColor: theme.colors.card,
                   transform: [
                     {
                       translateX: switchAnim.interpolate({
@@ -1892,14 +1915,15 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   <Ionicons
                     name={key === 'calendar' ? 'calendar-outline' : 'trophy-outline'}
                     size={14}
-                    color={segment === key ? '#126027' : '#6B7A75'}
+                    color={segment === key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted}
                   />
                   <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     style={[
                       trackerStyles.segmentText,
-                      segment === key && trackerStyles.segmentTextActive,
+                      { color: theme.colors.textMuted },
+                      segment === key && [trackerStyles.segmentTextActive, { color: isDark ? theme.colors.primary : '#126027' }],
                     ]}
                   >
                     {key === 'calendar' ? 'Activity Calendar' : 'Leaderboard'}
@@ -1912,18 +1936,18 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
         {/* ── Activity Calendar View ───────────────────────────────────────── */}
         {segment === 'calendar' && (
-          <View style={trackerStyles.surfaceCard}>
+          <View style={[trackerStyles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.06 }]}>
             <View style={[styles.rowBetween, { gap: 8 }]}>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceTitle, { flexShrink: 1 }]}>Activity Calendar</Text>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { flexShrink: 1 }]}>{formatMonthLabel(trackerMonth)}</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceTitle, { color: theme.colors.textPrimary, flexShrink: 1 }]}>Activity Calendar</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { color: theme.colors.textMuted, flexShrink: 1 }]}>{formatMonthLabel(trackerMonth)}</Text>
             </View>
 
             <View style={trackerStyles.calNavRow}>
               <TouchableOpacity
                 onPress={() => void model.loadTrackerMonth(-1)}
-                style={trackerStyles.calNavBtn}
+                style={[trackerStyles.calNavBtn, { backgroundColor: theme.colors.surfaceMuted }]}
               >
-                <Feather name="chevron-left" size={20} color="#1A211D" />
+                <Feather name="chevron-left" size={20} color={theme.colors.icon} />
               </TouchableOpacity>
               <View style={{ alignItems: 'center' }}>
                 {(() => {
@@ -1931,36 +1955,36 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   const isStreakActive = currentStreak >= 3;
                   
                   return isStreakActive ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#169070', letterSpacing: 0.5 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? theme.colors.primary : '#169070', letterSpacing: 0.5 }}>
                         BUILDING STREAK: {currentStreak}
                       </Text>
                       <Ionicons name="flame" size={14} color="#F97316" />
                     </View>
                   ) : (
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B7A75', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 6 }}>
                       Count {currentStreak}/3 to show the streak
                     </Text>
                   );
                 })()}
                 <View style={trackerStyles.calLegendRow}>
-                  <View style={[trackerStyles.legendChip, trackerStyles.cellEmpty]} />
-                  <Text style={trackerStyles.legendText}>None</Text>
+                  <View style={[trackerStyles.legendChip, trackerStyles.cellEmpty, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0F5F2' }]} />
+                  <Text style={[trackerStyles.legendText, { color: theme.colors.textMuted }]}>None</Text>
                   <View style={[trackerStyles.legendChip, trackerStyles.cellActive]} />
-                  <Text style={trackerStyles.legendText}>Active</Text>
+                  <Text style={[trackerStyles.legendText, { color: theme.colors.textMuted }]}>Active</Text>
                 </View>
               </View>
               <TouchableOpacity
                 onPress={() => void model.loadTrackerMonth(1)}
-                style={trackerStyles.calNavBtn}
+                style={[trackerStyles.calNavBtn, { backgroundColor: theme.colors.surfaceMuted }]}
               >
-                <Feather name="chevron-right" size={20} color="#1A211D" />
+                <Feather name="chevron-right" size={20} color={theme.colors.icon} />
               </TouchableOpacity>
             </View>
 
             <View style={trackerStyles.calWeekRow}>
               {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
-                <Text key={i} style={trackerStyles.calWeekLabel}>
+                <Text key={i} style={[trackerStyles.calWeekLabel, { color: theme.colors.textMuted }]}>
                   {day}
                 </Text>
               ))}
@@ -1981,14 +2005,15 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                       style={[
                         trackerStyles.heatmapCell,
                         intensityStyle(cell),
-                        cell.isToday && trackerStyles.heatmapToday,
+                        cell.isToday && [trackerStyles.heatmapToday, { borderColor: theme.colors.primary }],
                       ]}
                     >
                       <Text
                         style={[
                           trackerStyles.heatmapText,
+                          { color: theme.colors.textMuted },
                           cell.completed && trackerStyles.heatmapTextDone,
-                          cell.isToday && trackerStyles.heatmapTextToday,
+                          cell.isToday && [trackerStyles.heatmapTextToday, { color: isDark ? theme.colors.primary : '#126027' }],
                         ]}
                       >
                         {cell.day}
@@ -2003,10 +2028,10 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
         {/* ── Leaderboard View ─────────────────────────────────────────────── */}
         {segment === 'leaderboard' && (
-          <View style={trackerStyles.surfaceCard}>
+          <View style={[trackerStyles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.06 }]}>
             <View style={[styles.rowBetween, { gap: 8 }]}>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceTitle, { flexShrink: 1 }]}>Community Leaderboard</Text>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { flexShrink: 1 }]}>By Eco Points</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceTitle, { color: theme.colors.textPrimary, flexShrink: 1 }]}>Community Leaderboard</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { color: theme.colors.textMuted, flexShrink: 1 }]}>By Eco Points</Text>
             </View>
 
             {(model.initializing || model.booting || model.refreshing) && leaderboardItems.length === 0 ? (
@@ -2074,10 +2099,11 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                         key={entry.id}
                         style={[
                           trackerStyles.rankRow,
+                          { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAF9' },
                           entry.isCurrentUser && trackerStyles.rankRowUser,
                         ]}
                       >
-                        <Text style={trackerStyles.rankNumber}>#{entry.rank}</Text>
+                        <Text style={[trackerStyles.rankNumber, { color: theme.colors.textMuted }]}>#{entry.rank}</Text>
                         <AvatarBubble
                           label={entry.isCurrentUser ? model.userDisplayName : entry.displayName}
                           size={32}
@@ -2085,25 +2111,25 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                           textStyle={trackerStyles.rankAvatarText}
                           avatarUrl={userAvatar}
                         />
-                        <Text style={trackerStyles.rankName} numberOfLines={1}>
+                        <Text style={[trackerStyles.rankName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                           {entry.isCurrentUser ? 'You' : entry.displayName}
                         </Text>
-                        <Text style={trackerStyles.rankPoints}>{entry.points} Eco Points</Text>
+                        <Text style={[trackerStyles.rankPoints, { color: isDark ? theme.colors.primary : '#126027' }]}>{entry.points} Eco Points</Text>
                       </View>
                     );
                   })}
                 </View>
 
                 {/* Pagination Controls */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, borderTopWidth: 1, borderColor: '#EDF6F1', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, borderTopWidth: 1, borderColor: theme.colors.border, alignItems: 'center' }}>
                   <TouchableOpacity 
                     disabled={leaderboardPage === 1} 
                     onPress={() => setLeaderboardPage(leaderboardPage - 1)}
                     style={{ padding: 8, opacity: leaderboardPage === 1 ? 0.3 : 1 }}
                   >
-                    <Ionicons name="chevron-back" size={24} color="#126027" />
+                    <Ionicons name="chevron-back" size={24} color={isDark ? theme.colors.primary : '#126027'} />
                   </TouchableOpacity>
-                  <Text style={{ fontWeight: '800', color: '#126027', fontSize: 14 }}>
+                  <Text style={{ fontWeight: '800', color: isDark ? theme.colors.primary : '#126027', fontSize: 14 }}>
                     Page {leaderboardPage} of {lbTotalPages}
                   </Text>
                   <TouchableOpacity 
@@ -2111,7 +2137,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                     onPress={() => setLeaderboardPage(leaderboardPage + 1)}
                     style={{ padding: 8, opacity: leaderboardPage >= lbTotalPages ? 0.3 : 1 }}
                   >
-                    <Ionicons name="chevron-forward" size={24} color="#126027" />
+                    <Ionicons name="chevron-forward" size={24} color={isDark ? theme.colors.primary : '#126027'} />
                   </TouchableOpacity>
                 </View>
 
@@ -2217,6 +2243,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ProfileView({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark, setThemeMode } = useTheme();
   const { width, height } = useWindowDimensions();
   const isSmallDevice = height <= 680 || width < 375;
   const isCompact = height < 750 || width < 380;
@@ -2433,13 +2460,13 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
         </LinearGradient>
 
         {/* Progress Bar Info */}
-        <View style={[profileStyles.progressSection, isSmallDevice && { padding: moderateScale(12), marginBottom: verticalScale(14) }]}>
+        <View style={[profileStyles.progressSection, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.04 }, isSmallDevice && { padding: moderateScale(12), marginBottom: verticalScale(14) }]}>
           <View style={[profileStyles.progressInfoRow, isSmallDevice && { marginBottom: verticalScale(6) }]}>
-            <Text style={[profileStyles.progressInfoText, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
+            <Text style={[profileStyles.progressInfoText, { color: theme.colors.textPrimary }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
               Journey Progress
             </Text>
             <Text
-              style={[profileStyles.progressInfoValue, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
+              style={[profileStyles.progressInfoValue, { color: isDark ? theme.colors.primary : '#126027' }, isSmallDevice && { fontSize: responsiveFontSize(10) }]}
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.75}
@@ -2452,22 +2479,22 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
         {/* Events Quick Card */}
         <View style={profileStyles.sectionContainer}>
-          <Text style={profileStyles.sectionHeadline}>My Eco Events</Text>
-          <View style={profileStyles.eventBanner}>
+          <Text style={[profileStyles.sectionHeadline, { color: theme.colors.textPrimary }]}>My Eco Events</Text>
+          <View style={[profileStyles.eventBanner, { borderColor: theme.colors.cardBorder }]}>
             <LinearGradient
-              colors={['rgba(255, 255, 255, 0.95)', 'rgba(240, 253, 244, 0.95)']}
+              colors={isDark ? [theme.colors.card, theme.colors.cardAlt] : ['rgba(255, 255, 255, 0.95)', 'rgba(240, 253, 244, 0.95)']}
               style={profileStyles.eventBannerGrad}
             >
               <View style={profileStyles.eventBannerTextCol}>
-                <Text style={profileStyles.eventBannerTitle}>Local Workshops</Text>
-                <Text style={profileStyles.eventBannerDesc}>Join clean-ups, eco events, and tree plant activities.</Text>
+                <Text style={[profileStyles.eventBannerTitle, { color: isDark ? theme.colors.primary : '#126027' }]}>Local Workshops</Text>
+                <Text style={[profileStyles.eventBannerDesc, { color: theme.colors.textMuted }]}>Join clean-ups, eco events, and tree plant activities.</Text>
               </View>
               <TouchableOpacity
                 onPress={() => model.setActiveOverlay('events')}
-                style={profileStyles.eventBannerBtn}
+                style={[profileStyles.eventBannerBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
               >
-                <Text style={profileStyles.eventBannerBtnText}>Discover</Text>
-                <Ionicons name="arrow-forward" size={14} color="#FFF" />
+                <Text style={[profileStyles.eventBannerBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>Discover</Text>
+                <Ionicons name="arrow-forward" size={14} color={isDark ? '#0E1512' : '#FFF'} />
               </TouchableOpacity>
             </LinearGradient>
           </View>
@@ -2475,71 +2502,126 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
         {/* Unified Eco Actions List */}
         <View style={profileStyles.sectionContainer}>
-          <Text style={profileStyles.sectionHeadline}>Eco Hub</Text>
-          <View style={profileStyles.actionListCard}>
+          <Text style={[profileStyles.sectionHeadline, { color: theme.colors.textPrimary }]}>Eco Hub</Text>
+          <View style={[profileStyles.actionListCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.05 }]}>
             <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('editProfile')}
             >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#E0F2FE' }]}>
-                <Ionicons name="person-outline" size={20} color="#0369A1" />
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E0F2FE' }]}>
+                <Ionicons name="person-outline" size={20} color={isDark ? theme.colors.primary : '#0369A1'} />
               </View>
               <View style={profileStyles.actionTextCol}>
-                <Text style={profileStyles.actionLabel}>Edit Profile</Text>
-                <Text style={profileStyles.actionSub}>Update username, email & barangay</Text>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Edit Profile</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Update username, email & barangay</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>
 
-            <View style={profileStyles.divider} />
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
             <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('redeemPoints')}
             >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#FEF3C7' }]}>
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#FEF3C7' }]}>
                 <Image source={require('../../../assets/coin.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
               </View>
               <View style={profileStyles.actionTextCol}>
-                <Text style={[profileStyles.actionLabel, { color: '#D97706' }]}>Redeem Coins</Text>
-                <Text style={profileStyles.actionSub}>Exchange your eco coins for rewards</Text>
+                <Text style={[profileStyles.actionLabel, { color: isDark ? '#FBBF24' : '#D97706' }]}>Redeem Coins</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Exchange your eco coins for rewards</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>
 
-            <View style={profileStyles.divider} />
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
             <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('coinsHistory')}
             >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#EDF6F1' }]}>
-                <Ionicons name="time-outline" size={20} color="#126027" />
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
+                <Ionicons name="time-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
               </View>
               <View style={profileStyles.actionTextCol}>
-                <Text style={profileStyles.actionLabel}>Coins History</Text>
-                <Text style={profileStyles.actionSub}>Check your points and task completion logs</Text>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Coins History</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Check your points and task completion logs</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>
 
-            <View style={profileStyles.divider} />
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
             <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('settings')}
             >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#EDF6F1' }]}>
-                <Ionicons name="shield-checkmark-outline" size={20} color="#126027" />
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
               </View>
               <View style={profileStyles.actionTextCol}>
-                <Text style={profileStyles.actionLabel}>Settings & Security</Text>
-                <Text style={profileStyles.actionSub}>Manage account security & password</Text>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Settings & Security</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Manage account security & password</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>
 
-            <View style={profileStyles.divider} />
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
+
+            {/* App Appearance / Theme Mode Switch */}
+            <View style={profileStyles.actionItem}>
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? '#262626' : '#F5F3FF' }]}>
+                <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={isDark ? '#FBBF24' : '#7C3AED'} />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>App Appearance</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>
+                  {isDark ? 'Dark Mode (Night)' : 'Light Mode (Day)'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 20, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerSelectionHaptic();
+                    setThemeMode('light');
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 16,
+                    backgroundColor: !isDark ? '#126027' : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  <Ionicons name="sunny" size={13} color={!isDark ? '#FFF' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: !isDark ? '#FFF' : theme.colors.textMuted }}>Light</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerSelectionHaptic();
+                    setThemeMode('dark');
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 16,
+                    backgroundColor: isDark ? theme.colors.primary : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  <Ionicons name="moon" size={13} color={isDark ? '#0E1512' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
             <TouchableOpacity
               style={profileStyles.actionItem}
@@ -2548,28 +2630,28 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                 model.showCoachMarks();
               }}
             >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#F0FDF4' }]}>
-                <Ionicons name="help-buoy-outline" size={20} color="#059669" />
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4' }]}>
+                <Ionicons name="help-buoy-outline" size={20} color={isDark ? theme.colors.primary : '#059669'} />
               </View>
               <View style={profileStyles.actionTextCol}>
-                <Text style={[profileStyles.actionLabel, { color: '#059669' }]}>Replay Tutorial</Text>
-                <Text style={profileStyles.actionSub}>Re-watch the app walkthrough guide</Text>
+                <Text style={[profileStyles.actionLabel, { color: isDark ? theme.colors.primary : '#059669' }]}>Replay Tutorial</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Re-watch the app walkthrough guide</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#B0C4B8" />
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>
 
-            <View style={profileStyles.divider} />
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
             <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => void model.handleLogout()}
             >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: '#FEE2E2' }]}>
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? '#3E1D1D' : '#FEE2E2' }]}>
                 <Ionicons name="log-out-outline" size={20} color="#EF4444" />
               </View>
               <View style={profileStyles.actionTextCol}>
                 <Text style={[profileStyles.actionLabel, { color: '#EF4444' }]}>Sign Out</Text>
-                <Text style={profileStyles.actionSub}>Logout of your current device session</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Logout of your current device session</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#FCA5A5" />
             </TouchableOpacity>
@@ -2578,7 +2660,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
         {/* Rewards & Badges (Moved from Overlay) */}
         <View style={profileStyles.sectionContainer}>
-          <Text style={profileStyles.sectionHeadline}>Rewards & Badges</Text>
+          <Text style={[profileStyles.sectionHeadline, { color: theme.colors.textPrimary }]}>Rewards & Badges</Text>
           <LinearGradient
             colors={['#059669', '#10B981', '#047857']}
             start={{ x: 0, y: 0 }}
@@ -2675,22 +2757,22 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
             </View>
           </LinearGradient>
           
-          <Text style={[profileStyles.sectionHeadline, { fontSize: isSmallDevice ? 14 : 16, marginTop: isSmallDevice ? 4 : 8 }]}>Lifetime Achievements</Text>
+          <Text style={[profileStyles.sectionHeadline, { fontSize: isSmallDevice ? 14 : 16, marginTop: isSmallDevice ? 4 : 8, color: theme.colors.textPrimary }]}>Lifetime Achievements</Text>
           {(model.rewards?.achievements ?? []).length > 0 ? (
             (model.rewards?.achievements ?? []).map((achievement) => {
               const progress = Math.min(100, Math.round((achievement.current / achievement.target) * 100));
               return (
-                <View key={achievement.id} style={[profileStyles.achievementCard, isSmallDevice && { padding: moderateScale(12), borderRadius: moderateScale(18) }]}>
+                <View key={achievement.id} style={[profileStyles.achievementCard, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, isSmallDevice && { padding: moderateScale(12), borderRadius: moderateScale(18) }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: isSmallDevice ? 8 : 12, gap: 8 }}>
                     <Text
-                      style={[profileStyles.badgeTitle, { textAlign: 'left', flex: 1 }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}
+                      style={[profileStyles.badgeTitle, { textAlign: 'left', flex: 1, color: theme.colors.textPrimary }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.8}
                     >
                       {achievement.label} ({achievement.current}/{achievement.target})
                     </Text>
-                    <Text style={[{ color: '#10B981', fontWeight: 'bold' }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
+                    <Text style={[{ color: isDark ? theme.colors.primary : '#10B981', fontWeight: 'bold' }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
                       {achievement.reward} pts
                     </Text>
                   </View>
@@ -2701,13 +2783,13 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               );
             })
           ) : (
-            <Text style={{ textAlign: 'center', color: '#6B7A75', marginTop: 16 }}>No achievements yet.</Text>
+            <Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 16 }}>No achievements yet.</Text>
           )}
         </View>
 
         {/* Collectible Badges Grid */}
         <View style={profileStyles.sectionContainer}>
-          <Text style={profileStyles.sectionHeadline}>Collectible Badges</Text>
+          <Text style={[profileStyles.sectionHeadline, { color: theme.colors.textPrimary }]}>Collectible Badges</Text>
           <View style={profileStyles.badgesGrid}>
             {(model.rewards?.badges || []).length > 0 ? (
               (model.rewards?.badges || []).map((badge) => {
@@ -2717,12 +2799,12 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                     key={badge.id}
                     activeOpacity={0.8}
                     onPress={() => model.openBadgeOverlay(badge)}
-                    style={[profileStyles.badgeCard, !isUnlocked && { opacity: 0.75 }]}
+                    style={[profileStyles.badgeCard, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, !isUnlocked && { opacity: 0.75 }]}
                   >
-                    <View style={[profileStyles.badgeIconRing, { borderColor: isUnlocked ? (badge.accentColor || '#10B981') : '#B0C4B8' }]}>
+                    <View style={[profileStyles.badgeIconRing, { borderColor: isUnlocked ? (badge.accentColor || (isDark ? theme.colors.primary : '#10B981')) : (isDark ? theme.colors.border : '#B0C4B8') }]}>
                       {isUnlocked ? (
                         <LinearGradient
-                          colors={[badge.accentColor || '#10B981', badge.accentColor ? badge.accentColor + '99' : '#059669']}
+                          colors={[badge.accentColor || (isDark ? theme.colors.primary : '#10B981'), badge.accentColor ? badge.accentColor + '99' : (isDark ? '#17A07E' : '#059669')]}
                           style={profileStyles.badgeIconBg}
                         >
                           {badge.iconUrl && badge.iconUrl.startsWith('http') ? (
@@ -2732,32 +2814,32 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                           )}
                         </LinearGradient>
                       ) : (
-                        <View style={[profileStyles.badgeIconBg, { backgroundColor: '#F3F4F6' }]}>
+                        <View style={[profileStyles.badgeIconBg, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F3F4F6' }]}>
                           {badge.iconUrl && badge.iconUrl.startsWith('http') ? (
-                            <Image source={{ uri: badge.iconUrl }} style={{ width: 30, height: 30, tintColor: '#9CA3AF' }} resizeMode="contain" />
+                            <Image source={{ uri: badge.iconUrl }} style={{ width: 30, height: 30, tintColor: isDark ? theme.colors.textMuted : '#9CA3AF' }} resizeMode="contain" />
                           ) : (
-                            <Ionicons name="ribbon-outline" size={26} color="#9CA3AF" />
+                            <Ionicons name="ribbon-outline" size={26} color={isDark ? theme.colors.textMuted : '#9CA3AF'} />
                           )}
                         </View>
                       )}
                       
                       {!isUnlocked && (
-                        <View style={profileStyles.lockBadgeTag}>
+                        <View style={[profileStyles.lockBadgeTag, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                           <Ionicons name="lock-closed" size={10} color="#FFF" />
                         </View>
                       )}
                     </View>
-                    <Text style={isUnlocked ? profileStyles.badgeTitle : profileStyles.badgeTitleLocked}>{badge.name}</Text>
-                    <Text style={profileStyles.badgeDescription}>{badge.description}</Text>
+                    <Text style={[isUnlocked ? profileStyles.badgeTitle : profileStyles.badgeTitleLocked, { color: isUnlocked ? theme.colors.textPrimary : theme.colors.textMuted }]}>{badge.name}</Text>
+                    <Text style={[profileStyles.badgeDescription, { color: theme.colors.textMuted }]}>{badge.description}</Text>
                     {!isUnlocked && badge.targetProgress ? (
                       <View style={{ marginTop: 8, width: '100%', paddingHorizontal: 4 }}>
                         <ProgressBar progress={(badge.currentProgress ?? 0) / badge.targetProgress} />
-                        <Text style={[profileStyles.badgeDescription, { marginTop: 4, textAlign: 'center', fontSize: 10 }]}>
+                        <Text style={[profileStyles.badgeDescription, { marginTop: 4, textAlign: 'center', fontSize: 10, color: theme.colors.textMuted }]}>
                           {badge.currentProgress} / {badge.targetProgress} completed
                         </Text>
                       </View>
                     ) : !isUnlocked ? (
-                      <Text style={[profileStyles.badgeDescription, { marginTop: 4, fontWeight: 'bold' }]}>
+                      <Text style={[profileStyles.badgeDescription, { marginTop: 4, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027' }]}>
                         Unlocks at {badge.requiredPoints} pts
                       </Text>
                     ) : null}
@@ -2765,7 +2847,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                 );
               })
             ) : (
-              <Text style={{ textAlign: 'center', color: '#6B7A75', marginTop: 16 }}>No badges available.</Text>
+              <Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 16 }}>No badges available.</Text>
             )}
           </View>
         </View>

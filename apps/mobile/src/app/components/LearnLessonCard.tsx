@@ -11,6 +11,7 @@ import {
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale, useResponsive, clampFontSize } from '../utils/responsive';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 interface LearnLessonCardProps {
   lesson: LessonWithProgress;
@@ -43,6 +44,7 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
 };
 
 export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps) {
+  const { theme, isDark } = useTheme();
   const { isSmall } = useResponsive();
   const [imgError, setImgError] = React.useState(false);
   const animatedProgress = React.useRef(new Animated.Value(0)).current;
@@ -73,7 +75,7 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
   const starIconSize = isSmall ? clampFontSize(9.5, 8, 10) : clampFontSize(11, 10, 12);
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, style]}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
       <View style={styles.imageWrapper}>
         {resolvedImageUrl && !imgError ? (
           <Image 
@@ -83,8 +85,8 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
             onError={() => setImgError(true)}
           />
         ) : (
-          <View style={[styles.cardImage, styles.fallbackImageWrap]}>
-            <Ionicons name="book-outline" size={scale(44)} color="#126027" style={{ opacity: 0.7 }} />
+          <View style={[styles.cardImage, styles.fallbackImageWrap, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#dcfce7' }]}>
+            <Ionicons name="book-outline" size={scale(44)} color={isDark ? theme.colors.primary : '#126027'} style={{ opacity: 0.7 }} />
           </View>
         )}
 
@@ -107,32 +109,32 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
         )}
       </View>
 
-      <Text style={styles.title}>{lesson.title}</Text>
+      <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{lesson.title}</Text>
       
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: verticalScale(10), gap: scale(6) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-          <Ionicons name={getCategoryDetails(lesson.category || 'General', false).iconName} size={scale(12)} color="#6B7A75" />
-          <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
+          <Ionicons name={getCategoryDetails(lesson.category || 'General', false).iconName} size={scale(12)} color={theme.colors.textMuted} />
+          <Text style={{ fontSize: responsiveFontSize(12), color: theme.colors.textMuted, fontWeight: '700' }}>
             {lesson.category || 'General'}
           </Text>
         </View>
-        <Text style={{ color: '#9CA3AF' }}>•</Text>
+        <Text style={{ color: theme.colors.textMuted }}>•</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
           <Ionicons
             name="shield-checkmark"
             size={scale(11)}
             color={lesson.difficulty?.toLowerCase() === 'advanced' ? '#EF4444' : lesson.difficulty?.toLowerCase() === 'intermediate' ? '#F59E0B' : '#10B981'}
           />
-          <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
+          <Text style={{ fontSize: responsiveFontSize(12), color: theme.colors.textMuted, fontWeight: '700' }}>
             {lesson.difficulty || 'Beginner'}
           </Text>
         </View>
         {lesson.durationMinutes && lesson.durationMinutes > 0 ? (
           <>
-            <Text style={{ color: '#9CA3AF' }}>•</Text>
+            <Text style={{ color: theme.colors.textMuted }}>•</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              <Ionicons name="time-outline" size={scale(12)} color="#6B7A75" />
-              <Text style={{ fontSize: responsiveFontSize(12), color: '#6B7A75', fontWeight: '700' }}>
+              <Ionicons name="time-outline" size={scale(12)} color={theme.colors.textMuted} />
+              <Text style={{ fontSize: responsiveFontSize(12), color: theme.colors.textMuted, fontWeight: '700' }}>
                 {lesson.durationMinutes} min
               </Text>
             </View>
@@ -140,14 +142,14 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
         ) : null}
       </View>
 
-      <Text style={[styles.description, { marginBottom: verticalScale(14), lineHeight: responsiveFontSize(20) }]} numberOfLines={3}>
+      <Text style={[styles.description, { color: theme.colors.textSecondary, marginBottom: verticalScale(14), lineHeight: responsiveFontSize(20) }]} numberOfLines={3}>
         {lesson.description}
       </Text>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(16) }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6F4EC', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(8), gap: scale(4) }}>
-          <Ionicons name="leaf" size={scale(13)} color="#126027" />
-          <Text style={{ fontSize: responsiveFontSize(13), color: '#126027', fontWeight: '900' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E6F4EC', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(8), gap: scale(4) }}>
+          <Ionicons name="leaf" size={scale(13)} color={isDark ? theme.colors.primary : '#126027'} />
+          <Text style={{ fontSize: responsiveFontSize(13), color: isDark ? theme.colors.primary : '#126027', fontWeight: '900' }}>
             +{lesson.pointsReward || 10} Eco points
           </Text>
         </View>
@@ -158,20 +160,20 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
         paddingTop: verticalScale(12), 
         paddingBottom: verticalScale(12),
         borderTopWidth: 1, 
-        borderTopColor: '#F0F5F2', 
+        borderTopColor: isDark ? theme.colors.border : '#F0F5F2', 
         alignItems: 'center', 
         justifyContent: 'center' 
       }}>
-        <Text style={{ color: '#126027', fontSize: responsiveFontSize(15), fontWeight: '800' }}>
+        <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(15), fontWeight: '800' }}>
           {getActionLabel(lesson.status)}
         </Text>
       </View>
 
       {/* Sleek Progress Bar */}
-      <View style={{ height: verticalScale(4), backgroundColor: '#F0F5F2', width: '100%', position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+      <View style={{ height: verticalScale(4), backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0F5F2', width: '100%', position: 'absolute', bottom: 0, left: 0, right: 0 }}>
         <Animated.View style={{
           height: '100%',
-          backgroundColor: '#126027',
+          backgroundColor: isDark ? theme.colors.primary : '#126027',
           width: animatedProgress.interpolate({
             inputRange: [0, 100],
             outputRange: ['0%', '100%']

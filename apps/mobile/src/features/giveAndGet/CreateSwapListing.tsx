@@ -20,7 +20,7 @@ import {
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { swapService } from './swapService';
 import type { SwapCategory, ItemCondition, MeetupMethod } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
@@ -50,6 +50,7 @@ export function CreateSwapListing({
   onBack: () => void;
   onCreated: () => void;
 }) {
+  const { theme, isDark } = useTheme();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<SwapCategory | null>(null);
   const [quantity, setQuantity] = useState('');
@@ -181,8 +182,8 @@ export function CreateSwapListing({
   };
 
   return (
-    <Animated.View style={[localStyles.container, { transform: [{ translateX: slideAnim }] }]}>
-    <View style={localStyles.safeArea}>
+    <Animated.View style={[localStyles.container, { transform: [{ translateX: slideAnim }], backgroundColor: theme.colors.background }]}>
+    <View style={[localStyles.safeArea, { backgroundColor: theme.colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -218,14 +219,14 @@ export function CreateSwapListing({
         </LinearGradient>
 
         <ScrollView
-          style={localStyles.body}
-          contentContainerStyle={localStyles.bodyContent}
+          style={[localStyles.body, { backgroundColor: theme.colors.background }]}
+          contentContainerStyle={[localStyles.bodyContent, { backgroundColor: theme.colors.background }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
         >
           {step === 1 && (
             <>
-              <View style={localStyles.imagePicker}>
+              <View style={[localStyles.imagePicker, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
                 {images.length > 0 ? (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.imageList}>
                     {images.map((uri, i) => (
@@ -238,13 +239,13 @@ export function CreateSwapListing({
                     ))}
                     {images.length < 5 && (
                       <>
-                        <TouchableOpacity onPress={pickImages} style={localStyles.addMoreImage}>
-                          <Ionicons name="images-outline" size={24} color={ecoTheme.colors.primaryDark} />
-                          <Text style={localStyles.addMoreText}>Gallery</Text>
+                        <TouchableOpacity onPress={pickImages} style={[localStyles.addMoreImage, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                          <Ionicons name="images-outline" size={24} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                          <Text style={[localStyles.addMoreText, isDark && { color: theme.colors.primary }]}>Gallery</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={takePicture} style={[localStyles.addMoreImage, { marginLeft: 8 }]}>
-                          <Ionicons name="camera-outline" size={24} color={ecoTheme.colors.primaryDark} />
-                          <Text style={localStyles.addMoreText}>Camera</Text>
+                        <TouchableOpacity onPress={takePicture} style={[localStyles.addMoreImage, { marginLeft: 8 }, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                          <Ionicons name="camera-outline" size={24} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
+                          <Text style={[localStyles.addMoreText, isDark && { color: theme.colors.primary }]}>Camera</Text>
                         </TouchableOpacity>
                       </>
                     )}
@@ -252,75 +253,101 @@ export function CreateSwapListing({
                 ) : (
                   <View style={[localStyles.imagePlaceholder, { flexDirection: 'row', justifyContent: 'center', gap: scale(40) }]}>
                     <TouchableOpacity onPress={pickImages} style={{ alignItems: 'center' }}>
-                      <View style={localStyles.iconCircle}>
-                        <Ionicons name="images-outline" size={32} color={ecoTheme.colors.primaryDark} />
+                      <View style={[localStyles.iconCircle, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                        <Ionicons name="images-outline" size={32} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                       </View>
-                      <Text style={[localStyles.imagePlaceholderText, { marginTop: 8 }]}>Gallery</Text>
+                      <Text style={[localStyles.imagePlaceholderText, isDark && { color: theme.colors.textMuted }, { marginTop: 8 }]}>Gallery</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={takePicture} style={{ alignItems: 'center' }}>
-                      <View style={localStyles.iconCircle}>
-                        <Ionicons name="camera-outline" size={32} color={ecoTheme.colors.primaryDark} />
+                      <View style={[localStyles.iconCircle, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                        <Ionicons name="camera-outline" size={32} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                       </View>
-                      <Text style={[localStyles.imagePlaceholderText, { marginTop: 8 }]}>Camera</Text>
+                      <Text style={[localStyles.imagePlaceholderText, isDark && { color: theme.colors.textMuted }, { marginTop: 8 }]}>Camera</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
 
-              <Text style={localStyles.fieldLabel}>Item Title *</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Item Title *</Text>
               <TextInput
-                style={localStyles.input}
+                style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                 placeholder="e.g., Plastic Bottles, Glass Jars"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textMuted}
                 value={title}
                 onChangeText={setTitle}
               />
 
-              <Text style={localStyles.fieldLabel}>Category *</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Category *</Text>
               <View style={localStyles.chipGrid}>
-                {CATEGORIES.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    onPress={() => setCategory(cat)}
-                    style={[localStyles.chip, category === cat && localStyles.chipActive]}
-                  >
-                    <Text style={[localStyles.chipText, category === cat && localStyles.chipTextActive]}>
-                      {CATEGORY_LABELS[cat]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {CATEGORIES.map((cat) => {
+                  const isSelected = category === cat;
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      onPress={() => setCategory(cat)}
+                      style={[
+                        localStyles.chip,
+                        isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                        isSelected && [localStyles.chipActive, isDark && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          localStyles.chipText,
+                          isDark && { color: theme.colors.textMuted },
+                          isSelected && [localStyles.chipTextActive, isDark && { color: '#0E1512' }],
+                        ]}
+                      >
+                        {CATEGORY_LABELS[cat]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              <Text style={localStyles.fieldLabel}>Quantity *</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Quantity *</Text>
               <TextInput
-                style={localStyles.input}
+                style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                 placeholder="e.g., 50"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textMuted}
                 value={quantity}
                 onChangeText={(text) => setQuantity(text.replace(/[^0-9]/g, ''))}
                 keyboardType="numeric"
               />
 
-              <Text style={localStyles.fieldLabel}>Condition *</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Condition *</Text>
               <View style={localStyles.chipRow}>
-                {CONDITIONS.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    onPress={() => setCondition(c)}
-                    style={[localStyles.chip, condition === c && localStyles.chipActive]}
-                  >
-                    <Text style={[localStyles.chipText, condition === c && localStyles.chipTextActive]}>
-                      {CONDITION_LABELS[c]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {CONDITIONS.map((c) => {
+                  const isSelected = condition === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      onPress={() => setCondition(c)}
+                      style={[
+                        localStyles.chip,
+                        isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                        isSelected && [localStyles.chipActive, isDark && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          localStyles.chipText,
+                          isDark && { color: theme.colors.textMuted },
+                          isSelected && [localStyles.chipTextActive, isDark && { color: '#0E1512' }],
+                        ]}
+                      >
+                        {CONDITION_LABELS[c]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              <Text style={localStyles.fieldLabel}>Description</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Description</Text>
               <TextInput
-                style={[localStyles.input, localStyles.textArea]}
+                style={[localStyles.input, localStyles.textArea, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                 placeholder="Describe your item (condition, size, quantity details...)"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textMuted}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -332,57 +359,67 @@ export function CreateSwapListing({
 
           {step === 2 && (
             <>
-              <Text style={localStyles.fieldLabel}>Listing Type *</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Listing Type *</Text>
               <View style={localStyles.chipGrid}>
                 <TouchableOpacity
                   onPress={() => {
                     setListingType('swap');
                     setLookingFor('');
                   }}
-                  style={[localStyles.suggestionChip, listingType === 'swap' && localStyles.suggestionChipActive, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                  style={[
+                    localStyles.suggestionChip,
+                    isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                    listingType === 'swap' && [localStyles.suggestionChipActive, isDark && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
+                    { flexDirection: 'row', alignItems: 'center', gap: 6 }
+                  ]}
                 >
-                  <Ionicons name="swap-horizontal" size={16} color={listingType === 'swap' ? '#126027' : '#374151'} />
-                  <Text style={[localStyles.suggestionText, listingType === 'swap' && localStyles.suggestionTextActive]}>Swap</Text>
+                  <Ionicons name="swap-horizontal" size={16} color={listingType === 'swap' ? (isDark ? '#0E1512' : '#126027') : (isDark ? theme.colors.textMuted : '#374151')} />
+                  <Text style={[localStyles.suggestionText, isDark && { color: theme.colors.textMuted }, listingType === 'swap' && [localStyles.suggestionTextActive, isDark && { color: '#0E1512' }]]}>Swap</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
                     setListingType('giveaway');
                     setLookingFor('Giveaway');
                   }}
-                  style={[localStyles.suggestionChip, listingType === 'giveaway' && localStyles.suggestionChipActive, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                  style={[
+                    localStyles.suggestionChip,
+                    isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                    listingType === 'giveaway' && [localStyles.suggestionChipActive, isDark && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }],
+                    { flexDirection: 'row', alignItems: 'center', gap: 6 }
+                  ]}
                 >
-                  <Ionicons name="gift-outline" size={16} color={listingType === 'giveaway' ? '#126027' : '#374151'} />
-                  <Text style={[localStyles.suggestionText, listingType === 'giveaway' && localStyles.suggestionTextActive]}>Giveaway</Text>
+                  <Ionicons name="gift-outline" size={16} color={listingType === 'giveaway' ? (isDark ? '#0E1512' : '#126027') : (isDark ? theme.colors.textMuted : '#374151')} />
+                  <Text style={[localStyles.suggestionText, isDark && { color: theme.colors.textMuted }, listingType === 'giveaway' && [localStyles.suggestionTextActive, isDark && { color: '#0E1512' }]]}>Giveaway</Text>
                 </TouchableOpacity>
               </View>
 
               {listingType === 'swap' && (
                 <>
-                  <View style={localStyles.infoCard}>
+                  <View style={[localStyles.infoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                     <Ionicons name="bulb-outline" size={20} color="#D97706" />
-                    <Text style={localStyles.infoText}>
+                    <Text style={[localStyles.infoText, isDark && { color: theme.colors.textPrimary }]}>
                       Specify what you'd like to receive in exchange. Be specific to attract the right swaps!
                     </Text>
                   </View>
 
-                  <Text style={localStyles.fieldLabel}>What are you looking for? *</Text>
+                  <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>What are you looking for? *</Text>
                   <TextInput
-                    style={localStyles.input}
+                    style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                     placeholder="e.g., Indoor Plant, Used Books, School Supplies"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={lookingFor}
                     onChangeText={setLookingFor}
                   />
 
-                  <Text style={localStyles.suggestionLabel}>Popular requests:</Text>
+                  <Text style={[localStyles.suggestionLabel, isDark && { color: theme.colors.textMuted }]}>Popular requests:</Text>
                   <View style={localStyles.chipGrid}>
                     {['Flower Pot', 'Used Books', 'School Supplies', 'Plant Seeds', 'Plastic Storage Box', 'Garden Tools', 'Art Supplies', 'Cooking Utensils'].map((item) => (
                       <TouchableOpacity
                         key={item}
                         onPress={() => setLookingFor(item)}
-                        style={localStyles.suggestionChip}
+                        style={[localStyles.suggestionChip, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
                       >
-                        <Text style={localStyles.suggestionText}>{item}</Text>
+                        <Text style={[localStyles.suggestionText, isDark && { color: theme.colors.textMuted }]}>{item}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -390,9 +427,9 @@ export function CreateSwapListing({
               )}
 
               {listingType === 'giveaway' && (
-                <View style={localStyles.infoCard}>
+                <View style={[localStyles.infoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                   <Ionicons name="gift-outline" size={20} color="#10B981" />
-                  <Text style={localStyles.infoText}>
+                  <Text style={[localStyles.infoText, isDark && { color: theme.colors.textPrimary }]}>
                     You're giving this item away for free! No exchange needed.
                   </Text>
                 </View>
@@ -402,42 +439,49 @@ export function CreateSwapListing({
 
           {step === 3 && (
             <>
-              <Text style={localStyles.fieldLabel}>Meetup Method *</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Meetup Method *</Text>
               <View style={localStyles.meetupOptions}>
-                {MEETUP_METHODS.map((m) => (
-                  <TouchableOpacity
-                    key={m.key}
-                    onPress={() => setMeetupMethod(m.key)}
-                    style={[localStyles.meetupCard, meetupMethod === m.key && localStyles.meetupCardActive]}
-                  >
-                    <View style={[localStyles.meetupIcon, meetupMethod === m.key && localStyles.meetupIconActive]}>
-                      <Ionicons name={m.icon as any} size={22} color={meetupMethod === m.key ? '#FFF' : ecoTheme.colors.primaryDark} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[localStyles.meetupTitle, meetupMethod === m.key && localStyles.meetupTitleActive]}>
-                        {MEETUP_LABELS[m.key]}
-                      </Text>
-                      <Text style={localStyles.meetupDesc}>{m.desc}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {MEETUP_METHODS.map((m) => {
+                  const isSelected = meetupMethod === m.key;
+                  return (
+                    <TouchableOpacity
+                      key={m.key}
+                      onPress={() => setMeetupMethod(m.key)}
+                      style={[
+                        localStyles.meetupCard,
+                        isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                        isSelected && [localStyles.meetupCardActive, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.primary }],
+                      ]}
+                    >
+                      <View style={[localStyles.meetupIcon, isDark && { backgroundColor: theme.colors.surfaceMuted }, isSelected && [localStyles.meetupIconActive, isDark && { backgroundColor: theme.colors.primary }]]}>
+                        <Ionicons name={m.icon as any} size={22} color={isSelected ? (isDark ? '#0E1512' : '#FFF') : (isDark ? theme.colors.primary : ecoTheme.colors.primaryDark)} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[localStyles.meetupTitle, isDark && { color: theme.colors.textPrimary }, isSelected && isDark && { color: theme.colors.primary }]}>
+                          {MEETUP_LABELS[m.key]}
+                        </Text>
+                        <Text style={[localStyles.meetupDesc, isDark && { color: theme.colors.textMuted }]}>{m.desc}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {meetupMethod === 'public' && (
                 <>
-                  <Text style={localStyles.fieldLabel}>Meetup Location</Text>
+                  <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Meetup Location</Text>
                   <TextInput
-                    style={localStyles.input}
+                    style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                     placeholder="e.g., SM City Calamba"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={meetupLocation}
                     onChangeText={setMeetupLocation}
                   />
-                  <Text style={localStyles.fieldLabel}>Landmark</Text>
+                  <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Landmark</Text>
                   <TextInput
-                    style={localStyles.input}
+                    style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                     placeholder="e.g., Near Main Entrance"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={meetupLandmark}
                     onChangeText={setMeetupLandmark}
                   />
@@ -445,45 +489,45 @@ export function CreateSwapListing({
               )}
 
               {meetupMethod === 'pickup' && (
-                <View style={localStyles.infoCard}>
+                <View style={[localStyles.infoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                   <Ionicons name="information-circle-outline" size={20} color="#2563EB" />
-                  <Text style={localStyles.infoText}>
+                  <Text style={[localStyles.infoText, isDark && { color: theme.colors.textPrimary }]}>
                     Your pickup address will only be shared after both users confirm the swap for privacy.
                   </Text>
                 </View>
               )}
 
               {meetupMethod === 'dropoff' && (
-                <View style={localStyles.infoCard}>
+                <View style={[localStyles.infoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                   <Ionicons name="information-circle-outline" size={20} color="#2563EB" />
-                  <Text style={localStyles.infoText}>
+                  <Text style={[localStyles.infoText, isDark && { color: theme.colors.textPrimary }]}>
                     The delivery address will only be shared after both users confirm the swap for privacy.
                   </Text>
                 </View>
               )}
 
-              <Text style={localStyles.fieldLabel}>City</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>City</Text>
               <TextInput
-                style={localStyles.input}
+                style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                 placeholder="e.g., Santa Rosa"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textMuted}
                 value={city}
                 onChangeText={setCity}
               />
-              <Text style={localStyles.fieldLabel}>Province</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Province</Text>
               <TextInput
-                style={localStyles.input}
+                style={[localStyles.input, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                 placeholder="e.g., Laguna"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textMuted}
                 value={province}
                 onChangeText={setProvince}
               />
 
-              <Text style={localStyles.fieldLabel}>Additional Notes</Text>
+              <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Additional Notes</Text>
               <TextInput
-                style={[localStyles.input, localStyles.textArea]}
+                style={[localStyles.input, localStyles.textArea, isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
                 placeholder="Any extra details about the meetup..."
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.colors.textMuted}
                 value={meetupNotes}
                 onChangeText={setMeetupNotes}
                 multiline
@@ -494,10 +538,10 @@ export function CreateSwapListing({
           )}
         </ScrollView>
 
-        <View style={localStyles.bottomBar}>
+        <View style={[localStyles.bottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
           {step > 1 && (
-            <TouchableOpacity onPress={() => setStep(step - 1)} style={localStyles.prevBtn}>
-              <Text style={localStyles.prevBtnText}>Previous</Text>
+            <TouchableOpacity onPress={() => setStep(step - 1)} style={[localStyles.prevBtn, { borderColor: theme.colors.border }]}>
+              <Text style={[localStyles.prevBtnText, { color: theme.colors.textMuted }]}>Previous</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -515,13 +559,14 @@ export function CreateSwapListing({
             disabled={!canProceed() || submitting}
             style={[
               localStyles.nextBtn, 
-              (!canProceed() || submitting) && { backgroundColor: '#E2E8F0', shadowOpacity: 0, elevation: 0 }
+              isDark && { backgroundColor: theme.colors.primary },
+              (!canProceed() || submitting) && { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E2E8F0', shadowOpacity: 0, elevation: 0 }
             ]}
           >
             {submitting ? (
-              <ActivityIndicator color={canProceed() ? "#FFF" : "#94A3B8"} />
+              <ActivityIndicator color={canProceed() ? (isDark ? "#0E1512" : "#FFF") : (isDark ? "#4B5563" : "#94A3B8")} />
             ) : (
-              <Text style={[localStyles.nextBtnText, (!canProceed() || submitting) && { color: '#94A3B8' }]}>
+              <Text style={[localStyles.nextBtnText, isDark && { color: '#0E1512' }, (!canProceed() || submitting) && { color: isDark ? '#4B5563' : '#94A3B8' }]}>
                 {step < totalSteps ? 'Continue' : 'Create Listing'}
               </Text>
             )}

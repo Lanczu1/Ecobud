@@ -3,6 +3,7 @@ import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,7 +23,7 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
-import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { CoachMarksOverlay } from '../../app/components/CoachMarksOverlay';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
@@ -219,6 +220,89 @@ function getRequiredFields(mode: AuthModeType): FieldName[] {
 
 
 
+function AnimatedThemeToggle({
+  isDark,
+  onToggle,
+}: {
+  isDark: boolean;
+  onToggle: () => void;
+}) {
+  const spinAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(spinAnim, {
+        toValue: isDark ? 1 : 0,
+        friction: 6,
+        tension: 70,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 0.88, duration: 80, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [isDark, spinAnim, scaleAnim]);
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <TouchableOpacity
+      onPress={onToggle}
+      activeOpacity={0.8}
+      accessibilityLabel="Toggle Theme Mode"
+      style={{
+        position: 'absolute',
+        top: 0,
+        right: 20,
+        zIndex: 20,
+      }}
+    >
+      <Animated.View
+        style={{
+          transform: [{ scale: scaleAnim }],
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 7,
+          paddingHorizontal: 13,
+          paddingVertical: 7,
+          borderRadius: 22,
+          backgroundColor: isDark ? 'rgba(31, 51, 39, 0.94)' : 'rgba(255, 255, 255, 0.95)',
+          borderWidth: 1.5,
+          borderColor: isDark ? 'rgba(93, 223, 135, 0.35)' : 'rgba(18, 96, 39, 0.15)',
+          shadowColor: '#000',
+          shadowOpacity: isDark ? 0.3 : 0.08,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 5,
+        }}
+      >
+        <Animated.View style={{ transform: [{ rotate: spin }] }}>
+          <Ionicons
+            name={isDark ? 'moon' : 'sunny'}
+            size={16}
+            color={isDark ? '#5DDF87' : '#D97706'}
+          />
+        </Animated.View>
+        <Text
+          style={{
+            fontSize: 12,
+            fontWeight: '800',
+            letterSpacing: 0.3,
+            color: isDark ? '#F3F7F5' : '#163A24',
+          }}
+        >
+          {isDark ? 'Dark Mode' : 'Light Mode'}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
 export function AuthView({
   authLoading,
   authError,
@@ -229,12 +313,27 @@ export function AuthView({
   onSendOTP,
   onCheckUsernameAvailability,
 }: AuthViewProps) {
+  const { theme, isDark, toggleTheme } = useTheme();
   const player = useVideoPlayer(require('../../../assets/mobile-bg.mp4'), p => {
     p.loop = true;
     p.muted = true;
     p.play();
   });
   const [mode, setMode] = useState<AuthModeType>('signin');
+  const darkBgOpacity = useRef(new Animated.Value(isDark ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(darkBgOpacity, {
+      toValue: isDark ? 1 : 0,
+      duration: 380,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [isDark, darkBgOpacity]);
+
+  const pageFadeAnim = useRef(new Animated.Value(1)).current;
+  const pageSlideAnim = useRef(new Animated.Value(0)).current;
+  const pageScaleAnim = useRef(new Animated.Value(1)).current;
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -318,6 +417,61 @@ export function AuthView({
     ];
   }, [password]);
 
+  const switchMode = useCallback((nextMode: AuthModeType) => {
+    if (nextMode === mode) return;
+
+    Animated.parallel([
+      Animated.timing(pageFadeAnim, {
+        toValue: 0,
+        duration: 130,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(pageSlideAnim, {
+        toValue: nextMode === 'signin' ? 14 : -14,
+        duration: 130,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(pageScaleAnim, {
+        toValue: 0.97,
+        duration: 130,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setLocalError(null);
+      setTouched({});
+      setMode(nextMode);
+      setUsernameCheckState('idle');
+      setUsernameCheckMessage(null);
+      if (nextMode !== 'verify') {
+        setVerificationCode('');
+      }
+      pageSlideAnim.setValue(nextMode === 'signin' ? -16 : 16);
+
+      Animated.parallel([
+        Animated.timing(pageFadeAnim, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(pageSlideAnim, {
+          toValue: 0,
+          friction: 8,
+          tension: 90,
+          useNativeDriver: true,
+        }),
+        Animated.spring(pageScaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 90,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [mode, pageFadeAnim, pageSlideAnim, pageScaleAnim]);
+
   useEffect(() => {
     setUsernameCheckState('idle');
     setUsernameCheckMessage(null);
@@ -328,12 +482,12 @@ export function AuthView({
       mode === 'verify' &&
       authError?.toLowerCase().includes(DUPLICATE_EMAIL_ERROR_FRAGMENT)
     ) {
-      setMode('signup');
+      switchMode('signup');
       setVerificationCode('');
       setTouched({});
       setLocalError(authError);
     }
-  }, [authError, mode]);
+  }, [authError, mode, switchMode]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -416,17 +570,6 @@ export function AuthView({
     setTouched((current) => ({ ...current, [field]: true }));
   }, []);
 
-  const switchMode = useCallback((nextMode: AuthModeType) => {
-    setLocalError(null);
-    setTouched({});
-    setMode(nextMode);
-    setUsernameCheckState('idle');
-    setUsernameCheckMessage(null);
-    if (nextMode !== 'verify') {
-      setVerificationCode('');
-    }
-  }, []);
-
   const handleCheckUsername = useCallback(async () => {
     setLocalError(null);
     setTouched((current) => ({ ...current, username: true }));
@@ -482,7 +625,7 @@ export function AuthView({
       setIsSendingCode(true);
       try {
         await onSendOTP(email.trim());
-        setMode('verify');
+        switchMode('verify');
         setResendCooldown(60);
         setTouched({});
       } catch (error) {
@@ -496,7 +639,7 @@ export function AuthView({
     }
 
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
-  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode]);
+  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode]);
 
   const bannerMessage = localError || authError;
   const verifySubtitle =
@@ -505,9 +648,16 @@ export function AuthView({
       : copy.subtitle;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: isDark ? '#0E1512' : '#F9FAF5' }}>
       <VideoView style={StyleSheet.absoluteFill} player={player as any} contentFit="cover" />
-      <StatusBar style="dark" />
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: 'rgba(14, 21, 18, 0.90)', opacity: darkBgOpacity },
+        ]}
+        pointerEvents="none"
+      />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
@@ -521,6 +671,8 @@ export function AuthView({
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.topNavbar, { justifyContent: 'center' }]}>
+            <AnimatedThemeToggle isDark={isDark} onToggle={toggleTheme} />
+
             <Image
               source={require('../../../assets/ecobud_logo_circle.png')}
               style={{ width: 72, height: 72, borderRadius: 36, resizeMode: 'contain' }}
@@ -529,23 +681,43 @@ export function AuthView({
           </View>
 
           <View style={styles.contentContainer}>
+            <Animated.View
+              style={{
+                width: '100%',
+                opacity: pageFadeAnim,
+                transform: [
+                  { translateY: pageSlideAnim },
+                  { scale: pageScaleAnim },
+                ],
+              }}
+            >
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' }}>
-              <Text style={styles.welcomeTitle}>{copy.title}</Text>
-              <Ionicons name="leaf" size={18} color={palette.primary} style={{ marginTop: 2, marginLeft: 2 }} />
+              <Text style={[styles.welcomeTitle, isDark && { color: theme.colors.textPrimary }]}>{copy.title}</Text>
+              <Ionicons name="leaf" size={18} color={isDark ? theme.colors.primary : palette.primary} style={{ marginTop: 2, marginLeft: 2 }} />
             </View>
-            <Text style={styles.welcomeSubtitle}>{verifySubtitle}</Text>
+            <Text style={[styles.welcomeSubtitle, isDark && { color: theme.colors.textMuted }]}>{verifySubtitle}</Text>
 
             <View
-              style={[styles.authCard, isLegacyAndroid ? styles.authCardLegacy : styles.authCardModern]}
+              style={[
+                styles.authCard,
+                isLegacyAndroid ? styles.authCardLegacy : styles.authCardModern,
+                isDark && {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.cardBorder,
+                  borderWidth: 1,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.3,
+                }
+              ]}
               renderToHardwareTextureAndroid={isAndroid}
             >
               {bannerMessage ? <InlineBanner message={bannerMessage} /> : null}
 
               {mode === 'verify' ? (
                 <View style={styles.verifyStepBox}>
-                  <View style={styles.verifyEmailBadge}>
-                    <Ionicons name="mail-outline" size={16} color={palette.primary} />
-                    <Text style={styles.verifyEmailText} numberOfLines={1}>
+                  <View style={[styles.verifyEmailBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                    <Ionicons name="mail-outline" size={16} color={isDark ? theme.colors.primary : palette.primary} />
+                    <Text style={[styles.verifyEmailText, isDark && { color: theme.colors.textPrimary }]} numberOfLines={1}>
                       {email.trim()}
                     </Text>
                     <Pressable
@@ -553,11 +725,11 @@ export function AuthView({
                       hitSlop={8}
                       style={styles.changeEmailButton}
                     >
-                      <Text style={styles.changeEmailText}>Edit</Text>
+                      <Text style={[styles.changeEmailText, isDark && { color: theme.colors.primary }]}>Edit</Text>
                     </Pressable>
                   </View>
 
-                  <Text style={styles.otpPromptLabel}>Enter the 6-digit verification code</Text>
+                  <Text style={[styles.otpPromptLabel, isDark && { color: theme.colors.textPrimary }]}>Enter the 6-digit verification code</Text>
                   
                   <SegmentedOtpInput
                     value={verificationCode}
@@ -571,7 +743,7 @@ export function AuthView({
                   />
 
                   <View style={styles.resendRow}>
-                    <Text style={styles.resendPromptText}>Didn't receive the code?</Text>
+                    <Text style={[styles.resendPromptText, isDark && { color: theme.colors.textMuted }]}>Didn't receive the code?</Text>
                     <Pressable
                       disabled={resendCooldown > 0 || isLoading}
                       onPress={async () => {
@@ -596,7 +768,8 @@ export function AuthView({
                       <Text
                         style={[
                           styles.resendButtonText,
-                          resendCooldown > 0 && styles.resendButtonTextDisabled,
+                          isDark && { color: theme.colors.primary },
+                          resendCooldown > 0 && (isDark ? { color: theme.colors.textMuted } : styles.resendButtonTextDisabled),
                         ]}
                       >
                         {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
@@ -657,7 +830,8 @@ export function AuthView({
                   {mode === 'signup' ? (
                     <View style={styles.inputGroup}>
                       <View style={styles.inputLabelRow}>
-                        <Text style={styles.inputLabel}>Location (Barangay)</Text>
+                        <Ionicons name="location-outline" size={14} color={isDark ? theme.colors.primary : palette.primary} style={{ marginRight: 6, marginTop: 1 }} />
+                        <Text style={[styles.inputLabel, isDark && { color: theme.colors.textPrimary }]}>Location (Barangay)</Text>
                       </View>
                       <TouchableOpacity
                         activeOpacity={0.8}
@@ -665,18 +839,20 @@ export function AuthView({
                         style={[
                           styles.inputOuter,
                           { height: 56, flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 10 },
+                          isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder },
                           visibleFieldErrors.city ? styles.inputOuterError : null
                         ]}
                       >
                         <View style={styles.inputIcon}>
-                          <Ionicons name="location-outline" size={20} color={palette.fieldIcon} />
+                          <Ionicons name="location-outline" size={20} color={isDark ? theme.colors.primary : palette.fieldIcon} />
                         </View>
-                        <Text style={[styles.textInput, { color: city ? palette.textStrong : palette.textMuted, textAlignVertical: 'center', minHeight: undefined, flex: 1 }]}>
+                        <Text style={[styles.textInput, { color: city ? (isDark ? theme.colors.textPrimary : palette.textStrong) : (isDark ? theme.colors.textMuted : palette.textMuted), textAlignVertical: 'center', minHeight: undefined, flex: 1 }]}>
                           {city ? `Brgy. ${city}` : 'Select Barangay'}
                         </Text>
+                        <Ionicons name="chevron-down" size={18} color={isDark ? theme.colors.textMuted : palette.fieldIcon} />
                       </TouchableOpacity>
                       {visibleFieldErrors.city ? (
-                        <Text style={styles.inlineErrorText}>{visibleFieldErrors.city}</Text>
+                        <Text style={[styles.inlineErrorText, isDark && { color: '#F87171' }]}>{visibleFieldErrors.city}</Text>
                       ) : null}
                     </View>
                   ) : null}
@@ -704,7 +880,7 @@ export function AuthView({
               )}
 
               {mode !== 'signin' ? (
-                <Text style={styles.supportingCopy}>
+                <Text style={[styles.supportingCopy, isDark && { color: theme.colors.textMuted }]}>
                   {mode === 'signup'
                     ? 'We’ll send a one-time code to confirm your email before creating your account.'
                     : 'If the code does not arrive, return to sign up and request a fresh one.'}
@@ -747,7 +923,7 @@ export function AuthView({
             </View>
 
             <View style={styles.footerSwitchRow}>
-              <Text style={styles.footerSwitchText}>
+              <Text style={[styles.footerSwitchText, isDark && { color: theme.colors.textMuted }]}>
                 {mode === 'signin'
                   ? 'Need an account?'
                   : mode === 'verify'
@@ -768,7 +944,7 @@ export function AuthView({
                 style={({ pressed }) => [styles.footerSwitchLink, pressed && styles.footerSwitchLinkPressed]}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.footerSwitchLinkText}>
+                  <Text style={[styles.footerSwitchLinkText, isDark && { color: theme.colors.primary }]}>
                     {mode === 'signin'
                       ? 'Create account'
                       : mode === 'verify'
@@ -776,11 +952,12 @@ export function AuthView({
                         : 'Log in'}
                   </Text>
                   {mode === 'signin' && (
-                    <Ionicons name="leaf-outline" size={14} color={palette.primary} style={{ marginLeft: 4, marginTop: 4 }} />
+                    <Ionicons name="leaf-outline" size={14} color={isDark ? theme.colors.primary : palette.primary} style={{ marginLeft: 4, marginTop: 4 }} />
                   )}
                 </View>
               </Pressable>
             </View>
+            </Animated.View>
           </View>
         </ScrollView>
         </KeyboardAvoidingView>
@@ -802,20 +979,20 @@ export function AuthView({
       ) : null}
 
       <Modal visible={isBarangayPickerOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setIsBarangayPickerOpen(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: palette.textStrong }}>Select Barangay</Text>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? theme.colors.background : palette.canvas }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: isDark ? theme.colors.textPrimary : palette.textStrong }}>Select Barangay</Text>
             <Pressable onPress={() => setIsBarangayPickerOpen(false)}>
-              <Ionicons name="close" size={24} color={palette.textStrong} />
+              <Ionicons name="close" size={24} color={isDark ? theme.colors.textPrimary : palette.textStrong} />
             </Pressable>
           </View>
-          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.border }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: palette.inputFill, borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: palette.border }}>
-              <Ionicons name="search" size={20} color={palette.fieldIcon} />
+          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: isDark ? theme.colors.card : palette.surface, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? theme.colors.inputBackground : palette.inputFill, borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: isDark ? theme.colors.inputBorder : palette.border }}>
+              <Ionicons name="search" size={20} color={isDark ? theme.colors.textMuted : palette.fieldIcon} />
               <TextInput
-                style={{ flex: 1, marginLeft: 8, fontSize: 16, color: palette.textStrong }}
+                style={{ flex: 1, marginLeft: 8, fontSize: 16, color: isDark ? theme.colors.textPrimary : palette.textStrong }}
                 placeholder="Search barangay..."
-                placeholderTextColor={palette.textMuted}
+                placeholderTextColor={isDark ? theme.colors.textMuted : palette.textMuted}
                 value={barangaySearchQuery}
                 onChangeText={setBarangaySearchQuery}
               />
@@ -828,8 +1005,8 @@ export function AuthView({
             renderItem={({ item }) => (
               <Pressable
                 style={({ pressed }) => [
-                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-                  pressed && { backgroundColor: palette.primarySoft }
+                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+                  pressed && { backgroundColor: isDark ? theme.colors.surfaceMuted : palette.primarySoft }
                 ]}
                 onPress={() => {
                   setCity(item);
@@ -837,10 +1014,10 @@ export function AuthView({
                   markTouched('city');
                 }}
               >
-                <Text style={{ fontSize: 16, color: city === item ? palette.primary : palette.textStrong, fontWeight: city === item ? '700' : '400' }}>
+                <Text style={{ fontSize: 16, color: city === item ? (isDark ? theme.colors.primary : palette.primary) : (isDark ? theme.colors.textPrimary : palette.textStrong), fontWeight: city === item ? '700' : '400' }}>
                   {item}
                 </Text>
-                {city === item && <Ionicons name="checkmark" size={20} color={palette.primary} />}
+                {city === item && <Ionicons name="checkmark" size={20} color={isDark ? theme.colors.primary : palette.primary} />}
               </Pressable>
             )}
           />
@@ -859,11 +1036,11 @@ export function AuthView({
           }
         }}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: palette.canvas }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? theme.colors.background : palette.canvas }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 18, fontWeight: '700', color: palette.textStrong }}>Select Your Barangay</Text>
-              <Text style={{ fontSize: 13, color: palette.textMuted, marginTop: 2 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: isDark ? theme.colors.textPrimary : palette.textStrong }}>Select Your Barangay</Text>
+              <Text style={{ fontSize: 13, color: isDark ? theme.colors.textMuted : palette.textMuted, marginTop: 2 }}>
                 Welcome to EcoBud! Please choose your barangay to complete your setup.
               </Text>
             </View>
@@ -876,16 +1053,16 @@ export function AuthView({
               }}
               disabled={isConfirmingGoogleBarangay}
             >
-              <Ionicons name="close" size={24} color={palette.textStrong} />
+              <Ionicons name="close" size={24} color={isDark ? theme.colors.textPrimary : palette.textStrong} />
             </Pressable>
           </View>
-          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.border }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: palette.inputFill, borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: palette.border }}>
-              <Ionicons name="search" size={20} color={palette.fieldIcon} />
+          <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: isDark ? theme.colors.card : palette.surface, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? theme.colors.inputBackground : palette.inputFill, borderRadius: 12, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: isDark ? theme.colors.inputBorder : palette.border }}>
+              <Ionicons name="search" size={20} color={isDark ? theme.colors.textMuted : palette.fieldIcon} />
               <TextInput
-                style={{ flex: 1, marginLeft: 8, fontSize: 16, color: palette.textStrong }}
+                style={{ flex: 1, marginLeft: 8, fontSize: 16, color: isDark ? theme.colors.textPrimary : palette.textStrong }}
                 placeholder="Search barangay..."
-                placeholderTextColor={palette.textMuted}
+                placeholderTextColor={isDark ? theme.colors.textMuted : palette.textMuted}
                 value={barangaySearchQuery}
                 onChangeText={setBarangaySearchQuery}
               />
@@ -898,22 +1075,22 @@ export function AuthView({
             renderItem={({ item }) => (
               <Pressable
                 style={({ pressed }) => [
-                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-                  pressed && { backgroundColor: palette.primarySoft }
+                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+                  pressed && { backgroundColor: isDark ? theme.colors.surfaceMuted : palette.primarySoft }
                 ]}
                 onPress={() => {
                   setSelectedGoogleBarangay(item);
                 }}
               >
-                <Text style={{ fontSize: 16, color: selectedGoogleBarangay === item ? palette.primary : palette.textStrong, fontWeight: selectedGoogleBarangay === item ? '700' : '400' }}>
+                <Text style={{ fontSize: 16, color: selectedGoogleBarangay === item ? (isDark ? theme.colors.primary : palette.primary) : (isDark ? theme.colors.textPrimary : palette.textStrong), fontWeight: selectedGoogleBarangay === item ? '700' : '400' }}>
                   {item}
                 </Text>
-                {selectedGoogleBarangay === item && <Ionicons name="checkmark-circle" size={22} color={palette.primary} />}
+                {selectedGoogleBarangay === item && <Ionicons name="checkmark-circle" size={22} color={isDark ? theme.colors.primary : palette.primary} />}
               </Pressable>
             )}
           />
           {selectedGoogleBarangay ? (
-            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: palette.surface, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: palette.border }}>
+            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: isDark ? theme.colors.card : palette.surface, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: isDark ? theme.colors.border : palette.border }}>
               <PrimaryButton
                 label={isConfirmingGoogleBarangay ? 'Setting up account...' : `Continue with ${selectedGoogleBarangay}`}
                 disabled={isConfirmingGoogleBarangay}
@@ -966,10 +1143,11 @@ function usePressScale(pressedScale = 0.98) {
 }
 
 function InlineBanner({ message }: { message: string }) {
+  const { theme, isDark } = useTheme();
   return (
-    <View style={styles.errorBanner}>
-      <Ionicons name="alert-circle-outline" size={18} color={palette.danger} />
-      <Text style={styles.errorBannerText}>{message}</Text>
+    <View style={[styles.errorBanner, isDark && { backgroundColor: '#3D1414', borderColor: '#7F1D1D' }]}>
+      <Ionicons name="alert-circle-outline" size={18} color={isDark ? '#F87171' : palette.danger} />
+      <Text style={[styles.errorBannerText, isDark && { color: '#FECACA' }]}>{message}</Text>
     </View>
   );
 }
@@ -1008,6 +1186,7 @@ function RequirementChecklist({
   requirements: FieldRequirement[];
   hasValue: boolean;
 }) {
+  const { theme, isDark } = useTheme();
   return (
     <View style={styles.requirementBox}>
       {requirements.map((req, idx) => {
@@ -1018,26 +1197,26 @@ function RequirementChecklist({
               style={[
                 styles.requirementIconBadge,
                 req.met
-                  ? styles.requirementIconBadgeMet
+                  ? (isDark ? { backgroundColor: '#143823', borderColor: '#22A77B' } : styles.requirementIconBadgeMet)
                   : isError
-                    ? styles.requirementIconBadgeError
-                    : styles.requirementIconBadgeUnmet,
+                    ? (isDark ? { backgroundColor: '#3D1414', borderColor: '#7F1D1D' } : styles.requirementIconBadgeError)
+                    : (isDark ? { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border } : styles.requirementIconBadgeUnmet),
               ]}
             >
               <Ionicons
                 name={req.met ? 'checkmark' : isError ? 'close' : 'ellipse-outline'}
                 size={11}
-                color={req.met ? '#16A34A' : isError ? '#DC2626' : '#9CA3AF'}
+                color={req.met ? (isDark ? '#5DDF87' : '#16A34A') : isError ? (isDark ? '#F87171' : '#DC2626') : (isDark ? theme.colors.textMuted : '#9CA3AF')}
               />
             </View>
             <Text
               style={[
                 styles.requirementText,
                 req.met
-                  ? styles.requirementTextMet
+                  ? (isDark ? { color: '#5DDF87', fontWeight: '600' } : styles.requirementTextMet)
                   : isError
-                    ? styles.requirementTextError
-                    : styles.requirementTextUnmet,
+                    ? (isDark ? { color: '#F87171', fontWeight: '600' } : styles.requirementTextError)
+                    : (isDark ? { color: theme.colors.textMuted, fontWeight: '500' } : styles.requirementTextUnmet),
               ]}
             >
               {req.label}
@@ -1058,6 +1237,7 @@ function SegmentedOtpInput({
   onChange: (val: string) => void;
   error?: string;
 }) {
+  const { theme, isDark } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const digits = Array.from({ length: 6 }, (_, i) => value[i] || '');
@@ -1079,12 +1259,13 @@ function SegmentedOtpInput({
               key={idx}
               style={[
                 styles.otpBox,
-                isFilled && styles.otpBoxFilled,
-                isCurrent && styles.otpBoxActive,
-                Boolean(error) && styles.otpBoxError,
+                isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder },
+                isFilled && (isDark ? { borderColor: theme.colors.primary, backgroundColor: theme.colors.card } : styles.otpBoxFilled),
+                isCurrent && (isDark ? { borderColor: theme.colors.primary, backgroundColor: theme.colors.card } : styles.otpBoxActive),
+                Boolean(error) && (isDark ? { borderColor: '#EF4444', backgroundColor: '#3D1414' } : styles.otpBoxError),
               ]}
             >
-              <Text style={styles.otpDigitText}>{digit}</Text>
+              <Text style={[styles.otpDigitText, isDark && { color: theme.colors.textPrimary }]}>{digit}</Text>
             </View>
           );
         })}
@@ -1105,7 +1286,7 @@ function SegmentedOtpInput({
         caretHidden={true}
       />
 
-      {error ? <Text style={styles.inlineErrorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.inlineErrorText, isDark && { color: '#F87171' }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -1136,6 +1317,7 @@ function CustomInputField({
   requirements,
   showRequirementsAlways = false,
 }: CustomInputFieldProps) {
+  const { theme, isDark } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
   const focusValue = useRef(new Animated.Value(0)).current;
 
@@ -1147,15 +1329,19 @@ function CustomInputField({
     }).start();
   }, [focusValue, isFocused]);
 
-  const borderColor = focusValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [palette.border, palette.borderStrong],
-  });
+  const borderColor = isDark
+    ? (isFocused ? theme.colors.primary : theme.colors.inputBorder)
+    : focusValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [palette.border, palette.borderStrong],
+      });
 
-  const fillColor = focusValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [palette.inputFill, palette.surface],
-  });
+  const fillColor = isDark
+    ? theme.colors.inputBackground
+    : focusValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: [palette.inputFill, palette.surface],
+      });
 
   const shadowOpacity = focusValue.interpolate({
     inputRange: [0, 1],
@@ -1165,8 +1351,8 @@ function CustomInputField({
   return (
     <View style={styles.inputGroup}>
       <View style={styles.inputLabelRow}>
-        {labelIcon ? <Ionicons name={labelIcon} size={14} color={palette.primary} style={{ marginRight: 6, marginTop: 1 }} /> : null}
-        <Text style={[styles.inputLabel, isFocused && styles.inputLabelActive]}>{label}</Text>
+        {labelIcon ? <Ionicons name={labelIcon} size={14} color={isDark ? theme.colors.primary : palette.primary} style={{ marginRight: 6, marginTop: 1 }} /> : null}
+        <Text style={[styles.inputLabel, { color: isDark ? theme.colors.textPrimary : palette.textStrong }, isFocused && (isDark ? { color: theme.colors.primary } : styles.inputLabelActive)]}>{label}</Text>
         {actionLabel && onActionPress ? (
           <Pressable
             accessibilityRole="button"
@@ -1174,14 +1360,15 @@ function CustomInputField({
             onPress={onActionPress}
             style={({ pressed }) => [
               styles.inputActionButton,
+              isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border },
               (actionDisabled || actionLoading) && styles.inputActionButtonDisabled,
-              pressed && !(actionDisabled || actionLoading) && styles.inputActionButtonPressed,
+              pressed && !(actionDisabled || actionLoading) && (isDark ? { backgroundColor: theme.colors.card } : styles.inputActionButtonPressed),
             ]}
           >
             {actionLoading ? (
-              <ActivityIndicator size="small" color={palette.primary} />
+              <ActivityIndicator size="small" color={isDark ? theme.colors.primary : palette.primary} />
             ) : (
-              <Text style={styles.inputActionButtonText}>{actionLabel}</Text>
+              <Text style={[styles.inputActionButtonText, isDark && { color: theme.colors.primary }]}>{actionLabel}</Text>
             )}
           </Pressable>
         ) : null}
@@ -1190,9 +1377,9 @@ function CustomInputField({
         style={[
           styles.inputOuter,
           {
-            borderColor: (error && !requirements) ? palette.danger : borderColor,
+            borderColor: (error && !requirements) ? (isDark ? '#EF4444' : palette.danger) : borderColor,
             backgroundColor: fillColor,
-            shadowOpacity: (error && !requirements) ? 0 : shadowOpacity,
+            shadowOpacity: (error && !requirements || isDark) ? 0 : shadowOpacity,
           },
           (error && !requirements) ? styles.inputOuterError : null,
           !showEnhancedChrome && styles.inputOuterFallback,
@@ -1202,7 +1389,7 @@ function CustomInputField({
           <Ionicons
             name={iconName}
             size={18}
-            color={isFocused ? palette.fieldIconActive : palette.fieldIcon}
+            color={isFocused ? (isDark ? theme.colors.primary : palette.fieldIconActive) : (isDark ? theme.colors.textMuted : palette.fieldIcon)}
             style={styles.inputIcon}
           />
           <TextInput
@@ -1216,8 +1403,8 @@ function CustomInputField({
             autoComplete={autoComplete}
             textContentType={textContentType}
             placeholder={placeholder}
-            placeholderTextColor="#9CA3AF"
-            selectionColor={palette.primary}
+            placeholderTextColor={isDark ? theme.colors.textMuted : '#9CA3AF'}
+            selectionColor={isDark ? theme.colors.primary : palette.primary}
             underlineColorAndroid="transparent"
             onFocus={() => setIsFocused(true)}
             onBlur={() => {
@@ -1226,6 +1413,7 @@ function CustomInputField({
             }}
             style={[
               styles.textInput,
+              isDark && { color: theme.colors.textPrimary },
               secureTextEntry && Boolean(value) && styles.textInputSecure,
             ]}
             returnKeyType={returnKeyType}
@@ -1239,13 +1427,13 @@ function CustomInputField({
               onPress={onTrailingPress}
               style={({ pressed }) => [
                 styles.trailingIconButton,
-                pressed && styles.trailingIconButtonPressed,
+                pressed && (isDark ? { backgroundColor: 'rgba(255,255,255,0.06)' } : styles.trailingIconButtonPressed),
               ]}
             >
               <Ionicons
                 name={trailingIconName}
                 size={18}
-                color={isFocused ? palette.fieldIconActive : palette.fieldIcon}
+                color={isFocused ? (isDark ? theme.colors.primary : palette.fieldIconActive) : (isDark ? theme.colors.textMuted : palette.fieldIcon)}
               />
             </Pressable>
           ) : null}
@@ -1254,13 +1442,14 @@ function CustomInputField({
       {requirements && (showRequirementsAlways || value.length > 0 || isFocused) ? (
         <RequirementChecklist requirements={requirements} hasValue={value.length > 0} />
       ) : null}
-      {!requirements && error ? <Text style={styles.inlineErrorText}>{error}</Text> : null}
+      {!requirements && error ? <Text style={[styles.inlineErrorText, isDark && { color: '#F87171' }]}>{error}</Text> : null}
       {helperText ? (
         <Text
           style={[
             styles.helperText,
-            helperTone === 'success' && styles.helperTextSuccess,
-            helperTone === 'danger' && styles.helperTextDanger,
+            isDark && { color: theme.colors.textMuted },
+            helperTone === 'success' && (isDark ? { color: '#5DDF87' } : styles.helperTextSuccess),
+            helperTone === 'danger' && (isDark ? { color: '#F87171' } : styles.helperTextDanger),
           ]}
         >
           {helperText}
@@ -1279,6 +1468,7 @@ interface AuthButtonProps {
 }
 
 function PrimaryButton({ label, onPress, disabled, loading }: AuthButtonProps) {
+  const { theme, isDark } = useTheme();
   const { scale, onPressIn, onPressOut } = usePressScale(0.985);
 
   return (
@@ -1294,14 +1484,14 @@ function PrimaryButton({ label, onPress, disabled, loading }: AuthButtonProps) {
         style={[styles.primaryButton, disabled && styles.primaryButtonDisabled]}
       >
         <View
-          style={[styles.primaryButtonGradient, { backgroundColor: palette.primary }]}
+          style={[styles.primaryButtonGradient, { backgroundColor: isDark ? theme.colors.primary : palette.primary }]}
         >
           {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={isDark ? '#0E1512' : "#FFFFFF"} />
           ) : (
             <>
-              <Text style={styles.primaryButtonText}>{label}</Text>
-              <Ionicons name="arrow-forward-outline" size={18} color="#FFFFFF" />
+              <Text style={[styles.primaryButtonText, isDark && { color: '#0E1512' }]}>{label}</Text>
+              <Ionicons name="arrow-forward-outline" size={18} color={isDark ? '#0E1512' : "#FFFFFF"} />
             </>
           )}
         </View>
@@ -1311,6 +1501,7 @@ function PrimaryButton({ label, onPress, disabled, loading }: AuthButtonProps) {
 }
 
 function SocialButton({ label, onPress, disabled, iconName }: AuthButtonProps) {
+  const { theme, isDark } = useTheme();
   const { scale, onPressIn, onPressOut } = usePressScale(0.99);
 
   return (
@@ -1322,10 +1513,15 @@ function SocialButton({ label, onPress, disabled, iconName }: AuthButtonProps) {
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         android_ripple={disabled ? undefined : { color: 'rgba(18,96,39,0.08)' }}
-        style={[styles.secondaryButton, styles.googleButton, disabled && styles.secondaryButtonDisabled]}
+        style={[
+          styles.secondaryButton, 
+          styles.googleButton, 
+          isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border },
+          disabled && styles.secondaryButtonDisabled
+        ]}
       >
         {iconName ? <Ionicons name={iconName} size={20} color="#DB4437" /> : null}
-        <Text style={styles.secondaryButtonText}>{label}</Text>
+        <Text style={[styles.secondaryButtonText, isDark && { color: theme.colors.textPrimary }]}>{label}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -1338,6 +1534,7 @@ function SecondaryButton({
   iconName,
   tone = 'outline',
 }: AuthButtonProps & { tone?: 'outline' | 'soft' }) {
+  const { theme, isDark } = useTheme();
   const { scale, onPressIn, onPressOut } = usePressScale(0.99);
 
   return (
@@ -1352,22 +1549,24 @@ function SecondaryButton({
         style={[
           styles.secondaryButton,
           tone === 'soft' ? styles.softButton : styles.outlineButton,
+          isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border },
           disabled && styles.secondaryButtonDisabled,
         ]}
       >
-        {iconName ? <Ionicons name={iconName} size={18} color={palette.primary} /> : null}
-        <Text style={styles.secondaryButtonText}>{label}</Text>
+        {iconName ? <Ionicons name={iconName} size={18} color={isDark ? theme.colors.primary : palette.primary} /> : null}
+        <Text style={[styles.secondaryButtonText, isDark && { color: theme.colors.textPrimary }]}>{label}</Text>
       </Pressable>
     </Animated.View>
   );
 }
 
 function AuthSeparator({ label }: { label: string }) {
+  const { theme, isDark } = useTheme();
   return (
     <View style={styles.separatorRow}>
-      <View style={styles.separatorLine} />
-      <Text style={styles.separatorText}>{label}</Text>
-      <View style={styles.separatorLine} />
+      <View style={[styles.separatorLine, isDark && { backgroundColor: theme.colors.border }]} />
+      <Text style={[styles.separatorText, isDark && { color: theme.colors.textMuted }]}>{label}</Text>
+      <View style={[styles.separatorLine, isDark && { backgroundColor: theme.colors.border }]} />
     </View>
   );
 }
