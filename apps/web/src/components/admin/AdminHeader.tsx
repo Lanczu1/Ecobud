@@ -51,10 +51,6 @@ export function AdminHeader({ isDark, onToggleDark }: AdminHeaderProps) {
           {isDark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
         </button>
 
-        <button className="text-gray-400 hover:text-gray-600 transition-colors relative group">
-          <Activity className="w-6 h-6 animate-shake-bell" />
-          <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white translate-x-1 -translate-y-1"></span>
-        </button>
 
         <div className="flex items-center gap-3 pl-6 border-l border-gray-100">
           <div className="text-right">
