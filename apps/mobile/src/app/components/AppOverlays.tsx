@@ -70,6 +70,7 @@ import { FireStreak } from './FireStreak';
 import { EcoLevelsOverlay } from './EcoLevelsOverlay';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const challenge = model.selectedChallenge;
   const submission = challenge?.progress?.submission;
   const isSubmissionCompleted = submission?.status === 'completed' || submission?.rewardAwarded;
@@ -237,14 +238,15 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const handleCapture = async () => {
     if (cameraRef.current) {
       try {
-        const photo = await cameraRef.current.takePictureAsync();
+        const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
         if (step === 'capture_after') {
           processAfterImage(photo.uri);
         } else {
           processImage(photo.uri);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Camera error', err);
+        Alert.alert('Camera Error', err.message || 'Failed to open camera');
       }
     }
   };
@@ -254,7 +256,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.8,
+        quality: 0.5,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         if (step === 'capture_after') {
@@ -263,8 +265,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
           processImage(result.assets[0].uri);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Gallery error', err);
+      Alert.alert('Gallery Error', err.message || 'Failed to open gallery');
     }
   };
 
@@ -295,47 +298,79 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
             <Animated.View style={{ opacity: fadeAnim, width: '100%', alignItems: 'center' }}>
               {/* Header Title with horizontal decorative lines */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20, gap: 12 }}>
-                <View style={{ width: 28, height: 3, backgroundColor: '#10B981', borderRadius: 2 }} />
-                <Text style={{ fontSize: 22, fontWeight: '800', color: '#064E3B', letterSpacing: -0.3 }}>Detection Result</Text>
-                <View style={{ width: 28, height: 3, backgroundColor: '#10B981', borderRadius: 2 }} />
+                <View style={{ width: 28, height: 3, backgroundColor: theme.colors.primary, borderRadius: 2 }} />
+                <Text style={{ fontSize: 22, fontWeight: '800', color: isDark ? theme.colors.primary : '#064E3B', letterSpacing: -0.3 }}>Detection Result</Text>
+                <View style={{ width: 28, height: 3, backgroundColor: theme.colors.primary, borderRadius: 2 }} />
               </View>
 
               {/* Detection Result Card */}
-              <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 14, marginBottom: 24, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 }}>
+              <View style={{
+                width: '100%',
+                backgroundColor: theme.colors.card,
+                borderRadius: 20,
+                paddingHorizontal: 18,
+                paddingVertical: 14,
+                marginBottom: 24,
+                borderWidth: 1,
+                borderColor: theme.colors.cardBorder,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isDark ? 0.2 : 0.04,
+                shadowRadius: 8,
+                elevation: 2
+              }}>
                 {/* Object Detected */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: '#D1FAE5' }}>
-                    <Ionicons name="water-outline" size={22} color="#059669" />
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#D1FAE5' }}>
+                    <Ionicons name="water-outline" size={22} color={isDark ? theme.colors.primary : '#059669'} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Object Detected:</Text>
-                    <Text style={{ fontSize: 17, fontWeight: '800', color: '#064E3B' }}>{mockResult.object}</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Object Detected:</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.textPrimary }}>{mockResult.object}</Text>
                   </View>
                 </View>
 
-                <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+                <View style={{ height: 1, backgroundColor: theme.colors.cardBorder }} />
 
                 {/* Confidence */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: '#D1FAE5' }}>
-                    <Ionicons name="shield-outline" size={22} color="#059669" />
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#D1FAE5' }}>
+                    <Ionicons name="shield-outline" size={22} color={isDark ? theme.colors.primary : '#059669'} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Confidence:</Text>
-                    <Text style={{ fontSize: 17, fontWeight: '800', color: '#064E3B' }}>{mockResult.confidence}%</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Confidence:</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.textPrimary }}>{mockResult.confidence}%</Text>
                   </View>
                 </View>
 
-                <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+                <View style={{ height: 1, backgroundColor: theme.colors.cardBorder }} />
 
                 {/* Status */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: mockResult.passed ? '#ECFDF5' : '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: mockResult.passed ? '#D1FAE5' : '#FEE2E2' }}>
-                    <Ionicons name={mockResult.passed ? "checkmark-circle" : "close-circle"} size={24} color={mockResult.passed ? "#059669" : "#EF4444"} />
+                  <View style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: mockResult.passed
+                      ? (isDark ? theme.colors.surfaceMuted : '#ECFDF5')
+                      : (isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2'),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 14,
+                    borderWidth: 1,
+                    borderColor: mockResult.passed
+                      ? (isDark ? theme.colors.cardBorder : '#D1FAE5')
+                      : (isDark ? 'rgba(239, 68, 68, 0.3)' : '#FEE2E2')
+                  }}>
+                    <Ionicons
+                      name={mockResult.passed ? "checkmark-circle" : "close-circle"}
+                      size={24}
+                      color={mockResult.passed ? (isDark ? theme.colors.primary : "#059669") : "#EF4444"}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Status:</Text>
-                    <Text style={{ fontSize: 17, fontWeight: '800', color: mockResult.passed ? '#059669' : '#EF4444' }}>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Status:</Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: mockResult.passed ? (isDark ? theme.colors.primary : '#059669') : '#EF4444' }}>
                       {mockResult.passed ? 'Passed' : 'Failed'}
                     </Text>
                   </View>
@@ -343,13 +378,13 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
                 {!mockResult.passed && mockResult.reason && (
                   <>
-                    <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+                    <View style={{ height: 1, backgroundColor: theme.colors.cardBorder }} />
                     <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
                         <Ionicons name="alert-circle-outline" size={22} color="#EF4444" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, color: '#6B7280', fontWeight: '500', marginBottom: 2 }}>Reason:</Text>
+                        <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Reason:</Text>
                         <Text style={{ fontSize: 15, fontWeight: '700', color: '#EF4444' }}>{mockResult.reason}</Text>
                       </View>
                     </View>
@@ -360,66 +395,96 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               {mockResult.passed && (
                 <View style={{ alignItems: 'center', marginBottom: 28, width: '100%' }}>
                   {/* Step Description */}
-                  <Text style={{ fontSize: 19, fontWeight: '800', color: '#064E3B', marginBottom: 6, textAlign: 'center' }}>Step 1: Before Photo Ready</Text>
-                  <Text style={{ fontSize: 14, color: '#4B5563', textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
-                    We detected <Text style={{ fontWeight: '800', color: '#059669' }}>{mockResult.object}</Text>. You can now submit your mission proof.
+                  <Text style={{ fontSize: 19, fontWeight: '800', color: isDark ? theme.colors.primary : '#064E3B', marginBottom: 6, textAlign: 'center' }}>Step 1: Before Photo Ready</Text>
+                  <Text style={{ fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
+                    We detected <Text style={{ fontWeight: '800', color: isDark ? theme.colors.primary : '#059669' }}>{mockResult.object}</Text>. You can now submit your mission proof.
                   </Text>
 
                   {/* Reward Card */}
-                  <View style={{ width: '100%', backgroundColor: '#F0FDF4', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 16, borderWidth: 1, borderColor: '#A7F3D0', marginBottom: 18, flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                      <Ionicons name="gift" size={28} color="#059669" />
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',
+                    borderRadius: 18,
+                    paddingHorizontal: 16,
+                    paddingVertical: 16,
+                    borderWidth: 1,
+                    borderColor: isDark ? theme.colors.cardBorder : '#A7F3D0',
+                    marginBottom: 18,
+                    flexDirection: 'row',
+                    alignItems: 'center'
+                  }}>
+                    <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: isDark ? theme.colors.surfaceMuted : '#D1FAE5', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                      <Ionicons name="gift" size={28} color={isDark ? theme.colors.primary : '#059669'} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, color: '#064E3B', fontWeight: '700', marginBottom: 6 }}>Reward upon mission completion:</Text>
+                      <Text style={{ fontSize: 13, color: isDark ? theme.colors.textPrimary : '#064E3B', fontWeight: '700', marginBottom: 6 }}>Reward upon mission completion:</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <Ionicons name="leaf" size={17} color="#10B981" />
-                        <Text style={{ fontSize: 17, color: '#059669', fontWeight: '800' }}>+{expAward} Eco Points</Text>
+                        <Ionicons name="leaf" size={17} color={theme.colors.primary} />
+                        <Text style={{ fontSize: 17, color: isDark ? theme.colors.primary : '#059669', fontWeight: '800' }}>+{expAward} Eco Points</Text>
                       </View>
                       {coinsAward > 0 && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                           <Image source={require('../../../assets/coin.png')} style={{ width: 18, height: 18, resizeMode: 'contain' }} />
-                          <Text style={{ fontSize: 17, color: '#D97706', fontWeight: '800' }}>+{coinsAward} Eco Coins</Text>
+                          <Text style={{ fontSize: 17, color: isDark ? '#FBBF24' : '#D97706', fontWeight: '800' }}>+{coinsAward} Eco Coins</Text>
                         </View>
                       )}
                     </View>
                   </View>
 
                   {/* Important Reminder Card */}
-                  <View style={{ width: '100%', backgroundColor: '#FEF9C3', borderRadius: 18, padding: 16, borderWidth: 1.5, borderColor: '#FDE047' }}>
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: isDark ? '#2A2412' : '#FEF9C3',
+                    borderRadius: 18,
+                    padding: 16,
+                    borderWidth: 1.5,
+                    borderColor: isDark ? '#854D0E' : '#FDE047'
+                  }}>
                     {/* Top Row: Warning Icon + Main Message */}
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                      <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: '#FEF08A', alignItems: 'center', justifyContent: 'center', shadowColor: '#B45309', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 }}>
-                        <Ionicons name="warning" size={28} color="#B45309" />
+                      <View style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 26,
+                        backgroundColor: isDark ? '#3D3418' : '#FEF08A',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowColor: '#B45309',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 4,
+                        elevation: 2
+                      }}>
+                        <Ionicons name="warning" size={28} color={isDark ? '#FBBF24' : '#B45309'} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 15, fontWeight: '800', color: '#78350F', marginBottom: 4 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: isDark ? '#FEF08A' : '#78350F', marginBottom: 4 }}>
                           Important Reminder!
                         </Text>
-                        <Text style={{ fontSize: 12, color: '#78350F', lineHeight: 18 }}>
-                          After preliminary admin review, bring your collectible items to the <Text style={{ fontWeight: '800', color: '#451A03' }}>{collectionPointName}</Text> to submit the final.
+                        <Text style={{ fontSize: 12, color: isDark ? '#FDE68A' : '#78350F', lineHeight: 18 }}>
+                          After preliminary admin review, bring your collectible items to the <Text style={{ fontWeight: '800', color: isDark ? '#FFFFFF' : '#451A03' }}>{collectionPointName}</Text> to submit the final After photo.
                         </Text>
-                        <Text style={{ fontSize: 12, color: '#78350F', lineHeight: 18, marginTop: 2 }}>
-                          After photo, scan the QR code to receive your rewards!
+                        <Text style={{ fontSize: 12, color: isDark ? '#FDE68A' : '#78350F', lineHeight: 18, marginTop: 2 }}>
+                          Wait for the final approval ni admin to receive your rewards!
                         </Text>
                       </View>
                     </View>
 
                     {/* Dotted Divider */}
-                    <View style={{ borderStyle: 'dashed', borderWidth: 0.8, borderColor: '#FACC15', marginVertical: 4, width: '100%' }} />
+                    <View style={{ borderStyle: 'dashed', borderWidth: 0.8, borderColor: isDark ? '#854D0E' : '#FACC15', marginVertical: 4, width: '100%' }} />
 
                     {/* Bottom Row: Barangay Collection */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 10 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 10, flexShrink: 0 }}>
-                        <Ionicons name="location-outline" size={18} color="#92400E" />
-                        <Text style={{ fontSize: 12, fontWeight: '800', color: '#78350F' }}>Barangay Center</Text>
+                        <Ionicons name="location-outline" size={18} color={isDark ? '#FBBF24' : '#92400E'} />
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? '#FEF08A' : '#78350F' }}>Barangay Center</Text>
                       </View>
 
                       {/* Vertical Divider */}
-                      <View style={{ width: 1.5, height: 38, backgroundColor: '#D97706', marginHorizontal: 8, opacity: 0.6 }} />
+                      <View style={{ width: 1.5, height: 38, backgroundColor: isDark ? '#854D0E' : '#D97706', marginHorizontal: 8, opacity: 0.6 }} />
 
                       <View style={{ flex: 1, paddingLeft: 2 }}>
-                        <Text style={{ fontSize: 11, color: '#78350F', lineHeight: 16 }}>
+                        <Text style={{ fontSize: 11, color: isDark ? '#FDE68A' : '#78350F', lineHeight: 16 }}>
                           Bring your recyclables to the barangay collection desk to verify and claim your rewards.
                         </Text>
                       </View>
@@ -436,14 +501,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   onPress={handleSubmitBeforeProof}
                   style={{
                     width: '100%',
-                    backgroundColor: '#047857',
+                    backgroundColor: isDark ? theme.colors.primary : '#047857',
                     borderRadius: 28,
                     paddingVertical: 15,
                     paddingHorizontal: 20,
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    shadowColor: '#047857',
+                    shadowColor: isDark ? theme.colors.primary : '#047857',
                     shadowOffset: { width: 0, height: 6 },
                     shadowOpacity: 0.35,
                     shadowRadius: 10,
@@ -451,11 +516,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     gap: 10,
                   }}
                 >
-                  <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
-                  <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 }}>
+                  <Ionicons name="camera-outline" size={22} color={isDark ? '#0E1512' : '#FFFFFF'} />
+                  <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 }}>
                     {processing ? "Submitting..." : "Submit Before Photo"}
                   </Text>
-                  <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                  <Ionicons name="chevron-forward" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} style={{ marginLeft: 2 }} />
                 </TouchableOpacity>
               ) : (
                 <PrimaryButton label="Try Again" onPress={handleTryAgain} />
@@ -528,23 +593,23 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       <OverlayScaffold title="AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
         <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
           <Animated.View style={{ opacity: fadeAnim }}>
-            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#126027', marginBottom: 24 }}>{challenge.title}</Text>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027', marginBottom: 24 }}>{challenge.title}</Text>
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
               <View>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Difficulty:</Text>
-                <Text style={{ fontSize: 16, color: '#6B7A75' }}>{challenge.difficulty}</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Difficulty:</Text>
+                <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>{challenge.difficulty}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Rewards / Item:</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Rewards / Item:</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                  <Ionicons name="leaf" size={14} color="#10B981" />
-                  <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.expReward} Eco Points</Text>
+                  <Ionicons name="leaf" size={14} color={theme.colors.primary} />
+                  <Text style={{ fontSize: 16, color: theme.colors.primary, fontWeight: '600' }}>{challenge.expReward} Eco Points</Text>
                 </View>
                 {challenge.ecoCoinReward > 0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Image source={require('../../../assets/coin.png')} style={{ width: 16, height: 16, resizeMode: 'contain' }} />
-                    <Text style={{ fontSize: 16, color: '#10B981', fontWeight: '600' }}>{challenge.ecoCoinReward} Eco Coins</Text>
+                    <Text style={{ fontSize: 16, color: isDark ? '#FBBF24' : '#10B981', fontWeight: '600' }}>{challenge.ecoCoinReward} Eco Coins</Text>
                   </View>
                 )}
               </View>
@@ -552,8 +617,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
               <View>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Collection Point:</Text>
-                <Text style={{ fontSize: 14, color: '#6B7A75', maxWidth: 180 }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Collection Point:</Text>
+                <Text style={{ fontSize: 14, color: theme.colors.textMuted, maxWidth: 180 }}>
                   {collectionPointName}
                 </Text>
               </View>
@@ -561,38 +626,38 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
               <View>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Targets:</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Targets:</Text>
                 {challenge.aiDetectionTargets?.map(target => (
                   <View key={target} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Ionicons name="checkmark-circle-outline" size={15} color="#166534" />
-                    <Text style={{ fontSize: 16, color: '#6B7A75' }}>{target}</Text>
+                    <Ionicons name="checkmark-circle-outline" size={15} color={isDark ? theme.colors.primary : '#166534'} />
+                    <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>{target}</Text>
                   </View>
                 ))}
                 {(!challenge.aiDetectionTargets || challenge.aiDetectionTargets.length === 0) && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Ionicons name="checkmark-circle-outline" size={15} color="#166534" />
-                    <Text style={{ fontSize: 16, color: '#6B7A75' }}>Plastic Bottle</Text>
+                    <Ionicons name="checkmark-circle-outline" size={15} color={isDark ? theme.colors.primary : '#166534'} />
+                    <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>Plastic Bottle</Text>
                   </View>
                 )}
               </View>
 
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Minimum Confidence:</Text>
-                <Text style={{ fontSize: 16, color: '#6B7A75' }}>80%</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Minimum Confidence:</Text>
+                <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>80%</Text>
               </View>
             </View>
 
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 8 }}>Mission Workflow:</Text>
-            <Text style={{ fontSize: 14, color: '#6B7A75', marginBottom: 16, lineHeight: 22 }}>
-              1. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Before Picture (User)</Text>: Capture items with AI waste recognition.{'\n'}
-              2. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Manual Review (Admin)</Text>: Preliminary review & approval of your submitted items.{'\n'}
-              3. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Accept Mission</Text>: Receive approval to proceed with the drop-off.{'\n'}
-              4. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Barangay Drop-off</Text>: Bring the approved recyclable items to {collectionPointName}.{'\n'}
-              5. <Text style={{ fontWeight: 'bold', color: '#166534' }}>After Picture</Text>: Take and upload a photo at the drop-off location.{'\n'}
-              6. <Text style={{ fontWeight: 'bold', color: '#166534' }}>Final Approval (Admin)</Text>: Final verification to release your Eco Points & Coins!
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Mission Workflow:</Text>
+            <Text style={{ fontSize: 14, color: theme.colors.textSecondary, marginBottom: 16, lineHeight: 22 }}>
+              1. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Before Picture (User)</Text>: Capture items with AI waste recognition.{'\n'}
+              2. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Manual Review (Admin)</Text>: Preliminary review & approval of your submitted items.{'\n'}
+              3. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Accept Mission</Text>: Receive approval to proceed with the drop-off.{'\n'}
+              4. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Barangay Drop-off</Text>: Bring the approved recyclable items to {collectionPointName}.{'\n'}
+              5. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>After Picture</Text>: Take and upload a photo at the drop-off location.{'\n'}
+              6. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Final Approval (Admin)</Text>: Final verification to release your Eco Points & Coins!
             </Text>
 
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#3A4B43', marginBottom: 16 }}>Sample Images</Text>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 16 }}>Sample Images</Text>
             <View style={{ marginBottom: 32, marginHorizontal: -24 }}>
               <Image source={require('../../../assets/caw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
             </View>
@@ -601,12 +666,19 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               !submission?.afterProofUrl ? (
                 <PrimaryButton label="Take After Photo" onPress={() => setStep('capture_after')} />
               ) : (
-                <View style={{ backgroundColor: '#F0FDF4', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#BBF7D0', alignItems: 'center' }}>
-                  <Ionicons name="time-outline" size={24} color="#166534" style={{ marginBottom: 6 }} />
-                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#166534', textAlign: 'center', marginBottom: 4 }}>
+                <View style={{
+                  backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',
+                  padding: 16,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0',
+                  alignItems: 'center'
+                }}>
+                  <Ionicons name="time-outline" size={24} color={isDark ? theme.colors.primary : '#166534'} style={{ marginBottom: 6 }} />
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534', textAlign: 'center', marginBottom: 4 }}>
                     After Photo Submitted
                   </Text>
-                  <Text style={{ fontSize: 13, color: '#15803D', textAlign: 'center', lineHeight: 18 }}>
+                  <Text style={{ fontSize: 13, color: isDark ? theme.colors.textSecondary : '#15803D', textAlign: 'center', lineHeight: 18 }}>
                     Your submission is awaiting final admin review. Once approved, you can claim your rewards in the History tab!
                   </Text>
                 </View>
@@ -795,16 +867,17 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function NotificationsOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   return (
-    <View style={styles.fullscreenOverlay}>
+    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
       <ScrollView contentContainerStyle={styles.homeContent}>
-        <Text style={styles.welcomeLabel}>NOTIFICATIONS</Text>
-        <Text style={styles.pageTitle}>Notifications</Text>
+        <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>NOTIFICATIONS</Text>
+        <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Notifications</Text>
         <View style={{ marginTop: 40, alignItems: 'center' }}>
-          <Ionicons name="notifications-off-outline" size={64} color="#D1D5DB" />
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#9CA3AF', marginTop: 16 }}>Under Development</Text>
-          <Text style={{ fontSize: 13, color: '#D1D5DB', marginTop: 6, textAlign: 'center', paddingHorizontal: 40 }}>
+          <Ionicons name="notifications-off-outline" size={64} color={isDark ? theme.colors.icon : "#D1D5DB"} />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: isDark ? theme.colors.textPrimary : '#9CA3AF', marginTop: 16 }}>Under Development</Text>
+          <Text style={{ fontSize: 13, color: isDark ? theme.colors.textSecondary : '#D1D5DB', marginTop: 6, textAlign: 'center', paddingHorizontal: 40 }}>
             This feature is coming soon. Stay tuned for updates!
           </Text>
         </View>
@@ -1760,7 +1833,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         />
       )}
       <RejectionModal
-visible={rejectionModal.visible}
+        visible={rejectionModal.visible}
         title="Attendance Rejected"
         reason={rejectionModal.reason}
         onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
@@ -1773,6 +1846,7 @@ visible={rejectionModal.visible}
 }
 
 export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
   const pageAnim = React.useRef(new Animated.Value(1)).current;
 
@@ -1919,31 +1993,26 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
         if (targetTime > 0) {
           player.currentTime = targetTime;
-          maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, targetTime);
-          lastKnownPlayerTimeRef.current = targetTime;
+          maxWatchedTimeRef.current = targetTime;
         }
         initialSeekDoneForLessonRef.current = model.selectedLesson.id;
       }
     }
   });
 
-  // High-frequency polling interval (150ms) to ensure video cannot be fast-forwarded / skipped ahead
   React.useEffect(() => {
     const timer = setInterval(() => {
       try {
-        if (!player) return;
+        const isPlaying = player.playing;
         const curTime = player.currentTime;
         const curDuration = player.duration;
 
-        if (curDuration && curDuration > 0) {
-          // If the user tries to fast-forward beyond what they have already watched (+1.5s tolerance for normal play)
+        if (isPlaying && curDuration > 0) {
           if (curTime > maxWatchedTimeRef.current + 1.5) {
-            // Immediately bounce back to where they actually reached
             player.currentTime = maxWatchedTimeRef.current;
             return;
           }
 
-          // Advance maxWatchedTime only on natural continuous playback
           if (curTime > maxWatchedTimeRef.current) {
             maxWatchedTimeRef.current = curTime;
           }
@@ -2067,20 +2136,33 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           <>
             <SurfaceCard style={styles.lessonDetailCard}>
               <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>{model.selectedLesson.title}</Text>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{model.selectedLesson.title}</Text>
                 <TinyBadge label={`${displayProgress}%`} />
               </View>
-              <Text style={styles.sectionCaption}>{model.selectedLesson.description}</Text>
+              <Text style={[styles.sectionCaption, { color: theme.colors.textMuted }]}>{model.selectedLesson.description}</Text>
               
               {model.selectedLesson.durationMinutes ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#E6F4EC', borderRadius: 8, alignSelf: 'flex-start', gap: 4 }}>
-                  <Ionicons name="time-outline" size={14} color="#126027" />
-                  <Text style={{ fontSize: 13, color: '#126027', fontWeight: '700' }}>{model.selectedLesson.durationMinutes} minutes</Text>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginTop: 12,
+                  marginBottom: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  backgroundColor: isDark ? theme.colors.surfaceMuted : '#E6F4EC',
+                  borderRadius: 8,
+                  alignSelf: 'flex-start',
+                  gap: 4
+                }}>
+                  <Ionicons name="time-outline" size={14} color={isDark ? theme.colors.primary : '#126027'} />
+                  <Text style={{ fontSize: 13, color: isDark ? theme.colors.primary : '#126027', fontWeight: '700' }}>
+                    {model.selectedLesson.durationMinutes} minutes
+                  </Text>
                 </View>
               ) : null}
 
               {model.selectedLesson.content ? (
-                <View style={{ marginTop: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#E8F0EA' }}>
+                <View style={{ marginTop: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: theme.colors.cardBorder }}>
                   {model.selectedLesson.content.split('\n').map((paragraph, index) => {
                     if (!paragraph.trim()) return null;
                     const isHeading = paragraph.trim().startsWith('#');
@@ -2090,7 +2172,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                         fontSize: isHeading ? 20 : 16,
                         fontWeight: isHeading ? '800' : '400',
                         lineHeight: isHeading ? 28 : 24,
-                        color: isHeading ? '#126027' : '#3A4B43',
+                        color: isHeading ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textSecondary,
                         marginBottom: isHeading ? 16 : 12,
                         marginTop: isHeading && index > 0 ? 12 : 0
                       }}>
@@ -2112,15 +2194,19 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
               ) : null}
               {model.selectedLesson.pages && model.selectedLesson.pages.length > 0 ? (
                 <Animated.View style={{
-                  marginTop: 24, backgroundColor: '#FAFCFB', padding: 20,
-                  borderRadius: 16, borderWidth: 1, borderColor: '#E8F0EA',
+                  marginTop: 24,
+                  backgroundColor: isDark ? theme.colors.surface : '#FAFCFB',
+                  padding: 20,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: theme.colors.cardBorder,
                   opacity: pageAnim,
                   transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
                 }}>
-                  <Text style={[styles.lessonBodyText, { marginTop: 0 }]}>
+                  <Text style={[styles.lessonBodyText, { marginTop: 0, color: theme.colors.textPrimary }]}>
                     {model.selectedLesson.pages[currentPageIndex].content}
                   </Text>
-                  <Text style={{ textAlign: 'center', marginTop: 16, color: '#6B7A75', fontSize: 13, fontWeight: '600' }}>
+                  <Text style={{ textAlign: 'center', marginTop: 16, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
                     Page {currentPageIndex + 1} of {model.selectedLesson.pages.length}
                   </Text>
                 </Animated.View>
@@ -2128,25 +2214,25 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
               {model.selectedLesson.transcript ? (
                 <View style={{
-                  backgroundColor: '#F8FAF9',
+                  backgroundColor: isDark ? theme.colors.surface : '#F8FAF9',
                   padding: 20,
                   borderRadius: 16,
                   marginTop: 24,
                   borderWidth: 1,
-                  borderColor: '#E8F0EA',
+                  borderColor: theme.colors.cardBorder,
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#E8F0EA', justifyContent: 'center', alignItems: 'center' }}>
-                      <Ionicons name="document-text" size={14} color="#126027" />
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F0EA', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="document-text" size={14} color={isDark ? theme.colors.primary : '#126027'} />
                     </View>
-                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#126027', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: isDark ? theme.colors.primary : '#126027', letterSpacing: 0.8, textTransform: 'uppercase' }}>
                       Video Transcript
                     </Text>
                   </View>
                   <View style={{
                     marginTop: 8,
                     borderLeftWidth: 3,
-                    borderLeftColor: '#4ade80',
+                    borderLeftColor: theme.colors.primary,
                     paddingLeft: 16
                   }}>
                     {model.selectedLesson.transcript.split('\n').map((paragraph, index) => {
@@ -2155,7 +2241,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                         <Text key={index} style={{
                           fontSize: 15,
                           lineHeight: 26,
-                          color: '#3A4B43',
+                          color: theme.colors.textSecondary,
                           marginBottom: 10,
                           letterSpacing: 0.3
                         }}>
@@ -2177,7 +2263,19 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         displayProgress >= (model.selectedLesson.hasQuiz ? 80 : 90) ||
         model.selectedLesson.status === 'completed'
       ) && (
-          <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F0F5F2', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 10 }}>
+          <View style={{
+            paddingHorizontal: 24,
+            paddingTop: 16,
+            paddingBottom: 40,
+            backgroundColor: theme.colors.card,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.cardBorder,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: isDark ? 0.3 : 0.05,
+            shadowRadius: 12,
+            elevation: 10
+          }}>
             {model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1 ? (
               <PrimaryButton
                 label="Next Page"
@@ -2204,6 +2302,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const currentQuestion = model.quizQuestions[model.currentQuestionIndex];
   const totalQuestions = model.quizQuestions.length;
   const progress = totalQuestions > 0 ? ((model.currentQuestionIndex + 1) / totalQuestions) * 100 : 0;
@@ -2232,10 +2331,10 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
                   {model.quizScore}%
                 </Text>
               </View>
-              <Text style={[styles.cardTitle, { textAlign: 'center', marginBottom: 8 }]}>
+              <Text style={[styles.cardTitle, { textAlign: 'center', marginBottom: 8, color: theme.colors.textPrimary }]}>
                 {model.quizScore >= 70 ? 'Congratulations!' : 'Keep Learning!'}
               </Text>
-              <Text style={[styles.sectionCaption, { textAlign: 'center' }]}>
+              <Text style={[styles.sectionCaption, { textAlign: 'center', color: theme.colors.textMuted }]}>
                 {model.quizScore >= 70
                   ? 'You passed the quiz and completed the lesson. Great job!'
                   : 'You need at least 70% to pass. Review the lesson and try again.'}
@@ -2271,13 +2370,19 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
         <ScrollView contentContainerStyle={styles.overlayScroll}>
           <SurfaceCard style={styles.lessonDetailCard}>
             <View style={{ alignItems: 'center', paddingVertical: 32 }}>
-              <View style={[styles.badgeCircleMedium, { width: 64, height: 64, borderRadius: 32, marginBottom: 16, backgroundColor: '#E8F0EA' }]}>
-                <Ionicons name="help-circle-outline" size={32} color="#126027" />
+              <View style={[styles.badgeCircleMedium, {
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                marginBottom: 16,
+                backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F0EA'
+              }]}>
+                <Ionicons name="help-circle-outline" size={32} color={isDark ? theme.colors.primary : '#126027'} />
               </View>
-              <Text style={[styles.cardTitle, { textAlign: 'center', marginBottom: 8 }]}>
+              <Text style={[styles.cardTitle, { textAlign: 'center', marginBottom: 8, color: theme.colors.textPrimary }]}>
                 No Quiz Questions
               </Text>
-              <Text style={[styles.sectionCaption, { textAlign: 'center' }]}>
+              <Text style={[styles.sectionCaption, { textAlign: 'center', color: theme.colors.textMuted }]}>
                 This lesson does not have any quiz questions yet. You can complete the lesson directly.
               </Text>
             </View>
@@ -2320,10 +2425,10 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
       <ScrollView contentContainerStyle={styles.overlayScroll}>
         <SurfaceCard style={styles.lessonDetailCard}>
           <View style={{ marginBottom: 16 }}>
-            <Text style={[styles.sectionCaption, { marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }]}>
+            <Text style={[styles.sectionCaption, { marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, color: isDark ? theme.colors.primary : '#126027' }]}>
               Question {model.currentQuestionIndex + 1}
             </Text>
-            <Text style={[styles.cardTitle, { fontSize: 18, lineHeight: 26 }]}>
+            <Text style={[styles.cardTitle, { fontSize: 18, lineHeight: 26, color: theme.colors.textPrimary }]}>
               {currentQuestion.question}
             </Text>
           </View>
@@ -2341,8 +2446,12 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
                     padding: 16,
                     borderRadius: 12,
                     borderWidth: 2,
-                    borderColor: isSelected ? '#126027' : '#E8F0EA',
-                    backgroundColor: isSelected ? '#F0FFF4' : '#FFFFFF',
+                    borderColor: isSelected
+                      ? (isDark ? theme.colors.primary : '#126027')
+                      : theme.colors.cardBorder,
+                    backgroundColor: isSelected
+                      ? (isDark ? theme.colors.surfaceMuted : '#F0FFF4')
+                      : (isDark ? theme.colors.surface : '#FFFFFF'),
                   }}
                   onPress={() => model.selectAnswer(currentQuestion.id, optionLabel)}
                 >
@@ -2352,20 +2461,26 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
                       height: 32,
                       borderRadius: 16,
                       borderWidth: 2,
-                      borderColor: isSelected ? '#126027' : '#C8D8CE',
-                      backgroundColor: isSelected ? '#126027' : 'transparent',
+                      borderColor: isSelected
+                        ? (isDark ? theme.colors.primary : '#126027')
+                        : (isDark ? theme.colors.cardBorder : '#C8D8CE'),
+                      backgroundColor: isSelected
+                        ? (isDark ? theme.colors.primary : '#126027')
+                        : 'transparent',
                       justifyContent: 'center',
                       alignItems: 'center',
                     }}>
                       <Text style={{
                         fontSize: 14,
                         fontWeight: '700',
-                        color: isSelected ? '#FFF' : '#6B7A75',
+                        color: isSelected
+                          ? (isDark ? '#0E1512' : '#FFF')
+                          : theme.colors.textMuted,
                       }}>
                         {optionLabel}
                       </Text>
                     </View>
-                    <Text style={{ fontSize: 16, color: '#3A4B43', flex: 1 }}>
+                    <Text style={{ fontSize: 16, color: theme.colors.textPrimary, flex: 1 }}>
                       {optionText}
                     </Text>
                   </View>
@@ -2376,7 +2491,19 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
         </SurfaceCard>
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F0F5F2', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 10 }}>
+      <View style={{
+        paddingHorizontal: 24,
+        paddingTop: 16,
+        paddingBottom: 40,
+        backgroundColor: theme.colors.card,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.cardBorder,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: isDark ? 0.3 : 0.05,
+        shadowRadius: 12,
+        elevation: 10
+      }}>
         {model.currentQuestionIndex < totalQuestions - 1 ? (
           <PrimaryButton
             label="Next Question"
@@ -5130,7 +5257,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
-  const { theme, isDark, setThemeMode } = useTheme();
+  const { theme, isDark, themeMode, setThemeMode } = useTheme();
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
@@ -5201,14 +5328,14 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
                   paddingHorizontal: 10,
                   paddingVertical: 6,
                   borderRadius: 16,
-                  backgroundColor: !isDark ? '#126027' : 'transparent',
+                  backgroundColor: themeMode === 'light' ? '#126027' : 'transparent',
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 3,
                 }}
               >
-                <Ionicons name="sunny" size={13} color={!isDark ? '#FFF' : theme.colors.textMuted} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: !isDark ? '#FFF' : theme.colors.textMuted }}>Light</Text>
+                <Ionicons name="sunny" size={13} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'light' ? '#FFF' : theme.colors.textMuted }}>Light</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setThemeMode('dark')}
@@ -5217,14 +5344,30 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
                   paddingHorizontal: 10,
                   paddingVertical: 6,
                   borderRadius: 16,
-                  backgroundColor: isDark ? theme.colors.primary : 'transparent',
+                  backgroundColor: themeMode === 'dark' ? theme.colors.primary : 'transparent',
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 3,
                 }}
               >
-                <Ionicons name="moon" size={13} color={isDark ? '#0E1512' : theme.colors.textMuted} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+                <Ionicons name="moon" size={13} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setThemeMode('onyx')}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  backgroundColor: themeMode === 'onyx' ? '#FFF' : 'transparent',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <Ionicons name="moon-outline" size={13} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
               </TouchableOpacity>
             </View>
           </SurfaceCard>

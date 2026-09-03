@@ -543,10 +543,29 @@ export class AdminService {
     };
   }
 
-  static async getSubmissions() {
+  static async getSubmissions(filterBarangay?: string | null) {
     await expireStaleSubmissions();
 
+    const normalizedBarangay = filterBarangay?.trim();
+
+    const challengeWhere: any = {};
+    const eventWhere: any = {};
+
+    if (normalizedBarangay && normalizedBarangay !== 'All') {
+      challengeWhere.user = {
+        profile: {
+          city: normalizedBarangay,
+        },
+      };
+      eventWhere.user = {
+        profile: {
+          city: normalizedBarangay,
+        },
+      };
+    }
+
     const challengeSubs = await prisma.challengeSubmission.findMany({
+      where: challengeWhere,
       orderBy: { createdAt: 'desc' },
       include: {
         user: {
@@ -561,6 +580,7 @@ export class AdminService {
     });
 
     const eventSubs = await prisma.eventSubmission.findMany({
+      where: eventWhere,
       orderBy: { submittedAt: 'desc' },
       include: {
         user: {
@@ -610,16 +630,33 @@ export class AdminService {
     return unified;
   }
 
-  static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string) {
+  static async reviewSubmission(
+    id: string,
+    reviewerId: string,
+    status: 'approved' | 'rejected' | 'approved_collection',
+    notes?: string,
+    reviewerContext?: { role: string; city?: string | null },
+  ) {
     const challengeSub = await prisma.challengeSubmission.findUnique({ 
       where: { id },
       include: {
         challengeInstance: { include: { challenge: true } },
-        user: true
+        user: {
+          include: {
+            profile: true,
+          },
+        },
       }
     });
     
     if (challengeSub) {
+      if (reviewerContext && reviewerContext.role === 'moderator') {
+        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
+        const submissionBarangay = challengeSub.user.profile?.city?.trim().toLowerCase();
+        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
+          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
+        }
+      }
       const challenge = challengeSub.challengeInstance?.challenge;
 
       // Handle preliminary approval (approved_collection)
@@ -792,8 +829,24 @@ export class AdminService {
       return submission;
     }
 
-    const eventSub = await prisma.eventSubmission.findUnique({ where: { id } });
+    const eventSub = await prisma.eventSubmission.findUnique({
+      where: { id },
+      include: {
+        user: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    });
     if (eventSub) {
+      if (reviewerContext && reviewerContext.role === 'moderator') {
+        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
+        const submissionBarangay = eventSub.user.profile?.city?.trim().toLowerCase();
+        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
+          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
+        }
+      }
       const eventStatus = status === 'approved' ? 'approved' : 'rejected';
       const submission = await prisma.eventSubmission.update({
         where: { id },
@@ -863,15 +916,38 @@ export class AdminService {
     throw new Error('Submission not found');
   }
 
-  static async deleteSubmission(id: string) {
+  static async deleteSubmission(id: string, reviewerContext?: { role: string; city?: string | null }) {
+    if (reviewerContext && reviewerContext.role === 'moderator') {
+      const challengeSub = await prisma.challengeSubmission.findUnique({
+        where: { id },
+        include: { user: { include: { profile: true } } },
+      });
+      if (challengeSub) {
+        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
+        const submissionBarangay = challengeSub.user.profile?.city?.trim().toLowerCase();
+        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
+          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
+        }
+      }
+    }
     return await prisma.challengeSubmission.delete({
       where: { id },
     });
   }
 
-  static async deleteEventSubmission(id: string) {
-    const sub = await prisma.eventSubmission.findUnique({ where: { id } });
+  static async deleteEventSubmission(id: string, reviewerContext?: { role: string; city?: string | null }) {
+    const sub = await prisma.eventSubmission.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
     if (sub) {
+      if (reviewerContext && reviewerContext.role === 'moderator') {
+        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
+        const submissionBarangay = sub.user?.profile?.city?.trim().toLowerCase();
+        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
+          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
+        }
+      }
       await prisma.eventRegistration.updateMany({
         where: { userId: sub.userId, eventId: sub.eventId, status: 'PENDING_APPROVAL' },
         data: { status: 'REGISTERED' }

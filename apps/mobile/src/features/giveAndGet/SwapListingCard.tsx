@@ -16,16 +16,10 @@ import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapListing } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
+import { resolveMediaUrl } from '../../app/utils/appUtils';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
-  if (!url) return undefined;
-  let cleanUrl = url.replace(/\\/g, '/');
-  if (cleanUrl.includes('localhost:3000')) {
-    cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-  } else if (!cleanUrl.startsWith('http')) {
-    cleanUrl = `${ecobudApiOrigin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
-  }
-  return cleanUrl;
+  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
 }
 
 function getInitials(name: string): string {
@@ -299,19 +293,51 @@ function SwapListingCardComponent({
 }
 
 export function SwapListingSkeleton() {
+  const { theme, isDark } = useTheme();
+  const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+  const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
+
+  React.useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.95 : 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.5 : 0.55,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulseAnim, isDark]);
+
   return (
-    <View style={[localStyles.card, { opacity: 0.6 }]}>
-      <View style={[localStyles.cardImage, { backgroundColor: '#E4E9E6' }]} />
+    <Animated.View
+      style={[
+        localStyles.card,
+        {
+          backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+          borderColor: isDark ? theme.colors.cardBorder : '#E4F0E8',
+          opacity: pulseAnim,
+        },
+      ]}
+    >
+      <View style={[localStyles.cardImage, { backgroundColor: boneBg }]} />
       <View style={localStyles.cardBody}>
-        <View style={{ height: 14, width: 60, borderRadius: 7, backgroundColor: '#E4E9E6', marginBottom: 8 }} />
-        <View style={{ height: 18, width: '70%', borderRadius: 9, backgroundColor: '#E4E9E6', marginBottom: 10 }} />
-        <View style={{ height: 14, width: '90%', borderRadius: 7, backgroundColor: '#E4E9E6', marginBottom: 12 }} />
+        <View style={{ height: 14, width: 60, borderRadius: 7, backgroundColor: boneBg, marginBottom: 8 }} />
+        <View style={{ height: 18, width: '70%', borderRadius: 9, backgroundColor: boneBg, marginBottom: 10 }} />
+        <View style={{ height: 14, width: '90%', borderRadius: 7, backgroundColor: boneBg, marginBottom: 12 }} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <View style={{ height: 28, width: 80, borderRadius: 14, backgroundColor: '#E4E9E6' }} />
-          <View style={{ height: 28, width: 80, borderRadius: 14, backgroundColor: '#E4E9E6' }} />
+          <View style={{ height: 28, width: 80, borderRadius: 14, backgroundColor: boneBg }} />
+          <View style={{ height: 28, width: 80, borderRadius: 14, backgroundColor: boneBg }} />
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

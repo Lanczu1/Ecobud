@@ -411,42 +411,47 @@ export function CoachMarksOverlay({
 
   const targetBorderRadius = resolvedTarget.borderRadius ?? moderateScale(16);
 
-  // Dynamic responsive tooltip positioning
   // Calculate available space above and below the target card within Safe Area
   const safeTop = insets.top || verticalScale(20);
   const safeBottom = height - (insets.bottom || verticalScale(20));
   const estimatedTooltipHeight = verticalScale(195);
 
-  const spaceAbove = resolvedTarget.y - safeTop;
-  const spaceBelow = safeBottom - (resolvedTarget.y + resolvedTarget.height);
-
-  // For Step 4 (and any step with ample space above), prioritize placing above the target
-  // If space above fits the coachmark, place above; otherwise fallback to below
-  const placeTooltipBelow = spaceAbove < estimatedTooltipHeight && spaceBelow >= estimatedTooltipHeight;
-
-  const tooltipTop = placeTooltipBelow
-    ? resolvedTarget.y + resolvedTarget.height + verticalScale(14)
-    : Math.max(safeTop + verticalScale(8), resolvedTarget.y - estimatedTooltipHeight - verticalScale(16));
-
-  // Mascot dynamic positioning relative to tooltip and target
-  // For Step 2, Step 4, Step 5 & Step 6: place mascot at the bottom-right of the spotlight target pointing left directly into it
   const isStep2 = currentStepData.stepNumber === 2;
   const isStep4 = currentStepData.stepNumber === 4;
   const isStep5 = currentStepData.stepNumber === 5;
   const isStep6 = currentStepData.stepNumber === 6;
   const isTargetBottomRight = isStep2 || isStep4 || isStep5 || isStep6;
 
-  const mascotTop = isStep2
-    ? resolvedTarget.y + resolvedTarget.height - mascotSize * 0.40
-    : isStep4 || isStep5 || isStep6
-      ? resolvedTarget.y + resolvedTarget.height - mascotSize * 0.45
-      : placeTooltipBelow
-        ? Math.max(0, resolvedTarget.y + resolvedTarget.height - verticalScale(50))
-        : Math.max(safeTop, tooltipTop + verticalScale(30));
+  const spaceAbove = resolvedTarget.y - safeTop;
+  const spaceBelow = safeBottom - (resolvedTarget.y + resolvedTarget.height);
 
-  const mascotRight = isTargetBottomRight
-    ? Math.max(scale(6), width - (resolvedTarget.x + resolvedTarget.width) - scale(16))
-    : Math.max(scale(0), (width - Math.min(width - scale(32), 480)) / 2 - scale(45));
+  // For Steps 2, 4, 5, and 6, we want to put the mascot right below the target, so we need more space below
+  const effectiveTooltipSpace = isTargetBottomRight ? estimatedTooltipHeight + mascotSize - verticalScale(20) : estimatedTooltipHeight;
+  const placeTooltipBelow = spaceAbove < effectiveTooltipSpace && spaceBelow >= effectiveTooltipSpace;
+
+  const tooltipTop = placeTooltipBelow
+    ? resolvedTarget.y + resolvedTarget.height + (isTargetBottomRight ? mascotSize - verticalScale(15) : verticalScale(14))
+    : Math.max(safeTop + verticalScale(8), resolvedTarget.y - estimatedTooltipHeight - verticalScale(16));
+
+  // Place mascot so it stands clearly above or below the tooltip, avoiding the target cutout completely
+  // For Steps 2, 4, 5, and 6, place it cleanly just below the right side of the target hole
+  // Clamped to screen bounds to ensure it's always visible on smaller devices ("hindi na kita" fix)
+  const mascotTop = isTargetBottomRight
+    ? resolvedTarget.y + resolvedTarget.height + verticalScale(4) // Right below the target hole
+    : placeTooltipBelow
+      ? Math.min(tooltipTop + estimatedTooltipHeight + verticalScale(4), height - mascotSize - verticalScale(10))
+      : Math.max(safeTop + verticalScale(4), tooltipTop - mascotSize - verticalScale(4));
+
+  const cardWidthForMascot = Math.min(width - scale(32), 480);
+  const cardLeftForMascot = (width - cardWidthForMascot) / 2;
+
+  const mascotRight = currentStepData.mascotPosition === 'right'
+    ? cardLeftForMascot
+    : undefined;
+  
+  const mascotLeft = currentStepData.mascotPosition === 'left'
+    ? cardLeftForMascot
+    : undefined;
 
   return (
     <Animated.View style={[styles.backdropHost, { opacity: overlayFade }]} pointerEvents="auto">
@@ -506,15 +511,15 @@ export function CoachMarksOverlay({
             );
           })()}
 
-          {/* Layer 4: ECOBUD Mascot – positioned dynamically beside coachmark pointing toward target */}
+          {/* Layer 4: ECOBUD Mascot – positioned cleanly relative to tooltip */}
           <Animated.View
             pointerEvents="none"
             style={[
               styles.spotlightMascotWrap,
               {
                 top: mascotTop,
-                right: currentStepData.mascotPosition === 'left' ? undefined : mascotRight,
-                left: currentStepData.mascotPosition === 'left' ? Math.max(scale(6), resolvedTarget.x - scale(10)) : undefined,
+                right: mascotRight,
+                left: currentStepData.mascotPosition === 'center' ? (width - mascotSize) / 2 : mascotLeft,
                 transform: [{ translateX: mascotSlide }],
               },
             ]}
@@ -653,7 +658,7 @@ export function CoachMarksOverlay({
                     getMascotAlignStyle() as any,
                     {
                       transform: [{ translateX: mascotSlide }],
-                      marginBottom: verticalScale(-25),
+                      marginBottom: verticalScale(10),
                       zIndex: 20,
                     },
                   ]}
@@ -765,11 +770,10 @@ export function CoachMarksOverlay({
                     getMascotAlignStyle() as any,
                     currentStepData.cardVerticalAlign === 'center'
                       ? {
-                        position: 'absolute',
-                        bottom: verticalScale(-85),
-                        zIndex: 25,
-                      }
-                      : {},
+                          marginTop: verticalScale(16),
+                          zIndex: 25,
+                        }
+                      : { marginTop: verticalScale(10) },
                     { transform: [{ translateX: mascotSlide }] },
                   ]}
                   pointerEvents="none"
@@ -783,8 +787,8 @@ export function CoachMarksOverlay({
                     cacheComposition={true}
                     hardwareAccelerationAndroid={true}
                     style={{
-                      width: currentStepData.cardVerticalAlign === 'center' ? mascotSize * 0.9 : mascotSize,
-                      height: currentStepData.cardVerticalAlign === 'center' ? mascotSize * 0.9 : mascotSize,
+                      width: mascotSize,
+                      height: mascotSize,
                     }}
                   />
                 </Animated.View>

@@ -4,7 +4,7 @@ import {
   Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
   Loader2, UploadCloud, Power, Star, XCircle, ShieldCheck, 
   ChevronDown, ChevronRight, User, Layers, Filter, 
-  RefreshCw, CheckCircle2, Clock, MapPin
+  RefreshCw, CheckCircle2, Clock, MapPin, Lock
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -239,7 +239,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
                     <img src={form.imageUrl.startsWith('http') ? form.imageUrl : `${API_HOST}${form.imageUrl}`} alt="Challenge" className="w-full h-full object-cover" />
                     <button type="button" onClick={async () => {
                         if (form.imageUrl) {
-                          try { await adminPost('/admin/upload/delete', { url: form.imageUrl }); } catch (e) { console.error('Failed to delete image', e); }
+                          try { await adminPost('/admin/upload/delete', { url: form.imageUrl }); } catch (e: any) { console.error('Failed to delete image', e); alert(`Failed to delete image: ${e.message || e}`); }
                         }
                         setForm(f => ({ ...f, imageUrl: '' }));
                       }} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70">
@@ -395,15 +395,39 @@ export function Challenges() {
   const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>('challenges');
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const userJson = localStorage.getItem('ecobud_admin_user');
+  const loggedInUser = useMemo(() => {
+    if (!userJson) return null;
+    try {
+      return JSON.parse(userJson);
+    } catch {
+      return null;
+    }
+  }, [userJson]);
+
+  const isModerator = loggedInUser?.role === 'moderator';
+  const moderatorBarangay = loggedInUser?.city || loggedInUser?.profile?.city || null;
+
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
   const [selectedUserIdFilter, setSelectedUserIdFilter] = useState<string>('All');
-  const [selectedBarangayFilter, setSelectedBarangayFilter] = useState<string>('All');
+  const [selectedBarangayFilter, setSelectedBarangayFilter] = useState<string>(() => {
+    if (isModerator && moderatorBarangay) {
+      return moderatorBarangay;
+    }
+    return 'All';
+  });
   const [collapsedBarangays, setCollapsedBarangays] = useState<Record<string, boolean>>({});
   const [collapsedUsers, setCollapsedUsers] = useState<Record<string, boolean>>({});
   const [collapsedChallenges, setCollapsedChallenges] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (isModerator && moderatorBarangay) {
+      setSelectedBarangayFilter(moderatorBarangay);
+    }
+  }, [isModerator, moderatorBarangay]);
 
   const load = async () => {
     try {
@@ -419,7 +443,7 @@ export function Challenges() {
       const data = await adminGet<ChallengeSubmission[]>('/admin/submissions');
       // Filter to only challenge submissions (not events)
       setSubmissions(data.filter(s => !s.submissionType || s.submissionType === 'CHALLENGE'));
-    } catch (err: any) { console.error('Failed to load submissions', err); }
+    } catch (err: any) { console.error('Failed to load submissions', err); alert(`Failed to load submissions: ${err.message || err}`); }
     finally { setSubmissionsLoading(false); }
   };
 
@@ -811,8 +835,25 @@ export function Challenges() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-serif font-bold text-gray-900">Challenges</h2>
-          <p className="text-gray-500 text-sm mt-1">Design and manage eco-challenges for the community</p>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">Challenges</h2>
+            {isModerator && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                {moderatorBarangay ? `${moderatorBarangay} (Assigned Barangay)` : 'Assigned Barangay'}
+              </span>
+            )}
+            {!isModerator && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
+                DILG Administrator — All 52 Barangays
+              </span>
+            )}
+          </div>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+            {isModerator
+              ? `Review and manage challenge submissions for Barangay ${moderatorBarangay || 'Assigned'}`
+              : 'Design and manage eco-challenges across all 52 barangays'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {/* Tab toggle */}
@@ -1030,25 +1071,38 @@ export function Challenges() {
 
               {/* Barangay Filter & User Selector & Expand/Collapse */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* Barangay Dropdown */}
-                <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700">
-                  <MapPin className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-                  <select 
-                    value={selectedBarangayFilter} 
-                    onChange={e => setSelectedBarangayFilter(e.target.value)}
-                    className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer max-w-37.5 truncate"
+                {/* Barangay Filter / Indicator */}
+                {isModerator ? (
+                  <div 
+                    className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800"
+                    title="Assigned Barangay — Locked by Moderator Role"
                   >
-                    <option value="All">All Barangays ({activeSubmissionBarangays.length})</option>
-                    {BARANGAYS.map(b => (
-                      <option key={b} value={b}>
-                        {b} {activeSubmissionBarangays.includes(b) ? '●' : ''}
-                      </option>
-                    ))}
-                    {activeSubmissionBarangays.includes('Unassigned Barangay') && (
-                      <option value="Unassigned Barangay">Unassigned Barangay</option>
-                    )}
-                  </select>
-                </div>
+                    <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                      {moderatorBarangay || 'Assigned Barangay'}
+                    </span>
+                    <Lock className="w-3 h-3 text-emerald-600/70 dark:text-emerald-400/70 shrink-0 ml-0.5" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <MapPin className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                    <select 
+                      value={selectedBarangayFilter} 
+                      onChange={e => setSelectedBarangayFilter(e.target.value)}
+                      className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer max-w-37.5 truncate"
+                    >
+                      <option value="All">All Barangays ({activeSubmissionBarangays.length})</option>
+                      {BARANGAYS.map(b => (
+                        <option key={b} value={b}>
+                          {b} {activeSubmissionBarangays.includes(b) ? '●' : ''}
+                        </option>
+                      ))}
+                      {activeSubmissionBarangays.includes('Unassigned Barangay') && (
+                        <option value="Unassigned Barangay">Unassigned Barangay</option>
+                      )}
+                    </select>
+                  </div>
+                )}
 
                 {/* User Selector filter */}
                 <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700">

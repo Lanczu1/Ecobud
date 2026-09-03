@@ -20,6 +20,8 @@ import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndic
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
+import { resolveMediaUrl } from '../utils/appUtils';
+
 function initialsFromLabel(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || 'E';
 }
@@ -68,13 +70,8 @@ export function Header({
 
   const getAvatarSource = () => {
     if (!userAvatarUrl || userAvatarUrl === 'null') return null;
-    let cleanUrl = userAvatarUrl.replace(/\\/g, '/');
-    if (cleanUrl.includes('localhost:3000')) {
-      cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-    } else if (!cleanUrl.startsWith('http')) {
-      cleanUrl = `${ecobudApiOrigin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
-    }
-    return { uri: cleanUrl };
+    const resolvedUrl = resolveMediaUrl(userAvatarUrl, ecobudApiOrigin);
+    return resolvedUrl ? { uri: resolvedUrl } : null;
   };
 
   const avatarSource = getAvatarSource();

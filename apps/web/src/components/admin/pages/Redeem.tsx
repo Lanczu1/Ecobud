@@ -110,8 +110,9 @@ export function Redeem() {
       ]);
       setItems(itemsData);
       setStats(statsData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch redeem items', error);
+      alert(`Failed to fetch redeem items: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -170,7 +171,7 @@ export function Redeem() {
       formData.append('image', formImageFile);
       const result = await adminPostForm<{ url: string }>('/redeem/upload', formData);
       return result.url;
-    } catch (error) { throw error; } finally { setUploadingImage(false); }
+    } finally { setUploadingImage(false); }
   };
 
   const handleSave = async () => {
@@ -187,7 +188,10 @@ export function Redeem() {
       setShowCreateModal(false);
       resetForm();
       fetchItems();
-    } catch (error) { console.error('Failed to save redeem item', error); }
+    } catch (error: any) {
+      console.error('Failed to save redeem item', error);
+      alert(`Failed to save redeem item: ${error.message || error}`);
+    }
   };
 
   const handleToggleActive = async (id: string) => {
@@ -195,7 +199,10 @@ export function Redeem() {
       const updated = await adminPatch<RedeemItem>(`/redeem/${id}/toggle`, {});
       setItems(prev => prev.map(i => i.id === id ? { ...i, isActive: updated.isActive } : i));
       if (stats) setStats({ ...stats, active: updated.isActive ? stats.active + 1 : stats.active - 1, inactive: updated.isActive ? stats.inactive - 1 : stats.inactive + 1 });
-    } catch (error) { console.error('Failed to toggle item', error); }
+    } catch (error: any) {
+      console.error('Failed to toggle item', error);
+      alert(`Failed to toggle item: ${error.message || error}`);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -204,7 +211,10 @@ export function Redeem() {
         await adminDelete(`/redeem/${id}`);
         setItems(prev => prev.filter(i => i.id !== id));
         if (stats) setStats({ ...stats, total: stats.total - 1 });
-      } catch (error) { console.error('Failed to delete item', error); }
+      } catch (error: any) {
+        console.error('Failed to delete item', error);
+        alert(`Failed to delete item: ${error.message || error}`);
+      }
     }
   };
 
@@ -226,7 +236,10 @@ export function Redeem() {
       ]);
       setRequests(reqsData);
       setRequestStats(statsData);
-    } catch (error) { console.error('Failed to fetch requests', error); }
+    } catch (error: any) {
+      console.error('Failed to fetch requests', error);
+      alert(`Failed to fetch requests: ${error.message || error}`);
+    }
     finally { setRequestsLoading(false); }
   };
 
@@ -243,7 +256,10 @@ export function Redeem() {
       await adminPatch(`/redeem/requests/${approveModal.requestId}/approve`, { claimLocation: approveLocation });
       setApproveModal({ open: false, requestId: '' });
       fetchRequests();
-    } catch (error) { console.error('Failed to approve', error); }
+    } catch (error: any) {
+      console.error('Failed to approve', error);
+      alert(`Failed to approve: ${error.message || error}`);
+    }
     finally { setProcessingId(null); }
   };
 
@@ -258,7 +274,10 @@ export function Redeem() {
       await adminPatch(`/redeem/requests/${rejectModal.requestId}/reject`, { reason: rejectReason });
       setRejectModal({ open: false, requestId: '' });
       fetchRequests();
-    } catch (error) { console.error('Failed to reject', error); }
+    } catch (error: any) {
+      console.error('Failed to reject', error);
+      alert(`Failed to reject: ${error.message || error}`);
+    }
     finally { setProcessingId(null); }
   };
 
@@ -267,7 +286,10 @@ export function Redeem() {
       try {
         await adminDelete(`/redeem/requests/${id}`);
         fetchRequests();
-      } catch (error) { console.error('Failed to remove request', error); }
+      } catch (error: any) {
+        console.error('Failed to remove request', error);
+        alert(`Failed to remove request: ${error.message || error}`);
+      }
     }
   };
 

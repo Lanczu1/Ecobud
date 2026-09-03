@@ -13,6 +13,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import rateLimit from 'express-rate-limit';
+import { JWT_SECRET } from '../security/tokenService';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
@@ -690,8 +691,7 @@ challengeRoutes.post(
     // Generate a cryptographically secure random token with HMAC signature to prevent spoofing
     const randomNonce = crypto.randomBytes(16).toString('hex').toUpperCase();
     const tokenPayload = `${submission.id}:${submission.userId}:${randomNonce}`;
-    const tokenSecret = process.env.JWT_SECRET || 'ecobud_secure_qr_salt_2026';
-    const signature = crypto.createHmac('sha256', tokenSecret).update(tokenPayload).digest('hex').substring(0, 16).toUpperCase();
+    const signature = crypto.createHmac('sha256', JWT_SECRET).update(tokenPayload).digest('hex').substring(0, 16).toUpperCase();
     const updated = await prisma.challengeSubmission.update({
       where: { id: submission.id },
       data: {

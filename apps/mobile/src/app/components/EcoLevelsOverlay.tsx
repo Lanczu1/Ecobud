@@ -14,6 +14,7 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../util
 import { type EcoBudMobileModel } from '../types/home';
 import { getLevelFromPoints } from './LevelCard';
 import { triggerImpactLight } from '../utils/haptics';
+import { useTheme } from '../../shared/theme/ThemeContext';
 
 export const ECO_LEVELS_ROADMAP = [
   {
@@ -150,6 +151,7 @@ export const ECO_LEVELS_ROADMAP = [
 
 export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
+  const { theme, isDark } = useTheme();
   const isTablet = width >= 600;
 
   const totalPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
@@ -229,8 +231,8 @@ export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
 
         {/* Section Headline */}
         <View style={styles.sectionTitleRow}>
-          <Text style={styles.sectionTitle}>ALL ECO LEVELS (1 — 10)</Text>
-          <Text style={styles.sectionSub}>Earn Eco Points (XP) to level up</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>ALL ECO LEVELS (1 — 10)</Text>
+          <Text style={[styles.sectionSub, { color: theme.colors.textMuted }]}>Earn Eco Points (XP) to level up</Text>
         </View>
 
         {/* Levels List */}
@@ -247,8 +249,15 @@ export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
                 key={item.level}
                 style={[
                   styles.levelCard,
-                  isCurrent && styles.levelCardActive,
-                  !isUnlocked && styles.levelCardLocked,
+                  {
+                    backgroundColor: isUnlocked ? theme.colors.card : theme.colors.surfaceMuted,
+                    borderColor: isUnlocked ? theme.colors.cardBorder : theme.colors.border,
+                  },
+                  isCurrent && {
+                    borderColor: theme.colors.primary,
+                    borderWidth: 2,
+                    backgroundColor: theme.colors.surface,
+                  },
                 ]}
               >
                 {/* Header Row of the Card */}
@@ -260,8 +269,8 @@ export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
                         {
                           backgroundColor: isUnlocked
                             ? `${item.badgeColor}20`
-                            : '#F3F4F6',
-                          borderColor: isUnlocked ? item.badgeColor : '#E5E7EB',
+                            : theme.colors.surfaceMuted,
+                          borderColor: isUnlocked ? item.badgeColor : theme.colors.border,
                         },
                       ]}
                     >
@@ -274,7 +283,7 @@ export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
 
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <Text style={[styles.levelName, !isUnlocked && { color: '#4B5563' }]}>
+                        <Text style={[styles.levelName, { color: isUnlocked ? theme.colors.textPrimary : theme.colors.textMuted }]}>
                           Level {item.level}: {item.name}
                         </Text>
                         {isCurrent && (
@@ -283,44 +292,44 @@ export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
                           </View>
                         )}
                       </View>
-                      <Text style={styles.levelSubtitle}>{item.subtitle}</Text>
+                      <Text style={[styles.levelSubtitle, { color: theme.colors.textMuted }]}>{item.subtitle}</Text>
                     </View>
                   </View>
 
                   {/* Status Indicator */}
                   <View style={styles.statusCol}>
-                    <Text style={styles.pointsReqText}>
+                    <Text style={[styles.pointsReqText, { color: theme.colors.textPrimary }]}>
                       {item.points === 0 ? 'Free' : `${pointsRequired.toLocaleString()} XP`}
                     </Text>
                     {isUnlocked ? (
-                      <View style={styles.unlockedTag}>
-                        <Ionicons name="checkmark-circle" size={scale(13)} color="#059669" />
-                        <Text style={styles.unlockedTagText}>Unlocked</Text>
+                      <View style={[styles.unlockedTag, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#DCFCE7' }]}>
+                        <Ionicons name="checkmark-circle" size={scale(13)} color={isDark ? '#34D399' : '#059669'} />
+                        <Text style={[styles.unlockedTagText, { color: isDark ? '#34D399' : '#059669' }]}>Unlocked</Text>
                       </View>
                     ) : (
-                      <View style={styles.lockedTag}>
-                        <Ionicons name="lock-closed" size={scale(11)} color="#6B7280" />
-                        <Text style={styles.lockedTagText}>{neededToUnlock} XP left</Text>
+                      <View style={[styles.lockedTag, { backgroundColor: theme.colors.surfaceMuted }]}>
+                        <Ionicons name="lock-closed" size={scale(11)} color={theme.colors.textMuted} />
+                        <Text style={[styles.lockedTagText, { color: theme.colors.textMuted }]}>{neededToUnlock} XP left</Text>
                       </View>
                     )}
                   </View>
                 </View>
 
                 {/* Perks Checklist */}
-                <View style={styles.perksContainer}>
-                  <Text style={styles.perksLabel}>TIER PERKS & UNLOCKS:</Text>
+                <View style={[styles.perksContainer, { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[styles.perksLabel, { color: theme.colors.textMuted }]}>TIER PERKS & UNLOCKS:</Text>
                   {item.perks.map((perk, idx) => (
                     <View key={idx} style={styles.perkRow}>
                       <Ionicons
                         name={isUnlocked ? 'checkmark' : 'ellipse-outline'}
                         size={scale(14)}
-                        color={isUnlocked ? '#059669' : '#9CA3AF'}
+                        color={isUnlocked ? theme.colors.primary : theme.colors.textMuted}
                         style={{ marginTop: 2 }}
                       />
                       <Text
                         style={[
                           styles.perkItemText,
-                          !isUnlocked && { color: '#6B7280' },
+                          { color: isUnlocked ? theme.colors.textSecondary : theme.colors.textMuted },
                         ]}
                       >
                         {perk}
@@ -334,12 +343,12 @@ export function EcoLevelsOverlay({ model }: { model: EcoBudMobileModel }) {
         </View>
 
         {/* Motivation Tip Card */}
-        <SurfaceCard style={styles.tipCard}>
+        <SurfaceCard style={[styles.tipCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: verticalScale(6) }}>
-            <Ionicons name="bulb-outline" size={scale(18)} color="#126027" />
-            <Text style={styles.tipTitle}>How to earn XP fast?</Text>
+            <Ionicons name="bulb-outline" size={scale(18)} color={theme.colors.primary} />
+            <Text style={[styles.tipTitle, { color: theme.colors.textPrimary }]}>How to earn XP fast?</Text>
           </View>
-          <Text style={styles.tipBody}>
+          <Text style={[styles.tipBody, { color: theme.colors.textSecondary }]}>
             Log your daily eco habits (+10 XP), complete academy lessons (+30 XP), verify missions with photo proof (+100 XP), and attend community cleanups (+200 XP).
           </Text>
         </SurfaceCard>

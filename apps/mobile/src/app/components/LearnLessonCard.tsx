@@ -402,3 +402,51 @@ const styles = StyleSheet.create({
   },
 });
 
+export function LearnLessonSkeleton() {
+  const { theme, isDark } = useTheme();
+  const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+  const pulseAnim = React.useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
+
+  React.useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.95 : 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.5 : 0.55,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulseAnim, isDark]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.card,
+        {
+          backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+          borderColor: isDark ? theme.colors.cardBorder : '#E6F4EC',
+          borderWidth: 1,
+          opacity: pulseAnim,
+        },
+      ]}
+    >
+      <View style={[styles.imageWrapper, { backgroundColor: boneBg, marginBottom: verticalScale(12) }]} />
+      <View style={{ height: 14, width: 60, borderRadius: 7, backgroundColor: boneBg, marginBottom: 8 }} />
+      <View style={{ height: 18, width: '75%', borderRadius: 9, backgroundColor: boneBg, marginBottom: 10 }} />
+      <View style={{ height: 14, width: '92%', borderRadius: 7, backgroundColor: boneBg, marginBottom: 12 }} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ height: 28, width: 80, borderRadius: 14, backgroundColor: boneBg }} />
+        <View style={{ height: 28, width: 80, borderRadius: 14, backgroundColor: boneBg }} />
+      </View>
+    </Animated.View>
+  );
+}
+

@@ -38,6 +38,11 @@ export const authenticateRequest = async (
         email: true,
         role: true,
         status: true,
+        profile: {
+          select: {
+            city: true,
+          },
+        },
       },
     });
 
@@ -59,6 +64,7 @@ export const authenticateRequest = async (
       email: user.email,
       role: user.role,
       status: user.status,
+      city: user.profile?.city ?? null,
     };
 
     return next();

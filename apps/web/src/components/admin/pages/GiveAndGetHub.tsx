@@ -1094,8 +1094,9 @@ export function GiveAndGetHub() {
       ]);
       setListings(listingsData);
       setStats(statsData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch swap listings', error);
+      alert(`Failed to fetch swap listings: ${error.message || error}`);
     } finally {
       setLoading(false);
     }
@@ -1110,8 +1111,9 @@ export function GiveAndGetHub() {
       await adminPatch(`/give-and-get/swap-listings/${id}/approve`, {});
       setListings(prev => prev.map(l => (l.id === id ? { ...l, approvalStatus: 'approved', isReported: false, reportCount: 0 } : l)));
       if (stats) setStats({ ...stats, pending: stats.pending - 1, approved: stats.approved + 1 });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to approve listing', error);
+      alert(`Failed to approve listing: ${error.message || error}`);
     }
   };
 
@@ -1123,8 +1125,9 @@ export function GiveAndGetHub() {
         prev.map(l => (l.id === rejectModal.listingId ? { ...l, approvalStatus: 'rejected', isActive: false, reportReason: reason } : l))
       );
       if (stats) setStats({ ...stats, pending: stats.pending - 1, rejected: stats.rejected + 1 });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to reject listing', error);
+      alert(`Failed to reject listing: ${error.message || error}`);
     }
   };
 
@@ -1136,8 +1139,9 @@ export function GiveAndGetHub() {
         prev.map(l => (l.id === reportModal.listingId ? { ...l, isReported: true, reportCount: l.reportCount + 1, reportReason: reason } : l))
       );
       if (stats) setStats({ ...stats, reported: stats.reported + 1 });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to report listing', error);
+      alert(`Failed to report listing: ${error.message || error}`);
     }
   };
 
@@ -1147,8 +1151,9 @@ export function GiveAndGetHub() {
         await adminDelete(`/give-and-get/swap-listings/${id}`);
         setListings(prev => prev.filter(l => l.id !== id));
         if (stats) setStats({ ...stats, total: stats.total - 1 });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to delete listing', error);
+        alert(`Failed to delete listing: ${error.message || error}`);
       }
     }
   };

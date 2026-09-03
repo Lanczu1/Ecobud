@@ -6,7 +6,7 @@ import { type EcoBudMobileModel } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard } from './DiscoverChallengeCard';
 import { TopNavbar, SurfaceCard, AvatarBubble } from './CommonComponents';
-import { LearnLessonCard } from './LearnLessonCard';
+import { LearnLessonCard, LearnLessonSkeleton } from './LearnLessonCard';
 import { CoachMarkTarget } from './CoachMarkTarget';
 import { QuickActions } from './QuickActions';
 import { SummaryCards } from './SummaryCards';
@@ -16,7 +16,7 @@ import { UpcomingEventCard } from './UpcomingEventCard';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
-import { HomeViewSkeleton, LearnViewSkeleton } from '../../shared/ui/SkeletonLoaders';
+import { HomeViewSkeleton, HomeCardsSkeleton, LearnViewSkeleton } from '../../shared/ui/SkeletonLoaders';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
 export { getCategoryDetails };
@@ -87,14 +87,19 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  if ((model.initializing || model.booting) && !model.dashboard && !model.session) {
-    return (
-      <>
-        <TopNavbar model={model} />
-        <HomeViewSkeleton />
-      </>
-    );
-  }
+  // Smooth transition skeleton for Home Dashboard CARDS ONLY on tab switch or reload
+  const [homeLoading, setHomeLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setHomeLoading(true);
+    const timer = setTimeout(() => {
+      setHomeLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const isCardsLoading = homeLoading || model.initializing || model.booting || (model.refreshing && !model.dashboard);
+
 
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;
   const baseEcoPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
@@ -177,8 +182,12 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
           </View>
         </TouchableOpacity>
 
-        {/* Quick Action Grid */}
-        <QuickActions model={model} />
+        {isCardsLoading ? (
+          <HomeCardsSkeleton />
+        ) : (
+          <>
+            {/* Quick Action Grid */}
+            <QuickActions model={model} />
 
         {isTablet ? (
           <View style={{ flexDirection: 'row', gap: scale(14), marginBottom: verticalScale(4), alignItems: 'stretch' }}>
@@ -296,6 +305,8 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             </View>
           );
         })()}
+          </>
+        )}
 
         <View style={{ height: verticalScale(80) }} />
       </View>
@@ -308,14 +319,18 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  if ((model.initializing || model.booting) && (!model.lessons || model.lessons.length === 0)) {
-    return (
-      <>
-        <TopNavbar model={model} />
-        <LearnViewSkeleton />
-      </>
-    );
-  }
+  // Track switching into Learn tab with a brief card skeleton transition
+  const [cardsLoading, setCardsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setCardsLoading(true);
+    const timer = setTimeout(() => {
+      setCardsLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const isCardsLoading = cardsLoading || model.initializing || model.booting || model.refreshing;
 
   const continueLesson = model.lessons.find((l) => l.status === 'seen');
   const completedLessonsCount = model.lessons.filter((l) => l.status === 'completed').length;
@@ -580,11 +595,19 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
         </ScrollView>
 
         <View style={{ marginTop: verticalScale(20) }}>
-          {model.filteredLessons.length === 0 ? (
-            <SurfaceCard style={{ padding: moderateScale(24), borderRadius: moderateScale(22), alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAF9' }}>
-              <Ionicons name="library-outline" size={scale(36)} color="#126027" style={{ marginBottom: verticalScale(8) }} />
-              <Text style={[styles.cardTitle, { textAlign: 'center', fontSize: responsiveFontSize(16), marginBottom: verticalScale(6) }]}>No lessons available yet.</Text>
-              <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13) }]}>Check back soon for new content.</Text>
+          {isCardsLoading ? (
+            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) } : {}}>
+              {[1, 2, 3].map((item) => (
+                <View key={item} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                  <LearnLessonSkeleton />
+                </View>
+              ))}
+            </View>
+          ) : model.filteredLessons.length === 0 ? (
+            <SurfaceCard style={{ padding: moderateScale(24), borderRadius: moderateScale(22), alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
+              <Ionicons name="library-outline" size={scale(36)} color={isDark ? theme.colors.primary : '#126027'} style={{ marginBottom: verticalScale(8) }} />
+              <Text style={[styles.cardTitle, { textAlign: 'center', fontSize: responsiveFontSize(16), marginBottom: verticalScale(6), color: theme.colors.textPrimary }]}>No lessons available yet.</Text>
+              <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13), color: theme.colors.textMuted }]}>Check back soon for new content.</Text>
             </SurfaceCard>
           ) : (
             <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) } : {}}>
