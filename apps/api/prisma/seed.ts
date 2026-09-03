@@ -86,49 +86,42 @@ async function main() {
     },
   });
 
-  const moderator = await prisma.user.create({
-    data: {
-      name: 'EcoBud Moderator',
-      email: 'moderator@ecobud.app',
-      passwordHash: moderatorPassword,
-      role: 'moderator',
-      status: 'active',
-      points: 240,
-      currentStreak: 3,
-      lastActionDate: new Date(),
-      profile: {
-        create: {
-          displayName: 'EcoBud Moderator',
-          headline: 'Community event moderator.',
-          city: 'Quezon City',
-        },
-      },
-    },
-  });
+  const BARANGAYS = [
+    'Abo', 'Alibungbungan', 'Alumbrado', 'Balayong', 'Balimbing', 'Balinacon', 'Bambang', 'Banago', 'Banca-banca', 'Bangcuro', 'Banilad', 'Bayaquitos', 'Buboy', 'Buenavista', 'Buhanginan', 'Bukal', 'Bunga', 'Cabuyew', 'Calumpang', 'Kanluran Kabubuhayan', 'Silangan Kabubuhayan', 'Labangan', 'Lawaguin', 'Kanluran Lazaan', 'Silangan Lazaan', 'Lagulo', 'Maiit', 'Malaya', 'Malinao', 'Manaol', 'Maravilla', 'Nagcalbang', 'Poblacion I (Poblacion)', 'Poblacion II (Poblacion)', 'Poblacion III (Poblacion)', 'Oples', 'Palayan', 'Palina', 'Sabang', 'San Francisco', 'Sibulan', 'Silangan Napapatid', 'Silangan Ilaya', 'Sinipian', 'Santa Lucia', 'Sulsuguin', 'Talahib', 'Talangan', 'Taytay', 'Tipacan', 'Wakat', 'Yukos'
+  ];
 
-  const member = await prisma.user.create({
-    data: {
-      name: 'Lanczu',
-      email: 'member@ecobud.app',
-      passwordHash: memberPassword,
-      role: 'user',
-      status: 'active',
-      points: 120,
-      currentStreak: 1,
-      lastActionDate: new Date(),
-      profile: {
-        create: {
-          displayName: 'Lanczu',
-          headline: 'Turning daily habits into measurable impact.',
-          city: 'Manila',
-          preferencesJson: JSON.stringify({
-            reminders: true,
-            theme: 'eco-light',
-          }),
+  const moderators = await Promise.all(
+    BARANGAYS.map((barangay) => {
+      const emailPrefix = barangay.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      const email = barangay === 'Abo'
+        ? 'moderator@ecobud.app'
+        : barangay === 'Yukos'
+        ? 'moderator.yukos@ecobud.app'
+        : `moderator.${emailPrefix}@ecobud.app`;
+
+      return prisma.user.create({
+        data: {
+          name: `${barangay} Moderator`,
+          email,
+          passwordHash: moderatorPassword,
+          role: 'moderator',
+          status: 'active',
+          points: 240,
+          currentStreak: 3,
+          lastActionDate: new Date(),
+          profile: {
+            create: {
+              displayName: `${barangay} Moderator`,
+              headline: `Community moderator for Barangay ${barangay}.`,
+              city: barangay,
+            },
+          },
         },
-      },
-    },
-  });
+      });
+    })
+  );
+
+  const moderator = moderators.find((m) => m.email === 'moderator@ecobud.app')!;
 
   await prisma.userStats.createMany({
     data: [
@@ -144,12 +137,6 @@ async function main() {
         ecoPoints: 240,
         knowledgePoints: 35,
       },
-      {
-        userId: member.id,
-        currentStreak: 1,
-        ecoPoints: 120,
-        knowledgePoints: 60,
-      },
     ],
   });
 
@@ -162,10 +149,6 @@ async function main() {
       {
         userId: moderator.id,
         weeklyGoal: 4,
-      },
-      {
-        userId: member.id,
-        weeklyGoal: 5,
       },
     ],
   });
@@ -344,114 +327,8 @@ async function main() {
     ].map((event) => prisma.event.create({ data: event })),
   );
 
-  await prisma.userLessonProgress.createMany({
-    data: [
-      {
-        userId: member.id,
-        lessonId: lessons[0].id,
-        status: 'seen',
-        progress: 0,
-      },
-    ],
-  });
-
-  await prisma.userChallenge.createMany({
-    data: [
-      {
-        userId: member.id,
-        challengeInstanceId: challengeInstances[0].id,
-        progressPercentage: 43,
-        status: 'IN_PROGRESS',
-        expirationDate: addDays(2),
-      },
-      {
-        userId: member.id,
-        challengeInstanceId: challengeInstances[1].id,
-        progressPercentage: 20,
-        status: 'IN_PROGRESS',
-        expirationDate: addDays(10),
-      },
-      {
-        userId: member.id,
-        challengeInstanceId: challengeInstances[2].id,
-        progressPercentage: 100,
-        status: 'COMPLETED',
-        completedAt: addDays(-3),
-        expirationDate: addDays(1),
-      },
-    ],
-  });
-
-  await prisma.eventRegistration.createMany({
-    data: [
-      {
-        userId: member.id,
-        eventId: events[0].id,
-        status: 'REGISTERED',
-      },
-      {
-        userId: member.id,
-        eventId: events[1].id,
-        status: 'ATTENDED',
-        attendedAt: addDays(-2),
-      },
-    ],
-  });
-
-  await prisma.challengeSubmission.createMany({
-    data: [
-      {
-        userId: member.id,
-        challengeInstanceId: challengeInstances[0].id,
-        proofText:
-          'Uploaded a daily waste segregation tracker with labeled bins and end-of-day photos.',
-        proofUrl: 'https://example.com/proofs/waste-segregation-week.jpg',
-        status: 'pending',
-      },
-      {
-        userId: member.id,
-        challengeInstanceId: challengeInstances[1].id,
-        proofText:
-          'Submitted meter snapshots and a two-week reduction summary for the energy saver challenge.',
-        proofUrl: 'https://example.com/proofs/energy-saver-report.pdf',
-        status: 'approved',
-        moderatorNotes: 'Evidence is complete and matches the reported reduction.',
-        reviewedById: moderator.id,
-        reviewedAt: new Date(),
-      },
-    ],
-  });
-
-  const recentHabitDays = ['2026-04-04', '2026-04-05', '2026-04-06', '2026-04-07', '2026-04-08', '2026-04-09'];
-  const checkInData = recentHabitDays.flatMap((dateKey, index) =>
-    habits
-      .filter((_habit, habitIndex) => habitIndex <= (index % 3) + 1)
-      .map((habit) => ({
-        userId: member.id,
-        habitId: habit.id,
-        dateKey,
-        pointsAwarded: habit.pointsReward,
-      })),
-  );
-
-  await prisma.habitCheckIn.createMany({ data: checkInData });
-
   const logA = createLogRecord(
     'GENESIS_HASH_ECOBUD',
-    member.id,
-    'Daily habit completed: Used reusable water bottle',
-    5,
-    addDays(-2),
-  );
-  const logB = createLogRecord(
-    logA.currentHash,
-    member.id,
-    'Challenge completed: Plant-Based Meal Week',
-    30,
-    addDays(-1),
-  );
-  const logC = createLogRecord(
-    logB.currentHash,
     moderator.id,
     'Event attended: Community Tree Planting',
     35,
@@ -459,7 +336,7 @@ async function main() {
   );
 
   await prisma.transparencyLog.createMany({
-    data: [logA, logB, logC],
+    data: [logA],
   });
 
   await prisma.faq.createMany({
@@ -502,10 +379,20 @@ async function main() {
     ],
   });
 
-  console.log('ECOBUD seed complete.');
-  console.log('Member login: member@ecobud.app / eco12345');
-  console.log('Admin login: admin@ecobud.app / admin12345');
-  console.log('Moderator login: moderator@ecobud.app / moderator123');
+  console.log('ECOBUD seed complete.\n');
+  console.log('--- ADMIN ACCOUNT ---');
+  console.log('Admin login (All 52 Barangays): admin@ecobud.app / admin12345\n');
+  
+  console.log('--- 52 BARANGAY MODERATOR ACCOUNTS (Password: moderator123) ---');
+  BARANGAYS.forEach((barangay) => {
+    const emailPrefix = barangay.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const email = barangay === 'Abo'
+      ? 'moderator@ecobud.app'
+      : barangay === 'Yukos'
+      ? 'moderator.yukos@ecobud.app'
+      : `moderator.${emailPrefix}@ecobud.app`;
+    console.log(`- ${barangay.padEnd(25, ' ')} : ${email}`);
+  });
 }
 
 main()

@@ -15,16 +15,10 @@ import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { styles } from '../styles/appStyles';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useTheme } from '../../shared/theme/ecoTheme';
+import { resolveMediaUrl } from '../utils/appUtils';
 
 const getValidImageUrl = (url: string | null | undefined) => {
-  if (!url) return undefined;
-  let cleanUrl = url.replace(/\\/g, '/');
-  if (cleanUrl.includes('localhost:3000')) {
-    cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-  } else if (!cleanUrl.startsWith('http')) {
-    cleanUrl = `${ecobudApiOrigin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
-  }
-  return cleanUrl;
+  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
 };
 
 export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isViewed, isCycleActive = true }: ActiveChallengeCardProps) {

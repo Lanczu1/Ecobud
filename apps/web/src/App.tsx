@@ -43,7 +43,9 @@ export default function App() {
         if (user.role === 'moderator') {
           return 'Challenges';
         }
-      } catch (e) {}
+      } catch (e) {
+        // ignore parse error
+      }
     }
     return 'Dashboard';
   });

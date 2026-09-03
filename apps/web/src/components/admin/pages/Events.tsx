@@ -642,7 +642,7 @@ export function Events() {
     setReportLoading(eventId);
     try {
       const token = localStorage.getItem('ecobud_admin_token') || '';
-      const url = `http://localhost:3000/api/reports/events/${eventId}/${format === 'pdf' ? 'pdf' : 'excel'}`;
+      const url = `${API_HOST}/api/reports/events/${eventId}/${format === 'pdf' ? 'pdf' : 'excel'}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Failed to generate report');
       const blob = await res.blob();

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { mobileStorage } from '../storage/mobileStorage';
 import { typography, spacing } from '../../app/utils/responsive';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'onyx';
 
 export interface ThemeColors {
   background: string;
@@ -101,41 +101,52 @@ export const lightColors: ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  background: '#0E1512',
-  surface: '#16221C',
-  surfaceMuted: '#1E2D26',
-  card: '#1A2620',
-  cardAlt: '#22332B',
-  primary: '#4ADE80',
-  primaryLight: '#86EFAC',
-  primaryDark: '#22C55E',
-  secondary: '#34D399',
-  accent: '#4ADE80',
-  accentMuted: '#173A2A',
-  text: '#F0FDF4',
-  textPrimary: '#F9FAFB',
-  textSecondary: '#D1D5DB',
-  textMuted: '#9CA3AF',
-  textSoft: '#A7B3AE',
-  border: '#2A3B32',
-  outline: '#2A3B32',
-  icon: '#F0FDF4',
-  iconMuted: '#9CA3AF',
-  inputBackground: '#121C17',
-  inputBorder: '#2A3B32',
-  cardBorder: '#25362D',
-  badge: '#1E2E25',
-  badgeText: '#86EFAC',
+  background: '#0B110E',
+  surface: '#111A15',
+  surfaceMuted: '#16221C',
+  card: '#141E18',
+  cardAlt: '#1A261F',
+  primary: '#34D399',
+  primaryLight: '#6EE7B7',
+  primaryDark: '#10B981',
+  secondary: '#10B981',
+  accent: '#34D399',
+  accentMuted: '#132E22',
+  text: '#E4E9E6',
+  textPrimary: '#F1F5F3',
+  textSecondary: '#A8B3AE',
+  textMuted: '#84918C',
+  textSoft: '#74807C',
+  border: '#233028',
+  outline: '#233028',
+  icon: '#E4E9E6',
+  iconMuted: '#84918C',
+  inputBackground: '#0D1411',
+  inputBorder: '#233028',
+  cardBorder: '#1E2B23',
+  badge: '#17271F',
+  badgeText: '#6EE7B7',
   success: '#34D399',
   warning: '#FBBF24',
   error: '#F87171',
   overlay: 'rgba(0, 0, 0, 0.78)',
   shadow: 'rgba(0, 0, 0, 0.45)',
-  navBackground: '#0E1512',
-  navBorder: '#2A3B32',
-  tabBarBackground: 'rgba(22, 34, 28, 0.98)',
-  tabBarBorder: '#2A3B32',
+  navBackground: '#0B110E',
+  navBorder: '#233028',
+  tabBarBackground: 'rgba(17, 26, 21, 0.98)',
+  tabBarBorder: '#233028',
   statusBar: 'light',
+};
+
+export const onyxColors: ThemeColors = {
+  ...darkColors,
+  background: '#000000',
+  surface: '#0A0A0A',
+  surfaceMuted: '#121212',
+  card: '#080808',
+  cardAlt: '#0F0F0F',
+  navBackground: '#000000',
+  tabBarBackground: 'rgba(0, 0, 0, 0.98)',
 };
 
 export const lightTheme: EcoTheme = {
@@ -149,6 +160,14 @@ export const lightTheme: EcoTheme = {
 export const darkTheme: EcoTheme = {
   isDark: true,
   colors: darkColors,
+  radius: themeRadius,
+  typography,
+  spacing,
+};
+
+export const onyxTheme: EcoTheme = {
+  isDark: true,
+  colors: onyxColors,
   radius: themeRadius,
   typography,
   spacing,
@@ -181,8 +200,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const saved = await mobileStorage.getItem(THEME_STORAGE_KEY);
-        if (isMounted && (saved === 'light' || saved === 'dark')) {
-          setThemeModeState(saved);
+        if (isMounted && (saved === 'light' || saved === 'dark' || saved === 'onyx')) {
+          setThemeModeState(saved as ThemeMode);
         }
       } catch (err) {
         console.warn('Failed to load theme preference:', err);
@@ -203,12 +222,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleTheme = useCallback(async () => {
-    const nextMode: ThemeMode = themeMode === 'light' ? 'dark' : 'light';
+    let nextMode: ThemeMode = 'light';
+    if (themeMode === 'light') nextMode = 'dark';
+    else if (themeMode === 'dark') nextMode = 'onyx';
     await setThemeMode(nextMode);
   }, [themeMode, setThemeMode]);
 
-  const isDark = themeMode === 'dark';
-  const theme = useMemo(() => (isDark ? darkTheme : lightTheme), [isDark]);
+  const isDark = themeMode === 'dark' || themeMode === 'onyx';
+  const theme = useMemo(() => (themeMode === 'onyx' ? onyxTheme : isDark ? darkTheme : lightTheme), [isDark, themeMode]);
 
   const value = useMemo(
     () => ({

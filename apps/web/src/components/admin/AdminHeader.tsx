@@ -35,7 +35,10 @@ export function AdminHeader({ isDark, onToggleDark }: AdminHeaderProps) {
   const userJson = localStorage.getItem('ecobud_admin_user');
   const user = userJson ? JSON.parse(userJson) : null;
   const displayName = user?.profile?.displayName || user?.name || (user?.role === 'moderator' ? 'Moderator' : 'Admin');
-  const roleName = user?.role === 'moderator' ? 'Community Moderator' : 'Administrator';
+  const userCity = user?.city || user?.profile?.city;
+  const roleName = user?.role === 'moderator' 
+    ? (userCity ? `Moderator — Brgy. ${userCity}` : 'Community Moderator') 
+    : 'DILG Administrator';
 
   return (
     <div className="h-20 bg-white border-b border-gray-100 flex items-center justify-end px-8">

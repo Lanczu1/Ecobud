@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 
 const DEFAULT_DEV_SECRET = 'ecobud-local-development-secret';
-const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_DEV_SECRET;
+export const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_DEV_SECRET;
 
 if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === DEFAULT_DEV_SECRET)) {
   console.error('🚨 [CRITICAL SECURITY ERROR]: JWT_SECRET must be explicitly set to a strong secret in production!');
@@ -27,6 +27,7 @@ export interface TokenSession {
   email: string;
   role: AccessRole;
   status: AccountStatus;
+  city?: string | null;
 }
 
 export const TokenService = {

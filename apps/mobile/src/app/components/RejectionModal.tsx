@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
+import { useTheme } from '../../shared/theme/ThemeContext';
 
 interface RejectionModalProps {
   visible: boolean;
@@ -25,42 +26,44 @@ export function RejectionModal({
   onClose,
   onResubmit,
 }: RejectionModalProps) {
+  const { theme, isDark } = useTheme();
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.modalCard}>
+        <View style={[styles.modalCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }]}>
           <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Ionicons name="alert-circle" size={32} color="#DC2626" />
+            <View style={[styles.iconContainer, isDark && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+              <Ionicons name="alert-circle" size={32} color="#EF4444" />
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color="#6B7A75" />
+              <Ionicons name="close" size={24} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{title}</Text>
           
-          <View style={styles.reasonContainer}>
-            <Text style={styles.reasonLabel}>Moderator Note:</Text>
-            <Text style={styles.reasonText}>{reason || 'No reason provided.'}</Text>
+          <View style={[styles.reasonContainer, { backgroundColor: isDark ? theme.colors.surface : '#F8FAFC', borderColor: theme.colors.cardBorder }]}>
+            <Text style={[styles.reasonLabel, { color: theme.colors.textMuted }]}>Moderator Note:</Text>
+            <Text style={[styles.reasonText, { color: theme.colors.textSecondary }]}>{reason || 'No reason provided.'}</Text>
           </View>
           
           <View style={styles.actions}>
             {onResubmit ? (
               <>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={onClose}>
-                  <Text style={styles.secondaryBtnText}>Cancel</Text>
+                <TouchableOpacity style={[styles.secondaryBtn, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9' }]} onPress={onClose}>
+                  <Text style={[styles.secondaryBtnText, { color: theme.colors.textMuted }]}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => {
+                <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]} onPress={() => {
                   onClose();
                   onResubmit();
                 }}>
-                  <Text style={styles.primaryBtnText}>Resubmit</Text>
+                  <Text style={[styles.primaryBtnText, { color: isDark ? '#0E1512' : '#FFFFFF' }]}>Resubmit</Text>
                 </TouchableOpacity>
               </>
             ) : (
-              <TouchableOpacity style={styles.primaryBtn} onPress={onClose}>
-                <Text style={styles.primaryBtnText}>Understood</Text>
+              <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]} onPress={onClose}>
+                <Text style={[styles.primaryBtnText, { color: isDark ? '#0E1512' : '#FFFFFF' }]}>Understood</Text>
               </TouchableOpacity>
             )}
           </View>

@@ -78,7 +78,7 @@ const toAuthResponse = (user: {
   points: number;
   currentStreak: number;
   lastActionDate: Date | null;
-  profile: { displayName: string; avatarUrl: string | null } | null;
+  profile: { displayName: string; avatarUrl: string | null; city?: string | null } | null;
 }) => {
   const token = TokenService.sign({
     userId: user.id,
@@ -86,6 +86,7 @@ const toAuthResponse = (user: {
     email: user.email,
     role: user.role,
     status: user.status,
+    city: user.profile?.city ?? null,
   });
 
   return {
@@ -101,6 +102,12 @@ const toAuthResponse = (user: {
       currentStreak: resolveLiveStreak(user.currentStreak, user.lastActionDate),
       displayName: user.profile?.displayName ?? user.name,
       avatarUrl: user.profile?.avatarUrl ?? null,
+      city: user.profile?.city ?? null,
+      profile: user.profile ? {
+        displayName: user.profile.displayName,
+        avatarUrl: user.profile.avatarUrl,
+        city: user.profile.city ?? null,
+      } : null,
     },
   };
 };

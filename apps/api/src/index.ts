@@ -2,6 +2,7 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import path from 'path';
+import rateLimit from 'express-rate-limit';
 import { authRoutes } from './routes/authRoutes';
 import { userRoutes } from './routes/userRoutes';
 import { lessonRoutes } from './routes/lessonRoutes';
@@ -91,6 +92,19 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Apply rate limiting to all /api/ routes
+// const apiLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 200, // Limit each IP to 200 requests per `window`
+//   message: {
+//     status: 'error',
+//     message: 'Too many requests from this IP, please try again after 15 minutes',
+//   },
+//   standardHeaders: true, 
+//   legacyHeaders: false, 
+// });
+// app.use('/api/', apiLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/home', homeRoutes);

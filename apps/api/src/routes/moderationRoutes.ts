@@ -42,14 +42,31 @@ const updateSubmissionStatus = async (
   options?: {
     moderatorNotes?: string;
     flaggedReason?: string;
+    reviewerRole?: string;
+    reviewerCity?: string | null;
   },
 ) => {
   const submission = await prisma.challengeSubmission.findUnique({
     where: { id: submissionId },
+    include: {
+      user: {
+        include: {
+          profile: true,
+        },
+      },
+    },
   });
 
   if (!submission) {
     throw new HttpError(404, 'Challenge submission not found.');
+  }
+
+  if (options?.reviewerRole === 'moderator') {
+    const assignedBarangay = options.reviewerCity?.trim().toLowerCase();
+    const subBarangay = submission.user.profile?.city?.trim().toLowerCase();
+    if (!assignedBarangay || assignedBarangay !== subBarangay) {
+      throw new HttpError(403, 'Forbidden: You cannot moderate submissions outside your assigned barangay.');
+    }
   }
 
   return prisma.challengeSubmission.update({
@@ -62,7 +79,7 @@ const updateSubmissionStatus = async (
       reviewedAt: new Date(),
     },
     include: {
-          challengeInstance: { include: { challenge: true } },
+      challengeInstance: { include: { challenge: true } },
       user: {
         include: {
           profile: true,
@@ -198,16 +215,26 @@ moderationRoutes.post(
 
 moderationRoutes.get(
   '/challenge-submissions',
-  errorBoundary(async (req, res) => {
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
     const status = submissionStatusFilterSchema.parse(
       typeof req.query.status === 'string' ? req.query.status : undefined,
     );
+
+    const isModerator = req.auth?.role === 'moderator';
+    const where: any = { status };
+
+    if (isModerator && req.auth?.city) {
+      where.user = {
+        profile: {
+          city: req.auth.city,
+        },
+      };
+    }
+
     const items = await prisma.challengeSubmission.findMany({
-      where: {
-        status,
-      },
+      where,
       include: {
-          challengeInstance: { include: { challenge: true } },
+        challengeInstance: { include: { challenge: true } },
         user: {
           include: {
             profile: true,
@@ -236,6 +263,8 @@ moderationRoutes.post(
       'approved',
       {
         moderatorNotes: payload.moderatorNotes,
+        reviewerRole: req.auth!.role,
+        reviewerCity: req.auth!.city,
       },
     );
 
@@ -271,6 +300,8 @@ moderationRoutes.post(
       'rejected',
       {
         moderatorNotes: payload.moderatorNotes,
+        reviewerRole: req.auth!.role,
+        reviewerCity: req.auth!.city,
       },
     );
 
@@ -307,6 +338,8 @@ moderationRoutes.post(
       {
         flaggedReason: payload.reason,
         moderatorNotes: payload.moderatorNotes,
+        reviewerRole: req.auth!.role,
+        reviewerCity: req.auth!.city,
       },
     );
 

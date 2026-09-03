@@ -494,30 +494,33 @@ export function useHomeDashboard(): EcoBudMobileModel {
             ],
         );
       } catch (error) {
-        console.error('ECOBUD hydrateApp error:', error);
         const status = (error as any)?.status;
         const msg = error instanceof Error ? error.message : '';
         const isAuthExpired = status === 401 || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized');
 
         if (isAuthExpired) {
+          // Token is expired or invalid - silently wipe invalid session so app resets cleanly
           setSession(null);
           clearAppData();
           setActiveOverlayState(null);
           setActiveTabState('home');
           void persistSession(null);
-          Alert.alert('Session Expired', 'Your session has expired. Please sign in again.');
           return;
         }
 
         const message = error instanceof Error ? error.message : 'Unable to reach ECOBUD right now.';
         if (!silent) {
+          console.warn('ECOBUD sync error:', message);
           Alert.alert('Sync failed', message);
+        } else {
+          // Silent background sync / bootstrap fallback: warn softly in dev without popping up RedBox/LogBox error banner
+          console.warn('[ECOBUD hydrateApp (offline/unreachable)]:', message);
         }
       } finally {
         setRefreshing(false);
       }
     },
-    [clearAppData],
+    [clearAppData, persistSession],
   );
 
   const syncQueuedOfflineActions = useCallback(
@@ -927,7 +930,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         // Fallback to proceed if check failed
       }
 
-      const completeGoogleAuth = async (selectedCity?: string) => {
+      const completeGoogleAuth = async (selectedCity?: string, isNewUser?: boolean) => {
         await runWithActionLoader('Signing you into EcoBud...', async () => {
           setAuthLoading(true);
           try {
@@ -945,6 +948,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
             setSession(nextSession);
             await persistSession(nextSession);
             await hydrateApp(nextSession);
+
+            if (isNewUser) {
+              setTimeout(() => {
+                setCoachMarksCurrentStep(0);
+                setCoachMarksVisible(true);
+              }, 400);
+            }
           } finally {
             setAuthLoading(false);
           }
@@ -953,7 +963,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       if (userExists) {
         // If user already exists, proceed directly to home dashboard without asking barangay
-        await completeGoogleAuth();
+        await completeGoogleAuth(undefined, false);
       } else {
         // If new user signing up via Google, prompt for barangay selection first
         return {
@@ -962,7 +972,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           displayName: authDisplayName,
           avatarUrl: authAvatarUrl,
           onConfirmBarangay: async (chosenBarangay: string) => {
-            await completeGoogleAuth(chosenBarangay);
+            await completeGoogleAuth(chosenBarangay, true);
           },
         };
       }

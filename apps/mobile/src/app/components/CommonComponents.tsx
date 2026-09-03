@@ -23,7 +23,7 @@ import { styles } from '../styles/appStyles';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LoadingGlyph, LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
-import { initialsFromLabel, usePressScale } from '../utils/appUtils';
+import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic } from '../utils/haptics';
@@ -479,11 +479,7 @@ export function AvatarBubble({
 }) {
   let parsedUrl = null;
   if (avatarUrl && avatarUrl !== 'null') {
-    let cleanUrl = avatarUrl.replace(/\\/g, '/');
-    if (cleanUrl.includes('localhost:3000')) {
-      cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-    }
-    parsedUrl = cleanUrl.startsWith('http') ? cleanUrl : `${ecobudApiOrigin}${cleanUrl}`;
+    parsedUrl = resolveMediaUrl(avatarUrl, ecobudApiOrigin);
   }
 
   if (parsedUrl) {

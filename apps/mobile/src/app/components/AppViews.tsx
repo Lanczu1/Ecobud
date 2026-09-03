@@ -34,6 +34,7 @@ import {
   getPhMonthKey,
   usePressScale,
   getVisibleStreak,
+  resolveMediaUrl,
 } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import {
@@ -50,23 +51,16 @@ import { LevelCard, getLevelFromPoints } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
-import { DiscoverChallengeCard } from './DiscoverChallengeCard';
+import { DiscoverChallengeCard, DiscoverChallengeSkeleton } from './DiscoverChallengeCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
 import { ecobudApiOrigin, type ChallengeWithProgress } from '../../shared/api/ecobudApi';
-import { ChallengesViewSkeleton, LeaderboardSkeleton } from '../../shared/ui/SkeletonLoaders';
+import { ChallengesViewSkeleton, LeaderboardSkeleton, TrackerCardsSkeleton } from '../../shared/ui/SkeletonLoaders';
 import { triggerSelectionHaptic } from '../utils/haptics';
 
 const getValidImageUrl = (url: string | null | undefined) => {
-  if (!url) return undefined;
-  let cleanUrl = url.replace(/\\/g, '/');
-  if (cleanUrl.includes('localhost:3000')) {
-    cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-  } else if (!cleanUrl.startsWith('http')) {
-    cleanUrl = `${ecobudApiOrigin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
-  }
-  return cleanUrl;
+  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
 };
 
 // Local components used in Views
@@ -753,19 +747,93 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
   );
 };
 
+export function GroupedChallengeSkeleton() {
+  const { theme, isDark } = useTheme();
+  const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+  const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.95 : 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.5 : 0.55,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulseAnim, isDark]);
+
+  return (
+    <Animated.View
+      style={{
+        backgroundColor: theme.colors.card,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: theme.colors.cardBorder,
+        overflow: 'hidden',
+        padding: 16,
+        opacity: pulseAnim,
+        shadowColor: '#126027',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: isDark ? 0.2 : 0.06,
+        shadowRadius: 8,
+        elevation: 3,
+        marginBottom: 14,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+        {/* Thumbnail bone */}
+        <View style={{ width: 68, height: 68, borderRadius: 14, backgroundColor: boneBg }} />
+
+        {/* Content bones */}
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <View style={{ height: 16, width: 60, borderRadius: 6, backgroundColor: boneBg }} />
+              <View style={{ height: 16, width: 70, borderRadius: 6, backgroundColor: boneBg }} />
+            </View>
+            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: boneBg }} />
+          </View>
+
+          {/* Title bone */}
+          <View style={{ height: 18, width: '78%', borderRadius: 9, backgroundColor: boneBg, marginBottom: 10 }} />
+
+          {/* Badges row bones */}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <View style={{ height: 22, width: 95, borderRadius: 8, backgroundColor: boneBg }} />
+            <View style={{ height: 22, width: 80, borderRadius: 8, backgroundColor: boneBg }} />
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  if ((model.initializing || model.booting) && (!model.challenges || model.challenges.length === 0)) {
-    return (
-      <>
-        <TopNavbar model={model} />
-        <ChallengesViewSkeleton />
-      </>
-    );
-  }
+  // Brief tab switch skeleton loading transition
+  const [tabLoading, setTabLoading] = useState(true);
+
+  useEffect(() => {
+    setTabLoading(true);
+    const timer = setTimeout(() => {
+      setTabLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [model.activeTab, model.challengesViewMode]);
+
+  const isCardsLoading = tabLoading || model.initializing || model.booting || (model.refreshing && (!model.challenges || model.challenges.length === 0));
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
@@ -984,11 +1052,28 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   YOUR ECO JOURNEY
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
-                <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                  style={[
+                    styles.welcomeTitle,
+                    {
+                      marginTop: 0,
+                      color: theme.colors.textPrimary,
+                      fontSize: responsiveFontSize(26),
+                      letterSpacing: -0.3,
+                    },
+                  ]}
+                >
                   Tasks & Challenges
                 </Text>
-                <MaterialCommunityIcons name="target" size={scale(26)} color={isDark ? theme.colors.primary : '#126027'} />
+                <MaterialCommunityIcons
+                  name="target"
+                  size={scale(24)}
+                  color={isDark ? theme.colors.primary : '#10B981'}
+                />
               </View>
             </View>
             <View
@@ -1129,7 +1214,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         )}
 
         {/* Empty States */}
-        {((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedGroups.length === 0)) && (
+        {!isCardsLoading && ((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedGroups.length === 0)) && (
           <View style={{
             alignItems: 'center',
             justifyContent: 'center',
@@ -1164,69 +1249,86 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
         {/* === VIEW MODE 1: DISCOVER TAB (ALL AVAILABLE CHALLENGES) === */}
         {viewMode === 'Discover' && (
-          <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' } : {}}>
-            {currentActiveList.map((challenge, index) => {
+          isCardsLoading ? (
+            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(14) } : {}}>
+              {Array.from({ length: Math.max(3, currentActiveList.length || 0) }).map((_, idx) => (
+                <View key={`skel-${idx}`} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                  <DiscoverChallengeSkeleton />
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(14) } : {}}>
+              {currentActiveList.map((challenge, index) => {
               if (index === 0) {
                 return (
-                  <CoachMarkTarget
-                    key={challenge.uniqueId || challenge.id}
-                    name="featuredChallenge"
-                    borderRadius={moderateScale(22)}
-                    active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
-                    onMeasure={(rect) => {
-                      model.setSpotlightTargetRect?.(rect);
-                    }}
-                    style={[
-                      { marginBottom: verticalScale(16) },
-                      isTablet ? { width: '48%' } : undefined
-                    ]}
-                  >
-                    <DiscoverChallengeCard
-                      challenge={challenge}
-                      isTablet={isTablet}
-                      style={{ marginBottom: 0 }}
-                      onPress={() => {
-                        model.openChallengeMission(challenge);
+                  <View key={challenge.uniqueId || challenge.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                    <CoachMarkTarget
+                      name="featuredChallenge"
+                      borderRadius={moderateScale(22)}
+                      active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
+                      onMeasure={(rect) => {
+                        model.setSpotlightTargetRect?.(rect);
                       }}
-                    />
-                  </CoachMarkTarget>
+                      style={{ marginBottom: verticalScale(16) }}
+                    >
+                      <DiscoverChallengeCard
+                        challenge={challenge}
+                        isTablet={false}
+                        style={{ marginBottom: 0, width: '100%' }}
+                        onPress={() => {
+                          model.openChallengeMission(challenge);
+                        }}
+                      />
+                    </CoachMarkTarget>
+                  </View>
                 );
               }
 
               return (
-                <DiscoverChallengeCard
-                  key={challenge.uniqueId || challenge.id}
-                  challenge={challenge}
-                  isTablet={isTablet}
-                  onPress={() => {
-                    model.openChallengeMission(challenge);
-                  }}
-                />
+                <View key={challenge.uniqueId || challenge.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                  <DiscoverChallengeCard
+                    challenge={challenge}
+                    isTablet={false}
+                    style={{ width: '100%' }}
+                    onPress={() => {
+                      model.openChallengeMission(challenge);
+                    }}
+                  />
+                </View>
               );
             })}
           </View>
+          )
         )}
 
         {/* === VIEW MODE 2: MY TASKS TAB (GROUPED BY CHALLENGE TEMPLATE) === */}
         {viewMode === 'My Tasks' && (
-          <View style={{ gap: 14 }}>
-            {inProgressGroups.map((group) => {
-              const { challenge, submissions, totalQuantity, approvedCollectionCount, pendingCount, rejectedCount } = group;
-              const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
-              const isExpanded = expandedTaskGroups[challenge.id] !== false; // default true
+          isCardsLoading ? (
+            <View style={{ gap: 14 }}>
+              {Array.from({ length: Math.max(2, inProgressGroups.length || 0) }).map((_, idx) => (
+                <GroupedChallengeSkeleton key={`my-tasks-skel-${idx}`} />
+              ))}
+            </View>
+          ) : (
+            <View style={{ gap: 14 }}>
+              {inProgressGroups.map((group) => {
+                const { challenge, submissions, totalQuantity, approvedCollectionCount, pendingCount, rejectedCount } = group;
+                const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
+                const isExpanded = expandedTaskGroups[challenge.id] !== false; // default true
 
               return (
                 <View 
                   key={challenge.id}
                   style={{
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: theme.colors.card,
                     borderRadius: 20,
                     borderWidth: 1.5,
-                    borderColor: '#E6F4EC',
+                    borderColor: theme.colors.cardBorder,
                     overflow: 'hidden',
                     shadowColor: '#126027',
                     shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.06,
+                    shadowOpacity: isDark ? 0.2 : 0.06,
                     shadowRadius: 8,
                     elevation: 3,
                   }}
@@ -1235,17 +1337,17 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   <Pressable 
                     onPress={() => toggleTaskGroup(challenge.id)}
                     style={({ pressed }) => [
-                      { padding: 16, backgroundColor: pressed ? '#F9FAFB' : '#FFFFFF' }
+                      { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
                     ]}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
                       {/* Image Thumbnail */}
-                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: '#E8F5E9' }}>
+                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
                         {challenge.imageUrl ? (
                           <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                         ) : (
                           <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-                            <Ionicons name={isImageMission ? "camera-outline" : "leaf-outline"} size={30} color="#126027" />
+                            <Ionicons name={isImageMission ? "camera-outline" : "leaf-outline"} size={30} color={isDark ? theme.colors.primary : "#126027"} />
                           </View>
                         )}
                       </View>
@@ -1254,56 +1356,56 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
-                            <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
+                            <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
+                            <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#047857', backgroundColor: isDark ? theme.colors.surfaceMuted : '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
                           </View>
-                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color="#126027" />
+                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color={isDark ? theme.colors.primary : "#126027"} />
                         </View>
 
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A211D', marginBottom: 6 }} numberOfLines={1}>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6 }} numberOfLines={1}>
                           {challenge.title}
                         </Text>
 
                         {/* Summary Badges */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                          <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Ionicons name="document-text-outline" size={12} color="#166534" />
-                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#166534' }}>
+                          <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="document-text-outline" size={12} color={isDark ? theme.colors.primary : "#166534"} />
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? theme.colors.primary : '#166534' }}>
                               {submissions.length} {submissions.length === 1 ? 'Submission' : 'Submissions'}
                             </Text>
                           </View>
 
                           {totalQuantity > 0 && (
-                            <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="cube-outline" size={12} color="#047857" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
+                            <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="cube-outline" size={12} color={isDark ? theme.colors.primary : "#047857"} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? theme.colors.primary : '#047857' }}>
                                 {totalQuantity} {challenge.quantityUnit || 'items'} Total
                               </Text>
                             </View>
                           )}
 
                           {approvedCollectionCount > 0 && (
-                            <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="qr-code-outline" size={12} color="#1D4ED8" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#1D4ED8' }}>
-                                {approvedCollectionCount} Ready for QR
+                            <View style={{ backgroundColor: isDark ? '#1E293B' : '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#334155' : '#BFDBFE', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="checkmark-done-circle-outline" size={12} color={isDark ? '#60A5FA' : "#1D4ED8"} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#60A5FA' : '#1D4ED8' }}>
+                                {approvedCollectionCount} For Final Approval
                               </Text>
                             </View>
                           )}
 
                           {pendingCount > 0 && (
-                            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="time-outline" size={12} color="#B45309" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
+                            <View style={{ backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="time-outline" size={12} color={isDark ? '#FBBF24' : "#B45309"} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>
                                 {pendingCount} Pending
                               </Text>
                             </View>
                           )}
 
                           {rejectedCount > 0 && (
-                            <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="alert-circle-outline" size={12} color="#DC2626" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#DC2626' }}>
+                            <View style={{ backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="alert-circle-outline" size={12} color="#EF4444" />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#EF4444' }}>
                                 {rejectedCount} Rejected
                               </Text>
                             </View>
@@ -1315,8 +1417,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
                   {/* Expandable Sub-items List (Accordion Content) */}
                   {isExpanded && (
-                    <View style={{ backgroundColor: '#F8FAFC', borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 12, gap: 10 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, marginBottom: 2 }}>
+                    <View style={{ backgroundColor: isDark ? theme.colors.surface : '#F8FAFC', borderTopWidth: 1, borderTopColor: theme.colors.cardBorder, padding: 12, gap: 10 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, marginBottom: 2 }}>
                         Active Submissions ({submissions.length})
                       </Text>
 
@@ -1345,29 +1447,29 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                           <View 
                             key={item.uniqueId}
                             style={{
-                              backgroundColor: '#FFFFFF',
+                              backgroundColor: theme.colors.card,
                               borderRadius: 14,
                               padding: 12,
                               borderWidth: 1,
-                              borderColor: isApprovedCollection ? '#93C5FD' : isRejected ? '#FCA5A5' : '#E2E8F0',
+                              borderColor: isApprovedCollection ? (isDark ? '#3B82F6' : '#93C5FD') : isRejected ? (isDark ? '#EF4444' : '#FCA5A5') : theme.colors.cardBorder,
                               shadowColor: '#000',
                               shadowOffset: { width: 0, height: 1 },
-                              shadowOpacity: 0.03,
+                              shadowOpacity: isDark ? 0.2 : 0.03,
                               shadowRadius: 3,
                               elevation: 1,
                             }}
                           >
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, flexWrap: 'wrap' }}>
-                                <View style={{ backgroundColor: '#E2E8F0', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569' }}>#{subIndex + 1}</Text>
+                                <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#E2E8F0', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.textMuted }}>#{subIndex + 1}</Text>
                                 </View>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>
                                   Entry {subIndex + 1}
                                 </Text>
-                                <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Ionicons name="cube-outline" size={11} color="#475569" />
-                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569' }}>
+                                <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="cube-outline" size={11} color={theme.colors.textMuted} />
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.textMuted }}>
                                     {quantity} {challenge.quantityUnit || 'items'}
                                   </Text>
                                 </View>
@@ -1375,27 +1477,27 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
                               {/* Status Pill */}
                               {isApprovedCollection ? (
-                                <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#1D4ED8' }}>APPROVED FOR COLLECTION</Text>
+                                <View style={{ backgroundColor: isDark ? '#1E293B' : '#DBEAFE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#60A5FA' : '#1D4ED8' }}>APPROVED FOR COLLECTION</Text>
                                 </View>
                               ) : isPending ? (
-                                <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>PENDING APPROVAL</Text>
+                                <View style={{ backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>PENDING APPROVAL</Text>
                                 </View>
                               ) : isFinalReview ? (
-                                <View style={{ backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#7E22CE' }}>FINAL REVIEW</Text>
+                                <View style={{ backgroundColor: isDark ? '#2A1B3D' : '#F3E8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#C084FC' : '#7E22CE' }}>FINAL REVIEW</Text>
                                 </View>
                               ) : isRejected ? (
-                                <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#DC2626' }}>REJECTED</Text>
+                                <View style={{ backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#EF4444' }}>REJECTED</Text>
                                 </View>
                               ) : null}
                             </View>
 
                             {/* Submission Proof Image */}
                             {item.sub?.proofUrl && (
-                              <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
+                              <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.cardBorder, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAFC' }}>
                                 <Image 
                                   source={{ uri: item.sub.proofUrl }}
                                   style={{ width: '100%', height: 140 }}
@@ -1409,8 +1511,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
                             {/* Rejection Message if any */}
                             {isRejected && item.rejectionReason && (
-                              <View style={{ backgroundColor: '#FEF2F2', padding: 8, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#FECACA' }}>
-                                <Text style={{ fontSize: 12, color: '#991B1B' }}>
+                              <View style={{ backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', padding: 8, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: isDark ? '#EF4444' : '#FECACA' }}>
+                                <Text style={{ fontSize: 12, color: '#EF4444' }}>
                                   Reason: {item.rejectionReason}
                                 </Text>
                               </View>
@@ -1419,7 +1521,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
                               {isApprovedCollection && !item.afterProofUrl ? (
                                 <TouchableOpacity 
-                                  style={{ backgroundColor: '#1D4ED8', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                  style={{ backgroundColor: isDark ? '#2563EB' : '#1D4ED8', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                                   onPress={() => model.openChallengeMission(fullChallengeItem)}
                                 >
                                   <Ionicons name="camera" size={15} color="#FFFFFF" />
@@ -1444,13 +1546,13 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                                 </TouchableOpacity>
                               ) : isPending ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 }}>
-                                  <Ionicons name="time-outline" size={14} color="#B45309" />
-                                  <Text style={{ fontSize: 12, color: '#B45309', fontWeight: '600' }}>Admin reviewing Before photo</Text>
+                                  <Ionicons name="time-outline" size={14} color={isDark ? '#FBBF24' : "#B45309"} />
+                                  <Text style={{ fontSize: 12, color: isDark ? '#FBBF24' : '#B45309', fontWeight: '600' }}>Admin reviewing Before photo</Text>
                                 </View>
                               ) : (isFinalReview || (isApprovedCollection && item.afterProofUrl)) ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 }}>
-                                  <Ionicons name="hourglass-outline" size={14} color="#7E22CE" />
-                                  <Text style={{ fontSize: 12, color: '#7E22CE', fontWeight: '600' }}>Admin reviewing After photo</Text>
+                                  <Ionicons name="hourglass-outline" size={14} color={isDark ? '#C084FC' : "#7E22CE"} />
+                                  <Text style={{ fontSize: 12, color: isDark ? '#C084FC' : '#7E22CE', fontWeight: '600' }}>Admin reviewing After photo</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -1463,28 +1565,36 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               );
             })}
           </View>
+          )
         )}
 
         {/* === VIEW MODE 3: HISTORY TAB (GROUPED COMPLETED CHALLENGES) === */}
         {viewMode === 'History' && (
-          <View style={{ gap: 14 }}>
-            {completedGroups.map((group) => {
-              const { challenge, submissions, totalQuantity, totalEarnedExp, totalEarnedCoins, unclaimedCount, claimedCount } = group;
-              const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
-              const isExpanded = expandedTaskGroups[`history-${challenge.id}`] !== false; // default true
+          isCardsLoading ? (
+            <View style={{ gap: 14 }}>
+              {Array.from({ length: Math.max(2, completedGroups.length || 0) }).map((_, idx) => (
+                <GroupedChallengeSkeleton key={`history-skel-${idx}`} />
+              ))}
+            </View>
+          ) : (
+            <View style={{ gap: 14 }}>
+              {completedGroups.map((group) => {
+                const { challenge, submissions, totalQuantity, totalEarnedExp, totalEarnedCoins, unclaimedCount, claimedCount } = group;
+                const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
+                const isExpanded = expandedTaskGroups[`history-${challenge.id}`] !== false; // default true
 
-              return (
-                <View 
+                return (
+                  <View 
                   key={challenge.id}
                   style={{
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: theme.colors.card,
                     borderRadius: 20,
                     borderWidth: 1.5,
-                    borderColor: '#E6F4EC',
+                    borderColor: theme.colors.cardBorder,
                     overflow: 'hidden',
                     shadowColor: '#126027',
                     shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.06,
+                    shadowOpacity: isDark ? 0.2 : 0.06,
                     shadowRadius: 8,
                     elevation: 3,
                   }}
@@ -1493,17 +1603,17 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   <Pressable 
                     onPress={() => toggleTaskGroup(`history-${challenge.id}`)}
                     style={({ pressed }) => [
-                      { padding: 16, backgroundColor: pressed ? '#F9FAFB' : '#FFFFFF' }
+                      { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
                     ]}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
                       {/* Image Thumbnail */}
-                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: '#E8F5E9' }}>
+                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
                         {challenge.imageUrl ? (
                           <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                         ) : (
                           <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-                            <Ionicons name="trophy" size={30} color="#126027" />
+                            <Ionicons name="trophy" size={30} color={isDark ? theme.colors.primary : "#126027"} />
                           </View>
                         )}
                       </View>
@@ -1512,48 +1622,48 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <Text style={[styles.taskMetaLabel, { color: '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
-                            <Text style={[styles.taskMetaLabel, { color: '#047857', backgroundColor: '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
+                            <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
+                            <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#047857', backgroundColor: isDark ? theme.colors.surfaceMuted : '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                              <Ionicons name="leaf" size={12} color="#15803D" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#15803D' }}>+{totalEarnedExp} Pts</Text>
+                              <Ionicons name="leaf" size={12} color={theme.colors.primary} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>+{totalEarnedExp} Pts</Text>
                             </View>
                             {totalEarnedCoins > 0 && (
-                              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5, gap: 3 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5, gap: 3 }}>
                                 <Image source={require('../../../assets/coin.png')} style={{ width: 10, height: 10, resizeMode: 'contain' }} />
-                                <Text style={{ fontSize: 9, fontWeight: '800', color: '#B45309' }}>+{totalEarnedCoins}</Text>
+                                <Text style={{ fontSize: 9, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{totalEarnedCoins}</Text>
                               </View>
                             )}
                           </View>
-                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color="#126027" />
+                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color={isDark ? theme.colors.primary : "#126027"} />
                         </View>
 
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A211D', marginBottom: 6 }} numberOfLines={1}>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6 }} numberOfLines={1}>
                           {challenge.title}
                         </Text>
 
                         {/* Summary Badges */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                          <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Ionicons name="checkmark-circle-outline" size={12} color="#166534" />
-                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#166534' }}>
+                          <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="checkmark-circle-outline" size={12} color={isDark ? theme.colors.primary : "#166534"} />
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? theme.colors.primary : '#166534' }}>
                               {submissions.length} Completed {submissions.length === 1 ? 'Submission' : 'Submissions'}
                             </Text>
                           </View>
 
                           {totalQuantity > 0 && (
-                            <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="cube-outline" size={12} color="#047857" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#047857' }}>
+                            <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#A7F3D0', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="cube-outline" size={12} color={isDark ? theme.colors.primary : "#047857"} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? theme.colors.primary : '#047857' }}>
                                 {totalQuantity} {challenge.quantityUnit || 'items'} Total
                               </Text>
                             </View>
                           )}
 
                           {unclaimedCount > 0 && (
-                            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                              <Ionicons name="gift-outline" size={12} color="#B45309" />
-                              <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
+                            <View style={{ backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#854D0E' : '#FDE68A', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="gift-outline" size={12} color={isDark ? '#FBBF24' : "#B45309"} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>
                                 {unclaimedCount} Unclaimed Reward{unclaimedCount === 1 ? '' : 's'}
                               </Text>
                             </View>
@@ -1565,8 +1675,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
                   {/* Expandable Completed Sub-items List */}
                   {isExpanded && (
-                    <View style={{ backgroundColor: '#F8FAFC', borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 12, gap: 10 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, marginBottom: 2 }}>
+                    <View style={{ backgroundColor: isDark ? theme.colors.surface : '#F8FAFC', borderTopWidth: 1, borderTopColor: theme.colors.cardBorder, padding: 12, gap: 10 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, marginBottom: 2 }}>
                         Completed Submissions ({submissions.length})
                       </Text>
 
@@ -1577,29 +1687,29 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                           <View 
                             key={item.uniqueId}
                             style={{
-                              backgroundColor: '#FFFFFF',
+                              backgroundColor: theme.colors.card,
                               borderRadius: 14,
                               padding: 12,
                               borderWidth: 1,
-                              borderColor: item.isApproved ? '#FDE68A' : '#E2E8F0',
+                              borderColor: item.isApproved ? (isDark ? '#854D0E' : '#FDE68A') : theme.colors.cardBorder,
                               shadowColor: '#000',
                               shadowOffset: { width: 0, height: 1 },
-                              shadowOpacity: 0.03,
+                              shadowOpacity: isDark ? 0.2 : 0.03,
                               shadowRadius: 3,
                               elevation: 1,
                             }}
                           >
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, flexWrap: 'wrap' }}>
-                                <View style={{ backgroundColor: '#E2E8F0', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569' }}>#{subIndex + 1}</Text>
+                                <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#E2E8F0', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.textMuted }}>#{subIndex + 1}</Text>
                                 </View>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>
                                   Entry {subIndex + 1}
                                 </Text>
-                                <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Ionicons name="cube-outline" size={11} color="#475569" />
-                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569' }}>
+                                <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="cube-outline" size={11} color={theme.colors.textMuted} />
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.textMuted }}>
                                     {quantity} {challenge.quantityUnit || 'items'}
                                   </Text>
                                 </View>
@@ -1607,19 +1717,19 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
                               {/* Status Pill */}
                               {item.isApproved ? (
-                                <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A' }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>APPROVED (READY TO CLAIM)</Text>
+                                <View style={{ backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#854D0E' : '#FDE68A' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>APPROVED (READY TO CLAIM)</Text>
                                 </View>
                               ) : (
-                                <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0' }}>
-                                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#059669' }}>COMPLETED & CLAIMED</Text>
+                                <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#A7F3D0' }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? theme.colors.primary : '#059669' }}>COMPLETED & CLAIMED</Text>
                                 </View>
                               )}
                             </View>
 
                             {/* Submission Proof Image */}
                             {item.sub?.proofUrl && (
-                              <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }}>
+                              <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.cardBorder, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAFC' }}>
                                 <Image 
                                   source={{ uri: item.sub.proofUrl }}
                                   style={{ width: '100%', height: 140 }}
@@ -1635,13 +1745,13 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Ionicons name="leaf" size={13} color="#15803D" />
-                                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803D' }}>+{item.earnedExp} Eco Points</Text>
+                                  <Ionicons name="leaf" size={13} color={theme.colors.primary} />
+                                  <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.primary }}>+{item.earnedExp} Eco Points</Text>
                                 </View>
                                 {item.earnedCoins > 0 && (
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
                                     <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
-                                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#B45309' }}>+{item.earnedCoins} COINS</Text>
+                                    <Text style={{ fontSize: 10, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{item.earnedCoins} COINS</Text>
                                   </View>
                                 )}
                               </View>
@@ -1672,6 +1782,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               );
             })}
           </View>
+          )
         )}
 
         {model.challenges.length === 0 && (
@@ -1730,6 +1841,19 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     }, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Brief tab switch skeleton loading transition for Tracker cards
+  const [tabLoading, setTabLoading] = useState(true);
+
+  useEffect(() => {
+    setTabLoading(true);
+    const timer = setTimeout(() => {
+      setTabLoading(false);
+    }, 550);
+    return () => clearTimeout(timer);
+  }, [model.activeTab]);
+
+  const isCardsLoading = tabLoading || model.initializing || model.booting || (model.refreshing && !model.tracker);
 
   const trackerMonth = model.tracker?.month ?? liveMonth;
   const completedDays = model.tracker?.completedDays ?? [];
@@ -1857,24 +1981,28 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
       <TopNavbar model={model} showBack={false} title="Tracker" />
 
       <View style={styles.homeContent}>
-        {/* ── Current Streak Card wrapped in CoachMarkTarget ── */}
-        <CoachMarkTarget
-          name="ecoStreak"
-          borderRadius={moderateScale(24)}
-          active={model.coachMarksVisible && model.coachMarksCurrentStep === 2}
-          onMeasure={(rect) => {
-            model.setSpotlightTargetRect?.(rect);
-          }}
-          style={{ marginBottom: verticalScale(20) }}
-        >
-          <SummaryCards
-            currentStreak={getDisplayStreak(model)}
-            ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
-            onPressRewards={() => model.setActiveOverlay('streakRewards')}
-            onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
-            style={{ marginBottom: 0 }}
-          />
-        </CoachMarkTarget>
+        {isCardsLoading ? (
+          <TrackerCardsSkeleton />
+        ) : (
+          <>
+            {/* ── Current Streak Card wrapped in CoachMarkTarget ── */}
+            <CoachMarkTarget
+              name="ecoStreak"
+              borderRadius={moderateScale(24)}
+              active={model.coachMarksVisible && model.coachMarksCurrentStep === 2}
+              onMeasure={(rect) => {
+                model.setSpotlightTargetRect?.(rect);
+              }}
+              style={{ marginBottom: verticalScale(20) }}
+            >
+              <SummaryCards
+                currentStreak={getDisplayStreak(model)}
+                ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
+                onPressRewards={() => model.setActiveOverlay('streakRewards')}
+                onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
+                style={{ marginBottom: 0 }}
+              />
+            </CoachMarkTarget>
 
 
         {/* ── Level Progress Card ────────────────────────────────────────── */}
@@ -2064,21 +2192,25 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                           <AvatarBubble
                             label={isUser ? model.userDisplayName : entry.displayName}
                             size={48}
-                            style={[trackerStyles.podiumAvatar, isUser && trackerStyles.podiumAvatarUser]}
-                            textStyle={trackerStyles.podiumAvatarText}
+                            style={[
+                              trackerStyles.podiumAvatar,
+                              { backgroundColor: isDark ? theme.colors.surfaceMuted : '#CBEFD6', borderColor: isDark ? theme.colors.border : '#CBEFD6' },
+                              isUser && [trackerStyles.podiumAvatarUser, { borderColor: theme.colors.primary }]
+                            ]}
+                            textStyle={[trackerStyles.podiumAvatarText, { color: isDark ? theme.colors.primary : '#126027' }]}
                             avatarUrl={userAvatar}
                           />
-                          <Text style={trackerStyles.podiumName} numberOfLines={1}>
+                          <Text style={[trackerStyles.podiumName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                             {isUser ? 'You' : entry.displayName}
                           </Text>
-                          <Text style={trackerStyles.podiumPoints}>{entry.points} Eco Points</Text>
+                          <Text style={[trackerStyles.podiumPoints, { color: theme.colors.textMuted }]}>{entry.points} Eco Points</Text>
                           <View
                             style={[
                               trackerStyles.podiumBlock,
-                              { height: podiumHeight },
-                              entry.rank === 1 && trackerStyles.podiumBlockGold,
-                              entry.rank === 2 && trackerStyles.podiumBlockSilver,
-                              entry.rank === 3 && trackerStyles.podiumBlockBronze,
+                              { height: podiumHeight, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0F5F2' },
+                              entry.rank === 1 && [trackerStyles.podiumBlockGold, isDark && { backgroundColor: '#92400E' }],
+                              entry.rank === 2 && [trackerStyles.podiumBlockSilver, isDark && { backgroundColor: '#475569' }],
+                              entry.rank === 3 && [trackerStyles.podiumBlockBronze, isDark && { backgroundColor: '#B45309' }],
                             ]}
                           />
                         </View>
@@ -2099,16 +2231,20 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                         key={entry.id}
                         style={[
                           trackerStyles.rankRow,
-                          { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAF9' },
-                          entry.isCurrentUser && trackerStyles.rankRowUser,
+                          { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAF9', borderBottomColor: theme.colors.border },
+                          entry.isCurrentUser && [trackerStyles.rankRowUser, { backgroundColor: isDark ? 'rgba(52, 211, 153, 0.15)' : '#F0FDF4' }],
                         ]}
                       >
                         <Text style={[trackerStyles.rankNumber, { color: theme.colors.textMuted }]}>#{entry.rank}</Text>
                         <AvatarBubble
                           label={entry.isCurrentUser ? model.userDisplayName : entry.displayName}
                           size={32}
-                          style={[trackerStyles.rankAvatar, isUser && trackerStyles.rankAvatarUser]}
-                          textStyle={trackerStyles.rankAvatarText}
+                          style={[
+                            trackerStyles.rankAvatar,
+                            { backgroundColor: isDark ? theme.colors.surfaceMuted : '#CBEFD6', borderColor: isDark ? theme.colors.border : '#E6F4EC' },
+                            isUser && [trackerStyles.rankAvatarUser, { borderColor: theme.colors.primary }]
+                          ]}
+                          textStyle={[trackerStyles.rankAvatarText, { color: isDark ? theme.colors.primary : '#126027' }]}
                           avatarUrl={userAvatar}
                         />
                         <Text style={[trackerStyles.rankName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -2143,22 +2279,27 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
                 {/* Current user anchor */}
                 {currentRank != null && !lbCurrentItems.some((entry) => entry.isCurrentUser) && (
-                  <View style={trackerStyles.currentUserAnchor}>
-                    <Text style={trackerStyles.rankNumber}>#{currentRank}</Text>
+                  <View style={[
+                    trackerStyles.currentUserAnchor,
+                    { backgroundColor: isDark ? theme.colors.surface : '#F0FDF4', borderTopColor: theme.colors.primary }
+                  ]}>
+                    <Text style={[trackerStyles.rankNumber, { color: theme.colors.textMuted }]}>#{currentRank}</Text>
                     <AvatarBubble
                       label="You"
                       size={32}
-                      style={[trackerStyles.rankAvatar, trackerStyles.rankAvatarUser, { borderWidth: 0 }]}
-                      textStyle={[trackerStyles.rankAvatarText, { color: '#FFF' }]}
+                      style={[trackerStyles.rankAvatar, trackerStyles.rankAvatarUser, { borderWidth: 0, backgroundColor: theme.colors.primary }]}
+                      textStyle={[trackerStyles.rankAvatarText, { color: isDark ? '#1A2620' : '#FFF' }]}
                       avatarUrl={model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl}
                     />
-                    <Text style={trackerStyles.rankName}>You</Text>
-                    <Text style={trackerStyles.rankPoints}>{totalPoints} Eco Points</Text>
+                    <Text style={[trackerStyles.rankName, { color: theme.colors.textPrimary }]}>You</Text>
+                    <Text style={[trackerStyles.rankPoints, { color: theme.colors.primary }]}>{totalPoints} Eco Points</Text>
                   </View>
                 )}
               </Animated.View>
             )}
           </View>
+        )}
+          </>
         )}
 
         <View style={{ height: 110 }} />
@@ -2243,7 +2384,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ProfileView({ model }: { model: EcoBudMobileModel }) {
-  const { theme, isDark, setThemeMode } = useTheme();
+  const { theme, isDark, themeMode, setThemeMode } = useTheme();
   const { width, height } = useWindowDimensions();
   const isSmallDevice = height <= 680 || width < 375;
   const isCompact = height < 750 || width < 380;
@@ -2276,11 +2417,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
   const rawAvatarUrl = model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl;
   let avatarUrl: string | null = null;
   if (rawAvatarUrl && rawAvatarUrl !== 'null') {
-    let cleanUrl = rawAvatarUrl.replace(/\\/g, '/');
-    if (cleanUrl.includes('localhost:3000')) {
-      cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-    }
-    avatarUrl = cleanUrl.startsWith('http') ? cleanUrl : `${ecobudApiOrigin}${cleanUrl}`;
+    avatarUrl = resolveMediaUrl(rawAvatarUrl, ecobudApiOrigin) || null;
   }
 
   const totalPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
@@ -2590,14 +2727,14 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                     paddingHorizontal: 10,
                     paddingVertical: 4,
                     borderRadius: 16,
-                    backgroundColor: !isDark ? '#126027' : 'transparent',
+                    backgroundColor: themeMode === 'light' ? '#126027' : 'transparent',
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 3,
                   }}
                 >
-                  <Ionicons name="sunny" size={13} color={!isDark ? '#FFF' : theme.colors.textMuted} />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: !isDark ? '#FFF' : theme.colors.textMuted }}>Light</Text>
+                  <Ionicons name="sunny" size={13} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'light' ? '#FFF' : theme.colors.textMuted }}>Light</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
@@ -2609,14 +2746,33 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                     paddingHorizontal: 10,
                     paddingVertical: 4,
                     borderRadius: 16,
-                    backgroundColor: isDark ? theme.colors.primary : 'transparent',
+                    backgroundColor: themeMode === 'dark' ? theme.colors.primary : 'transparent',
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 3,
                   }}
                 >
-                  <Ionicons name="moon" size={13} color={isDark ? '#0E1512' : theme.colors.textMuted} />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+                  <Ionicons name="moon" size={13} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerSelectionHaptic();
+                    setThemeMode('onyx');
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 16,
+                    backgroundColor: themeMode === 'onyx' ? '#FFF' : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  <Ionicons name="moon-outline" size={13} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
                 </TouchableOpacity>
               </View>
             </View>

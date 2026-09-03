@@ -22,16 +22,10 @@ import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapChatMessage, SwapConversation, SwapRequestStatus } from './types';
 import { MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
+import { resolveMediaUrl } from '../../app/utils/appUtils';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
-  if (!url) return undefined;
-  let cleanUrl = url.replace(/\\/g, '/');
-  if (cleanUrl.includes('localhost:3000')) {
-    cleanUrl = cleanUrl.replace('http://localhost:3000', ecobudApiOrigin);
-  } else if (!cleanUrl.startsWith('http')) {
-    cleanUrl = `${ecobudApiOrigin}${cleanUrl.startsWith('/') ? '' : '/'}${cleanUrl}`;
-  }
-  return cleanUrl;
+  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
 }
 
 function getInitials(name: string): string {

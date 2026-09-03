@@ -466,7 +466,14 @@ export class AdminController {
 
   static async getSubmissions(req: AuthenticatedRequest, res: Response) {
     try {
-      const items = await AdminService.getSubmissions();
+      const isModerator = req.auth?.role === 'moderator';
+      // For moderators: strictly enforce their assigned barangay, completely ignore query param
+      // For admins: optionally allow filtering by query param if provided
+      const filterBarangay = isModerator
+        ? (req.auth?.city || null)
+        : ((req.query.barangay as string) || null);
+
+      const items = await AdminService.getSubmissions(filterBarangay);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch submissions.", error: error.message });
@@ -482,9 +489,19 @@ export class AdminController {
     }
 
     try {
-      const item = await AdminService.reviewSubmission(id, req.auth!.userId, status, notes);
+      const reviewerContext = {
+        role: req.auth!.role,
+        city: req.auth!.city,
+      };
+      const item = await AdminService.reviewSubmission(id, req.auth!.userId, status, notes, reviewerContext);
       return res.status(200).json(item);
     } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED_BARANGAY_ACCESS') {
+        return res.status(403).json({ message: "Forbidden: You cannot review submissions outside your assigned barangay." });
+      }
+      if (error.message === 'Submission not found') {
+        return res.status(404).json({ message: "Submission not found." });
+      }
       return res.status(500).json({ message: "Failed to review submission.", error: error.message });
     }
   }
@@ -493,30 +510,57 @@ export class AdminController {
     const { id } = req.params;
 
     try {
-      const submission = await prisma.challengeSubmission.findUnique({ where: { id } });
-      if (submission?.proofUrl) {
-        await safelyDeleteUpload(submission.proofUrl);
-      }
-      if (submission?.afterProofUrl) {
-        await safelyDeleteUpload(submission.afterProofUrl);
-      }
+      const reviewerContext = {
+        role: req.auth!.role,
+        city: req.auth!.city,
+      };
 
+      const submission = await prisma.challengeSubmission.findUnique({
+        where: { id },
+        include: { user: { include: { profile: true } } },
+      });
       if (submission) {
-        await AdminService.deleteSubmission(id);
-      } else {
-        const eventSubmission = await prisma.eventSubmission.findUnique({ where: { id } });
-        if (eventSubmission?.attendanceImageUrl) {
-          await safelyDeleteUpload(eventSubmission.attendanceImageUrl);
+        if (reviewerContext.role === 'moderator') {
+          const assigned = reviewerContext.city?.trim().toLowerCase();
+          const subBarangay = submission.user.profile?.city?.trim().toLowerCase();
+          if (!assigned || assigned !== subBarangay) {
+            return res.status(403).json({ message: "Forbidden: You cannot delete submissions outside your assigned barangay." });
+          }
         }
+        if (submission.proofUrl) {
+          await safelyDeleteUpload(submission.proofUrl);
+        }
+        if (submission.afterProofUrl) {
+          await safelyDeleteUpload(submission.afterProofUrl);
+        }
+        await AdminService.deleteSubmission(id, reviewerContext);
+      } else {
+        const eventSubmission = await prisma.eventSubmission.findUnique({
+          where: { id },
+          include: { user: { include: { profile: true } } },
+        });
         if (eventSubmission) {
-          await AdminService.deleteEventSubmission(id);
+          if (reviewerContext.role === 'moderator') {
+            const assigned = reviewerContext.city?.trim().toLowerCase();
+            const subBarangay = eventSubmission.user?.profile?.city?.trim().toLowerCase();
+            if (!assigned || assigned !== subBarangay) {
+              return res.status(403).json({ message: "Forbidden: You cannot delete submissions outside your assigned barangay." });
+            }
+          }
+          if (eventSubmission.attendanceImageUrl) {
+            await safelyDeleteUpload(eventSubmission.attendanceImageUrl);
+          }
+          await AdminService.deleteEventSubmission(id, reviewerContext);
         } else {
-          throw new Error('Submission not found');
+          return res.status(404).json({ message: 'Submission not found' });
         }
       }
 
       return res.status(204).send();
     } catch (error: any) {
+      if (error.message === 'UNAUTHORIZED_BARANGAY_ACCESS') {
+        return res.status(403).json({ message: "Forbidden: You cannot delete submissions outside your assigned barangay." });
+      }
       return res.status(500).json({ message: "Failed to delete submission.", error: error.message });
     }
   }

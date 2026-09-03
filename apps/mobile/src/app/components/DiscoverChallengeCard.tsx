@@ -5,6 +5,7 @@ import {
   Pressable,
   Image,
   StyleSheet,
+  Animated,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -42,9 +43,9 @@ export function DiscoverChallengeCard({
           backgroundColor: theme.colors.card,
           borderColor: theme.colors.cardBorder,
           shadowOpacity: isDark ? 0.2 : 0.07,
+          width: '100%',
         },
         pressed && cardStyles.discoverCardPressed,
-        isTablet && { width: '48%' },
         style,
       ]}
       onPress={onPress}
@@ -269,7 +270,7 @@ const cardStyles = StyleSheet.create({
   },
   discoverFooter: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: verticalScale(16),
     gap: scale(10),
@@ -315,8 +316,8 @@ const cardStyles = StyleSheet.create({
   footerRight: {
     flexDirection: 'column',
     alignItems: 'flex-end',
+    justifyContent: 'flex-end',
     gap: verticalScale(6),
-    marginTop: verticalScale(14),
   },
   quantityBadge: {
     backgroundColor: '#ECFDF5',
@@ -358,3 +359,65 @@ const cardStyles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 });
+
+export function DiscoverChallengeSkeleton() {
+  const { theme, isDark } = useTheme();
+  const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+  const pulseAnim = React.useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
+
+  React.useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.95 : 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: isDark ? 0.5 : 0.55,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulseAnim, isDark]);
+
+  return (
+    <Animated.View
+      style={[
+        cardStyles.discoverCard,
+        {
+          backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+          borderColor: isDark ? theme.colors.cardBorder : '#E4EEE6',
+          opacity: pulseAnim,
+          width: '100%',
+        },
+      ]}
+    >
+      {/* Banner bone */}
+      <View style={[cardStyles.discoverImageWrap, { backgroundColor: boneBg }]} />
+
+      {/* Body bones */}
+      <View style={cardStyles.discoverBody}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: verticalScale(10) }}>
+          <View style={{ height: 16, width: 70, borderRadius: 8, backgroundColor: boneBg }} />
+          <View style={{ height: 16, width: 45, borderRadius: 8, backgroundColor: boneBg }} />
+        </View>
+
+        <View style={{ height: 20, width: '80%', borderRadius: 10, backgroundColor: boneBg, marginBottom: 8 }} />
+        <View style={{ height: 14, width: '92%', borderRadius: 7, backgroundColor: boneBg, marginBottom: 16 }} />
+
+        {/* Footer */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: verticalScale(6) }}>
+          <View style={{ gap: 6 }}>
+            <View style={{ height: 11, width: 40, borderRadius: 5, backgroundColor: boneBg }} />
+            <View style={{ height: 16, width: 90, borderRadius: 8, backgroundColor: boneBg }} />
+          </View>
+          <View style={{ height: 36, width: 85, borderRadius: 12, backgroundColor: boneBg }} />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}

@@ -99,7 +99,7 @@ export function CreateSwapListing({
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.8,
+      quality: 0.5,
       allowsMultipleSelection: true,
       selectionLimit: 5 - images.length,
     });
@@ -121,7 +121,7 @@ export function CreateSwapListing({
     }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
-      quality: 0.8,
+      quality: 0.5,
     });
     if (!result.canceled) {
       const newImages = [...images, ...result.assets.map((a) => a.uri)];
