@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Sun, Moon, UserCog } from 'lucide-react';
+import { Sun, Moon, UserCog } from 'lucide-react';
 import { AdminSection } from './AdminSidebar';
 
 interface AdminHeaderProps {
