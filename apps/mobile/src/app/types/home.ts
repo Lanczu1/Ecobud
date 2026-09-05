@@ -74,6 +74,7 @@ export interface HeaderProps {
   onEventsPress?: () => void;
   onTrackerPress?: () => void;
   onNotificationsPress?: () => void;
+  onAssistantPress?: () => void;
 }
 
 export interface SummaryCardsProps {

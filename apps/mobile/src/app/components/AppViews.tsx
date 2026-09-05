@@ -43,6 +43,7 @@ import {
   AvatarBubble,
   SurfaceCard,
   SecondaryButton,
+  AiAssistantBar,
 } from './CommonComponents';
 import { CoachMarkTarget } from './CoachMarkTarget';
 import { RejectionModal } from './RejectionModal';
@@ -1095,6 +1096,14 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             Small actions add up. Pick a mission that fits your day and start making a difference.
           </Text>
         </View>
+
+        {/* Discoverable Eco AI Guide Bar */}
+        <AiAssistantBar
+          onPress={() => model.setActiveOverlay('assistant')}
+          placeholder="Ask EcoBud AI about challenges..."
+          badgeText="GUIDE"
+          style={{ marginTop: verticalScale(6), marginBottom: verticalScale(6) }}
+        />
 
         {/* View Mode Tabs */}
         <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 4, marginTop: verticalScale(10), marginBottom: verticalScale(10) }}>

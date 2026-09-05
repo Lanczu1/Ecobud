@@ -12,6 +12,7 @@ export interface QuickActionsProps {
   onPressRedeemCoins?: () => void;
   onPressMarketplace?: () => void;
   onPressEvents?: () => void;
+  isHabitPending?: boolean;
 }
 
 interface ActionItem {
@@ -34,10 +35,15 @@ export function QuickActions({
   onPressRedeemCoins,
   onPressMarketplace,
   onPressEvents,
+  isHabitPending,
 }: QuickActionsProps) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
+
+  const habitPending = isHabitPending !== undefined
+    ? isHabitPending
+    : (model ? (model.todaysCompletedHabits === 0) : false);
 
   const handleHabits = () => {
     triggerImpactLight();
@@ -125,50 +131,69 @@ export function QuickActions({
   return (
     <View style={styles.wrapper}>
       <View style={styles.grid}>
-        {actions.map((action) => (
-          <TouchableOpacity
-            key={action.id}
-            activeOpacity={0.78}
-            onPress={action.onPress}
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.colors.card,
-                borderColor: isDark ? theme.colors.cardBorder : action.borderColor,
-                width: isTablet ? '23.5%' : '23%',
-                shadowOpacity: isDark ? 0.2 : 0.05,
-              },
-            ]}
-          >
-            <View style={[styles.iconCircle, { backgroundColor: isDark ? theme.colors.surfaceMuted : action.bgColor }]}>
-              {action.iconType === 'image' ? (
-                <Image
-                  source={action.imageSource}
-                  style={{ width: scale(22), height: scale(22) }}
-                  resizeMode="contain"
-                />
-              ) : action.iconType === 'material' ? (
-                <MaterialCommunityIcons
-                  name={action.iconName as any}
-                  size={scale(22)}
-                  color={isDark ? theme.colors.primary : action.iconColor}
-                />
-              ) : (
-                <Ionicons
-                  name={action.iconName as any}
-                  size={scale(20)}
-                  color={isDark ? theme.colors.primary : action.iconColor}
-                />
+        {actions.map((action) => {
+          const isPrimary = action.id === 'habits' && habitPending;
+
+          return (
+            <TouchableOpacity
+              key={action.id}
+              activeOpacity={0.78}
+              onPress={action.onPress}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: isPrimary ? (isDark ? '#142E1F' : '#EBF7EE') : theme.colors.card,
+                  borderColor: isPrimary ? (isDark ? theme.colors.primary : '#126027') : (isDark ? theme.colors.cardBorder : action.borderColor),
+                  borderWidth: isPrimary ? 2 : 1,
+                  width: isTablet ? '23.5%' : '23%',
+                  shadowOpacity: isPrimary ? (isDark ? 0.35 : 0.16) : (isDark ? 0.2 : 0.05),
+                  transform: isPrimary ? [{ scale: 1.02 }] : undefined,
+                },
+              ]}
+            >
+              {isPrimary && (
+                <View style={[styles.primaryBadge, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}>
+                  <Text style={[styles.primaryBadgeText, { color: isDark ? '#0E1512' : '#FFFFFF' }]}>TODAY</Text>
+                </View>
               )}
-            </View>
-            <Text style={[styles.actionLabel, { color: theme.colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-              {action.label}
-            </Text>
-            <Text style={[styles.actionSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
-              {action.subLabel}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <View style={[styles.iconCircle, { backgroundColor: isDark ? theme.colors.surfaceMuted : action.bgColor }]}>
+                {action.iconType === 'image' ? (
+                  <Image
+                    source={action.imageSource}
+                    style={{ width: scale(22), height: scale(22) }}
+                    resizeMode="contain"
+                  />
+                ) : action.iconType === 'material' ? (
+                  <MaterialCommunityIcons
+                    name={action.iconName as any}
+                    size={scale(22)}
+                    color={isDark ? theme.colors.primary : action.iconColor}
+                  />
+                ) : (
+                  <Ionicons
+                    name={action.iconName as any}
+                    size={scale(20)}
+                    color={isDark ? theme.colors.primary : action.iconColor}
+                  />
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.actionLabel,
+                  { color: isPrimary ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textPrimary },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
+                {action.label}
+              </Text>
+              <Text style={[styles.actionSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {action.subLabel}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -197,6 +222,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    position: 'relative',
+  },
+  primaryBadge: {
+    position: 'absolute',
+    top: -verticalScale(7),
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(1.5),
+    borderRadius: moderateScale(6),
+    zIndex: 10,
+    elevation: 3,
+  },
+  primaryBadgeText: {
+    fontSize: responsiveFontSize(7.5),
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   iconCircle: {
     width: scale(42),

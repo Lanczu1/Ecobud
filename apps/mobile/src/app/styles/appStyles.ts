@@ -1611,7 +1611,7 @@ export const styles = StyleSheet.create({
     lineHeight: moderateScale(20),
   },
   mainScrollContent: {
-    paddingBottom: verticalScale(110),
+    paddingBottom: verticalScale(84),
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
@@ -2631,7 +2631,7 @@ export const styles = StyleSheet.create({
   },
   homeContent: {
     paddingHorizontal: scale(24),
-    paddingBottom: verticalScale(24),
+    paddingBottom: verticalScale(8),
   },
   welcomeLabel: {
     fontSize: responsiveFontSize(12),

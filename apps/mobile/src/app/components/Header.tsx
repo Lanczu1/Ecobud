@@ -58,6 +58,7 @@ export function Header({
   onEventsPress,
   onTrackerPress,
   onNotificationsPress,
+  onAssistantPress,
 }: HeaderProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -141,6 +142,11 @@ export function Header({
         </View>
 
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: actionGap }}>
+          {onAssistantPress && (
+            <TouchableOpacity onPress={onAssistantPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+              <Ionicons name="sparkles" size={iconSize} color={actionIconColor} />
+            </TouchableOpacity>
+          )}
           {onTrackerPress && (
             <TouchableOpacity onPress={onTrackerPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
               <Ionicons name="bar-chart-outline" size={iconSize} color={actionIconColor} />

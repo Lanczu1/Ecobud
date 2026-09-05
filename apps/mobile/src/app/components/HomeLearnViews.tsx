@@ -5,7 +5,7 @@ import { styles } from '../styles/appStyles';
 import { type EcoBudMobileModel } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard } from './DiscoverChallengeCard';
-import { TopNavbar, SurfaceCard, AvatarBubble } from './CommonComponents';
+import { TopNavbar, SurfaceCard, AvatarBubble, AiAssistantBar } from './CommonComponents';
 import { LearnLessonCard, LearnLessonSkeleton } from './LearnLessonCard';
 import { CoachMarkTarget } from './CoachMarkTarget';
 import { QuickActions } from './QuickActions';
@@ -13,6 +13,8 @@ import { SummaryCards } from './SummaryCards';
 import { LevelCard } from './LevelCard';
 import { MilestoneBadgePreview } from './MilestoneBadgePreview';
 import { UpcomingEventCard } from './UpcomingEventCard';
+import { UnifiedProgressCard } from './UnifiedProgressCard';
+import { ForYouFeed } from './ForYouFeed';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
@@ -35,51 +37,6 @@ const getGreetingInfo = (): { text: string; icon: keyof typeof Ionicons.glyphMap
     // Fallback if Intl is not fully supported
   }
   return { text: 'Hello', icon: 'sparkles', iconColor: '#10B981' };
-};
-
-
-
-const LeaderboardSnippet = ({ model }: { model: EcoBudMobileModel }) => {
-  const { theme } = useTheme();
-  const leaderboard = model.leaderboard;
-  if (!leaderboard || leaderboard.items.length === 0) return null;
-
-  const currentUser = leaderboard.items.find((item) => item.isCurrentUser) || leaderboard.items[0];
-  const userAvatar = currentUser.isCurrentUser
-    ? (currentUser.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
-    : currentUser.avatarUrl;
-
-  return (
-    <View style={{ backgroundColor: theme.colors.card, borderRadius: moderateScale(20), padding: moderateScale(16), marginBottom: verticalScale(14), borderWidth: 1, borderColor: theme.colors.cardBorder }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
-        <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(14), fontWeight: '800' }}>Weekly Leaderboard</Text>
-        <TouchableOpacity onPress={() => model.setActiveOverlay('leaderboard')}>
-          <Text style={{ color: theme.colors.primary, fontSize: responsiveFontSize(12), fontWeight: '700' }}>View All</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', backgroundColor: theme.colors.surfaceMuted, borderRadius: moderateScale(12), padding: moderateScale(12) }}>
-        <Text style={{ fontSize: responsiveFontSize(15), fontWeight: 'bold', color: theme.colors.textMuted, width: scale(24), flexShrink: 1 }}>#{currentUser.rank}</Text>
-        <AvatarBubble
-          label={currentUser.isCurrentUser ? model.userDisplayName : currentUser.displayName}
-          avatarUrl={userAvatar}
-          size={scale(34)}
-          style={{ marginRight: scale(10), flexShrink: 0 }}
-          textStyle={{ fontSize: responsiveFontSize(13) }}
-        />
-        <View style={{ flex: 1, minWidth: scale(120) }}>
-          <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(13), fontWeight: '700' }}>{currentUser.isCurrentUser ? 'You' : currentUser.displayName}</Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: responsiveFontSize(11) }}>
-            {currentUser.isCurrentUser
-              ? currentUser.rank === 1
-                ? 'You are #1 on the leaderboard!'
-                : 'Keep going to reach #1!'
-              : 'Top weekly eco contributor'}
-          </Text>
-        </View>
-        <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(13), fontWeight: 'bold' }}>{currentUser.points} pts</Text>
-      </View>
-    </View>
-  );
 };
 
 export function HomeView({ model }: { model: EcoBudMobileModel }) {
@@ -109,6 +66,8 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const weeklyGoal = model.dashboard?.weeklyGoal ?? 0;
   const firstDiscoverChallenge = model.challenges?.slice().sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))[0] || null;
   const featuredLesson = model.lessons?.find((l: any) => l.featured) || (model.lessons && model.lessons.length > 0 ? model.lessons[0] : null);
+  const featuredEvent = model.events.find((e) => e.isFeatured) || model.events[0] || null;
+  const isHabitPending = model.todaysCompletedHabits === 0;
 
   const greeting = getGreetingInfo();
   const firstName = model.userDisplayName.split(' ')[0] || 'Eco-Warrior';
@@ -149,166 +108,49 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         </View>
         <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(14), color: theme.colors.textMuted }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
 
-        <TouchableOpacity
-          onPress={() => model.setActiveOverlay('assistant')}
-          activeOpacity={0.88}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: theme.colors.card,
-            borderRadius: moderateScale(22),
-            paddingHorizontal: scale(16),
-            paddingVertical: verticalScale(10),
-            marginBottom: verticalScale(18),
-            minHeight: verticalScale(50),
-            shadowColor: '#126027',
-            shadowOpacity: isDark ? 0.2 : 0.08,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 3,
-            borderWidth: 1,
-            borderColor: theme.colors.cardBorder,
-          }}
-        >
-          <View style={{ width: scale(32), height: scale(32), borderRadius: scale(16), backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="sparkles" size={scale(16)} color={isDark ? theme.colors.primary : '#126027'} />
-          </View>
-          <Text style={{ flex: 1, marginLeft: scale(10), fontSize: responsiveFontSize(14), color: theme.colors.textSecondary, fontWeight: '600' }}>
-            Ask EcoBud AI a question...
-          </Text>
-          <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1', paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: moderateScale(12), flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(11), fontWeight: '800' }}>AI</Text>
-            <Ionicons name="chevron-forward" size={scale(12)} color={isDark ? theme.colors.primary : '#126027'} />
-          </View>
-        </TouchableOpacity>
+        {/* Discoverable AI Assistant Bar (Replaces floating FAB) */}
+        <AiAssistantBar onPress={() => model.setActiveOverlay('assistant')} />
 
         {isCardsLoading ? (
           <HomeCardsSkeleton />
         ) : (
           <>
-            {/* Quick Action Grid */}
-            <QuickActions model={model} />
+            {/* Quick Action Grid with Hero Primary CTA indicator */}
+            <QuickActions model={model} isHabitPending={isHabitPending} />
 
-        {isTablet ? (
-          <View style={{ flexDirection: 'row', gap: scale(14), marginBottom: verticalScale(4), alignItems: 'stretch' }}>
-            <View style={{ flex: 1 }}>
-              <LevelCard
-                ecoPoints={ecoPoints}
-                onPress={() => model.setActiveOverlay('ecoLevels')}
-                onProgressBarMeasured={model.setProgressBarLayout}
-              />
-              <MilestoneBadgePreview
-                ecoPoints={ecoPoints}
-                onPress={() => model.setActiveOverlay('ecoLevels')}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <SummaryCards
-                currentStreak={currentStreak}
-                ecoPoints={ecoPoints}
-                onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
-              />
-            </View>
-          </View>
-        ) : (
-          <>
-            <LevelCard
+            {/* Consolidated Gamification Progress Card */}
+            <UnifiedProgressCard
               ecoPoints={ecoPoints}
-              onPress={() => model.setActiveOverlay('ecoLevels')}
+              currentStreak={currentStreak}
+              leaderboard={model.leaderboard}
+              onOpenRoadmap={() => model.setActiveOverlay('ecoLevels')}
+              onOpenStreak={() => model.setActiveOverlay('streakUnlocked')}
+              onOpenLeaderboard={() => model.setActiveOverlay('leaderboard')}
               onProgressBarMeasured={model.setProgressBarLayout}
             />
-            <MilestoneBadgePreview
-              ecoPoints={ecoPoints}
-              onPress={() => model.setActiveOverlay('ecoLevels')}
-            />
-            <SummaryCards
-              currentStreak={currentStreak}
-              ecoPoints={ecoPoints}
-              onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
-            />
-          </>
-        )}
 
-        <LeaderboardSnippet model={model} />
+            {!model.dashboard ? (
+              <SurfaceCard style={{ padding: moderateScale(18), borderRadius: moderateScale(22), marginBottom: verticalScale(14) }}>
+                <Text style={styles.cardTitle}>Dashboard unavailable</Text>
+                <Text style={styles.metaTextSmallDark}>Pull to refresh and load your latest streak, eco points, and weekly goal.</Text>
+              </SurfaceCard>
+            ) : null}
 
-        {featuredLesson && (
-          <View style={{ marginBottom: verticalScale(14) }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
-              <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>Lesson</Text>
-              <TouchableOpacity onPress={() => model.setActiveTab('learn')}>
-                <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
-              </TouchableOpacity>
-            </View>
-            <LearnLessonCard
+            {/* Consolidated Horizontal "For You" Feed */}
+            <ForYouFeed
               lesson={featuredLesson}
-              onPress={() => void model.openLesson(featuredLesson.id)}
-            />
-          </View>
-        )}
-
-        {!model.dashboard ? (
-          <SurfaceCard style={{ padding: moderateScale(18), borderRadius: moderateScale(22) }}>
-            <Text style={styles.cardTitle}>Dashboard unavailable</Text>
-            <Text style={styles.metaTextSmallDark}>Pull to refresh and load your latest streak, eco points, and weekly goal.</Text>
-          </SurfaceCard>
-        ) : null}
-
-        {firstDiscoverChallenge ? (
-          <View style={{ marginBottom: verticalScale(14) }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
-              <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>Challenges</Text>
-              <TouchableOpacity onPress={() => model.setActiveTab('challenges')}>
-                <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
-              </TouchableOpacity>
-            </View>
-            <DiscoverChallengeCard
               challenge={firstDiscoverChallenge}
-              onPress={() => {
-                model.openChallengeMission(firstDiscoverChallenge);
-              }}
+              event={featuredEvent}
+              onOpenLesson={(id) => void model.openLesson(id)}
+              onOpenChallenge={(challenge) => model.openChallengeMission(challenge)}
+              onOpenEvent={(_e) => model.setActiveOverlay('events')}
+              onSeeAllLessons={() => model.setActiveTab('learn')}
+              onSeeAllChallenges={() => model.setActiveTab('challenges')}
+              onSeeAllEvents={() => model.setActiveOverlay('events')}
+              hasPendingHabit={isHabitPending}
             />
-          </View>
-        ) : null}
-
-        {(() => {
-          const featuredEvent = model.events.find((e) => e.isFeatured) || model.events[0];
-          if (!featuredEvent) return null;
-
-          return (
-            <View style={{ marginBottom: verticalScale(14) }}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(10) }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  {featuredEvent.isFeatured && <Ionicons name="star" size={scale(13)} color="#F59E0B" />}
-                  <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(13), fontWeight: '800', textTransform: 'uppercase' }}>
-                    {featuredEvent.isFeatured ? 'Featured Event' : 'Event'}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => model.setActiveOverlay('events')}>
-                  <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(12), fontWeight: '700' }}>See all</Text>
-                </TouchableOpacity>
-              </View>
-              <UpcomingEventCard
-                event={featuredEvent}
-                onJoin={() => {
-                  if (featuredEvent?.id) {
-                    void model.handleJoinEvent(featuredEvent.id);
-                  }
-                }}
-                onSignIn={() => model.leaveReadOnlyAccess()}
-                onRecordAttendance={() => model.setActiveOverlay('events')}
-                onClaimReward={() => {
-                  if (featuredEvent?.id) {
-                    void model.handleClaimEventReward(featuredEvent.id);
-                  }
-                }}
-              />
-            </View>
-          );
-        })()}
           </>
         )}
-
-        <View style={{ height: verticalScale(80) }} />
       </View>
     </>
   );
@@ -376,6 +218,13 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
             Master eco-friendly living with bite-sized lessons, complete quizzes, and build sustainable habits.
           </Text>
         </View>
+
+        {/* Discoverable Eco AI Tutor Bar */}
+        <AiAssistantBar
+          onPress={() => model.setActiveOverlay('assistant')}
+          placeholder="Ask EcoBud AI about lessons..."
+          badgeText="TUTOR"
+        />
 
         {/* Premium Learning Progress Card */}
         {totalLessonsCount > 0 && (

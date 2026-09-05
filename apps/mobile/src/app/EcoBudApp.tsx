@@ -41,7 +41,6 @@ import {
   TrackerView,
   ProfileView,
   OverlayRouter,
-  ChatbotFAB,
   BottomTabBar,
   ActionOverlayWrapper,
   MarketplaceView,
@@ -137,10 +136,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
-          <>
-            <ChatbotFAB onPress={() => model.setActiveOverlay('assistant')} />
-            <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
-          </>
+          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
         )}
       </SafeAreaView>
     );

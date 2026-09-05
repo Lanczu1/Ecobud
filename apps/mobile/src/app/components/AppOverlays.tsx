@@ -37,6 +37,7 @@ import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
+import { AiThinkingBubble } from './AiThinkingBubble';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
 import { BARANGAYS } from '../../shared/constants/barangays';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
@@ -939,6 +940,15 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   const insets = useSafeAreaInsets();
   const scrollViewRef = React.useRef<ScrollView>(null);
 
+  React.useEffect(() => {
+    if (model.sendingMessage) {
+      const timer = setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [model.sendingMessage]);
+
   const { isSmall, isTablet, isCompact } = responsive;
 
   // Responsive layout and dimension tokens
@@ -1063,7 +1073,12 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
             })}
 
             {model.sendingMessage ? (
-              <LoadingGlyph size={isSmall ? 'sm' : 'md'} style={{ marginTop: 8, alignSelf: 'flex-start' }} />
+              <AiThinkingBubble
+                bubbleMaxWidth={bubbleMaxWidth}
+                bubblePadding={bubblePadding}
+                bubbleRadius={bubbleRadius}
+                isSmall={isSmall}
+              />
             ) : null}
           </ScrollView>
 
@@ -1079,6 +1094,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   <TouchableOpacity
                     key={reply}
                     onPress={() => void model.handleAssistantSend(reply)}
+                    disabled={model.sendingMessage}
                     style={[
                       styles.categoryOutlineBtn,
                       {
@@ -1090,6 +1106,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                         alignItems: 'center',
                         backgroundColor: theme.colors.card,
                         borderColor: theme.colors.border,
+                        opacity: model.sendingMessage ? 0.6 : 1,
                       },
                     ]}
                   >
@@ -1123,8 +1140,9 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
             <TextInput
               value={model.assistantInput}
               onChangeText={model.setAssistantInput}
-              placeholder="Message ECOBUD..."
+              placeholder={model.sendingMessage ? 'EcoBud is thinking...' : 'Message ECOBUD...'}
               placeholderTextColor={theme.colors.textMuted}
+              editable={!model.sendingMessage}
               style={[
                 styles.assistantInput,
                 {
@@ -1136,11 +1154,13 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   backgroundColor: theme.colors.inputBackground,
                   borderColor: theme.colors.inputBorder,
                   color: theme.colors.textPrimary,
+                  opacity: model.sendingMessage ? 0.75 : 1,
                 },
               ]}
             />
             <TouchableOpacity
               onPress={() => void model.handleAssistantSend()}
+              disabled={model.sendingMessage || !model.assistantInput.trim()}
               style={[
                 styles.sendButton,
                 {
@@ -1148,6 +1168,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                   height: composerMinHeight,
                   borderRadius: composerRadius,
                   backgroundColor: isDark ? theme.colors.primary : '#126027',
+                  opacity: model.sendingMessage || !model.assistantInput.trim() ? 0.45 : 1,
                 },
               ]}
             >

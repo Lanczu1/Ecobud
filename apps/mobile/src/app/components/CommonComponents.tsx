@@ -121,7 +121,109 @@ export function ActionOverlayWrapper({ visible, label }: { visible: boolean; lab
   );
 }
 
-export function TopNavbar({ model, title, showBack, onBack }: { model: EcoBudMobileModel; title?: string; showBack?: boolean; onBack?: () => void }) {
+export function AiAssistantBar({
+  onPress,
+  placeholder = 'Ask EcoBud AI a question...',
+  badgeText = 'AI',
+  style,
+}: {
+  onPress: () => void;
+  placeholder?: string;
+  badgeText?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { theme, isDark } = useTheme();
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.88}
+      style={[
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: theme.colors.card,
+          borderRadius: moderateScale(22),
+          paddingHorizontal: scale(16),
+          paddingVertical: verticalScale(10),
+          marginBottom: verticalScale(16),
+          minHeight: verticalScale(50),
+          shadowColor: '#126027',
+          shadowOpacity: isDark ? 0.2 : 0.08,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 3,
+          borderWidth: 1,
+          borderColor: theme.colors.cardBorder,
+        },
+        style,
+      ]}
+    >
+      <View
+        style={{
+          width: scale(32),
+          height: scale(32),
+          borderRadius: scale(16),
+          backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Ionicons name="sparkles" size={scale(16)} color={isDark ? theme.colors.primary : '#126027'} />
+      </View>
+      <Text
+        style={{
+          flex: 1,
+          marginLeft: scale(10),
+          fontSize: responsiveFontSize(14),
+          color: theme.colors.textSecondary,
+          fontWeight: '600',
+        }}
+        numberOfLines={1}
+      >
+        {placeholder}
+      </Text>
+      <View
+        style={{
+          backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1',
+          paddingHorizontal: scale(10),
+          paddingVertical: verticalScale(4),
+          borderRadius: moderateScale(12),
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(11), fontWeight: '800' }}>
+          {badgeText}
+        </Text>
+        <Ionicons name="chevron-forward" size={scale(12)} color={isDark ? theme.colors.primary : '#126027'} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export function TopNavbar({
+  model,
+  title,
+  showBack,
+  onBack,
+  showAssistantInHeader,
+}: {
+  model: EcoBudMobileModel;
+  title?: string;
+  showBack?: boolean;
+  onBack?: () => void;
+  showAssistantInHeader?: boolean;
+}) {
+  // Option A (User preference): Header icon ONLY on screens that don't have the inline AiAssistantBar
+  // (e.g. Profile, Tracker, G&G, detail screens).
+  // On Home/Learn/Challenges, the inline bar is the discoverable entry point — don't duplicate it in header.
+  const hasInlineBar = ['home', 'learn', 'challenges'].includes(model.activeTab);
+  const shouldShowAssistantInHeader = showAssistantInHeader !== undefined
+    ? showAssistantInHeader
+    : (!hasInlineBar || !!showBack || !!title);
+
   return (
     <Header
       userDisplayName={model.userDisplayName}
@@ -141,6 +243,7 @@ export function TopNavbar({ model, title, showBack, onBack }: { model: EcoBudMob
         model.setActiveTab('tracker');
       }}
       onNotificationsPress={() => model.setActiveOverlay('notifications')}
+      onAssistantPress={shouldShowAssistantInHeader ? () => model.setActiveOverlay('assistant') : undefined}
     />
   );
 }
