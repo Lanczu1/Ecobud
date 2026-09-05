@@ -1576,55 +1576,60 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const handleAssistantSend = useCallback(
     async (seedMessage?: string) => {
       const outgoingText = (seedMessage ?? assistantInput).trim();
-      if (!outgoingText) {
+      if (!outgoingText || sendingMessage) {
         return;
       }
 
-      await runWithActionLoader('EcoBud is thinking...', async () => {
-        try {
-          const activeSession = ensureSession();
-          const userMessage: AssistantMessage = {
-            id: `user-${Date.now()}`,
-            role: 'user',
-            text: outgoingText,
+      let activeSession: SessionPayload;
+      try {
+        activeSession = ensureSession();
+      } catch (err) {
+        Alert.alert('Session required', err instanceof Error ? err.message : 'Please sign in again.');
+        return;
+      }
+
+      const userMessage: AssistantMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        text: outgoingText,
+        time: formatChatTime(new Date().toISOString()),
+      };
+
+      setAssistantMessages((current) => [...current, userMessage]);
+      setAssistantInput('');
+      setSendingMessage(true);
+
+      try {
+        // Build conversation history for the AI (last 10 messages, converted to {role, content})
+        const currentMessages = [...assistantMessages, userMessage];
+        const history = currentMessages.slice(-10).map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.text,
+        }));
+
+        const reply = await homeService.sendAssistantMessage(activeSession.token, outgoingText, history);
+
+        setAssistantMessages((current) => [
+          ...current,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            text: reply.reply,
             time: formatChatTime(new Date().toISOString()),
-          };
+          },
+        ]);
 
-          setAssistantMessages((current) => [...current, userMessage]);
-          setAssistantInput('');
-          setSendingMessage(true);
-
-          // Build conversation history for the AI (last 10 messages, converted to {role, content})
-          const currentMessages = [...assistantMessages, userMessage];
-          const history = currentMessages.slice(-10).map((m) => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.text,
-          }));
-
-          const reply = await homeService.sendAssistantMessage(activeSession.token, outgoingText, history);
-
-          setAssistantMessages((current) => [
-            ...current,
-            {
-              id: `assistant-${Date.now()}`,
-              role: 'assistant',
-              text: reply.reply,
-              time: formatChatTime(new Date().toISOString()),
-            },
-          ]);
-
-          // Update quick replies with contextual suggestions from the AI
-          if (reply.quickReplies?.length) {
-            setAssistantQuickReplies(reply.quickReplies);
-          }
-        } catch (error) {
-          Alert.alert('Assistant unavailable', error instanceof Error ? error.message : 'Please try again.');
-        } finally {
-          setSendingMessage(false);
+        // Update quick replies with contextual suggestions from the AI
+        if (reply.quickReplies?.length) {
+          setAssistantQuickReplies(reply.quickReplies);
         }
-      });
+      } catch (error) {
+        Alert.alert('Assistant unavailable', error instanceof Error ? error.message : 'Please try again.');
+      } finally {
+        setSendingMessage(false);
+      }
     },
-    [assistantInput, ensureSession, runWithActionLoader],
+    [assistantInput, assistantMessages, ensureSession, sendingMessage],
   );
 
   const loadTrackerMonth = useCallback(
