@@ -130,8 +130,9 @@ app.use(errorResponder);
 
 const port = Number(process.env.PORT ?? 3000);
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`ECOBUD API running at http://localhost:${port}`);
+  console.log(`ECOBUD API accessible on local network at http://0.0.0.0:${port}`);
 });
 
 startPresenceCleanupScheduler();

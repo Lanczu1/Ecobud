@@ -1,3 +1,4 @@
+import { detectionSettingsSchema } from '../services/challengeImageService';
 import { Response } from "express";
 import { AuthenticatedRequest } from "../http/authentication";
 import { AdminService } from "../services/adminService";
@@ -387,7 +388,12 @@ export class AdminController {
 
   static async createChallenge(req: AuthenticatedRequest, res: Response) {
     try {
-      const item = await AdminService.createChallenge(req.body);
+      const settings = detectionSettingsSchema.safeParse({
+        aiDetectionTargets: req.body.aiDetectionTargets,
+        aiMinimumConfidence: req.body.aiMinimumConfidence ?? 80,
+      });
+      if (!settings.success) return res.status(400).json({ message: 'Select one to three supported detection classes and a confidence from 1 to 100.' });
+      const item = await AdminService.createChallenge({ ...req.body, ...settings.data });
       return res.status(201).json(item);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to create challenge.", error: error.message });
@@ -396,7 +402,14 @@ export class AdminController {
 
   static async updateChallenge(req: AuthenticatedRequest, res: Response) {
     try {
-      const item = await AdminService.updateChallenge(req.params.id, req.body);
+      const existing = await prisma.challenge.findUnique({ where: { id: req.params.id } });
+      if (!existing) return res.status(404).json({ message: 'Challenge not found.' });
+      const settings = detectionSettingsSchema.safeParse({
+        aiDetectionTargets: req.body.aiDetectionTargets ?? existing.aiDetectionTargets,
+        aiMinimumConfidence: req.body.aiMinimumConfidence ?? existing.aiMinimumConfidence,
+      });
+      if (!settings.success) return res.status(400).json({ message: 'Select one to three supported detection classes and a confidence from 1 to 100.' });
+      const item = await AdminService.updateChallenge(req.params.id, { ...req.body, ...settings.data });
       return res.status(200).json(item);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to update challenge.", error: error.message });

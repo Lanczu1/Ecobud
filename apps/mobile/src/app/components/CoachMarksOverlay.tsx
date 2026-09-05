@@ -23,11 +23,11 @@ import type { AppTab, EcoBudMobileModel } from '../types/home';
 export type MascotPose = 'wave' | 'idle' | 'left_point' | 'right_point' | 'celebrate';
 
 const MASCOT_SOURCES: Record<MascotPose, any> = {
-  wave: require('../../../assets/Ecobud Mascot/Wave.json'),
-  right_point: require('../../../assets/Ecobud Mascot/Right Point.json'),
-  idle: require('../../../assets/Ecobud Mascot/Idle.json'),
-  left_point: require('../../../assets/Ecobud Mascot/Left Point.json'),
-  celebrate: require('../../../assets/Ecobud Mascot/Celebrate.json'),
+  wave: require('../../../assets/Ecobud Mascot/New Lottie files/Wave.lottie'),
+  right_point: require('../../../assets/Ecobud Mascot/New Lottie files/Right Point.lottie'),
+  idle: require('../../../assets/Ecobud Mascot/New Lottie files/Idle.lottie'),
+  left_point: require('../../../assets/Ecobud Mascot/New Lottie files/Left Point.lottie'),
+  celebrate: require('../../../assets/Ecobud Mascot/New Lottie files/Celebrate.lottie'),
 };
 
 export interface CoachMarksOverlayProps {

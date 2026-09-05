@@ -77,11 +77,14 @@ export const challengeUploadMiddleware = multer({
   },
 });
 
-// YOLO analysis images (10MB)
+// Gemini analysis images (10MB)
 export const analyzeUploadMiddleware = multer({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {
+    files: 1,
+    fields: 0,
+    parts: 2, // Allow the parser to finish the single file; fields remain forbidden.
     fileSize: 10 * 1024 * 1024, // 10MB
   },
 });

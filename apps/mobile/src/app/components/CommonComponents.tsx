@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   ViewStyle,
   TextStyle,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,50 +27,328 @@ import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
 import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
-import { triggerSelectionHaptic } from '../utils/haptics';
+import { triggerSelectionHaptic, triggerWarningHaptic } from '../utils/haptics';
+import LottieView from 'lottie-react-native';
 import { Header } from './Header';
 
-export function ChatbotFAB({ onPress }: { onPress: () => void }) {
+export function ChatbotFAB({
+  onPress,
+  onLongPress,
+}: {
+  onPress: () => void;
+  onLongPress?: () => void;
+}) {
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
-  const isNarrow = screenWidth < 380;
-  const { scale, onPressIn, onPressOut } = usePressScale(0.95);
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { theme, isDark } = useTheme();
 
-  // Responsive bottom offset taking safe-area and responsive navbar into account
-  const bottomOffset = (insets.bottom > 0 ? insets.bottom : 12) + (isNarrow ? 66 : 74);
+  // Responsive device classifications
+  const isSmallDevice = screenWidth < 375 || screenHeight <= 680;
+  const isLargeDevice = screenWidth >= 600 || screenHeight >= 900;
+  const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
-  React.useEffect(() => {
-    Animated.loop(
+  // Dynamic sizing derived directly from screen dimensions via responsive scaling:
+  // Base scale is 108dp, scaled by device density and capped gracefully on tablets
+  const mascotSize = scale(isSmallDevice ? 94 : isLargeDevice ? 130 : 108);
+
+  // Dynamic bottom offset calculated from tab bar height (64) + safe area insets + responsive clearance
+  const bottomBarHeight = verticalScale(64);
+  const bottomOffset = insets.bottom + bottomBarHeight + verticalScale(12);
+
+  // Max width of speech bubble dynamically bound to screen width (never overflows)
+  const bubbleMaxWidth = Math.min(screenWidth * 0.58, scale(220));
+
+  // Animated values for speech bubble (fade + gentle float up/down)
+  const bubbleOpacity = useRef(new Animated.Value(0)).current;
+  const bubbleTranslateY = useRef(new Animated.Value(6)).current;
+  // Continuous gentle breathing animation (gentle scale + vertical hover)
+  const breathAnim = useRef(new Animated.Value(0)).current;
+
+  // Continuous breathing loop (syncs with mascot's idle rhythm)
+  useEffect(() => {
+    const breathingLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -8,
-          duration: 1500,
+        Animated.timing(breathAnim, {
+          toValue: 1,
+          duration: 1800,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(floatAnim, {
+        Animated.timing(breathAnim, {
           toValue: 0,
-          duration: 1500,
+          duration: 1800,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, [floatAnim]);
+    );
+    breathingLoop.start();
+
+    return () => {
+      breathingLoop.stop();
+    };
+  }, [breathAnim]);
+
+  useEffect(() => {
+    let isMounted = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const runCycle = () => {
+      if (!isMounted) return;
+
+      // Animate IN (show)
+      Animated.parallel([
+        Animated.timing(bubbleOpacity, {
+          toValue: 1,
+          duration: 380,
+          easing: Easing.out(Easing.back(1.5)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bubbleTranslateY, {
+          toValue: 0,
+          duration: 380,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Stay visible for 5 seconds, then animate OUT (show off)
+      timer = setTimeout(() => {
+        if (!isMounted) return;
+
+        Animated.parallel([
+          Animated.timing(bubbleOpacity, {
+            toValue: 0,
+            duration: 320,
+            easing: Easing.in(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(bubbleTranslateY, {
+            toValue: 6,
+            duration: 320,
+            easing: Easing.in(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          // Stay hidden for 5 seconds before showing again
+          if (isMounted) {
+            timer = setTimeout(runCycle, 5000);
+          }
+        });
+      }, 5000);
+    };
+
+    // Initial brief delay before first entrance
+    const initialDelay = setTimeout(runCycle, 1200);
+
+    return () => {
+      isMounted = false;
+      if (initialDelay) clearTimeout(initialDelay);
+      if (timer) clearTimeout(timer);
+    };
+  }, [bubbleOpacity, bubbleTranslateY]);
+
+  // Interpolated breathing transforms
+  const breathScale = breathAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.028], // subtle gentle pulse
+  });
+
+  const breathHover = breathAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -3.5], // gentle float up and down
+  });
+
+  const handleLongPress = () => {
+    triggerWarningHaptic();
+    Alert.alert(
+      'Remove Chatbot?',
+      'Do you want to remove the chatbot mascot from your screen? You can turn it back on anytime in your Profile page.',
+      [
+        {
+          text: 'No',
+          style: 'cancel',
+        },
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: () => {
+            if (onLongPress) {
+              onLongPress();
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   return (
     <Animated.View
+      pointerEvents="box-none"
       style={[
         styles.chatbotFabOuter,
-        { bottom: bottomOffset },
-        { transform: [{ translateY: floatAnim }, { scale }] },
+        {
+          bottom: bottomOffset,
+          right: scale(16),
+        },
+        { transform: [{ scale: pressScale }] },
       ]}
     >
-      <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} style={styles.chatbotFab}>
-        <Image
-          source={require('../../../assets/chatbutton.png')}
-          style={styles.chatbotFabImg}
+      {/* Speech Bubble: Positioned on the TOP-LEFT of the Mascot with breathing effect */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          bottom: mascotSize * 0.52,
+          right: mascotSize * 0.55,
+          maxWidth: bubbleMaxWidth,
+          opacity: bubbleOpacity,
+          transform: [
+            { translateY: Animated.add(bubbleTranslateY, breathHover) },
+            { scale: breathScale },
+          ],
+          zIndex: 10,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: isDark ? '#111D17' : '#FFFFFF',
+            borderRadius: moderateScale(18),
+            borderBottomRightRadius: moderateScale(4),
+            paddingHorizontal: scale(14),
+            paddingTop: verticalScale(9),
+            paddingBottom: verticalScale(10),
+            borderWidth: 1.5,
+            borderColor: isDark ? 'rgba(74, 222, 128, 0.45)' : 'rgba(16, 185, 129, 0.28)',
+            shadowColor: '#0E5A35',
+            shadowOpacity: isDark ? 0.45 : 0.16,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 8,
+          }}
+        >
+          {/* Top Pill / Badge row */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: verticalScale(5),
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: isDark ? 'rgba(74, 222, 128, 0.15)' : '#ECFDF5',
+                paddingHorizontal: scale(7),
+                paddingVertical: verticalScale(2),
+                borderRadius: moderateScale(10),
+              }}
+            >
+              <Ionicons name="sparkles" size={scale(10)} color={isDark ? '#4ADE80' : '#059669'} />
+              <Text
+                style={{
+                  fontSize: responsiveFontSize(isSmallDevice ? 9.5 : 10.5),
+                  fontWeight: '800',
+                  color: isDark ? '#4ADE80' : '#047857',
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                }}
+              >
+                EcoBud AI
+              </Text>
+            </View>
+
+            {/* Online pulsing indicator */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <View
+                style={{
+                  width: scale(6),
+                  height: scale(6),
+                  borderRadius: scale(3),
+                  backgroundColor: '#10B981',
+                }}
+              />
+              <Text
+                style={{
+                  fontSize: responsiveFontSize(isSmallDevice ? 9 : 10),
+                  fontWeight: '600',
+                  color: isDark ? '#6EE7B7' : '#059669',
+                }}
+              >
+                Online
+              </Text>
+            </View>
+          </View>
+
+          {/* Main Conversational Text */}
+          <Text
+            style={{
+              fontSize: responsiveFontSize(isSmallDevice ? 12.5 : 13.5),
+              lineHeight: responsiveFontSize(isSmallDevice ? 17 : 19),
+              fontWeight: '700',
+              color: isDark ? '#F9FAFB' : '#111827',
+              letterSpacing: -0.1,
+            }}
+          >
+            Hi! I’m Ecobud.{' '}
+            <Text
+              style={{
+                fontWeight: '500',
+                color: isDark ? '#9CA3AF' : '#4B5563',
+              }}
+            >
+              How can I help?
+            </Text>
+          </Text>
+        </View>
+
+        {/* Bubble Pointer Tail pointing toward Mascot */}
+        <View
+          style={{
+            alignSelf: 'flex-end',
+            marginRight: scale(18),
+            width: 0,
+            height: 0,
+            borderTopWidth: verticalScale(8),
+            borderTopColor: isDark ? '#111D17' : '#FFFFFF',
+            borderLeftWidth: scale(7),
+            borderLeftColor: 'transparent',
+            borderRightWidth: scale(3),
+            borderRightColor: 'transparent',
+            marginTop: -0.5,
+          }}
+        />
+      </Animated.View>
+
+      {/* Interactive Mascot FAB */}
+      <Pressable
+        onPress={onPress}
+        onLongPress={handleLongPress}
+        delayLongPress={450}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        style={styles.chatbotFab}
+        accessibilityLabel="Chat with EcoBud AI. Hold to remove mascot."
+        accessibilityRole="button"
+      >
+        <LottieView
+          source={require('../../../assets/Ecobud Mascot/New Lottie files/Wave.lottie')}
+          autoPlay
+          loop
+          renderMode="HARDWARE"
+          cacheComposition={true}
+          hardwareAccelerationAndroid={true}
+          style={{ width: mascotSize, height: mascotSize }}
         />
       </Pressable>
     </Animated.View>
@@ -216,13 +495,9 @@ export function TopNavbar({
   onBack?: () => void;
   showAssistantInHeader?: boolean;
 }) {
-  // Option A (User preference): Header icon ONLY on screens that don't have the inline AiAssistantBar
-  // (e.g. Profile, Tracker, G&G, detail screens).
-  // On Home/Learn/Challenges, the inline bar is the discoverable entry point — don't duplicate it in header.
-  const hasInlineBar = ['home', 'learn', 'challenges'].includes(model.activeTab);
-  const shouldShowAssistantInHeader = showAssistantInHeader !== undefined
-    ? showAssistantInHeader
-    : (!hasInlineBar || !!showBack || !!title);
+  // The user requested to remove the sparkle icon (AI assistant) from the top navigation header on all screens, 
+  // since the new floating Chatbot FAB handles this access point.
+  const shouldShowAssistantInHeader = showAssistantInHeader !== undefined ? showAssistantInHeader : false;
 
   return (
     <Header

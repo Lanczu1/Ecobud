@@ -230,9 +230,10 @@ export interface EcoBudMobileModel {
     targetQuantity?: number;
     calculatedExpReward?: number;
     calculatedEcoCoins?: number;
+    box_2d?: [number, number, number, number] | null;
   }>;
   uploadChallengeProofImage: (challengeId: string, uri: string) => Promise<{ proofUrl: string }>;
-  handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) => Promise<void>;
+  handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, analysisToken?: string, proofText?: string) => Promise<void>;
   handleVerifyChallengeQr: (challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) => Promise<void>;
   handleSubmitChallengeAfterPhoto: (challengeId: string, afterProofUrl: string, submissionId?: string) => Promise<void>;
   handleClaimChallengeReward: (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => Promise<void>;
@@ -249,4 +250,7 @@ export interface EcoBudMobileModel {
   /** Real measured screen position of the LevelCard progress bar, for accurate particle targeting */
   progressBarLayout: { x: number; y: number; width: number; height: number } | null;
   setProgressBarLayout: (layout: { x: number; y: number; width: number; height: number } | null) => void;
+  /** Whether the floating leaf mascot AI chatbot is enabled or hidden by the user */
+  isChatbotEnabled: boolean;
+  setChatbotEnabled: (enabled: boolean) => Promise<void>;
 }

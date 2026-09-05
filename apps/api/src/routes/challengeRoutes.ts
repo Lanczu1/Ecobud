@@ -14,6 +14,8 @@ import path from 'path';
 import fs from 'fs';
 import rateLimit from 'express-rate-limit';
 import { JWT_SECRET } from '../security/tokenService';
+import { recognizeChallengeImage } from '../services/challengeImageService';
+import { signChallengeAnalysis, detectionSettingsHash } from '../security/challengeAnalysisToken';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
@@ -26,6 +28,19 @@ const analyzeLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many analysis requests. Please wait a moment before trying again.' },
 });
+
+// Cache recently analyzed image hashes to deduplicate identical scans (saves Gemini token quota)
+const imageAnalysisCache = new Map<string, { result: any; mimeType: string; timestamp: number }>();
+const HASH_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function cleanOldAnalysisCache() {
+  const now = Date.now();
+  for (const [key, value] of imageAnalysisCache.entries()) {
+    if (now - value.timestamp > HASH_CACHE_TTL_MS) {
+      imageAnalysisCache.delete(key);
+    }
+  }
+}
 
 const uploadProofLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -222,187 +237,76 @@ challengeRoutes.post(
       throw new HttpError(400, 'Image file is required');
     }
 
-    let instance = await prisma.challengeInstance.findUnique({
-      where: { id: req.params.challengeInstanceId },
-      include: { challenge: true }
-    });
+    try {
+      const instance = await resolveInstance(req.params.challengeInstanceId);
+      const challenge = instance?.challenge;
+      if (!instance || !challenge || !challenge.active || challenge.type !== 'AI Image Recognition Challenge') {
+        throw new HttpError(404, 'Active AI challenge not found.');
+      }
 
-    if (!instance) {
-      const challengeExists = await prisma.challenge.findUnique({
-        where: { id: req.params.challengeInstanceId },
-      });
-      if (challengeExists) {
-        const createdInstance = await getOrCreateActiveInstance(challengeExists.id);
-        instance = await prisma.challengeInstance.findUnique({
-          where: { id: createdInstance.id },
-          include: { challenge: true },
+      const bytes = await fs.promises.readFile(req.file.path);
+
+      // Hash deduplication: Compute sha256 to reuse recent analysis of identical image bytes
+      cleanOldAnalysisCache();
+      const imageHash = crypto.createHash('sha256').update(bytes).digest('hex');
+      const cacheKey = `${imageHash}:${challenge.id}:${(challenge.aiDetectionTargets || []).join(',')}:${challenge.aiMinimumConfidence || 1}`;
+
+      let mimeType: string;
+      let result: any;
+
+      if (imageAnalysisCache.has(cacheKey)) {
+        const cached = imageAnalysisCache.get(cacheKey)!;
+        mimeType = cached.mimeType;
+        result = cached.result;
+      } else {
+        const aiResponse = await recognizeChallengeImage(bytes, challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1);
+        mimeType = aiResponse.mimeType;
+        const { mimeType: _m, ...resData } = aiResponse;
+        result = resData;
+
+        imageAnalysisCache.set(cacheKey, {
+          result,
+          mimeType,
+          timestamp: Date.now(),
         });
       }
+
+      if (!result.passed) {
+        return res.json(result);
+      }
+
+      const ext = mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg';
+      let proofUrl: string;
+      try {
+        proofUrl = await supabaseStorageService.uploadFile(
+          'challenges/analyzed/' + crypto.randomUUID() + ext,
+          req.file.path,
+          mimeType,
+        );
+      } catch {
+        throw new HttpError(503, 'Could not save the analyzed photo. Please retry.');
+      }
+
+      const analysisToken = signChallengeAnalysis({
+        userId: req.auth!.userId,
+        instanceId: instance.id,
+        proofUrl,
+        detectedCount: result.detectedCount,
+        settings: detectionSettingsHash(challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1),
+      });
+
+      return res.json({
+        ...result,
+        proofUrl,
+        analysisToken,
+        calculatedExpReward: challenge.expReward,
+        calculatedEcoCoins: challenge.ecoCoinReward,
+      });
+    } finally {
+      if (req.file?.path) {
+        await fs.promises.unlink(req.file.path).catch(() => {});
+      }
     }
-
-    const challenge = instance?.challenge;
-
-    if (!challenge || !challenge.active) {
-      fs.unlinkSync(req.file.path);
-      throw new HttpError(404, 'Active challenge not found.');
-    }
-
-    const scriptPath = path.join(__dirname, '../utils/analyze_image.py');
-    const imagePath = req.file.path;
-
-    return new Promise((resolve, reject) => {
-      const pythonCommand = process.platform === 'win32' ? 'py' : 'python';
-      const rawTargets = Array.isArray(challenge.aiDetectionTargets) && (challenge.aiDetectionTargets as any[]).length > 0
-        ? (challenge.aiDetectionTargets as string[])
-        : ['Plastic Bottle', 'Glass Bottle'];
-      const targetsArg = rawTargets.join(',');
-      const pythonProcess = spawn(pythonCommand, [scriptPath, imagePath, targetsArg]);
-      
-      let outputData = '';
-      let errorData = '';
-
-      pythonProcess.on('error', (err) => {
-        try { fs.unlinkSync(imagePath); } catch {}
-        reject(new HttpError(500, `Failed to start Python (${pythonCommand}): ${err.message}`));
-      });
-
-      pythonProcess.stdout.on('data', (data) => {
-        outputData += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        errorData += data.toString();
-        console.error(`Python stderr: ${data}`);
-      });
-
-      pythonProcess.on('close', (code) => {
-        if (code !== 0) {
-          reject(new HttpError(500, `YOLO analysis failed: ${errorData}`));
-          return;
-        }
-
-        try {
-          const lines = outputData.trim().split('\n');
-          const lastLine = lines[lines.length - 1];
-          const result = JSON.parse(lastLine);
-          if (result.error) {
-            reject(new HttpError(500, result.error));
-            return;
-          }
-
-          const detected = result.detected || [];
-          const targets = rawTargets.map(t => String(t).toLowerCase().trim());
-          const minConf = challenge.aiMinimumConfidence || 30;
-
-          let passed = false;
-          let matchedObject = 'Unknown';
-          let maxConfidence = 0;
-          let reason = 'No matching object detected';
-          let detectedCount = 0;
-
-          for (const det of detected) {
-            const detObj = det.object.toLowerCase().trim();
-            const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const matchedTargetIndex = targets.findIndex(t => {
-              if (t === detObj) return true;
-              if (t.includes('bottle') && detObj === 'bottle') return true;
-              if (t.includes('glass') && (detObj === 'wine glass' || detObj === 'cup' || detObj === 'bottle')) return true;
-              if (t.includes('cup') && detObj === 'cup') return true;
-              const tRegex = new RegExp(`\\b${escapeRegExp(t)}\\b`, 'i');
-              const detRegex = new RegExp(`\\b${escapeRegExp(detObj)}\\b`, 'i');
-              return tRegex.test(detObj) || detRegex.test(t);
-            });
-            const isMatch = matchedTargetIndex !== -1;
-            
-            if (isMatch) {
-              const originalTarget = rawTargets[matchedTargetIndex] || det.object;
-              if (det.confidence >= minConf) {
-                passed = true;
-                matchedObject = originalTarget;
-                detectedCount++;
-                if (det.confidence > maxConfidence) {
-                  maxConfidence = det.confidence;
-                }
-              } else if (!passed && det.confidence > maxConfidence) {
-                matchedObject = originalTarget;
-                maxConfidence = det.confidence;
-                reason = `Confidence ${det.confidence.toFixed(1)}% is below minimum ${minConf}%`;
-              }
-            }
-          }
-
-          if (passed) {
-            reason = '';
-          } else if (matchedObject === 'Unknown') {
-            reason = `No ${targets.join(' or ')} detected in the image`;
-          }
-
-          const calculatedExpReward = challenge.expReward;
-          const calculatedEcoCoins = challenge.ecoCoinReward;
-
-          if (passed) {
-            const ext = path.extname(req.file!.originalname) || '.jpg';
-            const destinationPath = `challenges/analyzed/challenge-${req.params.challengeInstanceId}-${Date.now()}${ext}`;
-            
-            supabaseStorageService
-              .uploadFile(destinationPath, req.file!.path, req.file!.mimetype)
-              .then((publicUrl) => {
-                try {
-                  if (fs.existsSync(req.file!.path)) {
-                    fs.unlinkSync(req.file!.path);
-                  }
-                } catch (e) {
-                  console.error('Failed to remove temp analyzed file:', e);
-                }
-
-                res.json({
-                  passed: true,
-                  object: matchedObject,
-                  confidence: Math.round(maxConfidence),
-                  detectedCount: 1,
-                  calculatedExpReward,
-                  calculatedEcoCoins,
-                  proofUrl: publicUrl,
-                });
-                resolve(undefined);
-              })
-              .catch((err) => {
-                try {
-                  if (fs.existsSync(req.file!.path)) {
-                    fs.unlinkSync(req.file!.path);
-                  }
-                } catch {}
-                reject(new HttpError(500, `Failed to store image in cloud: ${err.message}`));
-              });
-          } else {
-            try {
-              if (fs.existsSync(req.file!.path)) {
-                fs.unlinkSync(req.file!.path);
-              }
-            } catch (e) {
-              console.error('Failed to remove failed analyzed file:', e);
-            }
-
-            res.json({
-              passed: false,
-              object: matchedObject,
-              confidence: Math.round(maxConfidence),
-              detectedCount: 0,
-              reason,
-            });
-            resolve(undefined);
-          }
-        } catch (err: any) {
-          console.error('Error handling YOLO output:', err);
-          try {
-            if (req.file && fs.existsSync(req.file.path)) {
-              fs.unlinkSync(req.file.path);
-            }
-          } catch {}
-          reject(new HttpError(500, `Failed to parse YOLO analysis output: ${err.message || err}`));
-        }
-      });
-    });
   }),
 );
 
