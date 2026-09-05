@@ -604,7 +604,7 @@ export const ecobudApi = {
   fetchChallenges: (token: string) =>
     request<{ items: ChallengeWithProgress[]; isCycleActive?: boolean }>('/challenges/active', { token }),
   analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
-    uploadFileAsync<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string }>(
+    uploadFileAsync<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string; box_2d?: [number, number, number, number] | null }>(
       `/challenges/${challengeId}/analyze`,
       token,
       uri
@@ -615,11 +615,11 @@ export const ecobudApi = {
       token,
       uri
     ),
-  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) =>
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, proofText?: string) =>
     request(`/challenges/${challengeId}/submissions`, {
       method: 'POST',
       token,
-      body: { proofUrl, afterProofUrl, detectedQuantity: detectedQuantity || 1 },
+      body: { proofUrl, afterProofUrl, detectedQuantity: detectedQuantity || 1, proofText },
     }),
   verifyChallengeQr: (token: string, challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) =>
     request<{ message: string; submission: any }>(`/challenges/${challengeId}/verify-qr`, {

@@ -2581,12 +2581,8 @@ export const styles = StyleSheet.create({
     zIndex: 999,
   },
   chatbotFab: {
-    shadowColor: '#10816A',
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: verticalScale(8) },
-    elevation: 8,
-    borderRadius: moderateScale(34),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chatbotFabImg: {
     width: scale(68),

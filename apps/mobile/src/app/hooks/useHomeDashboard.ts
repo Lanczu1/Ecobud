@@ -41,6 +41,7 @@ const SESSION_STORAGE_KEY = 'ecobud.mobile.session';
 const ONBOARDING_STORAGE_KEY = 'ecobud.mobile.onboarding';
 const VIEWED_MISSIONS_KEY = 'ecobud.mobile.viewedMissions';
 const RECENT_VIEWED_KEY = 'ecobud.mobile.recentViewedMission';
+const CHATBOT_ENABLED_STORAGE_KEY = 'ecobud.mobile.chatbotEnabled';
 
 // ─── Internal Utilities ─────────────────────────────────────────────────────────
 
@@ -152,6 +153,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const [progressBarLayout, setProgressBarLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [isChatbotEnabled, setIsChatbotEnabled] = useState(true);
+
+  const setChatbotEnabled = useCallback(async (enabled: boolean) => {
+    setIsChatbotEnabled(enabled);
+    try {
+      await mobileStorage.setItem(CHATBOT_ENABLED_STORAGE_KEY, JSON.stringify(enabled));
+    } catch (e) {
+      console.warn('Failed to persist chatbot preference', e);
+    }
+  }, []);
 
   const presence = usePresence(session);
 
@@ -566,6 +577,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const savedRecent = await mobileStorage.getItem(RECENT_VIEWED_KEY);
         if (savedRecent) {
           try { setRecentViewedMission(JSON.parse(savedRecent)); } catch (e) { }
+        }
+
+        const savedChatbotEnabled = await mobileStorage.getItem(CHATBOT_ENABLED_STORAGE_KEY);
+        if (savedChatbotEnabled !== null) {
+          try { setIsChatbotEnabled(JSON.parse(savedChatbotEnabled) !== false); } catch (e) { }
         }
 
         const savedSession = await mobileStorage.getItem(SESSION_STORAGE_KEY);
@@ -1691,12 +1707,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [ensureSession]);
 
-  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number) => {
+  const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, analysisToken?: string, proofText?: string) => {
     await runWithActionLoader('Submitting before photo...', async () => {
       try {
         const activeSession = ensureSession();
         setRefreshing(true);
-        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl, afterProofUrl, detectedQuantity);
+        await homeService.submitChallengeProof(activeSession.token, challengeId, proofUrl, afterProofUrl, detectedQuantity, analysisToken, proofText);
         // Optimistically update the challenge state to pending
         setChallenges((currentChallenges) =>
           currentChallenges.map((challenge) =>
@@ -2055,6 +2071,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setSpotlightTargetRect,
     progressBarLayout,
     setProgressBarLayout,
+    isChatbotEnabled,
+    setChatbotEnabled,
   };
 
 }

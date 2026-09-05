@@ -45,6 +45,7 @@ import {
   ActionOverlayWrapper,
   MarketplaceView,
   CoachMarksOverlay,
+  ChatbotFAB,
 } from './components';
 import { HomeView, LearnView } from './components/HomeLearnViews';
 import { styles } from './styles/appStyles';
@@ -137,6 +138,20 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
           <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+        )}
+        {Boolean(
+          model.isChatbotEnabled &&
+          !model.activeOverlay &&
+          !model.coachMarksVisible &&
+          (model.activeTab === 'home' ||
+            model.activeTab === 'learn' ||
+            model.activeTab === 'challenges' ||
+            (model.activeTab === 'marketplace' && !hideMarketplaceChrome))
+        ) && (
+          <ChatbotFAB
+            onPress={() => model.setActiveOverlay('assistant')}
+            onLongPress={() => void model.setChatbotEnabled(false)}
+          />
         )}
       </SafeAreaView>
     );

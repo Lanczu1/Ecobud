@@ -29,6 +29,7 @@ import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -106,7 +107,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     targetQuantity?: number;
     calculatedExpReward?: number;
     calculatedEcoCoins?: number;
+    box_2d?: [number, number, number, number] | null;
+    boxes?: Array<{ object: string; box_2d: [number, number, number, number] }> | null;
+    imageUri?: string | null;
   } | null>(null);
+  const MAX_AI_ATTEMPTS = 3;
+  const [attemptsLeft, setAttemptsLeft] = React.useState<number>(MAX_AI_ATTEMPTS);
   const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(submission?.proofUrl || null);
 
   const entryFadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -116,6 +122,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => {
     setCapturedImage(null);
     setMockResult(null);
+    setAttemptsLeft(MAX_AI_ATTEMPTS);
     setBeforeProofUrl(submission?.proofUrl || null);
     setStep(getInitialStep());
   }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.afterProofUrl]);
@@ -183,16 +190,36 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setCapturedImage(uri);
     setProcessing(true);
     try {
-      const result = await model.analyzeChallengeImage(challenge.id, uri);
+      // Client-side image downscaling & compression to optimize Gemini token usage and upload speed
+      let processedUri = uri;
+      try {
+        const manipResult = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 1024 } }],
+          { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        if (manipResult?.uri) {
+          processedUri = manipResult.uri;
+        }
+      } catch (manipErr) {
+        console.warn('Image downscaling fallback to raw uri:', manipErr);
+      }
+
+      const result = await model.analyzeChallengeImage(challenge.id, processedUri);
+      const enrichedResult = {
+        ...result,
+        imageUri: processedUri,
+      };
       if (result.passed && result.proofUrl) {
         setBeforeProofUrl(result.proofUrl);
-        setMockResult(result);
-        setCapturedImage(null);
+        setMockResult(enrichedResult);
       } else {
-        setMockResult(result);
+        setMockResult(enrichedResult);
+        setAttemptsLeft(prev => Math.max(0, prev - 1));
       }
     } catch (err: any) {
-      setMockResult({ passed: false, object: 'Error', confidence: 0, reason: err.message || 'Failed to analyze image' });
+      setMockResult({ passed: false, object: 'Error', confidence: 0, reason: err.message || 'Failed to analyze image', imageUri: uri });
+      setAttemptsLeft(prev => Math.max(0, prev - 1));
     } finally {
       setProcessing(false);
       setStep('result');
@@ -203,7 +230,13 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     if (!beforeProofUrl || !mockResult) return;
     setProcessing(true);
     try {
-      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, 1);
+      const proofMetadata = JSON.stringify({
+        box_2d: mockResult.box_2d || null,
+        boxes: mockResult.boxes || (mockResult.box_2d ? [{ object: mockResult.object, box_2d: mockResult.box_2d }] : []),
+        object: mockResult.object,
+        confidence: mockResult.confidence,
+      });
+      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, 1, undefined, proofMetadata);
       Alert.alert(
         'Before Photo Submitted!',
         `Your mission proof has been submitted. The admin will review it shortly.`,
@@ -294,15 +327,115 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
     return (
       <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold title="Result Page" subtitle="Detection Result" onBack={handleClose}>
+        <OverlayScaffold title="Result Page" subtitle="Verification Result" onBack={handleClose}>
           <ScrollView contentContainerStyle={[styles.overlayScroll, { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, alignItems: 'center' }]}>
             <Animated.View style={{ opacity: fadeAnim, width: '100%', alignItems: 'center' }}>
               {/* Header Title with horizontal decorative lines */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20, gap: 12 }}>
                 <View style={{ width: 28, height: 3, backgroundColor: theme.colors.primary, borderRadius: 2 }} />
-                <Text style={{ fontSize: 22, fontWeight: '800', color: isDark ? theme.colors.primary : '#064E3B', letterSpacing: -0.3 }}>Detection Result</Text>
+                <Text style={{ fontSize: 22, fontWeight: '800', color: isDark ? theme.colors.primary : '#064E3B', letterSpacing: -0.3 }}>Verification Result</Text>
                 <View style={{ width: 28, height: 3, backgroundColor: theme.colors.primary, borderRadius: 2 }} />
               </View>
+
+              {/* Analyzed Image Preview with Bounding Box */}
+              {(mockResult.imageUri || mockResult.proofUrl) && (
+                <View style={{
+                  width: '100%',
+                  aspectRatio: 1.15,
+                  borderRadius: 20,
+                  overflow: 'hidden',
+                  marginBottom: 20,
+                  backgroundColor: '#0F172A',
+                  position: 'relative',
+                  borderWidth: 1.5,
+                  borderColor: mockResult.passed ? (isDark ? theme.colors.primary : '#10B981') : (isDark ? 'rgba(239,68,68,0.5)' : '#FCA5A5'),
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 10,
+                  elevation: 3,
+                }}>
+                  <Image
+                    source={{ uri: mockResult.imageUri || mockResult.proofUrl }}
+                    style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                  />
+
+                  {/* Bounding Box Overlays for all detected items */}
+                  {mockResult.passed && (() => {
+                    const allBoxes = mockResult.boxes && mockResult.boxes.length > 0
+                      ? mockResult.boxes
+                      : (mockResult.box_2d && mockResult.box_2d.length === 4 ? [{ object: mockResult.object, box_2d: mockResult.box_2d }] : []);
+
+                    return allBoxes.map((item, idx) => {
+                      const [ymin, xmin, ymax, xmax] = item.box_2d;
+                      const topPct = `${Math.min(100, Math.max(0, ymin / 10))}%`;
+                      const leftPct = `${Math.min(100, Math.max(0, xmin / 10))}%`;
+                      const widthPct = `${Math.min(100, Math.max(8, (xmax - xmin) / 10))}%`;
+                      const heightPct = `${Math.min(100, Math.max(8, (ymax - ymin) / 10))}%`;
+
+                      return (
+                        <View
+                          key={`box-${idx}`}
+                          style={{
+                            position: 'absolute',
+                            top: topPct as any,
+                            left: leftPct as any,
+                            width: widthPct as any,
+                            height: heightPct as any,
+                            borderWidth: 2.5,
+                            borderColor: '#10B981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            borderRadius: 8,
+                          }}
+                        >
+                          {/* Detection Tag Badge */}
+                          <View style={{
+                            position: 'absolute',
+                            top: -24,
+                            left: -2,
+                            backgroundColor: '#10B981',
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 6,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.25,
+                            shadowRadius: 4,
+                            elevation: 3,
+                          }}>
+                            <Ionicons name="checkmark-circle" size={12} color="#FFFFFF" />
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.2 }}>
+                              {item.object || mockResult.object} {allBoxes.length > 1 ? `#${idx + 1}` : ''}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
+
+                  {/* Corner Status Pill */}
+                  <View style={{
+                    position: 'absolute',
+                    bottom: 12,
+                    right: 12,
+                    backgroundColor: mockResult.passed ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)',
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                  }}>
+                    <Ionicons name={mockResult.passed ? "shield-checkmark" : "close-circle"} size={14} color="#FFF" />
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFF' }}>
+                      {mockResult.passed ? 'Verified by Gemini AI' : 'Verification Failed'}
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {/* Detection Result Card */}
               <View style={{
@@ -322,25 +455,34 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               }}>
                 {/* Object Detected */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#D1FAE5' }}>
-                    <Ionicons name="water-outline" size={22} color={isDark ? theme.colors.primary : '#059669'} />
+                  <View style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: mockResult.object === 'Error'
+                      ? (isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2')
+                      : (isDark ? theme.colors.surfaceMuted : '#ECFDF5'),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 14,
+                    borderWidth: 1,
+                    borderColor: mockResult.object === 'Error'
+                      ? (isDark ? 'rgba(239, 68, 68, 0.3)' : '#FEE2E2')
+                      : (isDark ? theme.colors.cardBorder : '#D1FAE5'),
+                  }}>
+                    <Ionicons
+                      name={mockResult.object === 'Error' ? 'alert-circle' : 'water-outline'}
+                      size={22}
+                      color={mockResult.object === 'Error' ? '#EF4444' : (isDark ? theme.colors.primary : '#059669')}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Object Detected:</Text>
-                    <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.textPrimary }}>{mockResult.object}</Text>
-                  </View>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: theme.colors.cardBorder }} />
-
-                {/* Confidence */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginRight: 14, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#D1FAE5' }}>
-                    <Ionicons name="shield-outline" size={22} color={isDark ? theme.colors.primary : '#059669'} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Confidence:</Text>
-                    <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.textPrimary }}>{mockResult.confidence}%</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>
+                      {mockResult.object === 'Error' ? 'Scan Status:' : 'Object Detected:'}
+                    </Text>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: mockResult.object === 'Error' ? '#EF4444' : theme.colors.textPrimary }}>
+                      {mockResult.object === 'Error' ? 'Verification Failed' : mockResult.object}
+                    </Text>
                   </View>
                 </View>
 
@@ -387,6 +529,45 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>Reason:</Text>
                         <Text style={{ fontSize: 15, fontWeight: '700', color: '#EF4444' }}>{mockResult.reason}</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+
+                {!mockResult.passed && (
+                  <>
+                    <View style={{ height: 1, backgroundColor: theme.colors.cardBorder }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+                      <View style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: attemptsLeft > 0
+                          ? (isDark ? 'rgba(234, 179, 8, 0.15)' : '#FEF9C3')
+                          : (isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2'),
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 14,
+                        borderWidth: 1,
+                        borderColor: attemptsLeft > 0
+                          ? (isDark ? 'rgba(234, 179, 8, 0.3)' : '#FDE047')
+                          : (isDark ? 'rgba(239, 68, 68, 0.3)' : '#FEE2E2'),
+                      }}>
+                        <Ionicons
+                          name={attemptsLeft > 0 ? "refresh-circle" : "lock-closed"}
+                          size={22}
+                          color={attemptsLeft > 0 ? (isDark ? '#FBBF24' : '#D97706') : '#EF4444'}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, color: theme.colors.textMuted, fontWeight: '500', marginBottom: 2 }}>AI Recognition Attempts:</Text>
+                        <Text style={{
+                          fontSize: 16,
+                          fontWeight: '800',
+                          color: attemptsLeft > 1 ? (isDark ? theme.colors.primary : '#059669') : attemptsLeft === 1 ? (isDark ? '#FBBF24' : '#D97706') : '#EF4444'
+                        }}>
+                          {attemptsLeft} of {MAX_AI_ATTEMPTS} left
+                        </Text>
                       </View>
                     </View>
                   </>
@@ -494,7 +675,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               )}
 
-              {/* Submit Button */}
+              {/* Submit Button or Try Again */}
               {mockResult.passed ? (
                 <TouchableOpacity
                   activeOpacity={0.88}
@@ -523,8 +704,56 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   </Text>
                   <Ionicons name="chevron-forward" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} style={{ marginLeft: 2 }} />
                 </TouchableOpacity>
+              ) : attemptsLeft > 0 ? (
+                <View style={{ width: '100%', gap: 10 }}>
+                  <PrimaryButton label={`Try Again (${attemptsLeft} ${attemptsLeft === 1 ? 'try' : 'tries'} left)`} onPress={handleTryAgain} />
+                  <TouchableOpacity
+                    onPress={handleClose}
+                    style={{
+                      width: '100%',
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textMuted }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
-                <PrimaryButton label="Try Again" onPress={handleTryAgain} />
+                <View style={{ width: '100%', alignItems: 'center', gap: 14 }}>
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                    borderWidth: 1.5,
+                    borderColor: isDark ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5',
+                    borderRadius: 16,
+                    padding: 16,
+                    alignItems: 'center',
+                    gap: 6
+                  }}>
+                    <Ionicons name="alert-circle" size={28} color="#EF4444" />
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
+                      Maximum AI Attempts Reached
+                    </Text>
+                    <Text style={{ fontSize: 13, color: isDark ? '#FCA5A5' : '#991B1B', textAlign: 'center', lineHeight: 18 }}>
+                      Nakaabot ka na sa limit na 3 tries para sa AI recognition. Mangyaring subukan muli mamaya o makipag-ugnayan sa admin.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleClose}
+                    style={{
+                      width: '100%',
+                      backgroundColor: isDark ? theme.colors.surfaceMuted : '#E5E7EB',
+                      borderRadius: 24,
+                      paddingVertical: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>Close</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </Animated.View>
           </ScrollView>
@@ -546,6 +775,56 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         >
           <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
             <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+              {step === 'capture' && (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',
+                  borderRadius: 14,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  marginBottom: 16,
+                  borderWidth: 1,
+                  borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0',
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="sparkles" size={18} color={theme.colors.primary} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: isDark ? theme.colors.textPrimary : '#166534' }}>
+                      AI Recognition Limit:
+                    </Text>
+                  </View>
+                  <View style={{
+                    backgroundColor: attemptsLeft > 1
+                      ? (isDark ? 'rgba(16, 185, 129, 0.2)' : '#DCFCE7')
+                      : attemptsLeft === 1
+                        ? (isDark ? 'rgba(234, 179, 8, 0.2)' : '#FEF9C3')
+                        : (isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2'),
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: attemptsLeft > 1
+                      ? '#10B981'
+                      : attemptsLeft === 1
+                        ? '#F59E0B'
+                        : '#EF4444'
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: attemptsLeft > 1
+                        ? (isDark ? '#34D399' : '#15803D')
+                        : attemptsLeft === 1
+                          ? (isDark ? '#FBBF24' : '#B45309')
+                          : '#DC2626'
+                    }}>
+                      {attemptsLeft} / {MAX_AI_ATTEMPTS} attempts left
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
                 {capturedImage ? (
                   <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
@@ -562,7 +841,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.8)', justifyContent: 'center', alignItems: 'center', opacity: processFadeAnim }]}>
                     <ActivityIndicator size="large" color="#10B981" />
                     <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>
-                      {step === 'capture_after' ? 'Uploading After Photo...' : 'Analyzing Image with YOLO...'}
+                      {step === 'capture_after' ? 'Uploading After Photo...' : 'Analyzing Image with Gemini AI...'}
                     </Text>
                   </Animated.View>
                 )}
@@ -643,8 +922,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
 
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Minimum Confidence:</Text>
-                <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>80%</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>AI Recognition Attempts:</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="sparkles" size={16} color={theme.colors.primary} />
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.primary }}>Max {MAX_AI_ATTEMPTS} Tries</Text>
+                </View>
               </View>
             </View>
 
@@ -1255,11 +1537,12 @@ function isWithinPhilippines(lat: number, lng: number) {
 }
 
 function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: { latitude: number; longitude: number } | null }) {
+  const { theme, isDark } = useTheme();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const webViewRef = React.useRef<WebView | null>(null);
 
-  // Responsive map container height: tailored for small screens like iPhone SE (667h) up to larger devices
-  const mapHeight = Math.max(290, Math.min(screenHeight * 0.52, 480));
+  // Responsive map container height: comfortable top viewport so cards underneath are immediately visible and scrollable
+  const mapHeight = Math.max(240, Math.min(screenHeight * 0.38, 320));
 
   const initialLat = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
     ? userLocation.latitude
@@ -1314,53 +1597,78 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
           
           .custom-popup .leaflet-popup-content-wrapper {
-            background: #126027; color: white; border-radius: 12px;
+            background: #0E1512; color: #F1F5F9; border-radius: 14px;
             padding: 2px;
-            max-width: 230px;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+            border: 1px solid #1A2E22;
+            max-width: 250px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
           }
           .custom-popup .leaflet-popup-content {
-            margin: 8px 10px;
-            line-height: 1.3;
+            margin: 10px 12px;
+            line-height: 1.35;
           }
-          .custom-popup .leaflet-popup-tip { background: #126027; }
+          .custom-popup .leaflet-popup-tip { background: #0E1512; }
           .popup-btn {
-            background: #4ade80; color: #052e16; border: none; padding: 6px 10px; border-radius: 6px;
-            font-weight: 700; cursor: pointer; margin-top: 6px; width: 100%; font-size: 12px;
-            display: block; text-align: center;
+            background: linear-gradient(135deg, #10B981, #059669); color: #FFFFFF; border: none; padding: 7px 12px; border-radius: 8px;
+            font-weight: 700; cursor: pointer; margin-top: 8px; width: 100%; font-size: 12px;
+            display: block; text-align: center; box-shadow: 0 2px 8px rgba(16,185,129,0.3);
           }
-          .popup-btn:active { background: #22c55e; }
+          .popup-btn:active { opacity: 0.85; }
           
           .user-marker {
-            background-color: #2563eb; width: 18px; height: 18px; border-radius: 50%;
-            border: 3px solid #ffffff; box-shadow: 0 0 12px rgba(37,99,235,0.8);
+            background-color: #3B82F6; width: 18px; height: 18px; border-radius: 50%;
+            border: 3px solid #ffffff; box-shadow: 0 0 14px rgba(59,130,246,0.9);
             animation: pulse-ring 1.8s infinite;
           }
           @keyframes pulse-ring {
-            0% { box-shadow: 0 0 0 0 rgba(37,99,235,0.7); }
-            70% { box-shadow: 0 0 0 12px rgba(37,99,235,0); }
-            100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
+            0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(59,130,246,0); }
+            100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+          }
+          .eco-pin-wrapper {
+            display: flex; align-items: center; justify-content: center;
+          }
+          .eco-pin {
+            background: #10B981; width: 32px; height: 32px; border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg); border: 2.5px solid #FFFFFF;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+          .eco-pin:hover, .eco-pin.active {
+            transform: rotate(-45deg) scale(1.15);
+            background: #059669;
+          }
+          .eco-pin-inner {
+            transform: rotate(45deg); font-size: 14px;
           }
           .osm-badge {
             position: absolute; bottom: 8px; left: 8px; z-index: 1000;
-            background: rgba(18, 96, 39, 0.92); color: #fff; padding: 3px 8px;
-            border-radius: 14px; font-size: 10px; font-weight: 700;
-            letter-spacing: 0.2px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            background: rgba(14, 21, 18, 0.88); color: #A7F3D0; padding: 4px 10px;
+            border-radius: 20px; font-size: 10px; font-weight: 700;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             pointer-events: none;
+            backdrop-filter: blur(4px);
           }
           .leaflet-control-zoom {
             border: none !important;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
-            margin-right: 8px !important;
-            margin-top: 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+            margin-right: 12px !important;
+            margin-top: 12px !important;
+            border-radius: 10px !important;
+            overflow: hidden !important;
           }
           .leaflet-control-zoom a {
-            width: 28px !important;
-            height: 28px !important;
-            line-height: 28px !important;
-            font-size: 14px !important;
-            border-radius: 6px !important;
+            width: 32px !important;
+            height: 32px !important;
+            line-height: 32px !important;
+            font-size: 16px !important;
+            background: #0E1512 !important;
+            color: #10B981 !important;
+            border-color: #1E2923 !important;
           }
         </style>
       </head>
@@ -1412,9 +1720,19 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             map.flyTo([userLoc.lat, userLoc.lng], 13, { duration: 2.2 });
           }
 
+          const markerMap = {};
           const events = ${markersJson};
           events.forEach(ev => {
-            const marker = L.marker([ev.lat, ev.lng]).addTo(map);
+            const ecoIcon = L.divIcon({
+              className: 'eco-pin-wrapper',
+              html: '<div class="eco-pin"><div class="eco-pin-inner">🌱</div></div>',
+              iconSize: [32, 32],
+              iconAnchor: [16, 32],
+              popupAnchor: [0, -32]
+            });
+            const marker = L.marker([ev.lat, ev.lng], { icon: ecoIcon }).addTo(map);
+            markerMap[ev.id] = marker;
+
             const container = document.createElement('div');
             container.style.padding = '1px';
 
@@ -1445,32 +1763,328 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 
             marker.bindPopup(container, { className: 'custom-popup' });
           });
+
+          window.mapFocusEvent = function(id, lat, lng) {
+            if (map) {
+              map.flyTo([lat, lng], 15, { duration: 1.2 });
+              if (markerMap[id]) {
+                setTimeout(function() {
+                  markerMap[id].openPopup();
+                }, 700);
+              }
+            }
+          };
         </script>
       </body>
       </html>
     `;
   }, [phEvents, userLocation, initialLat, initialLng]);
 
+  const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null);
+
+  const focusEventOnMap = (eventItem: any) => {
+    setSelectedEventId(eventItem.id);
+    if (webViewRef.current && eventItem.latitude && eventItem.longitude) {
+      const script = `
+        (function() {
+          if (window.mapFocusEvent) {
+            window.mapFocusEvent('${eventItem.id}', ${eventItem.latitude}, ${eventItem.longitude});
+          }
+        })();
+        true;
+      `;
+      try {
+        webViewRef.current.injectJavaScript(script);
+      } catch (err) {
+        console.log('[Map] injectJavaScript failed', err);
+      }
+    }
+  };
+
   const WebViewComponent = WebView as any;
 
   return (
-    <View style={{ height: mapHeight, width: '100%', backgroundColor: '#E2E8F0', overflow: 'hidden', borderRadius: moderateScale(16) }}>
-      <WebViewComponent
-        ref={webViewRef}
-        originWhitelist={['*']}
-        source={{ html: leafletHtml }}
-        style={{ flex: 1, backgroundColor: 'transparent' }}
-        onMessage={(event: any) => {
-          try {
-            const data = JSON.parse(event.nativeEvent.data);
-            if (data.type === 'join' && data.id) {
-              void model.handleJoinEvent(data.id);
+    <View style={{ width: '100%' }}>
+      {/* MAP VIEW */}
+      <View style={{ height: mapHeight, width: '100%', backgroundColor: '#E2E8F0', overflow: 'hidden', borderRadius: moderateScale(16), borderWidth: 1, borderColor: isDark ? theme.colors.border : '#E2E8F0' }}>
+        <WebViewComponent
+          ref={webViewRef}
+          originWhitelist={['*']}
+          source={{ html: leafletHtml }}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          onMessage={(event: any) => {
+            try {
+              const data = JSON.parse(event.nativeEvent.data);
+              if (data.type === 'join' && data.id) {
+                void model.handleJoinEvent(data.id);
+              }
+            } catch (e) {
+              console.error('WebView message error:', e);
             }
-          } catch (e) {
-            console.error('WebView message error:', e);
-          }
-        }}
-      />
+          }}
+        />
+      </View>
+
+      {/* EVENTS LIST UNDERNEATH MAP */}
+      <View style={{ marginTop: verticalScale(20), paddingBottom: verticalScale(40) }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isDark ? theme.colors.primary : '#10B981' }} />
+              <Text style={{ fontSize: moderateScale(17), fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: -0.2 }}>
+                Events on the Map
+              </Text>
+            </View>
+            <Text style={{ fontSize: moderateScale(12), color: theme.colors.textMuted, marginTop: 2 }}>
+              Tap any event to locate and view details
+            </Text>
+          </View>
+          <View
+            style={{
+              backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : '#E6F4EA',
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(16,185,129,0.3)' : 'rgba(18,96,39,0.15)',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <Ionicons name="location" size={12} color={isDark ? theme.colors.primary : '#126027'} />
+            <Text style={{ fontSize: moderateScale(11), fontWeight: '800', color: isDark ? theme.colors.primary : '#126027' }}>
+              {phEvents.length} {phEvents.length === 1 ? 'Pin' : 'Pins'}
+            </Text>
+          </View>
+        </View>
+
+        {phEvents.length === 0 ? (
+          <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+            <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>
+              No mapped events found
+            </Text>
+            <Text style={[styles.metaTextSmallDark, { color: theme.colors.textMuted }]}>
+              There are currently no events with geographic coordinates plotted on the map.
+            </Text>
+          </SurfaceCard>
+        ) : (
+          <View style={{ gap: 14 }}>
+            {phEvents.map((eventItem: any) => {
+              const isSelected = selectedEventId === eventItem.id;
+              const lc = getEventLifecycleStatus(eventItem.startDatetime, eventItem.endDatetime);
+              const hasJoined = eventItem.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(eventItem.userStatus);
+              const capacity = eventItem.capacity || 0;
+              const spotsLeft = typeof eventItem.spotsLeft === 'number' ? eventItem.spotsLeft : capacity;
+              const joinedCount = Math.max(0, capacity - spotsLeft);
+              const progressPercent = capacity > 0 ? Math.min(100, Math.max(0, Math.round((joinedCount / capacity) * 100))) : 0;
+              const isFull = spotsLeft <= 0;
+              const imageUrl = eventItem.imageUrl
+                ? (eventItem.imageUrl.startsWith('http') ? eventItem.imageUrl : `${ecobudApiOrigin}${eventItem.imageUrl}`)
+                : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop';
+
+              return (
+                <TouchableOpacity
+                  key={eventItem.id}
+                  activeOpacity={0.88}
+                  onPress={() => focusEventOnMap(eventItem)}
+                  style={{
+                    backgroundColor: theme.colors.card,
+                    borderRadius: moderateScale(18),
+                    overflow: 'hidden',
+                    borderWidth: isSelected ? 2 : 1,
+                    borderColor: isSelected
+                      ? (isDark ? theme.colors.primary : '#10B981')
+                      : (isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0'),
+                    shadowColor: isSelected ? '#10B981' : '#000',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: isSelected ? 0.25 : (isDark ? 0.3 : 0.06),
+                    shadowRadius: 10,
+                    elevation: isSelected ? 5 : 2,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', height: 118 }}>
+                    {/* THUMBNAIL IMAGE WITH BADGES */}
+                    <View style={{ width: 110, height: '100%', position: 'relative' }}>
+                      <Image
+                        source={{ uri: imageUrl }}
+                        style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                      />
+                      <View
+                        style={{
+                          position: 'absolute',
+                          top: 8,
+                          left: 8,
+                          backgroundColor: lc === 'ongoing' ? '#DC2626' : lc === 'ended' ? 'rgba(71,85,105,0.92)' : '#10B981',
+                          paddingHorizontal: 6,
+                          paddingVertical: 2.5,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontSize: moderateScale(9), fontWeight: '900', letterSpacing: 0.5 }}>
+                          {lc === 'ongoing' ? 'LIVE' : lc === 'ended' ? 'ENDED' : 'UPCOMING'}
+                        </Text>
+                      </View>
+                      {eventItem.isFeatured && (
+                        <View
+                          style={{
+                            position: 'absolute',
+                            bottom: 8,
+                            left: 8,
+                            backgroundColor: '#F59E0B',
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 2,
+                          }}
+                        >
+                          <Ionicons name="star" size={9} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: moderateScale(8), fontWeight: '900' }}>HOT</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* CARD DETAILS BODY */}
+                    <View style={{ flex: 1, padding: moderateScale(10), justifyContent: 'space-between' }}>
+                      <View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                          <Text
+                            style={{
+                              fontSize: moderateScale(14),
+                              fontWeight: '700',
+                              color: theme.colors.textPrimary,
+                              flex: 1,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {eventItem.title}
+                          </Text>
+                          {isSelected && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                              <Ionicons name="location" size={12} color={isDark ? theme.colors.primary : '#10B981'} />
+                              <Text style={{ fontSize: moderateScale(10), fontWeight: '800', color: isDark ? theme.colors.primary : '#10B981' }}>
+                                Selected
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* LOCATION */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                          <Ionicons name="location-outline" size={12} color={isDark ? theme.colors.primary : '#126027'} />
+                          <Text
+                            style={{ fontSize: moderateScale(11), color: theme.colors.textSecondary, flex: 1 }}
+                            numberOfLines={1}
+                          >
+                            {eventItem.location || 'Philippines'}
+                          </Text>
+                        </View>
+
+                        {/* DATE & TIME */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                          <Ionicons name="calendar-outline" size={11} color={theme.colors.textMuted} />
+                          <Text style={{ fontSize: moderateScale(10), color: theme.colors.textMuted }}>
+                            {formatEventDateTag(eventItem.startDatetime)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* BOTTOM ROW: REWARDS & ACTION BUTTONS */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                            <Ionicons name="leaf" size={11} color={isDark ? theme.colors.primary : '#10B981'} />
+                            <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: theme.colors.textPrimary }}>
+                              +{eventItem.expReward || 10} XP
+                            </Text>
+                          </View>
+                          {!!eventItem.ecoCoinsReward && eventItem.ecoCoinsReward > 0 && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                              <Image source={require('../../../assets/coin.png')} style={{ width: 11, height: 11, resizeMode: 'contain' }} />
+                              <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: theme.colors.textPrimary }}>
+                                {eventItem.ecoCoinsReward}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <TouchableOpacity
+                            onPress={() => focusEventOnMap(eventItem)}
+                            style={{
+                              backgroundColor: isSelected
+                                ? (isDark ? theme.colors.primary : '#126027')
+                                : (isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9'),
+                              paddingHorizontal: 8,
+                              paddingVertical: 5,
+                              borderRadius: 8,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <Ionicons
+                              name="navigate"
+                              size={10}
+                              color={isSelected ? (isDark ? '#0E1512' : '#FFF') : (isDark ? theme.colors.primary : '#126027')}
+                            />
+                            <Text
+                              style={{
+                                fontSize: moderateScale(10),
+                                fontWeight: '700',
+                                color: isSelected ? (isDark ? '#0E1512' : '#FFF') : (isDark ? theme.colors.primary : '#126027'),
+                              }}
+                            >
+                              Locate
+                            </Text>
+                          </TouchableOpacity>
+
+                          {!hasJoined && lc !== 'ended' && !isFull && (
+                            <TouchableOpacity
+                              onPress={() => void model.handleJoinEvent(eventItem.id)}
+                              style={{
+                                backgroundColor: isDark ? theme.colors.primary : '#126027',
+                                paddingHorizontal: 10,
+                                paddingVertical: 5,
+                                borderRadius: 8,
+                              }}
+                            >
+                              <Text style={{ fontSize: moderateScale(10), fontWeight: '800', color: isDark ? '#0E1512' : '#FFF' }}>
+                                Join
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+
+                          {hasJoined && (
+                            <View
+                              style={{
+                                backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : '#E0EBE4',
+                                paddingHorizontal: 7,
+                                paddingVertical: 4,
+                                borderRadius: 8,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 2,
+                              }}
+                            >
+                              <Ionicons name="checkmark-circle" size={11} color={isDark ? theme.colors.primary : '#126027'} />
+                              <Text style={{ fontSize: moderateScale(10), fontWeight: '800', color: isDark ? theme.colors.primary : '#126027' }}>
+                                Joined
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
     </View>
   );
 }

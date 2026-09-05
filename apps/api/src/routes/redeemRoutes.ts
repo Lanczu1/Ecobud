@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { authenticateRequest, requireModeratorAccess, requireUserAccess, type AuthenticatedRequest } from '../http/authentication';
 import { redeemUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
@@ -8,6 +8,56 @@ import fs from 'fs';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+class RedemptionError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+async function redeemWithRetry(userId: string, itemId: string) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      // Include eligibility reads in the transaction so competing requests
+      // cannot both spend the same balance, stock, or pending-request slot.
+      return await prisma.$transaction(async (tx) => {
+        const item = await tx.redeemItem.findUnique({ where: { id: itemId } });
+        if (!item) throw new RedemptionError(404, 'Item not found');
+        if (!item.isActive) throw new RedemptionError(400, 'Item is no longer available');
+        if (item.stock !== -1 && item.stock <= 0) throw new RedemptionError(400, 'Item is out of stock');
+        if (item.coinCost < 0) throw new RedemptionError(400, 'Invalid item coin cost');
+
+        const existing = await tx.redeemRequest.findFirst({ where: { userId, itemId, status: 'pending' } });
+        if (existing) throw new RedemptionError(400, 'You already have a pending request for this item');
+
+        const debit = await tx.userStats.updateMany({
+          where: { userId, ecoCoins: { gte: item.coinCost } },
+          data: { ecoCoins: { decrement: item.coinCost } },
+        });
+        if (debit.count !== 1) throw new RedemptionError(400, 'Not enough coins');
+        if (item.stock !== -1) {
+          const reserved = await tx.redeemItem.updateMany({
+            where: { id: itemId, stock: { gt: 0 }, isActive: true },
+            data: { stock: { decrement: 1 } },
+          });
+          if (reserved.count !== 1) throw new RedemptionError(400, 'Item is out of stock');
+        }
+
+        const user = await tx.user.findUnique({ where: { id: userId }, select: { name: true } });
+        const request = await tx.redeemRequest.create({
+          data: { userId, itemId, coinCost: item.coinCost, status: 'pending',
+            userName: user?.name || '', itemTitle: item.title, itemImage: item.imageUrl },
+        });
+        await tx.rewardTransaction.create({ data: { userId, type: 'eco_coins', amount: -item.coinCost } });
+        return request;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        if (attempt < 2) continue;
+        throw new RedemptionError(409, 'Redemption is busy. Please try again.');
+      }
+      throw error;
+    }
+  }
+}
 
 // ─── Public Endpoints (for mobile app) — MUST be before /:id routes ────────
 
@@ -33,61 +83,11 @@ router.post('/redeem', authenticateRequest, requireUserAccess, async (req: Authe
 
     if (!itemId) return res.status(400).json({ message: 'Item ID is required' });
 
-    const item = await prisma.redeemItem.findUnique({ where: { id: itemId } });
-    if (!item) return res.status(404).json({ message: 'Item not found' });
-    if (!item.isActive) return res.status(400).json({ message: 'Item is no longer available' });
-    if (item.stock === 0) return res.status(400).json({ message: 'Item is out of stock' });
-
-    const userStats = await prisma.userStats.findUnique({ where: { userId } });
-    if (!userStats) return res.status(400).json({ message: 'User stats not found' });
-    if (userStats.ecoCoins < item.coinCost) {
-      return res.status(400).json({ message: 'Not enough coins' });
-    }
-
-    // Check for duplicate pending request
-    const existing = await prisma.redeemRequest.findFirst({
-      where: { userId, itemId, status: 'pending' },
-    });
-    if (existing) {
-      return res.status(400).json({ message: 'You already have a pending request for this item' });
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-
-    // Deduct coins, decrement stock, create request in a transaction
-    const [request] = await prisma.$transaction([
-      prisma.redeemRequest.create({
-        data: {
-          userId,
-          itemId,
-          coinCost: item.coinCost,
-          status: 'pending',
-          userName: user?.name || '',
-          itemTitle: item.title,
-          itemImage: item.imageUrl,
-        },
-      }),
-      prisma.userStats.update({
-        where: { userId },
-        data: { ecoCoins: { decrement: item.coinCost } },
-      }),
-      ...(item.stock > 0 ? [
-        prisma.redeemItem.update({
-          where: { id: itemId },
-          data: { stock: { decrement: 1 } },
-        }),
-      ] : []),
-      prisma.rewardTransaction.create({
-        data: {
-          userId,
-          type: 'eco_coins',
-          amount: -item.coinCost,
-        },
-      }),
-    ]);
+    const request = await redeemWithRetry(userId, itemId);
 
     res.status(201).json({ success: true, request, message: 'Redemption request submitted. Awaiting admin approval.' });
   } catch (error) {
+    if (error instanceof RedemptionError) return res.status(error.status).json({ message: error.message });
     console.error('Error creating redeem request:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -382,7 +382,13 @@ router.patch('/:id/toggle', authenticateRequest, requireModeratorAccess, async (
 // Delete a redemption request
 router.delete('/requests/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
-    await prisma.redeemRequest.delete({ where: { id: req.params.id } });
+    // Pending requests must be rejected first to refund coins and restore stock.
+    const deleted = await prisma.redeemRequest.deleteMany({
+      where: { id: req.params.id, status: { in: ['rejected', 'claimed'] } },
+    });
+    if (deleted.count === 0) {
+      return res.status(409).json({ message: 'Only rejected or claimed requests can be removed. Reject pending requests first to refund coins and restore stock.' });
+    }
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting redeem request:', error);

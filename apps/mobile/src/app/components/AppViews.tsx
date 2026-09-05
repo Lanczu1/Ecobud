@@ -16,6 +16,7 @@ import {
   Alert,
   TextInput,
   Modal,
+  Switch,
   type StyleProp,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -2784,6 +2785,37 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                   <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
+
+            {/* Mascot Chatbot On/Off Switch */}
+            <View style={profileStyles.actionItem}>
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#ECFDF5' }]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color={isDark ? theme.colors.primary : '#059669'} />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Mascot AI Chatbot</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>
+                  {model.isChatbotEnabled ? 'Floating leaf mascot enabled' : 'Hidden from screen'}
+                </Text>
+              </View>
+              <Switch
+                value={model.isChatbotEnabled}
+                onValueChange={(val) => {
+                  triggerSelectionHaptic();
+                  void model.setChatbotEnabled(val);
+                }}
+                trackColor={{
+                  false: isDark ? '#374151' : '#E5E7EB',
+                  true: isDark ? 'rgba(74, 222, 128, 0.5)' : '#A7F3D0',
+                }}
+                thumbColor={
+                  model.isChatbotEnabled
+                    ? (isDark ? theme.colors.primary : '#059669')
+                    : (isDark ? '#9CA3AF' : '#F3F4F6')
+                }
+              />
             </View>
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />

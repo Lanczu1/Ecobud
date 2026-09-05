@@ -42,6 +42,7 @@ interface ChallengeSubmission {
   challengeId?: string;
   challengeInstanceId?: string;
   challengeInstance?: { challengeId: string; challenge?: { id: string; title: string; type: string; quantityUnit?: string } };
+  proofText?: string | null;
   proofUrl: string | null;
   afterProofUrl: string | null;
   status: 'pending' | 'approved' | 'approved_collection' | 'rejected' | 'completed' | 'final_review';
@@ -57,6 +58,66 @@ interface ChallengeSubmission {
   submissionType?: string;
   user: { id: string; name: string; profile: { displayName: string | null; avatarUrl: string | null; city?: string | null } | null };
   challenge: { id: string; title: string; type: string; quantityUnit?: string; collectionPointName?: string };
+}
+
+interface DetectedBoxItem {
+  object: string;
+  box_2d: [number, number, number, number];
+}
+
+interface PreviewModalImage {
+  url: string;
+  title?: string;
+  box_2d?: [number, number, number, number] | null;
+  boxes?: DetectedBoxItem[] | null;
+  object?: string | null;
+  confidence?: number | null;
+}
+
+function parseAiProofMetadata(proofText?: string | null): { 
+  box_2d?: [number, number, number, number] | null; 
+  boxes?: DetectedBoxItem[] | null;
+  object?: string | null; 
+  confidence?: number | null 
+} | null {
+  if (!proofText) return null;
+  try {
+    const parsed = JSON.parse(proofText);
+    if (parsed && typeof parsed === 'object') {
+      const parsedBoxes: DetectedBoxItem[] = [];
+      if (Array.isArray(parsed.boxes)) {
+        for (const item of parsed.boxes) {
+          if (item && Array.isArray(item.box_2d) && item.box_2d.length === 4) {
+            parsedBoxes.push({
+              object: typeof item.object === 'string' ? item.object : (parsed.object || 'Detected Item'),
+              box_2d: [item.box_2d[0], item.box_2d[1], item.box_2d[2], item.box_2d[3]],
+            });
+          }
+        }
+      }
+
+      const singleBox: [number, number, number, number] | null = Array.isArray(parsed.box_2d) && parsed.box_2d.length === 4
+        ? [parsed.box_2d[0], parsed.box_2d[1], parsed.box_2d[2], parsed.box_2d[3]]
+        : null;
+
+      if (parsedBoxes.length === 0 && singleBox) {
+        parsedBoxes.push({
+          object: typeof parsed.object === 'string' ? parsed.object : 'Detected Item',
+          box_2d: singleBox,
+        });
+      }
+
+      return {
+        box_2d: singleBox || (parsedBoxes[0]?.box_2d ?? null),
+        boxes: parsedBoxes.length > 0 ? parsedBoxes : null,
+        object: typeof parsed.object === 'string' ? parsed.object : null,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
+      };
+    }
+  } catch {
+    // If not JSON, it's legacy plain text note
+  }
+  return null;
 }
 
 const statusColors: Record<string, string> = {
@@ -409,7 +470,7 @@ export function Challenges() {
   const moderatorBarangay = loggedInUser?.city || loggedInUser?.profile?.city || null;
 
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<PreviewModalImage | null>(null);
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
   const [selectedUserIdFilter, setSelectedUserIdFilter] = useState<string>('All');
@@ -1382,24 +1443,66 @@ export function Challenges() {
                                                       {/* Photos */}
                                                       <td className="px-4 py-4">
                                                         <div className="flex items-center gap-2">
-                                                          {fullProofUrl ? (
-                                                            <button 
-                                                              onClick={() => setSelectedImage(fullProofUrl)} 
-                                                              className="relative w-14 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer hover:ring-2 hover:ring-green-400 transition-all shadow-xs"
-                                                              title="Click to zoom BEFORE photo"
-                                                            >
-                                                              <img src={fullProofUrl} alt="Before" className="w-full h-full object-cover" />
-                                                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                                                <span className="text-white text-[9px] font-bold">BEFORE</span>
-                                                              </div>
-                                                            </button>
-                                                          ) : (
+                                                          {fullProofUrl ? (() => {
+                                                            const aiMeta = parseAiProofMetadata(sub.proofText);
+                                                            const allBoxes = aiMeta?.boxes && aiMeta.boxes.length > 0
+                                                              ? aiMeta.boxes
+                                                              : (aiMeta?.box_2d && aiMeta.box_2d.length === 4 ? [{ object: aiMeta.object || 'Detected Item', box_2d: aiMeta.box_2d }] : []);
+
+                                                            return (
+                                                              <button 
+                                                                onClick={() => setSelectedImage({
+                                                                  url: fullProofUrl,
+                                                                  title: 'BEFORE Photo (AI Verified)',
+                                                                  box_2d: aiMeta?.box_2d || (allBoxes[0]?.box_2d ?? null),
+                                                                  boxes: allBoxes.length > 0 ? allBoxes : null,
+                                                                  object: aiMeta?.object || null,
+                                                                  confidence: aiMeta?.confidence,
+                                                                })} 
+                                                                className="relative w-14 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer hover:ring-2 hover:ring-green-400 transition-all shadow-xs"
+                                                                title={`Click to zoom BEFORE photo${aiMeta?.object ? ` (${aiMeta.object})` : ''}`}
+                                                              >
+                                                                <img src={fullProofUrl} alt="Before" className="w-full h-full object-cover" />
+                                                                {/* Only draw bounding box outlines on thumbnail if AI detected them */}
+                                                                {allBoxes.map((item, bIdx) => {
+                                                                  const [ymin, xmin, ymax, xmax] = item.box_2d;
+                                                                  const topPct = `${Math.min(100, Math.max(0, ymin / 10))}%`;
+                                                                  const leftPct = `${Math.min(100, Math.max(0, xmin / 10))}%`;
+                                                                  const widthPct = `${Math.min(100, Math.max(8, (xmax - xmin) / 10))}%`;
+                                                                  const heightPct = `${Math.min(100, Math.max(8, (ymax - ymin) / 10))}%`;
+
+                                                                  return (
+                                                                    <div
+                                                                      key={`thumb-box-${bIdx}`}
+                                                                      style={{
+                                                                        position: 'absolute',
+                                                                        top: topPct,
+                                                                        left: leftPct,
+                                                                        width: widthPct,
+                                                                        height: heightPct,
+                                                                        border: '1.5px solid #10B981',
+                                                                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                                                        borderRadius: '2px',
+                                                                        pointerEvents: 'none',
+                                                                      }}
+                                                                    />
+                                                                  );
+                                                                })}
+                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                                  <span className="text-white text-[9px] font-bold">BEFORE</span>
+                                                                </div>
+                                                              </button>
+                                                            );
+                                                          })() : (
                                                             <span className="text-xs text-gray-400 dark:text-gray-500 italic">No before</span>
                                                           )}
 
                                                           {fullAfterUrl ? (
                                                             <button 
-                                                              onClick={() => setSelectedImage(fullAfterUrl)} 
+                                                              onClick={() => setSelectedImage({
+                                                                url: fullAfterUrl,
+                                                                title: 'AFTER Photo (Completion Proof)',
+                                                              })} 
                                                               className="relative w-14 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group/img cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all shadow-xs"
                                                               title="Click to zoom AFTER photo"
                                                             >
@@ -1540,12 +1643,80 @@ export function Challenges() {
 
       {/* Image preview modal */}
       {selectedImage && createPortal(
-        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
-          <div className="relative max-w-4xl max-h-[90vh] flex items-center justify-center animate-modal" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedImage(null)} className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white">
-              <XCircle className="w-8 h-8" />
-            </button>
-            <img src={selectedImage} alt="Proof" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/10" />
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-modal" onClick={e => e.stopPropagation()}>
+            <div className="w-full flex items-center justify-between pb-3 text-white">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-wide text-white/90">
+                  {selectedImage.title || 'Photo Proof'}
+                </span>
+                {selectedImage.object && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    AI Detected: {selectedImage.object}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setSelectedImage(null)} className="p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer">
+                <XCircle className="w-7 h-7" />
+              </button>
+            </div>
+
+            <div className="relative inline-block overflow-hidden rounded-2xl border border-white/15 shadow-2xl bg-black/50">
+              <img src={selectedImage.url} alt="Proof" className="max-w-full max-h-[80vh] object-contain block" />
+
+              {/* Bounding box overlays in zoom modal for all detected items */}
+              {(() => {
+                const allBoxes = selectedImage.boxes && selectedImage.boxes.length > 0
+                  ? selectedImage.boxes
+                  : (selectedImage.box_2d && selectedImage.box_2d.length === 4 ? [{ object: selectedImage.object || 'Detected Item', box_2d: selectedImage.box_2d }] : []);
+
+                return allBoxes.map((item, bIdx) => {
+                  const [ymin, xmin, ymax, xmax] = item.box_2d;
+                  const topPct = `${Math.min(100, Math.max(0, ymin / 10))}%`;
+                  const leftPct = `${Math.min(100, Math.max(0, xmin / 10))}%`;
+                  const widthPct = `${Math.min(100, Math.max(8, (xmax - xmin) / 10))}%`;
+                  const heightPct = `${Math.min(100, Math.max(8, (ymax - ymin) / 10))}%`;
+
+                  return (
+                    <div
+                      key={`modal-box-${bIdx}`}
+                      style={{
+                        position: 'absolute',
+                        top: topPct,
+                        left: leftPct,
+                        width: widthPct,
+                        height: heightPct,
+                        border: '2.5px solid #10B981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.16)',
+                        borderRadius: '8px',
+                        pointerEvents: 'none',
+                        boxShadow: '0 0 16px rgba(16, 185, 129, 0.4)',
+                      }}
+                    >
+                      {/* Floating Object Label */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '-26px',
+                          left: '-2px',
+                          backgroundColor: '#10B981',
+                          color: '#FFFFFF',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          whiteSpace: 'nowrap',
+                          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)',
+                        }}
+                      >
+                        ✓ {item.object || selectedImage.object || 'Detected Item'} {allBoxes.length > 1 ? `#${bIdx + 1}` : ''}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>,
         document.body
