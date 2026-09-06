@@ -99,24 +99,26 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     orderBy: [{ difficulty: 'asc' }, { title: 'asc' }],
   });
 
-  const items = [];
-  for (const challenge of challengeTemplates) {
+  const items = await Promise.all(challengeTemplates.map(async (challenge) => {
     const instance = await getOrCreateActiveInstance(challenge.id);
     
-    const userChallenge = await prisma.userChallenge.findUnique({
-      where: { userId_challengeInstanceId: { userId, challengeInstanceId: instance.id } }
-    });
-    
-    // Get ALL submissions for this challenge template (across all cycles)
-    const submissions = await prisma.challengeSubmission.findMany({
-      where: { 
-        userId, 
-        challengeInstance: {
-          challengeId: challenge.id
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const [userChallenge, submissions, freshChallenge] = await Promise.all([
+      prisma.userChallenge.findUnique({
+        where: { userId_challengeInstanceId: { userId, challengeInstanceId: instance.id } }
+      }),
+      // Get ALL submissions for this challenge template (across all cycles)
+      prisma.challengeSubmission.findMany({
+        where: { 
+          userId, 
+          challengeInstance: {
+            challengeId: challenge.id
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      // Re-fetch latest challenge state with fresh availableQuantity
+      prisma.challenge.findUnique({ where: { id: challenge.id } })
+    ]);
 
     // We'll keep the latest one as the primary for legacy fields if needed
     const latestSubmission = submissions.length > 0 ? submissions[0] : null;
@@ -126,10 +128,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
       finalStatus = latestSubmission.rewardAwarded ? 'completed' : latestSubmission.status;
     }
 
-    // Re-fetch latest challenge state with fresh availableQuantity
-    const freshChallenge = await prisma.challenge.findUnique({ where: { id: challenge.id } });
-
-    items.push({
+    return {
       ...(freshChallenge || challenge),
       cycle: {
         startDate: instance.startDate,
@@ -174,8 +173,8 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
           rejectionReason: sub.status === 'rejected' ? sub.moderatorNotes : undefined,
         }))
       },
-    });
-  }
+    };
+  }));
 
   return res.json({ items, isCycleActive: true });
 });
