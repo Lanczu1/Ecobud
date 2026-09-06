@@ -442,7 +442,11 @@ export class AdminService {
     return challenge;
   }
 
-  static async getDashboardStats() {
+  static async getDashboardStats(forceFresh = false) {
+    if (!forceFresh) {
+      const cached = apiCache.get('admin_dashboard_stats');
+      if (cached) return cached;
+    }
     const snapshotDate = new Date();
     const startOfToday = new Date(snapshotDate);
     startOfToday.setHours(0, 0, 0, 0);
@@ -486,45 +490,153 @@ export class AdminService {
       }),
     ]);
 
-    const activityTrend = await Promise.all(
-      [...Array(7)].map(async (_, i) => {
-        const date = new Date(snapshotDate);
-        date.setDate(snapshotDate.getDate() - (6 - i));
+    const sevenDaysAgo = new Date(startOfToday);
+    sevenDaysAgo.setDate(startOfToday.getDate() - 6);
 
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const [active, signups] = await Promise.all([
-          presenceQueryService.getActiveUsersCountForRange(startOfDay, endOfDay),
-          prisma.user.count({
-            where: {
-              createdAt: {
-                gte: startOfDay,
-                lte: endOfDay,
-              },
-              role: 'user',
-            },
-          }),
-        ]);
-
-        return {
-          active,
-          date: startOfDay.toISOString(),
-          dateLabel: startOfDay.toLocaleDateString('en-US', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          }),
-          day: startOfDay.toLocaleDateString('en-US', { weekday: 'short' }),
-          signups,
-        };
+    const [
+      presenceSessions,
+      actionUsers,
+      lessonProgress,
+      challengeSubmissions,
+      habitCheckIns,
+      signupUsers,
+    ] = await Promise.all([
+      prisma.presenceSession.findMany({
+        where: {
+          user: { role: 'user' },
+          OR: [
+            { lastSeenAt: { gte: sevenDaysAgo } },
+            { connectedAt: { gte: sevenDaysAgo } },
+            { updatedAt: { gte: sevenDaysAgo } },
+          ],
+        },
+        select: {
+          userId: true,
+          lastSeenAt: true,
+          connectedAt: true,
+          updatedAt: true,
+        },
       }),
-    );
+      prisma.user.findMany({
+        where: {
+          role: 'user',
+          OR: [
+            { lastActionDate: { gte: sevenDaysAgo } },
+            { createdAt: { gte: sevenDaysAgo } },
+          ],
+        },
+        select: {
+          id: true,
+          lastActionDate: true,
+          createdAt: true,
+        },
+      }),
+      prisma.userLessonProgress.findMany({
+        where: {
+          user: { role: 'user' },
+          OR: [
+            { updatedAt: { gte: sevenDaysAgo } },
+            { createdAt: { gte: sevenDaysAgo } },
+          ],
+        },
+        select: {
+          userId: true,
+          updatedAt: true,
+          createdAt: true,
+        },
+      }),
+      prisma.challengeSubmission.findMany({
+        where: {
+          user: { role: 'user' },
+          OR: [
+            { createdAt: { gte: sevenDaysAgo } },
+            { updatedAt: { gte: sevenDaysAgo } },
+          ],
+        },
+        select: {
+          userId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.habitCheckIn.findMany({
+        where: {
+          user: { role: 'user' },
+          createdAt: { gte: sevenDaysAgo },
+        },
+        select: {
+          userId: true,
+          createdAt: true,
+        },
+      }),
+      prisma.user.findMany({
+        where: {
+          role: 'user',
+          createdAt: { gte: sevenDaysAgo },
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
-    return {
+    const activityTrend = [...Array(7)].map((_, i) => {
+      const date = new Date(snapshotDate);
+      date.setDate(snapshotDate.getDate() - (6 - i));
+
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const startMs = startOfDay.getTime();
+      const endMs = endOfDay.getTime();
+
+      const activeUserIds = new Set<string>();
+
+      for (const ps of presenceSessions) {
+        const ts = ps.lastSeenAt?.getTime() ?? ps.connectedAt.getTime() ?? ps.updatedAt.getTime();
+        if (ts >= startMs && ts <= endMs) activeUserIds.add(ps.userId);
+      }
+      for (const u of actionUsers) {
+        const ts = u.lastActionDate?.getTime() ?? u.createdAt.getTime();
+        if (ts >= startMs && ts <= endMs) activeUserIds.add(u.id);
+      }
+      for (const lp of lessonProgress) {
+        const ts = lp.updatedAt.getTime() ?? lp.createdAt.getTime();
+        if (ts >= startMs && ts <= endMs) activeUserIds.add(lp.userId);
+      }
+      for (const cs of challengeSubmissions) {
+        const ts = cs.createdAt.getTime() ?? cs.updatedAt.getTime();
+        if (ts >= startMs && ts <= endMs) activeUserIds.add(cs.userId);
+      }
+      for (const hc of habitCheckIns) {
+        const ts = hc.createdAt.getTime();
+        if (ts >= startMs && ts <= endMs) activeUserIds.add(hc.userId);
+      }
+
+      let signups = 0;
+      for (const s of signupUsers) {
+        const ts = s.createdAt.getTime();
+        if (ts >= startMs && ts <= endMs) signups++;
+      }
+
+      return {
+        active: activeUserIds.size,
+        signups,
+        date: startOfDay.toISOString(),
+        dateLabel: startOfDay.toLocaleDateString('en-US', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }),
+        day: startOfDay.toLocaleDateString('en-US', { weekday: 'short' }),
+      };
+    });
+
+    const result = {
       overview: {
         activeToday: presenceOverview.activeToday,
         lessonCompletions,
@@ -541,6 +653,9 @@ export class AdminService {
       presence: presenceOverview,
       activityTrend,
     };
+
+    apiCache.set('admin_dashboard_stats', result, 15);
+    return result;
   }
 
   static async getSubmissions(filterBarangay?: string | null) {

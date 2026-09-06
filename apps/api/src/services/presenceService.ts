@@ -262,26 +262,11 @@ export class PresenceService {
 
   async cleanupStaleSessions(options?: { publish?: boolean }) {
     const now = new Date();
-    const staleSessions = await this.database.presenceSession.findMany({
+    const result = await this.database.presenceSession.updateMany({
       where: {
         isOnline: true,
         expiresAt: {
           lte: now,
-        },
-      },
-      select: {
-        sessionId: true,
-      },
-    });
-
-    if (staleSessions.length === 0) {
-      return 0;
-    }
-
-    const result = await this.database.presenceSession.updateMany({
-      where: {
-        sessionId: {
-          in: staleSessions.map((session) => session.sessionId),
         },
       },
       data: {

@@ -130,45 +130,73 @@ export const homeService = {
   // ─── Composite Loaders ────────────────────────────────────────────────────────
 
   /**
-   * Fetches all required data for a full member session.
+   * Fetches only the critical data required for the Home Screen immediately.
+   * Keeps network bandwidth lean and reduces time-to-interactive.
    */
-  async getFullHydrationData(token: string) {
+  async getHomeCriticalData(token: string) {
     const [
       dashboard,
       lessons,
       challenges,
       habitsToday,
-      tracker,
-      profile,
-      rewards,
-      leaderboard,
       events,
-      transparency,
     ] = await Promise.all([
-      this.getDashboard(token),
-      this.getLessons(token),
-      this.getChallenges(token),
-      this.getHabitsToday(token),
-      this.getTracker(token),
-      this.getProfile(token),
-      this.getRewards(token),
-      this.getLeaderboard(token),
-      this.getEvents(token),
-      this.getTransparency(token),
+      this.getDashboard(token).catch(() => null),
+      this.getLessons(token).catch(() => []),
+      this.getChallenges(token).catch(() => ({ items: [], isCycleActive: true })),
+      this.getHabitsToday(token).catch(() => null),
+      this.getEvents(token).catch(() => []),
     ]);
 
     return {
       dashboard: dashboard || null,
-      lessons: Array.isArray(lessons) ? lessons : lessons?.items || [],
-      challenges: Array.isArray(challenges?.items) ? challenges.items : Array.isArray(challenges) ? challenges : [],
-      isCycleActive: challenges?.isCycleActive ?? true,
+      lessons: Array.isArray(lessons) ? lessons : (lessons as any)?.items || [],
+      challenges: Array.isArray((challenges as any)?.items) ? (challenges as any).items : Array.isArray(challenges) ? challenges : [],
+      isCycleActive: (challenges as any)?.isCycleActive ?? true,
       habitsToday: habitsToday || null,
+      events: Array.isArray(events) ? events : (events as any)?.items || [],
+    };
+  },
+
+  /**
+   * Fetches non-critical secondary data for other tabs in the background.
+   */
+  async getSecondaryHydrationData(token: string) {
+    const [
+      tracker,
+      profile,
+      rewards,
+      leaderboard,
+      transparency,
+    ] = await Promise.all([
+      this.getTracker(token).catch(() => null),
+      this.getProfile(token).catch(() => null),
+      this.getRewards(token).catch(() => null),
+      this.getLeaderboard(token).catch(() => null),
+      this.getTransparency(token).catch(() => null),
+    ]);
+
+    return {
       tracker: tracker || null,
       profile: profile || null,
       rewards: rewards || null,
       leaderboard: leaderboard || null,
-      events: Array.isArray(events) ? events : events?.items || [],
       transparency: transparency || null,
+    };
+  },
+
+  /**
+   * Fetches all required data for a full member session.
+   */
+  async getFullHydrationData(token: string) {
+    const [homeData, secondaryData] = await Promise.all([
+      this.getHomeCriticalData(token),
+      this.getSecondaryHydrationData(token),
+    ]);
+
+    return {
+      ...homeData,
+      ...secondaryData,
     };
   }
 };

@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, User, Layers, Filter, 
   RefreshCw, CheckCircle2, Clock, MapPin, Lock
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 
 interface Challenge {
@@ -441,8 +441,8 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function Challenges() {
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [challenges, setChallenges] = useState<Challenge[]>(() => getCachedAdminData<Challenge[]>('/admin/challenges') || []);
+  const [loading, setLoading] = useState(() => !getCachedAdminData<Challenge[]>('/admin/challenges'));
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -494,8 +494,14 @@ export function Challenges() {
     try {
       const data = await adminGet<Challenge[]>('/admin/challenges');
       setChallenges(data);
-    } catch (err: any) { setError(err.message || 'Failed to load challenges.'); }
-    finally { setLoading(false); }
+      setError(null);
+    } catch (err: any) {
+      if (challenges.length === 0) {
+        setError(err.message || 'Failed to load challenges.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadSubmissions = async () => {
@@ -521,7 +527,7 @@ export function Challenges() {
             if (Array.isArray(raw)) setSubmissions(raw);
           })
           .catch(() => {});
-      }, 4000);
+      }, 20000);
       return () => clearInterval(interval);
     }
   }, [activeTab]);

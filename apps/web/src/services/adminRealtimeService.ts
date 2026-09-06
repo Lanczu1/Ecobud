@@ -28,10 +28,10 @@ class AdminRealtimeService {
   }
 
   private start() {
-    // Periodic refresh every 5 seconds for fast real-time responsiveness
+    // Periodic refresh every 25 seconds to preserve network/database bandwidth
     this.timer = setInterval(() => {
       this.notifyAll();
-    }, 5000);
+    }, 25000);
 
     if (typeof window !== 'undefined') {
       window.addEventListener('visibilitychange', this.handleVisibility);

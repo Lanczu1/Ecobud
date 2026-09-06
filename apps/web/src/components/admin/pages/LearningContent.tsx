@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
-import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 
 interface Lesson {
@@ -494,8 +494,8 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function LearningContent() {
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [lessons, setLessons] = useState<Lesson[]>(() => getCachedAdminData<Lesson[]>('/admin/lessons') || []);
+  const [loading, setLoading] = useState(() => !getCachedAdminData<Lesson[]>('/admin/lessons'));
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -508,8 +508,11 @@ export function LearningContent() {
     try {
       const data = await adminGet<Lesson[]>('/admin/lessons');
       setLessons(data);
+      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to load lessons.');
+      if (lessons.length === 0) {
+        setError(err.message || 'Failed to load lessons.');
+      }
     } finally {
       setLoading(false);
     }

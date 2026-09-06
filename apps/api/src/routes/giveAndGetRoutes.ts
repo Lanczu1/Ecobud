@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Get all give and get items (admin view)
 router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) => {

@@ -29,16 +29,47 @@ const migrateLegacyKey = async (key: string) => {
 export const mobileStorage = {
   async getItem(key: string) {
     await migrateLegacyKey(key);
-    return sqliteStorage.getItemAsync(key);
+    try {
+      const sqliteValue = await sqliteStorage.getItemAsync(key);
+      if (sqliteValue !== null && sqliteValue !== undefined) {
+        return sqliteValue;
+      }
+    } catch {
+      // Fallback below
+    }
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
   },
 
   async setItem(key: string, value: string) {
     await migrateLegacyKey(key);
-    await sqliteStorage.setItemAsync(key, value);
+    try {
+      await sqliteStorage.setItemAsync(key, value);
+    } catch (err) {
+      console.warn('[mobileStorage sqlite setItem error]:', err);
+    }
+    // Also mirror to AsyncStorage for maximum cross-run durability and recovery
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch {
+      // Ignore fallback mirror error
+    }
   },
 
   async removeItem(key: string) {
     await migrateLegacyKey(key);
-    await sqliteStorage.removeItemAsync(key);
+    try {
+      await sqliteStorage.removeItemAsync(key);
+    } catch {
+      // Ignore
+    }
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {
+      // Ignore
+    }
   },
 };

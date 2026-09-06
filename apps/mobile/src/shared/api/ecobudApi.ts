@@ -405,13 +405,24 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   try {
     const cacheBuster = path.includes('?') ? `&_cb=${Date.now()}` : `?_cb=${Date.now()}`;
     const url = `${API_BASE}${path}${cacheBuster}`;
-    response = await fetch(url, {
-      method: options.method ?? 'GET',
-      headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      cache: 'no-store',
-    });
-  } catch {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3-second network timeout safeguard
+
+    try {
+      response = await fetch(url, {
+        method: options.method ?? 'GET',
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timed out after 3 seconds. Please check your network connection.');
+    }
     throw new Error(
       `Unable to reach the ECOBUD API at ${apiOrigin}. Start apps/api first. If you are using Expo Go on a phone, set EXPO_PUBLIC_API_BASE_URL to http://YOUR_COMPUTER_IP:3000/api before starting Metro.`,
     );

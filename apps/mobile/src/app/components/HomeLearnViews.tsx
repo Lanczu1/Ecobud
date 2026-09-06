@@ -44,18 +44,8 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  // Smooth transition skeleton for Home Dashboard CARDS ONLY on tab switch or reload
-  const [homeLoading, setHomeLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    setHomeLoading(true);
-    const timer = setTimeout(() => {
-      setHomeLoading(false);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const isCardsLoading = homeLoading || model.initializing || model.booting || (model.refreshing && !model.dashboard);
+  // Only show card skeleton on cold launch when there is genuinely no data yet
+  const isCardsLoading = (model.initializing || model.booting) && !model.dashboard;
 
 
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;

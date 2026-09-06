@@ -16,5 +16,6 @@
     "java.configuration.updateBuildConfiguration": "interactive",
     "java.import.gradle.enabled": false,
     "java.gradle.buildServer.enabled": "off",
-    "css.lint.unknownAtRules": "ignore"
+    "css.lint.unknownAtRules": "ignore",
+    "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx4G -Xms100m -Xlog:disable"
 }

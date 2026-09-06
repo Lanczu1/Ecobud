@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
-import { PrismaClient } from '@prisma/client';
 import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
+import { prisma } from '../prismaClient';
 import fs from 'fs';
 import path from 'path';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Pre-load the ECOBUD logo for PDF embedding
 const logoPath = path.join(__dirname, '..', '..', '..', 'web', 'public', 'logo.png');

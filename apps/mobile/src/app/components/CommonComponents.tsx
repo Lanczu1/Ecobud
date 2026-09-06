@@ -16,6 +16,7 @@ import {
   TextStyle,
   useWindowDimensions,
   Alert,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -63,6 +64,50 @@ export function ChatbotFAB({
   const bubbleTranslateY = useRef(new Animated.Value(6)).current;
   // Continuous gentle breathing animation (gentle scale + vertical hover)
   const breathAnim = useRef(new Animated.Value(0)).current;
+
+  const pan = useRef(new Animated.ValueXY()).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10;
+      },
+      onPanResponderGrant: () => {
+        pan.setOffset({
+          x: (pan.x as any)._value,
+          y: (pan.y as any)._value
+        });
+      },
+      onPanResponderMove: (_, gestureState) => {
+        pan.setValue({ x: gestureState.dx, y: gestureState.dy });
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        pan.flattenOffset();
+        const threshold = scale(100);
+        if (Math.abs(gestureState.dx) > threshold || Math.abs(gestureState.dy) > threshold) {
+          triggerWarningHaptic();
+          Animated.timing(pan, {
+            toValue: {
+              x: gestureState.dx > 0 ? screenWidth : -screenWidth,
+              y: gestureState.dy > 0 ? screenHeight : -screenHeight
+            },
+            duration: 250,
+            useNativeDriver: true
+          }).start(() => {
+            if (onLongPress) {
+              onLongPress();
+            }
+          });
+        } else {
+          Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            friction: 5,
+            useNativeDriver: true
+          }).start();
+        }
+      }
+    })
+  ).current;
 
   // Continuous breathing loop (syncs with mascot's idle rhythm)
   useEffect(() => {
@@ -159,42 +204,30 @@ export function ChatbotFAB({
     outputRange: [0, -3.5], // gentle float up and down
   });
 
-  const handleLongPress = () => {
-    triggerWarningHaptic();
-    Alert.alert(
-      'Remove Chatbot?',
-      'Do you want to remove the chatbot mascot from your screen? You can turn it back on anytime in your Profile page.',
-      [
-        {
-          text: 'No',
-          style: 'cancel',
-        },
-        {
-          text: 'Yes',
-          style: 'destructive',
-          onPress: () => {
-            if (onLongPress) {
-              onLongPress();
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
   return (
     <Animated.View
       pointerEvents="box-none"
+      {...panResponder.panHandlers}
       style={[
         styles.chatbotFabOuter,
         {
           bottom: bottomOffset,
           right: scale(16),
         },
-        { transform: [{ scale: pressScale }] },
+        { 
+          transform: [
+            { translateX: pan.x },
+            { translateY: pan.y }
+          ] 
+        },
       ]}
     >
+      <Animated.View
+        pointerEvents="box-none"
+        style={{
+          transform: [{ scale: pressScale }]
+        }}
+      >
       {/* Speech Bubble: Positioned on the TOP-LEFT of the Mascot with breathing effect */}
       <Animated.View
         pointerEvents="none"
@@ -333,12 +366,10 @@ export function ChatbotFAB({
       {/* Interactive Mascot FAB */}
       <Pressable
         onPress={onPress}
-        onLongPress={handleLongPress}
-        delayLongPress={450}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         style={styles.chatbotFab}
-        accessibilityLabel="Chat with EcoBud AI. Hold to remove mascot."
+        accessibilityLabel="Chat with EcoBud AI. Swipe to remove mascot."
         accessibilityRole="button"
       >
         <LottieView
@@ -351,6 +382,7 @@ export function ChatbotFAB({
           style={{ width: mascotSize, height: mascotSize }}
         />
       </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -359,7 +391,6 @@ export function EcobudActionOverlay({ label }: { label: string }) {
   return (
     <LoadingScreenVisual
       label={label}
-      message="Optimized for smoother loading on older and newer Android devices."
     />
   );
 }

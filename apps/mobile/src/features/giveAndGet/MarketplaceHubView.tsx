@@ -38,14 +38,21 @@ export function MarketplaceHubView({
   const token = model.session?.token || '';
 
   const loadConversations = useCallback(async () => {
-    if (!currentUserId) return;
+    if (!currentUserId || !token) return;
     try {
+      swapService.init(token);
       const convs = await swapService.fetchConversations(currentUserId);
       setConversations(convs);
-    } catch (err) {
-      console.error('Failed to load conversations:', err);
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isAuthExpired = err?.status === 401 || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized');
+      if (isAuthExpired) {
+        // Silently reset expired session via root handler without popping LogBox
+        void model.handleLogout?.();
+        return;
+      }
     }
-  }, [currentUserId]);
+  }, [currentUserId, token, model]);
 
   useEffect(() => {
     loadConversations();

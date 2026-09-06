@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Users, Trophy, BookOpen, Coins, ArrowUpRight, Download, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet } from '../../../utils/adminApi';
+import { adminGet, getCachedAdminData } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 
 interface DashboardStats {
@@ -28,15 +28,15 @@ function Skeleton({ className = '', style }: { className?: string; style?: React
 }
 
 export function Reports() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats | null>(() => getCachedAdminData<DashboardStats>('/admin/stats'));
+  const [loading, setLoading] = useState(() => !getCachedAdminData<DashboardStats>('/admin/stats'));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadStats(isInitial = false) {
-      if (isInitial) setLoading(true);
+      if (isInitial && !stats) setLoading(true);
       try {
         const data = await adminGet<DashboardStats>('/admin/stats');
         if (isMounted) {
@@ -44,11 +44,11 @@ export function Reports() {
           setError(null);
         }
       } catch (err: any) {
-        if (isMounted && isInitial) {
+        if (isMounted && isInitial && !stats) {
           setError(err.message || 'Failed to load report data.');
         }
       } finally {
-        if (isMounted && isInitial) {
+        if (isMounted) {
           setLoading(false);
         }
       }
