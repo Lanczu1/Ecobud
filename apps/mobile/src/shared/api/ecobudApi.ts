@@ -406,7 +406,7 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
     const cacheBuster = path.includes('?') ? `&_cb=${Date.now()}` : `?_cb=${Date.now()}`;
     const url = `${API_BASE}${path}${cacheBuster}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3-second network timeout safeguard
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second network timeout safeguard
 
     try {
       response = await fetch(url, {
