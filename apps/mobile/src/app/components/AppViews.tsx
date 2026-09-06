@@ -58,6 +58,7 @@ import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
 import { ecobudApiOrigin, type ChallengeWithProgress } from '../../shared/api/ecobudApi';
+import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { ChallengesViewSkeleton, LeaderboardSkeleton, TrackerCardsSkeleton } from '../../shared/ui/SkeletonLoaders';
 import { triggerSelectionHaptic } from '../utils/haptics';
 
@@ -89,7 +90,6 @@ export function BootView() {
       >
         <LoadingScreenVisual
           label="Growing your EcoBud journey"
-          message="Preparing your dashboard with a lighter Android-safe loading flow."
         />
       </Animated.View>
     </SafeAreaView>
@@ -142,6 +142,9 @@ export function OnboardingView({ onComplete }: { onComplete: () => void }) {
         }),
       ])
     ).start();
+
+    // Cache onboarding open state immediately so subsequent app opens never show it again
+    void mobileStorage.setItem('ecobud.mobile.onboarding', 'true').catch(() => {});
   }, [screenFadeAnim, floatAnim, isSmallDevice]);
 
   const steps = [
@@ -824,18 +827,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  // Brief tab switch skeleton loading transition
-  const [tabLoading, setTabLoading] = useState(true);
-
-  useEffect(() => {
-    setTabLoading(true);
-    const timer = setTimeout(() => {
-      setTabLoading(false);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, [model.activeTab, model.challengesViewMode]);
-
-  const isCardsLoading = tabLoading || model.initializing || model.booting || (model.refreshing && (!model.challenges || model.challenges.length === 0));
+  const isCardsLoading = model.initializing || model.booting || (model.refreshing && (!model.challenges || model.challenges.length === 0));
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
@@ -1109,9 +1101,9 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         {/* View Mode Tabs */}
         <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 4, marginTop: verticalScale(10), marginBottom: verticalScale(10) }}>
           {[
-            { key: 'Discover', label: 'Discover', icon: 'compass-outline' as const },
-            { key: 'My Tasks', label: 'My Tasks', icon: 'list-circle-outline' as const },
-            { key: 'History', label: 'History', icon: 'time-outline' as const }
+            { key: 'Discover', label: 'Discover', icon: 'compass-outline' as const, badge: 0 },
+            { key: 'My Tasks', label: 'My Tasks', icon: 'list-circle-outline' as const, badge: inProgressGroups.length },
+            { key: 'History', label: 'History', icon: 'time-outline' as const, badge: completedGroups.reduce((sum, g) => sum + g.unclaimedCount, 0), badgeColor: '#F59E0B' }
           ].map(tab => (
             <TouchableOpacity 
               key={tab.key} 
@@ -1121,7 +1113,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexDirection: 'row',
-                gap: 6,
+                gap: 5,
                 borderRadius: 10,
                 backgroundColor: viewMode === tab.key ? theme.colors.card : 'transparent',
                 shadowColor: viewMode === tab.key ? '#000' : 'transparent',
@@ -1133,10 +1125,25 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             >
               <Ionicons 
                 name={tab.icon} 
-                size={16} 
+                size={15} 
                 color={viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted} 
               />
               <Text style={{ fontWeight: '700', color: viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted, fontSize: 13 }}>{tab.label}</Text>
+              {tab.badge > 0 && (
+                <View 
+                  style={{ 
+                    backgroundColor: tab.badgeColor || (isDark ? theme.colors.primary : '#126027'), 
+                    paddingHorizontal: 5, 
+                    paddingVertical: 1, 
+                    borderRadius: 8, 
+                    minWidth: 16, 
+                    alignItems: 'center', 
+                    justifyContent: 'center' 
+                  }}
+                >
+                  <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{tab.badge}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -1819,17 +1826,29 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
       />
 
       <Modal visible={!!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' }}>
-          <TouchableOpacity style={{ position: 'absolute', top: 40, right: 20, zIndex: 10, padding: 10 }} onPress={() => setPreviewImage(null)}>
-            <Ionicons name="close" size={32} color="#FFF" />
+        <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity 
+            style={{ 
+              position: 'absolute', 
+              top: Platform.OS === 'android' ? 24 : 12, 
+              right: 20, 
+              zIndex: 20, 
+              padding: 10,
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              borderRadius: 22,
+            }} 
+            onPress={() => setPreviewImage(null)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="close" size={26} color="#FFF" />
           </TouchableOpacity>
           {previewImage && (
             <Image 
               source={{ uri: previewImage }} 
-              style={{ width: '90%', height: '80%', resizeMode: 'contain' }} 
+              style={{ width: '92%', height: '82%', resizeMode: 'contain' }} 
             />
           )}
-        </View>
+        </SafeAreaView>
       </Modal>
     </>
   );

@@ -127,7 +127,7 @@ export function WebAuthView({ onLogin, authError, isDark, onToggleDark }: WebAut
               onBlur={() => markTouched('email')}
               icon={<Mail size={18} />}
               type="email"
-              placeholder="admin@ecobud.app"
+              placeholder="Enter your Email address"
               error={touched.email ? errors.email : undefined}
             />
 

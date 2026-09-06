@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, Leaf, FileText, BarChart3, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -479,8 +479,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function Events() {
-  const [events, setEvents] = useState<AdminEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<AdminEvent[]>(() => getCachedAdminData<AdminEvent[]>('/admin/events') || []);
+  const [loading, setLoading] = useState(() => !getCachedAdminData<AdminEvent[]>('/admin/events'));
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -499,8 +499,14 @@ export function Events() {
     try {
       const data = await adminGet<AdminEvent[]>('/admin/events');
       setEvents(data);
-    } catch (err: any) { setError(err.message || 'Failed to load events.'); }
-    finally { setLoading(false); }
+      setError(null);
+    } catch (err: any) {
+      if (events.length === 0) {
+        setError(err.message || 'Failed to load events.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleToggleFeatured = async (event: AdminEvent) => {

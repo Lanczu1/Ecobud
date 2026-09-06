@@ -123,9 +123,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setCapturedImage(null);
     setMockResult(null);
     setAttemptsLeft(MAX_AI_ATTEMPTS);
-    setBeforeProofUrl(submission?.proofUrl || null);
+    // If submission is rejected or not started, clear beforeProofUrl so user can take a fresh photo
+    const isRejectedSubmission = submission?.status === 'rejected' || challenge?.progress?.status === 'rejected';
+    setBeforeProofUrl(isRejectedSubmission ? null : (submission?.proofUrl || null));
     setStep(getInitialStep());
-  }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.afterProofUrl]);
+  }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.status, submission?.afterProofUrl]);
 
   React.useEffect(() => {
     Animated.timing(entryFadeAnim, {
@@ -236,7 +238,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         object: mockResult.object,
         confidence: mockResult.confidence,
       });
-      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, 1, undefined, proofMetadata);
+      const detectedQty = mockResult.detectedCount || 1;
+      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedQty, undefined, proofMetadata);
       Alert.alert(
         'Before Photo Submitted!',
         `Your mission proof has been submitted. The admin will review it shortly.`,

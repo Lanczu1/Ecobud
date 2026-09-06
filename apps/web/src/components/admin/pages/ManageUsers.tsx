@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet, adminPost, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 
 interface AdminUser {
@@ -56,8 +56,8 @@ function UserAvatar({ user }: { user: AdminUser }) {
 }
 
 export function ManageUsers() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<AdminUser[]>(() => getCachedAdminData<AdminUser[]>('/admin/users') || []);
+  const [loading, setLoading] = useState(() => !getCachedAdminData<AdminUser[]>('/admin/users'));
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -69,8 +69,11 @@ export function ManageUsers() {
     try {
       const data = await adminGet<AdminUser[]>('/admin/users');
       setUsers(data);
+      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to load users.');
+      if (users.length === 0) {
+        setError(err.message || 'Failed to load users.');
+      }
     } finally {
       setLoading(false);
     }
@@ -172,7 +175,7 @@ export function ManageUsers() {
 
       {error && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
           <p className="text-sm text-red-700">{error}</p>
         </div>
       )}

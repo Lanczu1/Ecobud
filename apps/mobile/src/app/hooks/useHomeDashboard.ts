@@ -42,6 +42,7 @@ const ONBOARDING_STORAGE_KEY = 'ecobud.mobile.onboarding';
 const VIEWED_MISSIONS_KEY = 'ecobud.mobile.viewedMissions';
 const RECENT_VIEWED_KEY = 'ecobud.mobile.recentViewedMission';
 const CHATBOT_ENABLED_STORAGE_KEY = 'ecobud.mobile.chatbotEnabled';
+const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
 
 // ─── Internal Utilities ─────────────────────────────────────────────────────────
 
@@ -239,6 +240,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setPendingStreakUnlock(false);
     previousStreakRef.current = null;
     previousUnlockedBadgeIdsRef.current = null;
+    void mobileStorage.removeItem(CACHED_HOME_DATA_STORAGE_KEY).catch(() => {});
     // Intentionally keep viewed missions across logouts
   }, []);
 
@@ -423,11 +425,29 @@ export function useHomeDashboard(): EcoBudMobileModel {
       setActionOverlayLabel(label);
       setActionOverlayVisible(true);
 
+      // Hard safety guard: Never let any loading overlay stay longer than 3 seconds (3000ms) anywhere
+      const maxLoadingTimeout = setTimeout(() => {
+        if (actionOverlayTicket.current === ticket) {
+          setActionOverlayVisible(false);
+        }
+      }, 3000);
+
       try {
-        return await action();
+        const actionPromise = Promise.resolve().then(() => action());
+        // Cap action execution wait to 3 seconds
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Operation exceeded 3 seconds timeout')), 3000)
+        );
+        return await Promise.race([actionPromise, timeoutPromise]);
+      } catch (err) {
+        console.warn(`[runWithActionLoader] Operation completed or timed out for: ${label}`, err);
+        throw err;
       } finally {
+        clearTimeout(maxLoadingTimeout);
         const elapsed = Date.now() - startedAt;
-        const remaining = minimumDuration - elapsed;
+        // Cap remaining duration so total time cannot exceed 3000ms
+        const clampedMinDuration = Math.min(minimumDuration, 3000);
+        const remaining = Math.min(Math.max(0, clampedMinDuration - elapsed), Math.max(0, 3000 - elapsed));
         if (remaining > 0) {
           await new Promise<void>((resolve) => setTimeout(resolve, remaining));
         }
@@ -460,36 +480,34 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
 
       try {
-        const data = await homeService.getFullHydrationData(existingSession.token);
+        // Step 1: Fetch Home Critical Data first (dashboard, lessons, challenges, habits, events)
+        const homeData = await homeService.getHomeCriticalData(existingSession.token);
 
-        const safeLessons = Array.isArray(data?.lessons) ? [...data.lessons] : [];
+        const safeLessons = Array.isArray(homeData?.lessons) ? [...homeData.lessons] : [];
         safeLessons.sort((a: any, b: any) => {
           if (a.featured && !b.featured) return -1;
           if (!a.featured && b.featured) return 1;
           return 0;
         });
 
-        // Initialize baseline refs on first hydration if not yet set
-        if (previousStreakRef.current === null && data?.dashboard) {
-          previousStreakRef.current = data.dashboard.streak;
-        }
-        if (previousUnlockedBadgeIdsRef.current === null && data?.rewards?.badges) {
-          const unlockedIds = new Set<string>(data.rewards.badges.filter((b: any) => b.unlocked).map((b: any) => String(b.id)));
-          previousUnlockedBadgeIdsRef.current = unlockedIds;
+        if (previousStreakRef.current === null && homeData?.dashboard) {
+          previousStreakRef.current = homeData.dashboard.streak;
         }
 
-        setDashboard(data?.dashboard ?? null);
+        // Immediately update critical home state for fast UI rendering
+        setDashboard(homeData?.dashboard ?? null);
         setLessons(safeLessons);
-        setChallenges(Array.isArray(data?.challenges) ? data.challenges : []);
-        setIsCycleActive(data?.isCycleActive ?? true);
-        setHabitsToday(data?.habitsToday ?? null);
-        setTracker(data?.tracker ?? null);
-        setProfile(data?.profile ?? null);
-        setRewards(data?.rewards ?? null);
-        setLeaderboard(data?.leaderboard ?? null);
-        setEvents(Array.isArray(data?.events) ? data.events : []);
-        setTransparency(data?.transparency ?? null);
+        setChallenges(Array.isArray(homeData?.challenges) ? homeData.challenges : []);
+        setIsCycleActive(homeData?.isCycleActive ?? true);
+        setHabitsToday(homeData?.habitsToday ?? null);
+        setEvents(Array.isArray(homeData?.events) ? homeData.events : []);
         setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
+
+        // Release pull-to-refresh spinner immediately so UI feels instantaneous
+        if (!silent) {
+          setRefreshing(false);
+        }
+
         const userDisplayName = existingSession?.user?.displayName || existingSession?.user?.name || 'Eco Warrior';
         const firstName = userDisplayName.split(' ')[0] || 'Eco Warrior';
         setAssistantMessages((current) =>
@@ -504,6 +522,34 @@ export function useHomeDashboard(): EcoBudMobileModel {
               },
             ],
         );
+
+        // Save critical home state to cache for instantaneous loading on next launch
+        void mobileStorage.setItem(
+          CACHED_HOME_DATA_STORAGE_KEY,
+          JSON.stringify({
+            dashboard: homeData?.dashboard ?? null,
+            lessons: safeLessons,
+            challenges: Array.isArray(homeData?.challenges) ? homeData.challenges : [],
+            habitsToday: homeData?.habitsToday ?? null,
+            events: Array.isArray(homeData?.events) ? homeData.events : [],
+            cachedAt: Date.now(),
+          }),
+        ).catch(() => {});
+
+        // Step 2: Fetch non-critical secondary data for other tabs in the background
+        void homeService.getSecondaryHydrationData(existingSession.token).then((secData) => {
+          if (previousUnlockedBadgeIdsRef.current === null && secData?.rewards?.badges) {
+            const unlockedIds = new Set<string>(secData.rewards.badges.filter((b: any) => b.unlocked).map((b: any) => String(b.id)));
+            previousUnlockedBadgeIdsRef.current = unlockedIds;
+          }
+          setTracker(secData?.tracker ?? null);
+          setProfile(secData?.profile ?? null);
+          setRewards(secData?.rewards ?? null);
+          setLeaderboard(secData?.leaderboard ?? null);
+          setTransparency(secData?.transparency ?? null);
+        }).catch((e) => {
+          console.warn('[ECOBUD secondary hydration warning]:', e);
+        });
       } catch (error) {
         const status = (error as any)?.status;
         const msg = error instanceof Error ? error.message : '';
@@ -567,30 +613,73 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   useEffect(() => {
+    const bootstrapTimer = setTimeout(() => {
+      setBooting(false);
+      setInitializing(false);
+    }, 3000);
+
     const bootstrap = async () => {
       try {
-        const savedViewedIds = await mobileStorage.getItem(VIEWED_MISSIONS_KEY);
+        const [
+          savedViewedIds,
+          savedRecent,
+          savedChatbotEnabled,
+          savedSession,
+          cachedHome,
+          savedOnboarded,
+        ] = await Promise.all([
+          mobileStorage.getItem(VIEWED_MISSIONS_KEY),
+          mobileStorage.getItem(RECENT_VIEWED_KEY),
+          mobileStorage.getItem(CHATBOT_ENABLED_STORAGE_KEY),
+          mobileStorage.getItem(SESSION_STORAGE_KEY),
+          mobileStorage.getItem(CACHED_HOME_DATA_STORAGE_KEY),
+          mobileStorage.getItem(ONBOARDING_STORAGE_KEY),
+        ]);
+
+        if (savedOnboarded === 'true' || savedOnboarded === '1' || Boolean(savedOnboarded) || savedSession) {
+          setHasOnboarded(true);
+        }
+
         if (savedViewedIds) {
           try { setViewedMissionIds(JSON.parse(savedViewedIds)); } catch (e) { }
         }
 
-        const savedRecent = await mobileStorage.getItem(RECENT_VIEWED_KEY);
         if (savedRecent) {
           try { setRecentViewedMission(JSON.parse(savedRecent)); } catch (e) { }
         }
 
-        const savedChatbotEnabled = await mobileStorage.getItem(CHATBOT_ENABLED_STORAGE_KEY);
         if (savedChatbotEnabled !== null) {
           try { setIsChatbotEnabled(JSON.parse(savedChatbotEnabled) !== false); } catch (e) { }
         }
 
-        const savedSession = await mobileStorage.getItem(SESSION_STORAGE_KEY);
         if (savedSession) {
           try {
             const parsed = JSON.parse(savedSession) as SessionPayload;
             if (parsed && typeof parsed === 'object' && parsed.token && parsed.user) {
               setSession(parsed);
-              await hydrateApp(parsed, true);
+
+              // ─── Instant Stale-While-Revalidate Hydration ──────────────
+              // If cached home dashboard data exists, apply it immediately to skip the loading state!
+              if (cachedHome) {
+                try {
+                  const cached = JSON.parse(cachedHome);
+                  if (cached && typeof cached === 'object') {
+                    if (cached.dashboard) setDashboard(cached.dashboard);
+                    if (Array.isArray(cached.lessons) && cached.lessons.length > 0) {
+                      setLessons(cached.lessons);
+                      setSelectedLessonId(cached.lessons[0]?.id ?? null);
+                    }
+                    if (Array.isArray(cached.challenges)) setChallenges(cached.challenges);
+                    if (cached.habitsToday) setHabitsToday(cached.habitsToday);
+                    if (Array.isArray(cached.events)) setEvents(cached.events);
+                  }
+                } catch (cacheErr) {
+                  console.warn('[ECOBUD Cache hydrate warning]:', cacheErr);
+                }
+              }
+
+              // Background fetch the latest fresh data without blocking the user
+              void hydrateApp(parsed, true);
             } else {
               await mobileStorage.removeItem(SESSION_STORAGE_KEY);
             }
@@ -602,12 +691,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
       } catch (error) {
         console.error('Failed to bootstrap ECOBUD mobile app.', error);
       } finally {
+        clearTimeout(bootstrapTimer);
         setBooting(false);
         setInitializing(false);
       }
     };
 
     void bootstrap();
+
+    return () => clearTimeout(bootstrapTimer);
   }, [hydrateApp]);
 
   // Monitor streak unlock
@@ -704,7 +796,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           }
         }).catch(() => {});
       }
-    }, 3000); // Automatically sync every 3 seconds for seamless real-time updates
+    }, 25000); // Automatically sync every 25 seconds for seamless real-time updates
 
     return () => clearInterval(interval);
   }, [session?.token, presence.hasUsableInternet]);
@@ -739,17 +831,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [session]);
 
   const completeOnboarding = useCallback(async () => {
-    const startedAt = Date.now();
     setBooting(true);
-
     try {
       setHasOnboarded(true);
+      await mobileStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
     } finally {
-      const elapsed = Date.now() - startedAt;
-      const remaining = 920 - elapsed;
-      if (remaining > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, remaining));
-      }
       setBooting(false);
     }
   }, []);
@@ -821,6 +907,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       const redirectUri = makeRedirectUri({
         scheme: 'ecobud',
+        path: 'auth',
       });
 
       const { data, error } = await supabaseClient.auth.signInWithOAuth({
@@ -844,10 +931,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
         authUrl += `${authUrl.includes('?') ? '&' : '?'}prompt=select_account`;
       }
 
-      const authResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, {
-        showInRecents: true,
-        preferEphemeralSession: true,
-      });
+      // In production Android, preferEphemeralSession can cause the browser to fail to open or close instantly.
+      // We also catch any explicit WebBrowser failure just in case.
+      let authResult;
+      try {
+        authResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, {
+          showInRecents: true,
+        });
+      } catch (browserErr) {
+        console.warn('WebBrowser open error:', browserErr);
+        throw new Error('Failed to open secure browser for Google Sign In. Please try again.');
+      }
 
       if (authResult.type !== 'success') {
         return;
@@ -1069,10 +1163,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
       return;
     }
 
-    await runWithActionLoader('Refreshing your dashboard...', async () => {
-      await hydrateApp(session);
-    });
-  }, [hydrateApp, runWithActionLoader, session]);
+    await hydrateApp(session);
+  }, [hydrateApp, session]);
 
   const queueRealtimeRefresh = useCallback(
     (reason: string) => {
@@ -1727,8 +1819,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
                     status: 'pending',
                     proofUrl,
                     afterProofUrl: null,
-                    detectedQuantity: 1,
-                    reservedQuantity: 1,
+                    detectedQuantity: detectedQuantity || 1,
+                    reservedQuantity: detectedQuantity || 1,
                     qrToken: null,
                     qrVerified: false,
                     adminPreliminaryApproved: false,
@@ -1799,8 +1891,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
     try {
       const activeSession = ensureSession();
 
-      const totalExp = challenge.expReward;
-      const totalCoins = challenge.ecoCoinReward;
+      const targetSub = submissionId
+        ? challenge.progress?.submissions?.find((s: any) => s.id === submissionId) || (challenge.progress?.submission?.id === submissionId ? challenge.progress.submission : null)
+        : challenge.progress?.submission;
+
+      const totalExp = (targetSub && targetSub.expAwarded) || challenge.expReward;
+      const totalCoins = (targetSub && targetSub.ecoCoinsAwarded !== undefined) ? targetSub.ecoCoinsAwarded : challenge.ecoCoinReward;
 
       setEarnedPoints(totalExp);
       setEarnedCoins(totalCoins);

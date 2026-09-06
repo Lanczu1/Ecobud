@@ -158,7 +158,7 @@ export async function expireStaleSubmissions(): Promise<number> {
   const GRACE_PERIOD_DAYS = 7;
   const cutoffDate = new Date(Date.now() - GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
 
-  const staleSubmissions = await prisma.challengeSubmission.findMany({
+  const result = await prisma.challengeSubmission.updateMany({
     where: {
       status: { in: ['approved_collection', 'final_review'] },
       adminPreliminaryApproved: true,
@@ -166,25 +166,12 @@ export async function expireStaleSubmissions(): Promise<number> {
         lte: cutoffDate
       }
     },
-    include: {
-      challengeInstance: { include: { challenge: true } }
+    data: {
+      status: 'rejected',
+      moderatorNotes: 'Failed: 1-week grace period expired without completing After Photo or QR verification.',
+      reservedQuantity: 0,
     }
   });
 
-  let expiredCount = 0;
-
-  for (const sub of staleSubmissions) {
-    await prisma.challengeSubmission.update({
-      where: { id: sub.id },
-      data: {
-        status: 'rejected',
-        moderatorNotes: 'Failed: 1-week grace period expired without completing After Photo or QR verification.',
-        reservedQuantity: 0,
-      }
-    });
-
-    expiredCount++;
-  }
-
-  return expiredCount;
+  return result.count;
 }
