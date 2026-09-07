@@ -1451,12 +1451,17 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                           ...challenge,
                           uniqueId: item.uniqueId,
                           progress: {
-                            progressPercentage: challenge.progress?.progressPercentage ?? 0,
+                            progressPercentage: isRejected ? 0 : (challenge.progress?.progressPercentage ?? 0),
                             ...challenge.progress,
                             status: item.status,
                             rejectionReason: item.rejectionReason,
                             submissionId: item.sub?.id,
-                            submission: item.sub,
+                            submission: isRejected && item.sub ? {
+                              ...item.sub,
+                              afterProofUrl: null,
+                              adminPreliminaryApproved: false,
+                              adminFinalApproved: false,
+                            } : item.sub,
                           }
                         };
 

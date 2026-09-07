@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, BackHandler } from 'react-native';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import type { EcoBudMobileModel } from '../../app/types/home';
 import { TopNavbar } from '../../app/components/CommonComponents';
@@ -57,6 +57,46 @@ export function MarketplaceHubView({
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  // Hardware back button support within Marketplace (closes dialogs or steps back to feed)
+  useEffect(() => {
+    const onBackPress = () => {
+      // 1. Dismiss any open swap dialog
+      if (showSwapDialog) {
+        setShowSwapDialog(false);
+        return true;
+      }
+      if (showAcceptedDialog) {
+        setShowAcceptedDialog(false);
+        return true;
+      }
+
+      // 2. Step back from sub-screens (create, detail, chat) to feed
+      if (screen === 'chat') {
+        setScreen('feed');
+        setFeedTab('chats');
+        setSelectedConversation(null);
+        loadConversations();
+        return true;
+      }
+      if (screen === 'detail') {
+        setScreen('feed');
+        setSelectedListing(null);
+        return true;
+      }
+      if (screen === 'create') {
+        setScreen('feed');
+        return true;
+      }
+
+      // 3. Let parent shell (useHomeDashboard tab history) handle back navigation
+      return false;
+    };
+
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backSub.remove();
+  }, [showSwapDialog, showAcceptedDialog, screen, loadConversations]);
+
 
   useEffect(() => {
     onScreenStateChange?.(screen === 'chat' || screen === 'detail' || screen === 'create');

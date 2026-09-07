@@ -253,4 +253,7 @@ export interface EcoBudMobileModel {
   /** Whether the floating leaf mascot AI chatbot is enabled or hidden by the user */
   isChatbotEnabled: boolean;
   setChatbotEnabled: (enabled: boolean) => Promise<void>;
+  /** Hardware and gesture back button handler (Facebook-style tab history & overlay pop) */
+  handleHardwareBackPress: () => boolean;
 }
+

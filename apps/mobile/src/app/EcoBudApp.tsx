@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useState, useCallback } from 'react';
 import {
   Alert,
+  BackHandler,
   RefreshControl,
   ScrollView,
   View,
@@ -85,6 +86,20 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       scrollRef.current.scrollTo({ y: 0, animated: false });
     }
   }, [model.activeTab]);
+
+  // Global Android Hardware & Gesture Back Button listener (Facebook-style tab history & overlay handling)
+  React.useEffect(() => {
+    const onHardwareBack = () => {
+      // Only handle if user is authenticated and not currently in onboarding/booting
+      if (!model.session || model.booting || model.initializing || !model.hasOnboarded) {
+        return false;
+      }
+      return model.handleHardwareBackPress();
+    };
+
+    const backSubscription = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+    return () => backSubscription.remove();
+  }, [model]);
 
   let content: React.ReactNode;
 

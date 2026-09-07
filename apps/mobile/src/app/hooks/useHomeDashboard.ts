@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, DeviceEventEmitter, AppState } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
 import { homeService } from '../services/homeService';
 import {
   type AppTab,
@@ -77,6 +77,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [activeTab, setActiveTabState] = useState<AppTab>('home');
+  const [tabHistory, setTabHistory] = useState<AppTab[]>(['home']);
+  const lastBackPressRef = useRef<number>(0);
   const [challengesViewMode, setChallengesViewMode] = useState<'Discover' | 'My Tasks' | 'History'>('Discover');
   const [activeOverlay, setActiveOverlayState] = useState<OverlayScreen>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
@@ -238,6 +240,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setNewlyUnlockedBadges([]);
     setPendingBadgeQueue([]);
     setPendingStreakUnlock(false);
+    setTabHistory(['home']);
     previousStreakRef.current = null;
     previousUnlockedBadgeIdsRef.current = null;
     void mobileStorage.removeItem(CACHED_HOME_DATA_STORAGE_KEY).catch(() => {});
@@ -425,29 +428,22 @@ export function useHomeDashboard(): EcoBudMobileModel {
       setActionOverlayLabel(label);
       setActionOverlayVisible(true);
 
-      // Hard safety guard: Never let any loading overlay stay longer than 3 seconds (3000ms) anywhere
+      // Safety guard: dismiss loading overlay if an action takes too long
       const maxLoadingTimeout = setTimeout(() => {
         if (actionOverlayTicket.current === ticket) {
           setActionOverlayVisible(false);
         }
-      }, 3000);
+      }, 10000);
 
       try {
-        const actionPromise = Promise.resolve().then(() => action());
-        // Cap action execution wait to 3 seconds
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Operation exceeded 3 seconds timeout')), 3000)
-        );
-        return await Promise.race([actionPromise, timeoutPromise]);
+        return await action();
       } catch (err) {
-        console.warn(`[runWithActionLoader] Operation completed or timed out for: ${label}`, err);
+        console.warn(`[runWithActionLoader] Operation failed for: ${label}`, err);
         throw err;
       } finally {
         clearTimeout(maxLoadingTimeout);
         const elapsed = Date.now() - startedAt;
-        // Cap remaining duration so total time cannot exceed 3000ms
-        const clampedMinDuration = Math.min(minimumDuration, 3000);
-        const remaining = Math.min(Math.max(0, clampedMinDuration - elapsed), Math.max(0, 3000 - elapsed));
+        const remaining = Math.max(0, minimumDuration - elapsed);
         if (remaining > 0) {
           await new Promise<void>((resolve) => setTimeout(resolve, remaining));
         }
@@ -1133,13 +1129,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const handleLogout = useCallback(async () => {
     await runWithActionLoader('Signing you out...', async () => {
-      const disconnectResult = await presence.disconnectPresence({
-        clearSessionId: true,
-        requireImmediateSync: true,
-      });
-
-      if (presence.hasUsableInternet && !disconnectResult.synced) {
-        throw new Error('Unable to update your live status on the server. Please try signing out again.');
+      try {
+        await presence.disconnectPresence({
+          clearSessionId: true,
+          requireImmediateSync: false,
+        });
+      } catch (err) {
+        console.warn('[handleLogout] Presence disconnect non-fatal error:', err);
       }
 
       setSession(null);
@@ -1151,10 +1147,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
       await persistSession(null);
     }, 700).catch((error) => {
-      Alert.alert(
-        'Sign out incomplete',
-        error instanceof Error ? error.message : 'Please try again.',
-      );
+      console.warn('[handleLogout] Error during sign out loader:', error);
+      // Guarantee local logout occurs even if any unexpected error happened
+      setSession(null);
+      clearAppData();
+      setActiveOverlayState(null);
+      setActiveTabState('home');
+      void persistSession(null);
     });
   }, [clearAppData, persistSession, presence, runWithActionLoader]);
 
@@ -1762,7 +1761,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const setActiveTab = useCallback(
     (tab: AppTab, silent: boolean = false) => {
-      setActiveTabState(tab);
+      setActiveTabState((prev) => {
+        if (prev !== tab) {
+          setTabHistory((history) => {
+            // Avoid duplicate consecutive entries and limit history size to 25
+            const nextHistory = history[history.length - 1] === tab ? history : [...history, tab];
+            return nextHistory.length > 25 ? nextHistory.slice(-25) : nextHistory;
+          });
+        }
+        return tab;
+      });
     },
     [],
   );
@@ -1778,6 +1786,86 @@ export function useHomeDashboard(): EcoBudMobileModel {
     },
     [],
   );
+
+  /**
+   * Hardware & gesture back button handler (Facebook-style tab history & overlay handling)
+   * Returns true if the back action was consumed, or false to permit default exit.
+   */
+  const handleHardwareBackPress = useCallback((): boolean => {
+    // 1. If CoachMarks walkthrough tutorial is open, close it
+    if (coachMarksVisible) {
+      completeCoachMarks();
+      return true;
+    }
+
+    // 2. If an overlay is active, handle overlay back hierarchy
+    if (activeOverlay) {
+      if (activeOverlay === 'quiz') {
+        // Step back from quiz to lesson detail
+        resetQuiz();
+        setActiveOverlayState('lesson');
+        return true;
+      }
+
+      // Special handling for lesson completed celebration -> return to lesson or close
+      if (activeOverlay === 'lessonCompleted') {
+        resetQuiz();
+        setActiveOverlayState(null);
+        return true;
+      }
+
+      // For all other overlays (assistant, events, lesson, leaderboard, rewards, etc.)
+      setActiveOverlayState(null);
+      return true;
+    }
+
+    // 3. If in Challenges tab and viewing My Tasks or History, step back to Discover view
+    if (activeTab === 'challenges' && challengesViewMode !== 'Discover') {
+      setChallengesViewMode('Discover');
+      return true;
+    }
+
+    // 4. Facebook-style Tab Navigation History Stack:
+    // If the user has navigated between tabs, pop backwards
+    if (tabHistory.length > 1) {
+      // Create new history without the current top tab
+      const nextHistory = [...tabHistory];
+      nextHistory.pop(); // remove current active tab
+      const previousTab = nextHistory[nextHistory.length - 1];
+
+      setTabHistory(nextHistory);
+      setActiveTabState(previousTab);
+      return true;
+    }
+
+    // 5. If user is on a tab other than 'home' but history is somehow 1 entry, go to 'home'
+    if (activeTab !== 'home') {
+      setActiveTabState('home');
+      setTabHistory(['home']);
+      return true;
+    }
+
+    // 6. User is at root ('home') with no previous history -> Double-back to exit
+    const now = Date.now();
+    if (now - lastBackPressRef.current < 2000) {
+      // User pressed back twice within 2 seconds -> Allow app to exit
+      return false;
+    }
+
+    lastBackPressRef.current = now;
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('Press back again to exit EcoBud', ToastAndroid.SHORT);
+    }
+    return true;
+  }, [
+    activeOverlay,
+    activeTab,
+    challengesViewMode,
+    coachMarksVisible,
+    completeCoachMarks,
+    resetQuiz,
+    tabHistory,
+  ]);
 
   const analyzeChallengeImage = useCallback(async (challengeId: string, uri: string) => {
     try {
@@ -2169,6 +2257,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setProgressBarLayout,
     isChatbotEnabled,
     setChatbotEnabled,
+    handleHardwareBackPress,
   };
 
 }

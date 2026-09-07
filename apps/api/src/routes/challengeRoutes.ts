@@ -420,8 +420,8 @@ challengeRoutes.post(
         proofUrl: payload.proofUrl || null,
         afterProofUrl: payload.afterProofUrl || null,
         status: 'pending',
-        detectedQuantity: 1,
-        reservedQuantity: 1,
+        detectedQuantity: payload.detectedQuantity || 1,
+        reservedQuantity: payload.detectedQuantity || 1,
       },
     });
 

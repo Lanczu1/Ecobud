@@ -101,7 +101,7 @@ export const homeService = {
     ecobudApi.uploadChallengeProofImage(token, challengeId, uri),
 
   submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, analysisToken?: string, proofText?: string) =>
-    ecobudApi.submitChallengeProof(token, challengeId, proofUrl, afterProofUrl, detectedQuantity, proofText),
+    ecobudApi.submitChallengeProof(token, challengeId, proofUrl, afterProofUrl, detectedQuantity, analysisToken, proofText),
 
   verifyChallengeQr: (token: string, challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) =>
     ecobudApi.verifyChallengeQr(token, challengeId, qrData, latitude, longitude, submissionId),
