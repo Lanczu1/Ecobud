@@ -14,6 +14,8 @@ interface LoadingScreenVisualProps {
   label?: string;
   message?: string;
   style?: StyleProp<ViewStyle>;
+  loop?: boolean;
+  onAnimationFinish?: (isCancelled: boolean) => void;
 }
 
 interface LoadingGlyphProps {
@@ -33,7 +35,13 @@ function getGlyphSize(size: LoadingGlyphSize): number {
   return isLegacyAndroid ? 64 : 80;
 }
 
-export function LoadingScreenVisual({ label, message, style }: LoadingScreenVisualProps) {
+export function LoadingScreenVisual({
+  label,
+  message,
+  style,
+  loop = true,
+  onAnimationFinish,
+}: LoadingScreenVisualProps) {
   const { theme, isDark } = useTheme();
   const lottieSize = getGlyphSize('lg');
 
@@ -67,7 +75,8 @@ export function LoadingScreenVisual({ label, message, style }: LoadingScreenVisu
           <LottieView
             source={loadingAnimation}
             autoPlay
-            loop
+            loop={loop}
+            onAnimationFinish={onAnimationFinish}
             style={{ width: lottieSize, height: lottieSize, alignSelf: 'center' }}
           />
         </View>

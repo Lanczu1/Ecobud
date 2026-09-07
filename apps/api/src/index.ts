@@ -27,6 +27,7 @@ import {
   startPresenceCleanupScheduler,
   stopPresenceCleanupScheduler,
 } from './services/presenceCleanupScheduler';
+import compression from 'compression';
 import {
   startLessonPublishScheduler,
   stopLessonPublishScheduler,
@@ -34,6 +35,7 @@ import {
 
 const app = express();
 
+app.use(compression());
 app.use(
   cors({
     origin: '*',

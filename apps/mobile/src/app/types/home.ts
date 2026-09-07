@@ -122,6 +122,7 @@ export interface CommunityImpactCardProps {
 export interface EcoBudMobileModel {
   initializing: boolean;
   booting: boolean;
+  isHydrating: boolean;
   hasOnboarded: boolean;
   session: SessionPayload | null;
   actionOverlayVisible: boolean;

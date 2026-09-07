@@ -5,6 +5,7 @@ import { errorBoundary } from '../http/errorResponder';
 import { chatRateLimiter } from '../http/chatRateLimiter';
 import { getEcoGuideReply, type ChatHistoryMessage } from '../services/ecoGuideService';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
+import { apiCache } from '../lib/cache';
 
 const experienceRoutes = Router();
 
@@ -53,10 +54,12 @@ experienceRoutes.get(
           orderBy: [{ difficulty: 'asc' }, { title: 'asc' }],
           take: 3,
         }),
-        prisma.lesson.findMany({
-          where: { featured: true },
-          orderBy: { title: 'asc' },
-          take: 3,
+        apiCache.getOrSet('dashboard_featured_lessons', 120, async () => {
+          return prisma.lesson.findMany({
+            where: { featured: true },
+            orderBy: { title: 'asc' },
+            take: 3,
+          });
         }),
         prisma.eventRegistration.findMany({
           where: {
@@ -70,9 +73,11 @@ experienceRoutes.get(
           include: { event: true },
           orderBy: { event: { startDatetime: 'asc' } },
         }),
-        prisma.habit.findMany({
-          where: { active: true },
-          orderBy: { title: 'asc' },
+        apiCache.getOrSet('active_habits_list', 300, async () => {
+          return prisma.habit.findMany({
+            where: { active: true },
+            orderBy: { title: 'asc' },
+          });
         }),
         prisma.habitCheckIn.findMany({
           where: {
@@ -120,7 +125,9 @@ experienceRoutes.get(
     const userId = req.auth!.userId;
     const month = typeof req.query.month === 'string' ? req.query.month : getDateKey().slice(0, 7);
     const [habits, checkIns, logs, user] = await Promise.all([
-      prisma.habit.findMany({ where: { active: true }, orderBy: { title: 'asc' } }),
+      apiCache.getOrSet('active_habits_list', 300, async () => {
+        return prisma.habit.findMany({ where: { active: true }, orderBy: { title: 'asc' } });
+      }),
       prisma.habitCheckIn.findMany({
         where: {
           userId,
@@ -194,14 +201,34 @@ experienceRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const currentUserId = req.auth!.userId;
-    const users = await prisma.user.findMany({
-      where: {
-        status: 'active',
-        role: 'user',
-      },
-      include: { profile: true, badges: { include: { badge: true } } },
-      orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],
-      take: 10,
+    const users = await apiCache.getOrSet('global_leaderboard_top10', 45, async () => {
+      return prisma.user.findMany({
+        where: {
+          status: 'active',
+          role: 'user',
+        },
+        select: {
+          id: true,
+          name: true,
+          points: true,
+          profile: {
+            select: {
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+          badges: {
+            take: 3,
+            select: {
+              badge: {
+                select: { name: true },
+              },
+            },
+          },
+        },
+        orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],
+        take: 10,
+      });
     });
 
     const currentUserIndex = users.findIndex((user) => user.id === currentUserId);
@@ -214,7 +241,7 @@ experienceRoutes.get(
         displayName: user.profile?.displayName ?? user.name,
         avatarUrl: user.profile?.avatarUrl ?? null,
         points: user.points,
-        badges: user.badges.slice(0, 3).map((item) => item.badge.name),
+        badges: user.badges.map((item) => item.badge.name),
         isCurrentUser: user.id === currentUserId,
       })),
       currentUserRank: currentUserIndex >= 0 ? currentUserIndex + 1 : null,
@@ -233,7 +260,9 @@ experienceRoutes.get(
         where: { id: userId },
         select: { points: true },
       }),
-      prisma.badge.findMany({ orderBy: { requiredPoints: 'asc' } }),
+      apiCache.getOrSet('system_badges_list', 600, async () => {
+        return prisma.badge.findMany({ orderBy: { requiredPoints: 'asc' } });
+      }),
       prisma.userBadge.findMany({
         where: { userId },
       }),

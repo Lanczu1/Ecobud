@@ -44,8 +44,8 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  // Only show card skeleton on cold launch when there is genuinely no data yet
-  const isCardsLoading = (model.initializing || model.booting) && !model.dashboard;
+  // Show card skeleton on cold launch when there is genuinely no data yet
+  const isCardsLoading = !model.dashboard && (model.isHydrating || model.initializing || model.booting);
 
 
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;
@@ -151,18 +151,15 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  // Track switching into Learn tab with a brief card skeleton transition
-  const [cardsLoading, setCardsLoading] = React.useState(true);
+  const [cardsLoading, setCardsLoading] = React.useState(model.lessons.length === 0);
 
   React.useEffect(() => {
-    setCardsLoading(true);
-    const timer = setTimeout(() => {
+    if (model.lessons.length > 0) {
       setCardsLoading(false);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, []);
+    }
+  }, [model.lessons.length]);
 
-  const isCardsLoading = cardsLoading || model.initializing || model.booting || model.refreshing;
+  const isCardsLoading = (cardsLoading || model.isHydrating) && model.lessons.length === 0;
 
   const continueLesson = model.lessons.find((l) => l.status === 'seen');
   const completedLessonsCount = model.lessons.filter((l) => l.status === 'completed').length;

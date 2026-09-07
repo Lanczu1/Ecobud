@@ -3,6 +3,7 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
 import { GamificationService } from '../services/GamificationService';
+import { apiCache } from '../lib/cache';
 
 const habitRoutes = Router();
 const gamificationService = new GamificationService();
@@ -24,9 +25,11 @@ habitRoutes.get(
     const userId = req.auth!.userId;
     const dateKey = getDateKey();
     const [habits, checkIns] = await Promise.all([
-      prisma.habit.findMany({
-        where: { active: true },
-        orderBy: { title: 'asc' },
+      apiCache.getOrSet('active_habits_list', 300, async () => {
+        return prisma.habit.findMany({
+          where: { active: true },
+          orderBy: { title: 'asc' },
+        });
       }),
       prisma.habitCheckIn.findMany({
         where: {

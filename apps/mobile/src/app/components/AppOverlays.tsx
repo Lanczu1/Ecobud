@@ -1739,14 +1739,18 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
               placeholder={model.sendingMessage ? 'EcoBud is thinking...' : 'Message ECOBUD...'}
               placeholderTextColor={theme.colors.textMuted}
               editable={!model.sendingMessage}
+              multiline={true}
+              maxLength={500}
               style={[
                 styles.assistantInput,
                 {
                   minHeight: composerMinHeight,
+                  maxHeight: isSmall ? 100 : isTablet ? 180 : 130,
+                  textAlignVertical: 'top',
                   borderRadius: composerRadius,
                   fontSize: composerInputFontSize,
-                  paddingHorizontal: isSmall ? 14 : 18,
-                  paddingVertical: isSmall ? 6 : 8,
+                  paddingHorizontal: isSmall ? 14 : isTablet ? 22 : 18,
+                  paddingVertical: isSmall ? 10 : isTablet ? 16 : 14,
                   backgroundColor: theme.colors.inputBackground,
                   borderColor: theme.colors.inputBorder,
                   color: theme.colors.textPrimary,

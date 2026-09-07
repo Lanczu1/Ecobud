@@ -4,6 +4,7 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess, requireUserAccess, type AuthenticatedRequest } from '../http/authentication';
 import { redeemUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
+import { apiCache } from '../lib/cache';
 import path from 'path';
 import fs from 'fs';
 
@@ -64,9 +65,11 @@ async function redeemWithRetry(userId: string, itemId: string) {
 // Get active redeem items (public)
 router.get('/items', async (req, res) => {
   try {
-    const items = await prisma.redeemItem.findMany({
-      where: { isActive: true, stock: { not: 0 } },
-      orderBy: { coinCost: 'asc' },
+    const items = await apiCache.getOrSet('active_redeem_items', 60, async () => {
+      return prisma.redeemItem.findMany({
+        where: { isActive: true, stock: { not: 0 } },
+        orderBy: { coinCost: 'asc' },
+      });
     });
     res.json(items);
   } catch (error) {
@@ -337,6 +340,7 @@ router.post('/', authenticateRequest, requireModeratorAccess, async (req, res) =
         stock: stock != null ? Number(stock) : -1,
       },
     });
+    apiCache.delete('active_redeem_items');
     res.status(201).json(item);
   } catch (error) {
     console.error('Error creating redeem item:', error);
@@ -358,6 +362,7 @@ router.patch('/:id', authenticateRequest, requireModeratorAccess, async (req, re
     if (req.body.isActive !== undefined) data.isActive = Boolean(req.body.isActive);
 
     const item = await prisma.redeemItem.update({ where: { id }, data });
+    apiCache.delete('active_redeem_items');
     res.json(item);
   } catch (error) {
     console.error('Error updating redeem item:', error);
@@ -372,6 +377,7 @@ router.patch('/:id/toggle', authenticateRequest, requireModeratorAccess, async (
     const item = await prisma.redeemItem.findUnique({ where: { id }, select: { isActive: true } });
     if (!item) return res.status(404).json({ message: 'Item not found' });
     const updated = await prisma.redeemItem.update({ where: { id }, data: { isActive: !item.isActive } });
+    apiCache.delete('active_redeem_items');
     res.json(updated);
   } catch (error) {
     console.error('Error toggling redeem item:', error);
@@ -400,6 +406,7 @@ router.delete('/requests/:id', authenticateRequest, requireModeratorAccess, asyn
 router.delete('/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
     await prisma.redeemItem.delete({ where: { id: req.params.id } });
+    apiCache.delete('active_redeem_items');
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting redeem item:', error);

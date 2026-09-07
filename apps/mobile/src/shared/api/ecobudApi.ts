@@ -389,7 +389,32 @@ const parseJsonSafely = async (response: Response) => {
   }
 };
 
-const request = async <T>(path: string, options: RequestOptions = {}) => {
+// In-flight GET request deduplication map to prevent duplicate concurrent network calls
+const inFlightRequests = new Map<string, Promise<any>>();
+
+const request = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
+  const method = options.method ?? 'GET';
+
+  // Only deduplicate read/GET operations
+  if (method === 'GET') {
+    const dedupeKey = `${path}:${options.token ?? ''}`;
+    const existing = inFlightRequests.get(dedupeKey);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+
+    const promise = executeRequest<T>(path, options).finally(() => {
+      inFlightRequests.delete(dedupeKey);
+    });
+
+    inFlightRequests.set(dedupeKey, promise);
+    return promise;
+  }
+
+  return executeRequest<T>(path, options);
+};
+
+const executeRequest = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
   const headers: Record<string, string> = {};
 
   if (options.body) {

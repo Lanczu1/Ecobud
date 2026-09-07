@@ -5,9 +5,9 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  Image,
   useWindowDimensions,
 } from 'react-native';
+import { FastImage } from '../../shared/ui/FastImage';
 import { Ionicons } from '@expo/vector-icons';
 import { type LessonWithProgress, type ChallengeWithProgress, type EcoEvent, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
@@ -115,10 +115,10 @@ export function ForYouFeed({
             {/* Media Area (Fixed height prevents CLS) */}
             <View style={styles.mediaWrap}>
               {lessonImg && !lessonImgErr ? (
-                <Image
+                <FastImage
                   source={{ uri: lessonImg }}
                   style={styles.cardImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                   onError={() => setLessonImgErr(true)}
                 />
               ) : (
@@ -201,10 +201,10 @@ export function ForYouFeed({
             {/* Media Area (Fixed height prevents CLS) */}
             <View style={styles.mediaWrap}>
               {challengeImg && !challengeImgErr ? (
-                <Image
+                <FastImage
                   source={{ uri: challengeImg }}
                   style={styles.cardImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                   onError={() => setChallengeImgErr(true)}
                 />
               ) : (
@@ -285,10 +285,10 @@ export function ForYouFeed({
             {/* Media Area (Fixed height prevents CLS) */}
             <View style={styles.mediaWrap}>
               {eventImg && !eventImgErr ? (
-                <Image
+                <FastImage
                   source={{ uri: eventImg }}
                   style={styles.cardImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                   onError={() => setEventImgErr(true)}
                 />
               ) : (

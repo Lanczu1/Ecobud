@@ -1,7 +1,6 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,6 +11,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import { FastImage } from '../../shared/ui/FastImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { responsiveFontSize, moderateScale, scale } from '../utils/responsive';
 
@@ -113,9 +113,10 @@ export function Header({
               delayLongPress={300}
             >
               {avatarSource ? (
-                <Image
+                <FastImage
                   source={avatarSource}
                   style={[styles.topNavAvatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderColor: theme.colors.primary }]}
+                  contentFit="cover"
                 />
               ) : (
                 <AvatarBubble
@@ -135,9 +136,10 @@ export function Header({
         </View>
 
         <View style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-          <Image
+          <FastImage
             source={require('../../../assets/ecobud_logo_circle.png')}
-            style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2, resizeMode: 'contain' }}
+            style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2 }}
+            contentFit="contain"
           />
         </View>
 
@@ -184,7 +186,7 @@ export function Header({
             </TouchableOpacity>
 
             {avatarSource ? (
-              <Image source={avatarSource} style={{ width: '85%', height: '70%', resizeMode: 'contain' }} />
+              <FastImage source={avatarSource} style={{ width: '85%', height: '70%' }} contentFit="contain" />
             ) : (
               <AvatarBubble
                 label={userDisplayName}

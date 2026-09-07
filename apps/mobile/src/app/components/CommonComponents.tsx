@@ -32,7 +32,7 @@ import { triggerSelectionHaptic, triggerWarningHaptic } from '../utils/haptics';
 import LottieView from 'lottie-react-native';
 import { Header } from './Header';
 
-export function ChatbotFAB({
+export const ChatbotFAB = React.memo(function ChatbotFAB({
   onPress,
   onLongPress,
 }: {
@@ -49,7 +49,6 @@ export function ChatbotFAB({
   const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
   // Dynamic sizing derived directly from screen dimensions via responsive scaling:
-  // Base scale is 108dp, scaled by device density and capped gracefully on tablets
   const mascotSize = scale(isSmallDevice ? 94 : isLargeDevice ? 130 : 108);
 
   // Dynamic bottom offset calculated from tab bar height (64) + safe area insets + responsive clearance
@@ -59,18 +58,16 @@ export function ChatbotFAB({
   // Max width of speech bubble dynamically bound to screen width (never overflows)
   const bubbleMaxWidth = Math.min(screenWidth * 0.58, scale(220));
 
-  // Animated values for speech bubble (fade + gentle float up/down)
+  // Animated values for speech bubble (fade + translate)
   const bubbleOpacity = useRef(new Animated.Value(0)).current;
   const bubbleTranslateY = useRef(new Animated.Value(6)).current;
-  // Continuous gentle breathing animation (gentle scale + vertical hover)
-  const breathAnim = useRef(new Animated.Value(0)).current;
 
   const pan = useRef(new Animated.ValueXY()).current;
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10;
+        return Math.abs(gestureState.dx) > 15 || Math.abs(gestureState.dy) > 15;
       },
       onPanResponderGrant: () => {
         pan.setOffset({
@@ -109,31 +106,7 @@ export function ChatbotFAB({
     })
   ).current;
 
-  // Continuous breathing loop (syncs with mascot's idle rhythm)
-  useEffect(() => {
-    const breathingLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathAnim, {
-          toValue: 1,
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(breathAnim, {
-          toValue: 0,
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    breathingLoop.start();
-
-    return () => {
-      breathingLoop.stop();
-    };
-  }, [breathAnim]);
-
+  // Gentle periodic bubble appearance without compounding continuous CPU render loops
   useEffect(() => {
     let isMounted = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -145,46 +118,46 @@ export function ChatbotFAB({
       Animated.parallel([
         Animated.timing(bubbleOpacity, {
           toValue: 1,
-          duration: 380,
-          easing: Easing.out(Easing.back(1.5)),
+          duration: 350,
+          easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(bubbleTranslateY, {
           toValue: 0,
-          duration: 380,
+          duration: 350,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
       ]).start();
 
-      // Stay visible for 5 seconds, then animate OUT (show off)
+      // Stay visible for 5 seconds, then animate OUT
       timer = setTimeout(() => {
         if (!isMounted) return;
 
         Animated.parallel([
           Animated.timing(bubbleOpacity, {
             toValue: 0,
-            duration: 320,
+            duration: 300,
             easing: Easing.in(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(bubbleTranslateY, {
             toValue: 6,
-            duration: 320,
+            duration: 300,
             easing: Easing.in(Easing.ease),
             useNativeDriver: true,
           }),
         ]).start(() => {
-          // Stay hidden for 5 seconds before showing again
+          // Stay hidden for 7 seconds before next reminder cycle (conserves low-end CPU)
           if (isMounted) {
-            timer = setTimeout(runCycle, 5000);
+            timer = setTimeout(runCycle, 7000);
           }
         });
       }, 5000);
     };
 
     // Initial brief delay before first entrance
-    const initialDelay = setTimeout(runCycle, 1200);
+    const initialDelay = setTimeout(runCycle, 1500);
 
     return () => {
       isMounted = false;
@@ -192,17 +165,6 @@ export function ChatbotFAB({
       if (timer) clearTimeout(timer);
     };
   }, [bubbleOpacity, bubbleTranslateY]);
-
-  // Interpolated breathing transforms
-  const breathScale = breathAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.028], // subtle gentle pulse
-  });
-
-  const breathHover = breathAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -3.5], // gentle float up and down
-  });
 
   return (
     <Animated.View
@@ -228,7 +190,7 @@ export function ChatbotFAB({
           transform: [{ scale: pressScale }]
         }}
       >
-      {/* Speech Bubble: Positioned on the TOP-LEFT of the Mascot with breathing effect */}
+      {/* Speech Bubble: Positioned on the TOP-LEFT of the Mascot */}
       <Animated.View
         pointerEvents="none"
         style={{
@@ -238,8 +200,7 @@ export function ChatbotFAB({
           maxWidth: bubbleMaxWidth,
           opacity: bubbleOpacity,
           transform: [
-            { translateY: Animated.add(bubbleTranslateY, breathHover) },
-            { scale: breathScale },
+            { translateY: bubbleTranslateY },
           ],
           zIndex: 10,
         }}
@@ -255,10 +216,10 @@ export function ChatbotFAB({
             borderWidth: 1.5,
             borderColor: isDark ? 'rgba(74, 222, 128, 0.45)' : 'rgba(16, 185, 129, 0.28)',
             shadowColor: '#0E5A35',
-            shadowOpacity: isDark ? 0.45 : 0.16,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 8,
+            shadowOpacity: isDark ? 0.25 : 0.1,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 3,
           }}
         >
           {/* Top Pill / Badge row */}
@@ -376,16 +337,16 @@ export function ChatbotFAB({
           source={require('../../../assets/Ecobud Mascot/New Lottie files/Wave.lottie')}
           autoPlay
           loop
-          renderMode="HARDWARE"
+          renderMode="AUTOMATIC"
           cacheComposition={true}
-          hardwareAccelerationAndroid={true}
+          hardwareAccelerationAndroid={Platform.OS === 'android'}
           style={{ width: mascotSize, height: mascotSize }}
         />
       </Pressable>
       </Animated.View>
     </Animated.View>
   );
-}
+});
 
 export function EcobudActionOverlay({ label }: { label: string }) {
   return (

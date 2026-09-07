@@ -88,6 +88,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('dashboard_featured_lessons');
 
     if (lesson.isPublished) {
       await Promise.all([
@@ -174,6 +175,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('dashboard_featured_lessons');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -198,6 +200,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('dashboard_featured_lessons');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -243,8 +246,11 @@ export class AdminService {
   static async toggleFeature(id: string, featured: boolean) {
     const lesson = await prisma.lesson.update({
       where: { id },
-      data: { featured }
+      data: { featured },
     });
+
+    apiCache.invalidatePrefix('learn_published_');
+    apiCache.delete('dashboard_featured_lessons');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {

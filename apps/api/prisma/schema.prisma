@@ -194,6 +194,7 @@ model Challenge {
   requireLocation         Boolean               @default(false) @map("require_location")
   instances               ChallengeInstance[]
 
+  @@index([active, startDate, endDate])
   @@index([active, isFeatured])
   @@index([category])
 }
@@ -228,6 +229,8 @@ model UserChallenge {
   user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, challengeInstanceId])
+  @@index([challengeInstanceId])
+  @@index([userId, status])
 }
 
 model ChallengeSubmission {
@@ -275,6 +278,8 @@ model Habit {
   pointsReward Int
   active       Boolean        @default(true)
   checkIns     HabitCheckIn[]
+
+  @@index([active])
 }
 
 model HabitCheckIn {
@@ -569,7 +574,7 @@ model RedeemItem {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  @@index([isActive])
+  @@index([isActive, coinCost])
   @@map("redeem_items")
 }
 

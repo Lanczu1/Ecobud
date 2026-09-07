@@ -5,10 +5,10 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
   Animated,
   Easing
 } from 'react-native';
+import { FastImage } from '../../shared/ui/FastImage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type ActiveChallengeCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -83,10 +83,10 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
       {/* Header Banner / Thumbnail */}
       <View style={localStyles.bannerContainer}>
         {dailyChallenge.imageUrl ? (
-          <Image
+          <FastImage
             source={{ uri: getValidImageUrl(dailyChallenge.imageUrl) }}
             style={StyleSheet.absoluteFill}
-            resizeMode="cover"
+            contentFit="cover"
           />
         ) : (
           <LinearGradient
@@ -179,9 +179,10 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
 
           {dailyChallenge.ecoCoinReward > 0 && (
             <View style={[localStyles.coinBadge, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#FEF3C7' }]}>
-              <Image
+              <FastImage
                 source={require('../../../assets/coin.png')}
-                style={{ width: scale(14), height: scale(14), resizeMode: 'contain' }}
+                style={{ width: scale(14), height: scale(14) }}
+                contentFit="contain"
               />
               <Text style={[localStyles.coinBadgeText, { color: isDark ? '#FBBF24' : '#B45309' }]}>+{dailyChallenge.ecoCoinReward} Coins</Text>
             </View>
