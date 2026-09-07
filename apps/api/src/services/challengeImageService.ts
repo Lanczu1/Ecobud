@@ -79,38 +79,49 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
   evaluateDetections({ detected: [] }, targets, minimumConfidence);
   const mimeType = imageMimeType(bytes);
   const key = process.env.GEMINI_API_KEY?.trim();
-  const model = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.6-flash';
-  if (!key || !/^gemini-[a-z0-9.-]+$/.test(model)) throw new HttpError(503, 'Image recognition is not configured. Contact the administrator.');
+  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.5-flash';
+  const fallbackModel = 'gemini-3.7-flash';
+  if (!key) throw new HttpError(503, 'Image recognition is not configured. Contact the administrator.');
   if (inFlight >= 4) throw new HttpError(503, 'Image recognition is busy. Please retry shortly.');
   inFlight += 1;
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      redirect: 'error',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      signal: AbortSignal.timeout(25_000),
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: 'You are an environmental assistant classifying waste and recyclable objects in user photos for an eco challenge. Identify any: "Plastic Bottle" (including any plastic drink bottle, mineral water bottle, soft drink bottle, plastic flask/tumbler, or plastic jug/container), "Glass Bottle" (including glass drink bottles, condiment bottles, jars, or glass beverage containers), or "Plastic Wrapper" (including plastic snack wrappers, food packaging, bread bags, plastic bags, sachets, grocery bags, or cellophane wrappers). If the photo shows any of these items or anything resembling them, classify it accordingly. If there are multiple items (e.g. 2 or 3 bottles), detect ALL of them and provide tight bounding box coordinates in boxes array (each box as [ymin, xmin, ymax, xmax] 0-1000) tightly enclosing each individual detected item. Provide an estimated confidence percentage from 50 to 100, the count, and tight bounding boxes for each item.' }] },
-        contents: [{ role: 'user', parts: [{ text: 'Analyze this photo and detect any Plastic Bottle, Glass Bottle, or Plastic Wrapper. Detect all items visible and return precise tight bounding box coordinates for each individual item.' }, { inlineData: { mimeType, data: bytes.toString('base64') } }] }],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 1024,
-          thinkingConfig: { thinkingBudget: 0 },
-          responseMimeType: 'application/json',
-          responseSchema: { type: 'OBJECT', required: ['detected'], properties: {
-            detected: { type: 'ARRAY', maxItems: 10, items: { type: 'OBJECT', required: ['object', 'confidence', 'count'], properties: {
-              object: { type: 'STRING', enum: [...AI_TARGETS] },
-              confidence: { type: 'NUMBER' },
-              count: { type: 'INTEGER' },
-              box_2d: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } },
-              boxes: { type: 'ARRAY', items: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } } },
-            } } },
-          } },
-        },
-      }),
-    });
+    const callGemini = async (modelName: string) => {
+      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        signal: AbortSignal.timeout(25_000),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: 'You are an environmental assistant classifying waste and recyclable objects in user photos for an eco challenge. Identify any: "Plastic Bottle" (including any plastic drink bottle, mineral water bottle, soft drink bottle, plastic flask/tumbler, or plastic jug/container), "Glass Bottle" (including glass drink bottles, condiment bottles, jars, or glass beverage containers), or "Plastic Wrapper" (including plastic snack wrappers, food packaging, bread bags, plastic bags, sachets, grocery bags, or cellophane wrappers). If the photo shows any of these items or anything resembling them, classify it accordingly. If there are multiple items (e.g. 2 or 3 bottles), detect ALL of them and provide tight bounding box coordinates in boxes array (each box as [ymin, xmin, ymax, xmax] 0-1000) tightly enclosing each individual detected item. Provide an estimated confidence percentage from 50 to 100, the count, and tight bounding boxes for each item.' }] },
+          contents: [{ role: 'user', parts: [{ text: 'Analyze this photo and detect any Plastic Bottle, Glass Bottle, or Plastic Wrapper. Detect all items visible and return precise tight bounding box coordinates for each individual item.' }, { inlineData: { mimeType, data: bytes.toString('base64') } }] }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 1024,
+            responseMimeType: 'application/json',
+            responseSchema: { type: 'OBJECT', required: ['detected'], properties: {
+              detected: { type: 'ARRAY', maxItems: 10, items: { type: 'OBJECT', required: ['object', 'confidence', 'count'], properties: {
+                object: { type: 'STRING', enum: [...AI_TARGETS] },
+                confidence: { type: 'NUMBER' },
+                count: { type: 'INTEGER' },
+                box_2d: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } },
+                boxes: { type: 'ARRAY', items: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } } },
+              } } },
+            } },
+          },
+        }),
+      });
+    };
+
+    let response = await callGemini(primaryModel);
+    if (!response.ok && response.status === 503) {
+      console.warn(`[AI Recognition] ${primaryModel} returned 503, falling back to ${fallbackModel}...`);
+      await response.body?.cancel().catch(() => {});
+      response = await callGemini(fallbackModel);
+    }
+
     if (!response.ok) {
-      await response.body?.cancel();
+      const errText = await response.text().catch(() => '');
+      console.error(`[AI Recognition Error] Status ${response.status}:`, errText);
       throw new HttpError(503, 'Image recognition is temporarily unavailable. Please retry later.');
     }
     // Bound provider output independently of its declared Content-Length.

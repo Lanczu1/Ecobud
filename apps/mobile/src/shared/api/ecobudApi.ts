@@ -626,11 +626,11 @@ export const ecobudApi = {
       token,
       uri
     ),
-  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, proofText?: string) =>
+  submitChallengeProof: (token: string, challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, analysisToken?: string, proofText?: string) =>
     request(`/challenges/${challengeId}/submissions`, {
       method: 'POST',
       token,
-      body: { proofUrl, afterProofUrl, detectedQuantity: detectedQuantity || 1, proofText },
+      body: { proofUrl, afterProofUrl, detectedQuantity: detectedQuantity || 1, proofText: proofText || analysisToken },
     }),
   verifyChallengeQr: (token: string, challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) =>
     request<{ message: string; submission: any }>(`/challenges/${challengeId}/verify-qr`, {

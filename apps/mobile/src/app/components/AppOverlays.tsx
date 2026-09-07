@@ -8,6 +8,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
   TextInput,
   ImageBackground,
   Image,
@@ -41,6 +42,7 @@ import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { AiThinkingBubble } from './AiThinkingBubble';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
 import { BARANGAYS } from '../../shared/constants/barangays';
+import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
 import { RejectionModal } from './RejectionModal';
 import {
@@ -75,9 +77,10 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const challenge = model.selectedChallenge;
   const submission = challenge?.progress?.submission;
-  const isSubmissionCompleted = submission?.status === 'completed' || submission?.rewardAwarded;
-  const isPreliminaryApproved = !isSubmissionCompleted && (challenge?.progress?.status === 'approved_collection' || submission?.status === 'approved_collection' || submission?.adminPreliminaryApproved);
-  const isFinalApproved = !isSubmissionCompleted && (challenge?.progress?.status === 'approved' || submission?.status === 'approved' || submission?.adminFinalApproved);
+  const isRejectedSubmission = submission?.status === 'rejected' || challenge?.progress?.status === 'rejected';
+  const isSubmissionCompleted = !isRejectedSubmission && (submission?.status === 'completed' || submission?.rewardAwarded);
+  const isPreliminaryApproved = !isRejectedSubmission && !isSubmissionCompleted && (challenge?.progress?.status === 'approved_collection' || submission?.status === 'approved_collection' || submission?.adminPreliminaryApproved);
+  const isFinalApproved = !isRejectedSubmission && !isSubmissionCompleted && (challenge?.progress?.status === 'approved' || submission?.status === 'approved' || submission?.adminFinalApproved);
 
   // Dynamic user barangay collection point
   const userBarangay = model.profile?.profile?.city?.trim();
@@ -85,7 +88,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     ? `Barangay ${userBarangay} Collection Point`
     : (challenge?.collectionPointName || 'Barangay Collection Point');
 
-  const isReadyForAfterPhoto = !isSubmissionCompleted && Boolean(submission?.proofUrl) && isPreliminaryApproved;
+  const isReadyForAfterPhoto = !isRejectedSubmission && !isSubmissionCompleted && Boolean(submission?.proofUrl) && isPreliminaryApproved;
 
   // Determine initial step
   const getInitialStep = (): 'details' | 'capture' | 'result' | 'capture_after' => {
@@ -112,22 +115,114 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     imageUri?: string | null;
   } | null>(null);
   const MAX_AI_ATTEMPTS = 3;
+  const COOLDOWN_DURATION_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
   const [attemptsLeft, setAttemptsLeft] = React.useState<number>(MAX_AI_ATTEMPTS);
+  const [cooldownRemainingSec, setCooldownRemainingSec] = React.useState<number>(0);
   const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(submission?.proofUrl || null);
 
   const entryFadeAnim = React.useRef(new Animated.Value(0)).current;
   const processFadeAnim = React.useRef(new Animated.Value(0)).current;
 
-  // Sync step whenever challenge or overlay reopens
+  // Load per-challenge AI attempts & 15-minute cooldown from mobileStorage
+  const loadChallengeAttempts = React.useCallback(async (challengeId: string) => {
+    try {
+      const storageKey = `ai_attempts_${challengeId}`;
+      const raw = await mobileStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const { attemptsUsed = 0, resetAt = 0 } = parsed;
+        const now = Date.now();
+
+        // If cooldown resetAt exists and has passed, clear storage and restore full attempts
+        if (resetAt && now >= resetAt) {
+          await mobileStorage.removeItem(storageKey).catch(() => {});
+          setAttemptsLeft(MAX_AI_ATTEMPTS);
+          setCooldownRemainingSec(0);
+        } else if (resetAt && now < resetAt && attemptsUsed >= MAX_AI_ATTEMPTS) {
+          // All 3 attempts exhausted and cooldown is still active
+          setAttemptsLeft(0);
+          setCooldownRemainingSec(Math.ceil((resetAt - now) / 1000));
+        } else {
+          // Attempts used are saved (e.g. 1 or 2 attempts consumed), user still has remaining attempts!
+          const remaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
+          setAttemptsLeft(remaining);
+          setCooldownRemainingSec(0);
+        }
+      } else {
+        setAttemptsLeft(MAX_AI_ATTEMPTS);
+        setCooldownRemainingSec(0);
+      }
+    } catch {
+      setAttemptsLeft(MAX_AI_ATTEMPTS);
+      setCooldownRemainingSec(0);
+    }
+  }, []);
+
+  // Save per-challenge AI attempt to mobileStorage
+  const recordFailedAttempt = React.useCallback(async (challengeId: string) => {
+    try {
+      const storageKey = `ai_attempts_${challengeId}`;
+      const raw = await mobileStorage.getItem(storageKey);
+      const now = Date.now();
+      let attemptsUsed = 1;
+      let resetAt = 0;
+
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // If a previous cooldown expired, restart from 1
+        if (parsed.resetAt && now >= parsed.resetAt) {
+          attemptsUsed = 1;
+        } else {
+          attemptsUsed = (parsed.attemptsUsed || 0) + 1;
+        }
+      }
+
+      // ONLY trigger the 15-minute cooldown when all 3 attempts have been exhausted!
+      if (attemptsUsed >= MAX_AI_ATTEMPTS) {
+        resetAt = now + COOLDOWN_DURATION_MS;
+      }
+
+      await mobileStorage.setItem(storageKey, JSON.stringify({ attemptsUsed, resetAt }));
+      const newRemaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
+      setAttemptsLeft(newRemaining);
+      if (newRemaining <= 0 && resetAt > 0) {
+        setCooldownRemainingSec(Math.ceil((resetAt - now) / 1000));
+      } else {
+        setCooldownRemainingSec(0);
+      }
+    } catch {
+      setAttemptsLeft(prev => Math.max(0, prev - 1));
+    }
+  }, []);
+
+  // Live countdown timer for cooldown
+  React.useEffect(() => {
+    if (cooldownRemainingSec <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownRemainingSec(prev => {
+        if (prev <= 1) {
+          if (challenge?.id) {
+            void loadChallengeAttempts(challenge.id);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownRemainingSec, challenge?.id, loadChallengeAttempts]);
+
+  // Sync step & reload attempts whenever challenge or overlay reopens
   React.useEffect(() => {
     setCapturedImage(null);
     setMockResult(null);
-    setAttemptsLeft(MAX_AI_ATTEMPTS);
+    if (challenge?.id) {
+      void loadChallengeAttempts(challenge.id);
+    }
     // If submission is rejected or not started, clear beforeProofUrl so user can take a fresh photo
-    const isRejectedSubmission = submission?.status === 'rejected' || challenge?.progress?.status === 'rejected';
     setBeforeProofUrl(isRejectedSubmission ? null : (submission?.proofUrl || null));
     setStep(getInitialStep());
-  }, [challenge?.id, challenge?.progress?.status, submission?.id, submission?.status, submission?.afterProofUrl]);
+  }, [challenge?.id, challenge?.progress?.status, isRejectedSubmission, submission?.id, submission?.status, submission?.afterProofUrl, loadChallengeAttempts]);
 
   React.useEffect(() => {
     Animated.timing(entryFadeAnim, {
@@ -153,6 +248,33 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = React.useRef<any>(null);
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
+  const [cameraSessionId, setCameraSessionId] = React.useState(0);
+  const [isCameraReady, setIsCameraReady] = React.useState(false);
+
+  const [isCameraMountAllowed, setIsCameraMountAllowed] = React.useState(true);
+
+  const resetCameraSession = React.useCallback(() => {
+    setCapturedImage(null);
+    setIsCameraReady(false);
+    // Briefly unmount camera to allow Android camera hardware to release cleanly
+    setIsCameraMountAllowed(false);
+    setCameraSessionId(prev => prev + 1);
+    setTimeout(() => {
+      setIsCameraMountAllowed(true);
+    }, 250);
+  }, []);
+
+  React.useEffect(() => {
+    if (step !== 'capture' && step !== 'capture_after') {
+      setIsCameraReady(false);
+    } else {
+      // Safety timeout: Ensure camera is marked ready even if native onCameraReady delays
+      const timer = setTimeout(() => {
+        setIsCameraReady(true);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [step, cameraSessionId]);
 
   // Automatically request camera permission when entering a camera step if not granted yet
   React.useEffect(() => {
@@ -166,6 +288,16 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   }
 
   const handleStartRecognition = async () => {
+    if (attemptsLeft <= 0 && cooldownRemainingSec > 0) {
+      const minutes = Math.floor(cooldownRemainingSec / 60);
+      const seconds = cooldownRemainingSec % 60;
+      Alert.alert(
+        'AI Limit Reached',
+        `You have used all ${MAX_AI_ATTEMPTS} attempts for this challenge. Please wait ${minutes}:${seconds < 10 ? '0' : ''}${seconds} before trying again.`
+      );
+      return;
+    }
+
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
@@ -174,6 +306,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       }
     }
 
+    resetCameraSession();
+    setMockResult(null);
+    setBeforeProofUrl(null);
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 200,
@@ -215,13 +350,17 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       if (result.passed && result.proofUrl) {
         setBeforeProofUrl(result.proofUrl);
         setMockResult(enrichedResult);
+        // Clear cooldown/attempt counter for this challenge on success
+        void mobileStorage.removeItem(`ai_attempts_${challenge.id}`).catch(() => {});
+        setAttemptsLeft(MAX_AI_ATTEMPTS);
+        setCooldownRemainingSec(0);
       } else {
         setMockResult(enrichedResult);
-        setAttemptsLeft(prev => Math.max(0, prev - 1));
+        void recordFailedAttempt(challenge.id);
       }
     } catch (err: any) {
       setMockResult({ passed: false, object: 'Error', confidence: 0, reason: err.message || 'Failed to analyze image', imageUri: uri });
-      setAttemptsLeft(prev => Math.max(0, prev - 1));
+      void recordFailedAttempt(challenge.id);
     } finally {
       setProcessing(false);
       setStep('result');
@@ -273,9 +412,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const handleCapture = async () => {
+    if (!isCameraReady) {
+      Alert.alert('Camera Not Ready', 'Please wait a moment for the camera to initialize.');
+      return;
+    }
     if (cameraRef.current) {
       try {
         const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
+        // Do NOT manually null cameraRef here — let React handle ref lifecycle
         if (step === 'capture_after') {
           processAfterImage(photo.uri);
         } else {
@@ -290,6 +434,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const handleGallery = async () => {
     try {
+      cameraRef.current = null;
+      setCameraSessionId(prev => prev + 1);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -318,10 +464,42 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     });
   };
 
+  // Hardware back button support within AiMissionOverlay:
+  // If user is in capture or result, step back to details rather than immediately closing
+  React.useEffect(() => {
+    const onBackPress = () => {
+      if (step === 'capture' || step === 'result' || step === 'capture_after') {
+        setProcessing(false);
+        setMockResult(null);
+        resetCameraSession();
+        setStep('details');
+        return true;
+      }
+      handleClose();
+      return true;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [step]);
+
   const handleTryAgain = () => {
+    setProcessing(false);
     setMockResult(null);
-    setCapturedImage(null);
-    setStep('capture');
+    setBeforeProofUrl(null);
+    resetCameraSession();
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setStep('capture');
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    });
   };
 
   if (step === 'result' && mockResult) {
@@ -736,10 +914,10 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   }}>
                     <Ionicons name="alert-circle" size={28} color="#EF4444" />
                     <Text style={{ fontSize: 15, fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
-                      Maximum AI Attempts Reached
+                      Maximum AI Attempts Reached (15m Cooldown)
                     </Text>
                     <Text style={{ fontSize: 13, color: isDark ? '#FCA5A5' : '#991B1B', textAlign: 'center', lineHeight: 18 }}>
-                      Nakaabot ka na sa limit na 3 tries para sa AI recognition. Mangyaring subukan muli mamaya o makipag-ugnayan sa admin.
+                      Nakaabot ka na sa limit na 3 tries para sa challenge na ito. Magkakaroon ka muli ng 3 attempts pagkatapos ng 15 minutes cooldown ({Math.floor(cooldownRemainingSec / 60)}:{(cooldownRemainingSec % 60) < 10 ? '0' : ''}${cooldownRemainingSec % 60} natitira).
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -772,7 +950,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
           title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"}
           subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"}
           onBack={() => {
-            setCapturedImage(null);
+            resetCameraSession();
             setStep('details');
           }}
         >
@@ -832,7 +1010,28 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 {capturedImage ? (
                   <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                 ) : permission?.granted ? (
-                  <CameraView style={{ width: '100%', height: '100%' }} facing="back" ref={cameraRef} />
+                  isCameraMountAllowed ? (
+                    <>
+                      <CameraView
+                        key={`cam-${step}-${cameraSessionId}`}
+                        style={{ width: '100%', height: '100%' }}
+                        facing="back"
+                        ref={cameraRef}
+                        onCameraReady={() => setIsCameraReady(true)}
+                      />
+                      {!isCameraReady && (
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
+                          <ActivityIndicator size="large" color="#10B981" />
+                          <Text style={{ marginTop: 12, color: '#6B7A75', fontSize: 14 }}>Starting camera...</Text>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
+                      <ActivityIndicator size="large" color="#10B981" />
+                      <Text style={{ marginTop: 12, color: '#6B7A75', fontSize: 14 }}>Preparing camera...</Text>
+                    </View>
+                  )
                 ) : (
                   <>
                     <Ionicons name="camera" size={64} color="#C8D8CE" />
@@ -948,6 +1147,110 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               <Image source={require('../../../assets/caw.png')} style={{ width: '100%', height: 540, resizeMode: 'contain' }} />
             </View>
 
+            {/* Rejection Notification Banner if resubmitting */}
+            {isRejectedSubmission && (
+              <View style={{
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2',
+                borderRadius: 16,
+                padding: 16,
+                marginBottom: 20,
+                borderWidth: 1.5,
+                borderColor: isDark ? '#EF4444' : '#FCA5A5',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <Ionicons name="alert-circle" size={20} color="#EF4444" />
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#EF4444' }}>
+                    Previous Submission Rejected
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 13, color: isDark ? '#FCA5A5' : '#991B1B', lineHeight: 18 }}>
+                  Reason: {challenge?.progress?.rejectionReason || (submission as any)?.rejectionReason || 'No reason specified by moderator.'}
+                </Text>
+                <Text style={{ fontSize: 12, color: isDark ? '#F87171' : '#B91C1C', marginTop: 6, fontWeight: '600' }}>
+                  Please take a fresh, clearer photo following the mission guidelines below.
+                </Text>
+              </View>
+            )}
+
+            {/* Attempt / Cooldown Status Banner directly above Start Recognition button */}
+            {!isPreliminaryApproved && (
+              <View style={{
+                width: '100%',
+                backgroundColor: cooldownRemainingSec > 0
+                  ? (isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2')
+                  : attemptsLeft < MAX_AI_ATTEMPTS
+                    ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB')
+                    : (isDark ? 'rgba(16, 185, 129, 0.12)' : '#F0FDF4'),
+                borderWidth: 1.5,
+                borderColor: cooldownRemainingSec > 0
+                  ? (isDark ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5')
+                  : attemptsLeft < MAX_AI_ATTEMPTS
+                    ? (isDark ? 'rgba(245, 158, 11, 0.35)' : '#FDE68A')
+                    : (isDark ? 'rgba(16, 185, 129, 0.35)' : '#BBF7D0'),
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                marginBottom: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, paddingRight: 8 }}>
+                  <Ionicons
+                    name={cooldownRemainingSec > 0 ? "hourglass-outline" : "sparkles"}
+                    size={20}
+                    color={cooldownRemainingSec > 0 ? '#EF4444' : attemptsLeft === 1 ? '#F59E0B' : theme.colors.primary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{
+                      fontSize: 13,
+                      fontWeight: '800',
+                      color: cooldownRemainingSec > 0
+                        ? '#EF4444'
+                        : isDark ? theme.colors.textPrimary : '#14532D',
+                    }}>
+                      {cooldownRemainingSec > 0 ? 'AI Limit Reached (Cooldown Active)' : 'Challenge AI Recognition Limit'}
+                    </Text>
+                    <Text style={{
+                      fontSize: 12,
+                      color: cooldownRemainingSec > 0
+                        ? (isDark ? '#FCA5A5' : '#991B1B')
+                        : (isDark ? theme.colors.textMuted : '#166534'),
+                      marginTop: 2,
+                    }}>
+                      {cooldownRemainingSec > 0
+                        ? `Available again after a 15-minute cooldown.`
+                        : `You have ${attemptsLeft} / ${MAX_AI_ATTEMPTS} attempts left for this challenge.`}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{
+                  backgroundColor: cooldownRemainingSec > 0
+                    ? '#EF4444'
+                    : attemptsLeft > 1
+                      ? (isDark ? 'rgba(16, 185, 129, 0.2)' : '#DCFCE7')
+                      : (isDark ? 'rgba(234, 179, 8, 0.2)' : '#FEF3C7'),
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: cooldownRemainingSec > 0 ? '#DC2626' : attemptsLeft > 1 ? '#10B981' : '#F59E0B',
+                  alignItems: 'center',
+                }}>
+                  <Text style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: cooldownRemainingSec > 0 ? '#FFFFFF' : attemptsLeft > 1 ? (isDark ? '#34D399' : '#15803D') : '#B45309',
+                  }}>
+                    {cooldownRemainingSec > 0
+                      ? `${Math.floor(cooldownRemainingSec / 60)}:${(cooldownRemainingSec % 60) < 10 ? '0' : ''}${cooldownRemainingSec % 60}`
+                      : `${attemptsLeft} left`}
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {isPreliminaryApproved ? (
               !submission?.afterProofUrl ? (
                 <PrimaryButton label="Take After Photo" onPress={() => setStep('capture_after')} />
@@ -970,7 +1273,15 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               )
             ) : (
-              <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
+              <PrimaryButton 
+                label={cooldownRemainingSec > 0
+                  ? `Cooldown Active (${Math.floor(cooldownRemainingSec / 60)}:${(cooldownRemainingSec % 60) < 10 ? '0' : ''}${cooldownRemainingSec % 60})`
+                  : isRejectedSubmission
+                    ? "Resubmit: Capture New Before Photo"
+                    : "Start Recognition"} 
+                onPress={handleStartRecognition}
+                style={cooldownRemainingSec > 0 ? { opacity: 0.6, backgroundColor: isDark ? '#4B5563' : '#9CA3AF' } : undefined}
+              />
             )}
           </Animated.View>
         </ScrollView>
