@@ -1071,7 +1071,7 @@ export function AuthView({
           <FlatList
             data={filteredBarangays}
             keyExtractor={(item) => item}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
             renderItem={({ item }) => {
               const isSelected = selectedGoogleBarangay === item;
               return (
