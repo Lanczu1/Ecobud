@@ -30,7 +30,14 @@ eventRoutes.get(
 
     const events = await prisma.event.findMany({
       include: {
-        registrations: true,
+        _count: {
+          select: { registrations: true }
+        },
+        registrations: userId ? {
+          where: { userId },
+          select: { status: true, attendedAt: true, userId: true },
+          take: 1
+        } : false,
         ...(userId ? { submissions: { where: { userId }, orderBy: { submittedAt: 'desc' }, take: 1 } } : {})
       },
       orderBy: [
@@ -44,7 +51,7 @@ eventRoutes.get(
         let userStatus = null;
         let rejectionReason = undefined;
         if (userId) {
-          const userReg = event.registrations.find(r => r.userId === userId);
+          const userReg = event.registrations?.[0];
           const submission = (event as any).submissions?.[0];
           
           if (userReg) {
@@ -64,7 +71,7 @@ eventRoutes.get(
         
         return {
           ...event,
-          spotsLeft: Math.max(0, event.capacity - event.registrations.length),
+          spotsLeft: Math.max(0, event.capacity - (event._count?.registrations ?? 0)),
           userStatus,
           rejectionReason,
           submissions: undefined,

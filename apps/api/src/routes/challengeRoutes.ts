@@ -99,28 +99,76 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     orderBy: [{ difficulty: 'asc' }, { title: 'asc' }],
   });
 
-  const items = await Promise.all(challengeTemplates.map(async (challenge) => {
-    const instance = await getOrCreateActiveInstance(challenge.id);
-    
-    const [userChallenge, submissions, freshChallenge] = await Promise.all([
-      prisma.userChallenge.findUnique({
-        where: { userId_challengeInstanceId: { userId, challengeInstanceId: instance.id } }
-      }),
-      // Get ALL submissions for this challenge template (across all cycles)
-      prisma.challengeSubmission.findMany({
-        where: { 
-          userId, 
-          challengeInstance: {
-            challengeId: challenge.id
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      }),
-      // Re-fetch latest challenge state with fresh availableQuantity
-      prisma.challenge.findUnique({ where: { id: challenge.id } })
-    ]);
+  if (challengeTemplates.length === 0) {
+    return res.json({ items: [], isCycleActive: true });
+  }
 
-    // We'll keep the latest one as the primary for legacy fields if needed
+  // 1. Resolve or create active instances concurrently for each template
+  const templateInstances = await Promise.all(
+    challengeTemplates.map(async (challenge) => {
+      const instance = await getOrCreateActiveInstance(challenge.id);
+      return { challenge, instance };
+    })
+  );
+
+  const challengeIds = challengeTemplates.map(c => c.id);
+  const instanceIds = templateInstances.map(ti => ti.instance.id);
+
+  // 2. Batch fetch UserChallenges and Submissions in just 2 queries instead of 2 * N queries
+  const [userChallenges, allSubmissions, freshChallenges] = await Promise.all([
+    prisma.userChallenge.findMany({
+      where: {
+        userId,
+        challengeInstanceId: { in: instanceIds },
+      },
+    }),
+    prisma.challengeSubmission.findMany({
+      where: {
+        userId,
+        challengeInstance: {
+          challengeId: { in: challengeIds },
+        },
+      },
+      include: {
+        challengeInstance: {
+          select: { challengeId: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.challenge.findMany({
+      where: { id: { in: challengeIds } },
+    }),
+  ]);
+
+  // Index by challengeInstanceId
+  const userChallengeByInstanceId = new Map(
+    userChallenges.map(uc => [uc.challengeInstanceId, uc])
+  );
+
+  // Index latest and all submissions by template challengeId
+  const submissionsByChallengeId = new Map<string, typeof allSubmissions>();
+  for (const sub of allSubmissions) {
+    const cId = sub.challengeInstance?.challengeId;
+    if (!cId) continue;
+    const existing = submissionsByChallengeId.get(cId);
+    if (existing) {
+      existing.push(sub);
+    } else {
+      submissionsByChallengeId.set(cId, [sub]);
+    }
+  }
+
+  const freshChallengeById = new Map(
+    freshChallenges.map(fc => [fc.id, fc])
+  );
+
+  // 3. Map memory-indexed records cleanly without any more queries
+  const items = templateInstances.map(({ challenge, instance }) => {
+    const userChallenge = userChallengeByInstanceId.get(instance.id);
+    const submissions = submissionsByChallengeId.get(challenge.id) || [];
+    const freshChallenge = freshChallengeById.get(challenge.id);
+
     const latestSubmission = submissions.length > 0 ? submissions[0] : null;
 
     let finalStatus = userChallenge?.status || 'not_started';
@@ -134,7 +182,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
         startDate: instance.startDate,
         endDate: instance.endDate,
         status: instance.status,
-        instanceId: instance.id
+        instanceId: instance.id,
       },
       progress: {
         progressPercentage: userChallenge?.progressPercentage || 0,
@@ -171,10 +219,10 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
           ecoCoinsAwarded: sub.ecoCoinsAwarded,
           expAwarded: sub.expAwarded,
           rejectionReason: sub.status === 'rejected' ? sub.moderatorNotes : undefined,
-        }))
+        })),
       },
     };
-  }));
+  });
 
   return res.json({ items, isCycleActive: true });
 });

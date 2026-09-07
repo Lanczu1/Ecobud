@@ -1072,44 +1072,54 @@ export function AuthView({
             data={filteredBarangays}
             keyExtractor={(item) => item}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [
-                  { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? theme.colors.border : palette.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-                  pressed && { backgroundColor: isDark ? theme.colors.surfaceMuted : palette.primarySoft }
-                ]}
-                onPress={() => {
-                  setSelectedGoogleBarangay(item);
-                }}
-              >
-                <Text style={{ fontSize: 16, color: selectedGoogleBarangay === item ? (isDark ? theme.colors.primary : palette.primary) : (isDark ? theme.colors.textPrimary : palette.textStrong), fontWeight: selectedGoogleBarangay === item ? '700' : '400' }}>
-                  {item}
-                </Text>
-                {selectedGoogleBarangay === item && <Ionicons name="checkmark-circle" size={22} color={isDark ? theme.colors.primary : palette.primary} />}
-              </Pressable>
-            )}
+            renderItem={({ item }) => {
+              const isSelected = selectedGoogleBarangay === item;
+              return (
+                <Pressable
+                  disabled={isConfirmingGoogleBarangay}
+                  style={({ pressed }) => [
+                    {
+                      paddingVertical: 16,
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? theme.colors.border : palette.border,
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    },
+                    (pressed || isSelected) && { backgroundColor: isDark ? theme.colors.surfaceMuted : palette.primarySoft },
+                  ]}
+                  onPress={async () => {
+                    if (isConfirmingGoogleBarangay || !pendingGoogleAuth) return;
+                    setSelectedGoogleBarangay(item);
+                    setIsConfirmingGoogleBarangay(true);
+                    try {
+                      setIsGoogleBarangayModalOpen(false);
+                      await pendingGoogleAuth.onConfirmBarangay(item);
+                    } catch (err) {
+                      setIsGoogleBarangayModalOpen(true);
+                    } finally {
+                      setIsConfirmingGoogleBarangay(false);
+                    }
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      color: isSelected
+                        ? (isDark ? theme.colors.primary : palette.primary)
+                        : (isDark ? theme.colors.textPrimary : palette.textStrong),
+                      fontWeight: isSelected ? '700' : '500',
+                    }}
+                  >
+                    {item}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={22} color={isDark ? theme.colors.primary : palette.primary} />
+                  )}
+                </Pressable>
+              );
+            }}
           />
-          {selectedGoogleBarangay ? (
-            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: isDark ? theme.colors.card : palette.surface, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: isDark ? theme.colors.border : palette.border }}>
-              <PrimaryButton
-                label={isConfirmingGoogleBarangay ? 'Setting up account...' : `Continue with ${selectedGoogleBarangay}`}
-                disabled={isConfirmingGoogleBarangay}
-                loading={isConfirmingGoogleBarangay}
-                onPress={async () => {
-                  if (!pendingGoogleAuth || !selectedGoogleBarangay) return;
-                  setIsConfirmingGoogleBarangay(true);
-                  try {
-                    setIsGoogleBarangayModalOpen(false);
-                    await pendingGoogleAuth.onConfirmBarangay(selectedGoogleBarangay);
-                  } catch (err) {
-                    setIsGoogleBarangayModalOpen(true);
-                  } finally {
-                    setIsConfirmingGoogleBarangay(false);
-                  }
-                }}
-              />
-            </View>
-          ) : null}
         </SafeAreaView>
       </Modal>
 

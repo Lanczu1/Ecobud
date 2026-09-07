@@ -67,7 +67,7 @@ const getValidImageUrl = (url: string | null | undefined) => {
 };
 
 // Local components used in Views
-export function BootView() {
+export function BootView({ onFinish }: { onFinish?: () => void }) {
   const { theme, isDark } = useTheme();
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -90,18 +90,24 @@ export function BootView() {
       >
         <LoadingScreenVisual
           label="Growing your EcoBud journey"
+          loop={!onFinish}
+          onAnimationFinish={onFinish ? () => onFinish() : undefined}
         />
       </Animated.View>
     </SafeAreaView>
   );
 }
 
-export function LaunchBackdrop() {
+export function LaunchBackdrop({ onFinish }: { onFinish?: () => void }) {
   const { theme, isDark } = useTheme();
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <LoadingScreenVisual label="Preparing your EcoBud welcome" />
+      <LoadingScreenVisual
+        label="Preparing your EcoBud welcome"
+        loop={!onFinish}
+        onAnimationFinish={onFinish ? () => onFinish() : undefined}
+      />
     </SafeAreaView>
   );
 }
@@ -827,7 +833,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 600;
 
-  const isCardsLoading = model.initializing || model.booting || (model.refreshing && (!model.challenges || model.challenges.length === 0));
+  const isCardsLoading = (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
@@ -1876,18 +1882,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Brief tab switch skeleton loading transition for Tracker cards
-  const [tabLoading, setTabLoading] = useState(true);
-
-  useEffect(() => {
-    setTabLoading(true);
-    const timer = setTimeout(() => {
-      setTabLoading(false);
-    }, 550);
-    return () => clearTimeout(timer);
-  }, [model.activeTab]);
-
-  const isCardsLoading = tabLoading || model.initializing || model.booting || (model.refreshing && !model.tracker);
+  const isCardsLoading = !model.tracker && (model.isHydrating || model.initializing || model.booting);
 
   const trackerMonth = model.tracker?.month ?? liveMonth;
   const completedDays = model.tracker?.completedDays ?? [];

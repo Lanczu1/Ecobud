@@ -5,9 +5,9 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
   Animated,
 } from 'react-native';
+import { FastImage } from '../../shared/ui/FastImage';
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale, useResponsive, clampFontSize } from '../utils/responsive';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
@@ -78,10 +78,10 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
     <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
       <View style={styles.imageWrapper}>
         {resolvedImageUrl && !imgError ? (
-          <Image 
+          <FastImage 
             source={{ uri: resolvedImageUrl }}
             style={styles.cardImage}
-            resizeMode="cover"
+            contentFit="cover"
             onError={() => setImgError(true)}
           />
         ) : (

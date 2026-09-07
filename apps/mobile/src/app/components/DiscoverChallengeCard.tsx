@@ -9,6 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { FastImage } from '../../shared/ui/FastImage';
 import { Ionicons } from '@expo/vector-icons';
 import { type ChallengeWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { resolveMediaUrl } from '../utils/appUtils';
@@ -52,7 +53,7 @@ export function DiscoverChallengeCard({
     >
       <View style={cardStyles.discoverImageWrap}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={cardStyles.discoverImage} resizeMode="cover" />
+          <FastImage source={{ uri: imageUrl }} style={cardStyles.discoverImage} contentFit="cover" />
         ) : (
           <View style={[cardStyles.discoverImage, cardStyles.discoverImageFallback, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }]}>
             <Ionicons

@@ -43,18 +43,40 @@ userRoutes.get(
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.auth!.userId },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        points: true,
+        currentStreak: true,
+        lastActionDate: true,
         profile: true,
         badges: {
-          include: { badge: true },
+          select: {
+            badge: true,
+          },
           orderBy: { unlockedAt: 'asc' },
         },
         eventRegistrations: {
-          include: { event: true },
+          select: {
+            status: true,
+            attendedAt: true,
+            event: true,
+          },
           orderBy: { registeredAt: 'desc' },
         },
-        lessonProgress: true,
-        challengeProgress: true,
+        lessonProgress: {
+          select: {
+            status: true,
+          },
+        },
+        challengeProgress: {
+          select: {
+            status: true,
+          },
+        },
       },
     });
 

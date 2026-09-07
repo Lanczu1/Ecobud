@@ -1,33 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { API_HOST } from './utils/adminApi';
 import { WebAuthView } from './components/WebAuthView';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminSection } from './components/admin/AdminSidebar';
-import { Dashboard } from './components/admin/Dashboard';
-import { ManageUsers } from './components/admin/pages/ManageUsers';
-import { LearningContent } from './components/admin/pages/LearningContent';
-import { Challenges } from './components/admin/pages/Challenges';
 
-import { Events } from './components/admin/pages/Events';
+const Dashboard = lazy(() => import('./components/admin/Dashboard').then((m) => ({ default: m.Dashboard })));
+const ManageUsers = lazy(() => import('./components/admin/pages/ManageUsers').then((m) => ({ default: m.ManageUsers })));
+const LearningContent = lazy(() => import('./components/admin/pages/LearningContent').then((m) => ({ default: m.LearningContent })));
+const Challenges = lazy(() => import('./components/admin/pages/Challenges').then((m) => ({ default: m.Challenges })));
+const Events = lazy(() => import('./components/admin/pages/Events').then((m) => ({ default: m.Events })));
+const GiveAndGetHub = lazy(() => import('./components/admin/pages/GiveAndGetHub').then((m) => ({ default: m.GiveAndGetHub })));
+const Redeem = lazy(() => import('./components/admin/pages/Redeem').then((m) => ({ default: m.Redeem })));
+const Reports = lazy(() => import('./components/admin/pages/Reports').then((m) => ({ default: m.Reports })));
 
-import { GiveAndGetHub } from './components/admin/pages/GiveAndGetHub';
-import { Redeem } from './components/admin/pages/Redeem';
-import { Reports } from './components/admin/pages/Reports';
+function SectionFallback() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-80 w-full py-12">
+      <div className="w-9 h-9 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+      <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 tracking-wide uppercase">
+        Loading module...
+      </span>
+    </div>
+  );
+}
 
 function renderSection(section: AdminSection) {
-  switch (section) {
-    case 'Dashboard':        return <Dashboard />;
-    case 'Users':            return <ManageUsers />;
-    case 'Learning Content': return <LearningContent />;
-    case 'Challenges':       return <Challenges />;
-
-    case 'Events':           return <Events />;
-
-    case 'Give and Get Hub': return <GiveAndGetHub />;
-    case 'Redeem':          return <Redeem />;
-    case 'Reports':          return <Reports />;
-    default:                 return <Dashboard />;
-  }
+  return (
+    <Suspense fallback={<SectionFallback />}>
+      {(() => {
+        switch (section) {
+          case 'Dashboard':        return <Dashboard />;
+          case 'Users':            return <ManageUsers />;
+          case 'Learning Content': return <LearningContent />;
+          case 'Challenges':       return <Challenges />;
+          case 'Events':           return <Events />;
+          case 'Give and Get Hub': return <GiveAndGetHub />;
+          case 'Redeem':          return <Redeem />;
+          case 'Reports':          return <Reports />;
+          default:                 return <Dashboard />;
+        }
+      })()}
+    </Suspense>
+  );
 }
 
 export default function App() {

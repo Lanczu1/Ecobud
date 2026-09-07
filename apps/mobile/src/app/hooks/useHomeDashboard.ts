@@ -73,6 +73,7 @@ const getPhMonthKey = (date: Date = new Date()): string => getPhDateKey(date).sl
 export function useHomeDashboard(): EcoBudMobileModel {
   const [initializing, setInitializing] = useState(true);
   const [booting, setBooting] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(false);
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -106,6 +107,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const actionOverlayTicket = React.useRef(0);
   const realtimeRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const offlineSyncInFlightRef = React.useRef(false);
+  const isHydratingRef = React.useRef(false);
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -467,9 +469,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const hydrateApp = useCallback(
     async (existingSession: SessionPayload | null | undefined, silent = false) => {
-      if (!existingSession?.token) {
+      if (!existingSession?.token || isHydratingRef.current) {
         return;
       }
+
+      isHydratingRef.current = true;
+      setIsHydrating(true);
 
       if (!silent) {
         setRefreshing(true);
@@ -570,6 +575,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
           console.warn('[ECOBUD hydrateApp (offline/unreachable)]:', message);
         }
       } finally {
+        isHydratingRef.current = false;
+        setIsHydrating(false);
         setRefreshing(false);
       }
     },
@@ -687,15 +694,27 @@ export function useHomeDashboard(): EcoBudMobileModel {
       } catch (error) {
         console.error('Failed to bootstrap ECOBUD mobile app.', error);
       } finally {
-        clearTimeout(bootstrapTimer);
-        setBooting(false);
-        setInitializing(false);
+        // Loading animation duration from Loading.json is exactly 3003ms (90 frames @ 29.97fps)
+        const LOTTIE_CYCLE_MS = 3003;
+        const elapsed = Date.now() - startTime;
+        const remainingDelay = Math.max(0, LOTTIE_CYCLE_MS - elapsed);
+
+        finishTimer = setTimeout(() => {
+          clearTimeout(bootstrapTimer);
+          setBooting(false);
+          setInitializing(false);
+        }, remainingDelay);
       }
     };
 
+    let finishTimer: ReturnType<typeof setTimeout> | null = null;
+    const startTime = Date.now();
     void bootstrap();
 
-    return () => clearTimeout(bootstrapTimer);
+    return () => {
+      clearTimeout(bootstrapTimer);
+      if (finishTimer) clearTimeout(finishTimer);
+    };
   }, [hydrateApp]);
 
   // Monitor streak unlock
@@ -2143,6 +2162,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   return {
     initializing,
     booting,
+    isHydrating,
     hasOnboarded,
     session,
     actionOverlayVisible,
