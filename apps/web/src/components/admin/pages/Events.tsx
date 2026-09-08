@@ -23,6 +23,7 @@ interface AdminEvent {
   latitude: number | null;
   longitude: number | null;
   isFeatured?: boolean;
+  isPublished?: boolean;
   createdAt: string;
   updatedAt: string;
   registrations: { id: string }[];
@@ -86,6 +87,7 @@ interface FormData {
   latitude: number | null;
   longitude: number | null;
   isFeatured: boolean;
+  isPublished: boolean;
   imageFile?: File | null;
   imageUrl?: string | null;
 }
@@ -112,6 +114,7 @@ const emptyForm: FormData = {
   latitude: null,
   longitude: null,
   isFeatured: false,
+  isPublished: true,
   imageFile: null,
   imageUrl: null,
 };
@@ -168,6 +171,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
         latitude: initial.latitude,
         longitude: initial.longitude,
         isFeatured: initial.isFeatured ?? false,
+        isPublished: initial.isPublished ?? true,
       }
         : { 
             ...emptyForm, 
@@ -178,6 +182,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
               return formatDateForInput(d);
             })(),
             isFeatured: false,
+  isPublished: true,
           }
   );
   const [imagePreview, setImagePreview] = useState<string | null>(initial?.imageUrl ? `${API_HOST}${initial.imageUrl}` : null);
@@ -463,13 +468,14 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
               <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isFeatured ? 'translate-x-5' : ''}`} />
             </div>
           </div>
+          <label className="flex items-center gap-3 p-4 text-sm text-gray-700"><input type="checkbox" checked={form.isPublished} onChange={e=>setForm(f=>({...f,isPublished:e.target.checked}))}/>Published and visible to users (uncheck to save a draft)</label>
         </form>
         {/* Footer buttons */}
         <div className="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3">
           <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
           <button form="event-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            {saving ? 'Saving…' : (initial ? 'Update Event' : 'Create Event')}
+            {saving ? 'Saving…' : (form.isPublished ? (initial ? 'Update Event' : 'Publish Event') : 'Save Draft')}
           </button>
         </div>
       </div>
@@ -1302,3 +1308,4 @@ export function Events() {
     </div>
   );
 }
+

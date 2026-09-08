@@ -15,7 +15,7 @@ import fs from 'fs';
 import rateLimit from 'express-rate-limit';
 import { JWT_SECRET } from '../security/tokenService';
 import { recognizeChallengeImage } from '../services/challengeImageService';
-import { signChallengeAnalysis, detectionSettingsHash } from '../security/challengeAnalysisToken';
+import { signChallengeAnalysis, detectionSettingsHash, verifyChallengeAnalysis } from '../security/challengeAnalysisToken';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
@@ -28,19 +28,6 @@ const analyzeLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many analysis requests. Please wait a moment before trying again.' },
 });
-
-// Cache recently analyzed image hashes to deduplicate identical scans (saves Gemini token quota)
-const imageAnalysisCache = new Map<string, { result: any; mimeType: string; timestamp: number }>();
-const HASH_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function cleanOldAnalysisCache() {
-  const now = Date.now();
-  for (const [key, value] of imageAnalysisCache.entries()) {
-    if (now - value.timestamp > HASH_CACHE_TTL_MS) {
-      imageAnalysisCache.delete(key);
-    }
-  }
-}
 
 const uploadProofLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -64,6 +51,7 @@ const progressSchema = z.object({
 
 const submissionSchema = z
   .object({
+    analysisToken: z.string().max(8192).optional(),
     proofText: z.string().min(1).max(1000).optional(),
     proofUrl: z.string().optional(),
     afterProofUrl: z.string().optional(),
@@ -240,6 +228,10 @@ challengeRoutes.post(
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const actualInstanceId = instance?.id || req.params.challengeInstanceId;
 
+    if (!instance?.challenge.active || instance.challenge.type === 'AI Image Recognition Challenge') {
+      throw new HttpError(400, 'This challenge requires verified evidence rather than manual progress.');
+    }
+
     const result = await gamificationService.updateChallengeProgress(
       userId,
       actualInstanceId,
@@ -293,30 +285,7 @@ challengeRoutes.post(
 
       const bytes = await fs.promises.readFile(req.file.path);
 
-      // Hash deduplication: Compute sha256 to reuse recent analysis of identical image bytes
-      cleanOldAnalysisCache();
-      const imageHash = crypto.createHash('sha256').update(bytes).digest('hex');
-      const cacheKey = `${imageHash}:${challenge.id}:${(challenge.aiDetectionTargets || []).join(',')}:${challenge.aiMinimumConfidence || 1}`;
-
-      let mimeType: string;
-      let result: any;
-
-      if (imageAnalysisCache.has(cacheKey)) {
-        const cached = imageAnalysisCache.get(cacheKey)!;
-        mimeType = cached.mimeType;
-        result = cached.result;
-      } else {
-        const aiResponse = await recognizeChallengeImage(bytes, challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1);
-        mimeType = aiResponse.mimeType;
-        const { mimeType: _m, ...resData } = aiResponse;
-        result = resData;
-
-        imageAnalysisCache.set(cacheKey, {
-          result,
-          mimeType,
-          timestamp: Date.now(),
-        });
-      }
+      const { mimeType, ...result } = await recognizeChallengeImage(bytes, challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1);
 
       if (!result.passed) {
         return res.json(result);
@@ -433,8 +402,9 @@ challengeRoutes.get(
       include: {
         challengeInstance: { include: { challenge: true } },
         reviewer: {
-          include: {
-            profile: true,
+          select: {
+            id: true, name: true,
+            profile: { select: { displayName: true, avatarUrl: true } },
           },
         },
       },
@@ -460,37 +430,51 @@ challengeRoutes.post(
 
     const actualInstanceId = instance!.id;
 
-    const submission = await prisma.challengeSubmission.create({
-      data: {
-        userId: req.auth!.userId,
-        challengeInstanceId: actualInstanceId,
-        proofText: payload.proofText || null,
-        proofUrl: payload.proofUrl || null,
-        afterProofUrl: payload.afterProofUrl || null,
-        status: 'pending',
-        detectedQuantity: payload.detectedQuantity || 1,
-        reservedQuantity: payload.detectedQuantity || 1,
-      },
-    });
+    const detectedQuantity = challenge.type === 'AI Image Recognition Challenge'
+      ? verifyChallengeAnalysis(payload.analysisToken, {
+          userId: req.auth!.userId, instanceId: actualInstanceId, proofUrl: payload.proofUrl || '',
+          settings: detectionSettingsHash(challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1),
+        }).detectedCount
+      : 1;
 
-    await prisma.userChallenge.upsert({
-      where: {
-        userId_challengeInstanceId: {
+    const submission = await prisma.$transaction(async tx => {
+      if (payload.proofUrl && await tx.challengeSubmission.findFirst({ where: { userId: req.auth!.userId, challengeInstanceId: actualInstanceId, proofUrl: payload.proofUrl } })) {
+        throw new HttpError(409, 'This analyzed photo has already been submitted.');
+      }
+      const created = await tx.challengeSubmission.create({
+        data: {
           userId: req.auth!.userId,
           challengeInstanceId: actualInstanceId,
+          proofText: payload.proofText || null,
+          proofUrl: payload.proofUrl || null,
+          afterProofUrl: null,
+          status: 'pending',
+          detectedQuantity,
+          reservedQuantity: detectedQuantity,
         },
-      },
-      create: {
-        userId: req.auth!.userId,
-        challengeInstanceId: actualInstanceId,
-        status: 'IN_PROGRESS',
-        progressPercentage: 50,
-      },
-      update: {
-        status: 'IN_PROGRESS',
-        progressPercentage: 50,
-      },
-    });
+      });
+
+      await tx.userChallenge.upsert({
+        where: {
+          userId_challengeInstanceId: {
+            userId: req.auth!.userId,
+            challengeInstanceId: actualInstanceId,
+          },
+        },
+        create: {
+          userId: req.auth!.userId,
+          challengeInstanceId: actualInstanceId,
+          status: 'IN_PROGRESS',
+          progressPercentage: 50,
+        },
+        update: {
+          status: 'IN_PROGRESS',
+          progressPercentage: 50,
+        },
+      });
+
+      return created;
+    }, { isolationLevel: 'Serializable' });
 
     return res.status(201).json(submission);
   }),

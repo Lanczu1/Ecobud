@@ -1,13 +1,12 @@
 import jwt from 'jsonwebtoken';
+import { randomBytes } from 'crypto';
+import { z } from 'zod';
 
 const DEFAULT_DEV_SECRET = 'ecobud-local-development-secret';
-export const JWT_SECRET = process.env.JWT_SECRET || DEFAULT_DEV_SECRET;
+export const JWT_SECRET = process.env.JWT_SECRET || randomBytes(48).toString('hex');
 
-if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === DEFAULT_DEV_SECRET)) {
-  console.error('🚨 [CRITICAL SECURITY ERROR]: JWT_SECRET must be explicitly set to a strong secret in production!');
-  if (!process.env.ALLOW_INSECURE_SECRET) {
-    throw new Error('Fatal: Insecure JWT_SECRET in production environment.');
-  }
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET === DEFAULT_DEV_SECRET || /replace|your-|example|development/i.test(JWT_SECRET))) {
+  throw new Error('JWT_SECRET must be a strong, unique secret of at least 32 characters in production.');
 }
 
 export type AccessRole = 'user' | 'moderator' | 'admin';
@@ -28,12 +27,22 @@ export interface TokenSession {
   role: AccessRole;
   status: AccountStatus;
   city?: string | null;
+  sessionVersion?: number;
 }
+
+const accessClaims = z.object({
+  userId: z.string().min(1), name: z.string(), email: z.string().email(),
+  role: z.enum(['user', 'moderator', 'admin']), status: z.enum(['active', 'pending', 'suspended']),
+  city: z.string().nullable().optional(), sessionVersion: z.number().int().nonnegative(),
+});
 
 export const TokenService = {
   sign: (session: TokenSession) =>
-    jwt.sign(session, JWT_SECRET, {
-      expiresIn: '7d',
+    jwt.sign({ ...session, sessionVersion: session.sessionVersion ?? 0 }, JWT_SECRET, {
+      algorithm: 'HS256', issuer: 'ecobud-api', audience: 'ecobud-access',
+      expiresIn: '1h',
     }),
-  verify: (token: string) => jwt.verify(token, JWT_SECRET) as TokenSession,
+  verify: (token: string): TokenSession => accessClaims.parse(jwt.verify(token, JWT_SECRET, {
+    algorithms: ['HS256'], issuer: 'ecobud-api', audience: 'ecobud-access',
+  })),
 };

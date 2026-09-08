@@ -1,9 +1,13 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import { randomUUID } from 'crypto';
+import type { RequestHandler } from 'express';
+import { HttpError } from './errorResponder';
 
 // Temporary directory for multer file parsing before cloud storage / processing
-const tmpUploadDirectory = path.join(__dirname, '..', '..', 'uploads', 'tmp');
+const tmpUploadDirectory = path.join(os.tmpdir(), 'ecobud-uploads');
 
 if (!fs.existsSync(tmpUploadDirectory)) {
   fs.mkdirSync(tmpUploadDirectory, { recursive: true });
@@ -15,12 +19,45 @@ const tempStorage = multer.diskStorage({
     cb(null, tmpUploadDirectory);
   },
   filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const uniqueSuffix = randomUUID();
     const rawExt = path.extname(file.originalname).toLowerCase();
     const safeExt = /^\.[a-z0-9]+$/i.test(rawExt) ? rawExt : '.bin';
     cb(null, `${file.fieldname}-${uniqueSuffix}${safeExt}`);
   },
 });
+
+export function matchesMediaSignature(bytes: Buffer, mime: string): boolean {
+  if (mime === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (mime === 'image/jpeg' || mime === 'image/jpg') return bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  if (mime === 'image/webp') return bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+  if (mime === 'video/mp4' || mime === 'video/quicktime') return bytes.toString('ascii', 4, 8) === 'ftyp';
+  if (mime === 'video/webm' || mime === 'video/x-matroska') return bytes.subarray(0, 4).equals(Buffer.from([26,69,223,163]));
+  return false;
+}
+
+function secureUpload(options: multer.Options) {
+  const parser = multer(options);
+  const wrap = (handler: RequestHandler): RequestHandler => (req, res, next) => {
+    handler(req, res, error => {
+      const files = req.file ? [req.file] : Array.isArray(req.files) ? req.files : Object.values(req.files || {}).flat();
+      const cleanup = () => { for (const file of files) void fs.promises.unlink(file.path).catch(() => {}); };
+      res.once('finish', cleanup);
+      res.once('close', cleanup);
+      if (error) { cleanup(); next(error); return; }
+      void (async () => {
+        for (const file of files) {
+          const handle = await fs.promises.open(file.path, 'r');
+          try {
+            const bytes = Buffer.alloc(16);
+            const { bytesRead } = await handle.read(bytes, 0, 16, 0);
+            if (!matchesMediaSignature(bytes.subarray(0, bytesRead), file.mimetype)) throw new HttpError(400, 'File contents do not match the declared media type.');
+          } finally { await handle.close(); }
+        }
+      })().then(() => next(), error => { cleanup(); next(error); });
+    });
+  };
+  return { single: (name: string) => wrap(parser.single(name)), fields: (fields: multer.Field[]) => wrap(parser.fields(fields)) };
+}
 
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
 const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -59,17 +96,17 @@ const mediaFileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   return cb(new Error('Invalid media file type. Only standard images and MP4/WebM videos are allowed.'));
 };
 
-// General upload middleware (e.g. for lessons with videos up to 100MB)
-export const uploadMiddleware = multer({
+// Match the storage bucket's 50MB limit before accepting a file.
+export const uploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: mediaFileFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB
+    fileSize: 50 * 1024 * 1024,
   },
 });
 
 // Challenge proof images (10MB)
-export const challengeUploadMiddleware = multer({
+export const challengeUploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {
@@ -78,7 +115,7 @@ export const challengeUploadMiddleware = multer({
 });
 
 // Gemini analysis images (10MB)
-export const analyzeUploadMiddleware = multer({
+export const analyzeUploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {
@@ -90,7 +127,7 @@ export const analyzeUploadMiddleware = multer({
 });
 
 // Avatar images (5MB)
-export const avatarUploadMiddleware = multer({
+export const avatarUploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {
@@ -99,7 +136,7 @@ export const avatarUploadMiddleware = multer({
 });
 
 // Event cover / banner images (10MB)
-export const eventUploadMiddleware = multer({
+export const eventUploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {
@@ -108,7 +145,7 @@ export const eventUploadMiddleware = multer({
 });
 
 // Event submission proof images (10MB)
-export const eventSubmissionUploadMiddleware = multer({
+export const eventSubmissionUploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {
@@ -117,7 +154,7 @@ export const eventSubmissionUploadMiddleware = multer({
 });
 
 // Redeem reward images (5MB)
-export const redeemUploadMiddleware = multer({
+export const redeemUploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: imageFileFilter,
   limits: {

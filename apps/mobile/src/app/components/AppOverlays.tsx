@@ -1,3 +1,4 @@
+import { NotificationInbox } from './NotificationInbox';
 import React from 'react';
 import { useAudioPlayer } from 'expo-audio';
 import LottieView from 'lottie-react-native';
@@ -1464,25 +1465,9 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function NotificationsOverlay({ model }: { model: EcoBudMobileModel }) {
-  const { theme, isDark } = useTheme();
-  return (
-    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
-      <TopNavbar model={model} showBack={true} />
-      <ScrollView contentContainerStyle={styles.homeContent}>
-        <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>NOTIFICATIONS</Text>
-        <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Notifications</Text>
-        <View style={{ marginTop: 40, alignItems: 'center' }}>
-          <Ionicons name="notifications-off-outline" size={64} color={isDark ? theme.colors.icon : "#D1D5DB"} />
-          <Text style={{ fontSize: 16, fontWeight: '700', color: isDark ? theme.colors.textPrimary : '#9CA3AF', marginTop: 16 }}>Under Development</Text>
-          <Text style={{ fontSize: 13, color: isDark ? theme.colors.textSecondary : '#D1D5DB', marginTop: 6, textAlign: 'center', paddingHorizontal: 40 }}>
-            This feature is coming soon. Stay tuned for updates!
-          </Text>
-        </View>
-      </ScrollView>
-    </View>
-  );
+ const {theme}=useTheme();
+ return <View style={[styles.fullscreenOverlay,{backgroundColor:theme.colors.background}]}><TopNavbar model={model} showBack={true}/><NotificationInbox model={model}/></View>;
 }
-
 export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
   switch (model.activeOverlay) {
     case 'coinsHistory':
@@ -2408,6 +2393,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 }
 
 export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
+  React.useEffect(() => () => model.setFocusedEventId(null), []);
   const { theme, isDark } = useTheme();
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past'>('browse');
@@ -2458,6 +2444,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const allEvents = featuredEvent ? [featuredEvent, ...otherEvents] : otherEvents;
   
   const displayedEvents = allEvents.filter((event) => {
+    if (model.focusedEventId) return event.id === model.focusedEventId;
     const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
     const hasJoined = event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
     
@@ -6018,7 +6005,6 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
     try {
       await model.handleUpdateProfile({
         displayName: trimmedName,
-        email: trimmedEmail,
         city: selectedBarangay,
       });
       model.setActiveOverlay(null);
@@ -6030,7 +6016,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <OverlayScaffold
       title="Edit Profile"
-      subtitle="Update your username, email, and barangay"
+      subtitle="Update your username and barangay"
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -6067,10 +6053,10 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
                 },
               ]}
               value={email}
-              onChangeText={setEmail}
+              editable={false}
               autoCapitalize="none"
               keyboardType="email-address"
-              placeholder="Enter your email"
+              placeholder="Change email in Settings & Security"
               placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
@@ -6214,6 +6200,9 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [newEmail, setNewEmail] = React.useState('');
+  const [emailCode, setEmailCode] = React.useState('');
+  const [emailBusy, setEmailBusy] = React.useState(false);
 
   const handleSave = async () => {
     if (!currentPassword) {
@@ -6258,6 +6247,25 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.overlayScroll}>
           {/* App Appearance Section */}
+          <SurfaceCard style={{ padding: 16 }}>
+            <Text style={{ color: theme.colors.textPrimary }}>Change email</Text>
+            <TextInput style={[localStyles.formInput, { color: theme.colors.textPrimary }]} placeholder="Current password" placeholderTextColor={theme.colors.textMuted} secureTextEntry value={currentPassword} onChangeText={setCurrentPassword} />
+            <TextInput style={[localStyles.formInput, { color: theme.colors.textPrimary }]} placeholder="New email" placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" keyboardType="email-address" value={newEmail} onChangeText={value => { setNewEmail(value); setEmailCode(''); }} />
+            <TouchableOpacity disabled={emailBusy} onPress={async () => {
+              if (!model.session || !currentPassword || !newEmail.trim()) { Alert.alert('Missing details', 'Enter your current password and new email.'); return; }
+              setEmailBusy(true);
+              try { await ecobudApi.sendEmailChangeCode(model.session.token, currentPassword, newEmail.trim()); Alert.alert('Code sent', 'Check your new email for the verification code.'); }
+              catch (error) { Alert.alert('Could not send code', error instanceof Error ? error.message : 'Please try again.'); }
+              finally { setEmailBusy(false); }
+            }}><Text style={{ color: theme.colors.textPrimary, paddingVertical: 12 }}>Send verification code</Text></TouchableOpacity>
+            <TextInput style={[localStyles.formInput, { color: theme.colors.textPrimary }]} placeholder="Six-digit code" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={6} value={emailCode} onChangeText={setEmailCode} />
+            <TouchableOpacity disabled={emailBusy} onPress={async () => {
+              setEmailBusy(true);
+              try { await model.handleUpdateSecuritySettings({ currentPassword, newEmail: newEmail.trim(), emailCode }); setNewEmail(''); setEmailCode(''); setCurrentPassword(''); }
+              catch { /* The model displays the error. */ }
+              finally { setEmailBusy(false); }
+            }}><Text style={{ color: theme.colors.textPrimary, paddingVertical: 12 }}>Verify and change email</Text></TouchableOpacity>
+          </SurfaceCard>
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>App Appearance</Text>
           <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
@@ -6937,3 +6945,4 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
     </View>
   );
 }
+

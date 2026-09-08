@@ -20,6 +20,7 @@
     },
     "plugins": [
       "expo-font",
+      "expo-notifications",
       "expo-web-browser",
       "expo-audio",
       "expo-image",
@@ -29,3 +30,4 @@
     ]
   }
 }
+

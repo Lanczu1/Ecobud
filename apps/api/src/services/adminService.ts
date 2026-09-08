@@ -1129,6 +1129,7 @@ export class AdminService {
     latitude?: number;
     longitude?: number;
     isFeatured?: boolean;
+    isPublished?: boolean;
     managedById: string;
   }) {
     return await prisma.event.create({
@@ -1146,6 +1147,7 @@ export class AdminService {
         latitude: data.latitude,
         longitude: data.longitude,
         isFeatured: data.isFeatured ?? false,
+        isPublished: data.isPublished ?? true,
       },
       include: {
         registrations: { select: { id: true } },
@@ -1167,6 +1169,7 @@ export class AdminService {
     latitude: number;
     longitude: number;
     isFeatured: boolean;
+    isPublished: boolean;
   }>) {
     const updateData: any = { ...data };
     if (data.startDatetime) {
@@ -1224,3 +1227,4 @@ export class AdminService {
     });
   }
 }
+

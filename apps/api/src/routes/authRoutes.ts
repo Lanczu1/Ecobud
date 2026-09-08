@@ -10,12 +10,14 @@ import { resolveLiveStreak } from '../utils/gamificationUtils';
 import nodemailer from 'nodemailer';
 import { emailRegistrationSchema } from '../security/emailValidator';
 import { LoginAttemptTracker } from '../security/loginAttemptTracker';
+import { verifyGoogleIdentity } from '../security/googleIdentity';
+import { emailCodeHash } from '../security/emailChange';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.GMAIL_USER || 'demo@gmail.com',
-    pass: process.env.GMAIL_PASS || 'demo1234',
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
   },
 });
 
@@ -40,7 +42,8 @@ const otpLimiter = rateLimit({
 const passwordComplexitySchema = z
   .string()
   .min(8, 'Password must be at least 8 characters long.')
-  .max(128, 'Password must not exceed 128 characters.')
+  .max(72, 'Password must not exceed 72 characters.')
+  .refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be at most 72 bytes.')
   .regex(/[a-zA-Z]/, 'Password must contain at least one letter.')
   .regex(/[0-9]/, 'Password must contain at least one number.');
 
@@ -73,6 +76,7 @@ const toAuthResponse = (user: {
   id: string;
   name: string;
   email: string;
+  sessionVersion: number;
   role: AccessRole;
   status: 'active' | 'pending' | 'suspended';
   points: number;
@@ -87,6 +91,7 @@ const toAuthResponse = (user: {
     role: user.role,
     status: user.status,
     city: user.profile?.city ?? null,
+    sessionVersion: user.sessionVersion,
   });
 
   return {
@@ -151,10 +156,11 @@ const emailCheckSchema = z.object({
 authRoutes.get(
   '/check-email',
   errorBoundary(async (req, res) => {
-    const { email } = emailCheckSchema.parse(req.query);
-    const normalizedEmail = email.trim().toLowerCase();
+    const authorization = req.headers.authorization;
+    if (!authorization?.startsWith('Bearer ')) throw new HttpError(401, 'Verified Google authentication is required.');
+    const identity = await verifyGoogleIdentity(authorization.slice(7));
     const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
+      where: { email: identity.email },
       include: { profile: true },
     });
 
@@ -182,12 +188,14 @@ authRoutes.post(
       throw new HttpError(409, 'That username is already taken. Please choose another one.');
     }
 
+    const attempt = await prisma.otpCode.updateMany({ where: { email: payload.email, attempts: { lt: 5 }, expiresAt: { gt: new Date() } }, data: { attempts: { increment: 1 } } });
+    if (attempt.count !== 1) throw new HttpError(400, 'Verification code expired or attempt limit reached. Request a new code.');
     const otpRecord = await prisma.otpCode.findUnique({ where: { email: payload.email } });
     if (!otpRecord) {
       throw new HttpError(400, 'No verification code requested for this email.');
     }
 
-    if (otpRecord.code !== payload.otpCode) {
+    if (otpRecord.code !== emailCodeHash(payload.email, payload.otpCode)) {
       throw new HttpError(400, 'Invalid verification code.');
     }
 
@@ -196,7 +204,8 @@ authRoutes.post(
     }
 
     // Clean up used OTP
-    await prisma.otpCode.delete({ where: { email: payload.email } });
+    const consumed = await prisma.otpCode.deleteMany({ where: { email: payload.email, code: otpRecord.code, expiresAt: { gt: new Date() } } });
+    if (consumed.count !== 1) throw new HttpError(400, 'Verification code already used.');
 
     const passwordHash = await PasswordService.hash(payload.password);
     const user = await prisma.user.create({
@@ -206,6 +215,7 @@ authRoutes.post(
         passwordHash,
         role: 'user',
         status: 'active',
+        verifiedAt: new Date(),
         stats: {
           create: {
             currentStreak: 0,
@@ -244,16 +254,17 @@ authRoutes.post(
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
-      throw new HttpError(409, 'An ECOBUD account already exists for this email.');
+      return res.json({ success: true, message: 'If this email can be registered, a verification code has been sent.' });
     }
 
     const code = crypto.randomInt(100000, 1000000).toString();
+    const storedCode = emailCodeHash(email, code);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     await prisma.otpCode.upsert({
       where: { email },
-      update: { code, expiresAt },
-      create: { email, code, expiresAt },
+      update: { code: storedCode, expiresAt, attempts: 0 },
+      create: { email, code: storedCode, expiresAt },
     });
 
     try {
@@ -284,11 +295,12 @@ authRoutes.post(
         `,
       });
     } catch (e) {
-      console.error('Failed to send OTP email', e);
-      // Even if mock email fails, we return success for demo purporses if no valid credentials
+      console.error('OTP email delivery failed.');
+      await prisma.otpCode.deleteMany({ where: { email, code: storedCode } });
+      throw new HttpError(503, 'Verification email could not be sent. Please try again later.');
     }
 
-    return res.json({ success: true, message: 'OTP sent successfully.' });
+    return res.json({ success: true, message: 'If this email can be registered, a verification code has been sent.' });
   }),
 );
 
@@ -308,7 +320,7 @@ authRoutes.post(
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: payload.email },
+      where: { email: normalizedEmail },
       include: { profile: true },
     });
 
@@ -342,19 +354,17 @@ authRoutes.post(
 );
 
 const googleAuthSchema = z.object({
-  idToken: z.string().min(1).optional(),
-  email: z.string().email(),
-  displayName: z.string().optional(),
-  avatarUrl: z.string().optional(),
-  city: z.string().optional(),
+  accessToken: z.string().min(1).max(16384),
+  city: z.string().trim().min(1).max(80).optional(),
 });
 
 authRoutes.post(
   '/google',
   errorBoundary(async (req, res) => {
     const payload = googleAuthSchema.parse(req.body);
-    const normalizedEmail = payload.email.trim().toLowerCase();
-    const displayName = payload.displayName?.trim() || normalizedEmail.split('@')[0] || 'EcoBud User';
+    const identity = await verifyGoogleIdentity(payload.accessToken);
+    const normalizedEmail = identity.email;
+    const displayName = identity.name;
 
     let user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -374,10 +384,12 @@ authRoutes.post(
       user = await prisma.user.create({
         data: {
           email: normalizedEmail,
+          googleIdentityId: identity.id,
           passwordHash: randomPasswordHash,
           name: uniqueDisplayName,
           role: 'user',
           status: 'active',
+          verifiedAt: new Date(),
           stats: {
             create: {
               currentStreak: 0,
@@ -394,7 +406,7 @@ authRoutes.post(
           profile: {
             create: {
               displayName: uniqueDisplayName,
-              avatarUrl: payload.avatarUrl || null,
+              avatarUrl: identity.avatarUrl,
               city: payload.city?.trim() || 'Brgy. Poblacion',
               headline: 'Growing sustainable habits with EcoBud.',
             },
@@ -405,8 +417,15 @@ authRoutes.post(
         },
       });
     } else {
+      if (user.role !== 'user' || (user.googleIdentityId && user.googleIdentityId !== identity.id) ||
+          (!user.googleIdentityId && !identity.canLinkByEmail)) {
+        throw new HttpError(403, 'Use your password to sign in to this account.');
+      }
       if (user.status !== 'active') {
         throw new HttpError(403, getInactiveStatusMessage(user.status));
+      }
+      if (!user.googleIdentityId) {
+        user = await prisma.user.update({ where: { id: user.id }, data: { googleIdentityId: identity.id }, include: { profile: true } });
       }
       // For existing accounts, do not overwrite their displayName or avatarUrl,
       // so their avatar continues to use their custom username / initial (e.g. 'L' for 'Lanczu2').
@@ -421,4 +440,3 @@ authRoutes.post(
 );
 
 export { authRoutes };
-

@@ -34,6 +34,27 @@ export function MarketplaceHubView({
   const [showAcceptedDialog, setShowAcceptedDialog] = useState(false);
   const [conversations, setConversations] = useState<SwapConversation[]>([]);
 
+  useEffect(() => {
+    const target = model.notificationDestination;
+    const session = model.session;
+    if (!target || !session) return;
+
+    let alive = true;
+    swapService.init(session.token);
+    void (async () => {
+      if (['chat', 'conversation', 'swap_request'].includes(target.type)) {
+        const all = await swapService.fetchConversations(session.user.id);
+        const conversation = all.find(item => item.id === target.id || item.swapRequestId === target.id);
+        if (alive && conversation) { setSelectedConversation(conversation); setScreen('chat'); }
+        else if (alive) { setFeedTab('chats'); }
+      } else {
+        const listing = await swapService.fetchListingById(target.id);
+        if (alive && listing) { setSelectedListing(listing); setScreen('detail'); }
+      }
+    })().catch(() => { if (alive) Alert.alert('Content unavailable', 'This item may no longer be available.'); }).finally(() => { if (alive) model.setNotificationDestination(null); });
+    return () => { alive = false; };
+  }, [model.notificationDestination, model.session?.token]);
+
   const currentUserId = model.session?.user.id || '';
   const token = model.session?.token || '';
 
@@ -335,3 +356,5 @@ const localStyles = StyleSheet.create({
     backgroundColor: ecoTheme.colors.background,
   },
 });
+
+

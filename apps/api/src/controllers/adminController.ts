@@ -32,7 +32,7 @@ export class AdminController {
       const lessons = await AdminService.getAllLessons();
       return res.status(200).json(lessons);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to retrieve lessons.", error: error.message });
+      return res.status(500).json({ message: "Failed to retrieve lessons." });
     }
   }
 
@@ -135,7 +135,7 @@ export class AdminController {
       });
       return res.status(201).json(lesson);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to create lesson.", error: error.message });
+      return res.status(500).json({ message: "Failed to create lesson." });
     }
   }
 
@@ -263,7 +263,7 @@ export class AdminController {
       const lesson = await AdminService.updateLesson(id, updateData);
       return res.status(200).json(lesson);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to update lesson.", error: error.message });
+      return res.status(500).json({ message: "Failed to update lesson." });
     }
   }
 
@@ -281,7 +281,7 @@ export class AdminController {
       );
       return res.status(200).json({ transcript, videoUrl });
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to transcribe video.", error: error.message });
+      return res.status(500).json({ message: "Failed to transcribe video." });
     } finally {
       if (file && fs.existsSync(file.path)) {
         try { fs.unlinkSync(file.path); } catch {}
@@ -300,7 +300,7 @@ export class AdminController {
       await AdminService.deleteLesson(id);
       return res.status(204).send();
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to delete lesson.", error: error.message });
+      return res.status(500).json({ message: "Failed to delete lesson." });
     }
   }
 
@@ -316,7 +316,7 @@ export class AdminController {
       const lesson = await AdminService.togglePublish(id, is_published);
       return res.status(200).json(lesson);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to toggle publish status.", error: error.message });
+      return res.status(500).json({ message: "Failed to toggle publish status." });
     }
   }
 
@@ -332,7 +332,7 @@ export class AdminController {
       const lesson = await AdminService.toggleFeature(id, featured);
       return res.status(200).json(lesson);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to toggle featured status.", error: error.message });
+      return res.status(500).json({ message: "Failed to toggle featured status." });
     }
   }
 
@@ -343,7 +343,7 @@ export class AdminController {
       await AdminService.resetUserKnowledge(userId);
       return res.status(200).json({ message: "User knowledge points reset to 0." });
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to reset user knowledge points.", error: error.message });
+      return res.status(500).json({ message: "Failed to reset user knowledge points." });
     }
   }
 
@@ -352,7 +352,7 @@ export class AdminController {
       const users = await AdminService.getUsers();
       return res.status(200).json(users);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to retrieve users.", error: error.message });
+      return res.status(500).json({ message: "Failed to retrieve users." });
     }
   }
 
@@ -362,7 +362,7 @@ export class AdminController {
       await AdminService.blockUser(userId, req.auth!.userId);
       return res.status(200).json({ message: "User blocked successfully." });
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to block user.", error: error.message });
+      return res.status(500).json({ message: "Failed to block user." });
     }
   }
 
@@ -372,7 +372,7 @@ export class AdminController {
       await AdminService.unblockUser(userId, req.auth!.userId);
       return res.status(200).json({ message: "User unblocked successfully." });
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to unblock user.", error: error.message });
+      return res.status(500).json({ message: "Failed to unblock user." });
     }
   }
 
@@ -382,7 +382,7 @@ export class AdminController {
       const items = await AdminService.getAllChallenges();
       return res.status(200).json(items);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to fetch challenges.", error: error.message });
+      return res.status(500).json({ message: "Failed to fetch challenges." });
     }
   }
 
@@ -396,7 +396,7 @@ export class AdminController {
       const item = await AdminService.createChallenge({ ...req.body, ...settings.data });
       return res.status(201).json(item);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to create challenge.", error: error.message });
+      return res.status(500).json({ message: "Failed to create challenge." });
     }
   }
 
@@ -412,7 +412,7 @@ export class AdminController {
       const item = await AdminService.updateChallenge(req.params.id, { ...req.body, ...settings.data });
       return res.status(200).json(item);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to update challenge.", error: error.message });
+      return res.status(500).json({ message: "Failed to update challenge." });
     }
   }
 
@@ -421,7 +421,7 @@ export class AdminController {
       await AdminService.deleteChallenge(req.params.id);
       return res.status(204).send();
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to delete challenge.", error: error.message });
+      return res.status(500).json({ message: "Failed to delete challenge." });
     }
   }
 
@@ -452,7 +452,7 @@ export class AdminController {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}
       }
-      return res.status(500).json({ message: "Failed to upload image.", error: error.message });
+      return res.status(500).json({ message: "Failed to upload image." });
     }
   }
 
@@ -464,7 +464,7 @@ export class AdminController {
       await safelyDeleteUpload(url);
       return res.json({ message: 'Image deleted successfully' });
     } catch (error: any) {
-      return res.status(500).json({ message: 'Failed to delete image', error: error.message });
+      return res.status(500).json({ message: 'Failed to delete image' });
     }
   }
 
@@ -473,7 +473,7 @@ export class AdminController {
       const stats = await AdminService.getDashboardStats();
       return res.status(200).json(stats);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to fetch dashboard stats.", error: error.message });
+      return res.status(500).json({ message: "Failed to fetch dashboard stats." });
     }
   }
 
@@ -489,7 +489,7 @@ export class AdminController {
       const items = await AdminService.getSubmissions(filterBarangay);
       return res.status(200).json(items);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to fetch submissions.", error: error.message });
+      return res.status(500).json({ message: "Failed to fetch submissions." });
     }
   }
 
@@ -515,7 +515,7 @@ export class AdminController {
       if (error.message === 'Submission not found') {
         return res.status(404).json({ message: "Submission not found." });
       }
-      return res.status(500).json({ message: "Failed to review submission.", error: error.message });
+      return res.status(500).json({ message: "Failed to review submission." });
     }
   }
 
@@ -574,7 +574,7 @@ export class AdminController {
       if (error.message === 'UNAUTHORIZED_BARANGAY_ACCESS') {
         return res.status(403).json({ message: "Forbidden: You cannot delete submissions outside your assigned barangay." });
       }
-      return res.status(500).json({ message: "Failed to delete submission.", error: error.message });
+      return res.status(500).json({ message: "Failed to delete submission." });
     }
   }
 
@@ -583,7 +583,7 @@ export class AdminController {
       const items = await AdminService.getAuditLogs();
       return res.status(200).json(items);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to fetch audit logs.", error: error.message });
+      return res.status(500).json({ message: "Failed to fetch audit logs." });
     }
   }
 
@@ -592,7 +592,7 @@ export class AdminController {
       await AdminService.clearAuditLogs();
       return res.status(200).json({ message: "Audit logs cleared successfully." });
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to clear audit logs.", error: error.message });
+      return res.status(500).json({ message: "Failed to clear audit logs." });
     }
   }
 
@@ -602,13 +602,14 @@ export class AdminController {
       const items = await AdminService.getAllEvents();
       return res.status(200).json(items);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to fetch events.", error: error.message });
+      return res.status(500).json({ message: "Failed to fetch events." });
     }
   }
 
   static async createEvent(req: AuthenticatedRequest, res: Response) {
     try {
       const payload = { ...req.body };
+      if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
       if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
       if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
       if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
@@ -639,13 +640,14 @@ export class AdminController {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}
       }
-      return res.status(500).json({ message: "Failed to create event.", error: error.message });
+      return res.status(500).json({ message: "Failed to create event." });
     }
   }
 
   static async updateEvent(req: AuthenticatedRequest, res: Response) {
     try {
       const payload = { ...req.body };
+      if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
       if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
       if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
       if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
@@ -687,7 +689,7 @@ export class AdminController {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}
       }
-      return res.status(500).json({ message: "Failed to update event.", error: error.message });
+      return res.status(500).json({ message: "Failed to update event." });
     }
   }
 
@@ -699,7 +701,7 @@ export class AdminController {
       await AdminService.deleteEvent(req.params.id);
       return res.status(204).send();
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to delete event.", error: error.message });
+      return res.status(500).json({ message: "Failed to delete event." });
     }
   }
 
@@ -709,7 +711,7 @@ export class AdminController {
       if (!qrCode) return res.status(404).json({ message: 'No QR code generated yet.' });
       return res.status(200).json(qrCode);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to get QR code.", error: error.message });
+      return res.status(500).json({ message: "Failed to get QR code." });
     }
   }
 
@@ -718,7 +720,8 @@ export class AdminController {
       const qrCode = await AdminService.generateEventQr(req.params.id);
       return res.status(201).json(qrCode);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to generate QR code.", error: error.message });
+      return res.status(500).json({ message: "Failed to generate QR code." });
     }
   }
 }
+

@@ -26,7 +26,7 @@ interface RealtimeSignalInput {
 interface RealtimeNoticeInput {
   level?: 'info' | 'success' | 'warning';
   message: string;
-  scope: 'moderation' | 'learn' | 'challenge' | 'tracker';
+  scope: 'notifications' | 'moderation' | 'learn' | 'challenge' | 'tracker';
   title: string;
 }
 
@@ -300,3 +300,4 @@ class SupabaseRealtimeService {
 }
 
 export const supabaseRealtimeService = new SupabaseRealtimeService();
+

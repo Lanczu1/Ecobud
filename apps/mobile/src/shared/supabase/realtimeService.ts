@@ -15,7 +15,7 @@ interface RealtimeNotice {
   level?: 'info' | 'success' | 'warning';
   message: string;
   revision: number;
-  scope: 'moderation' | 'learn' | 'challenge' | 'tracker';
+  scope: 'notifications' | 'moderation' | 'learn' | 'challenge' | 'tracker';
   title: string;
   updatedAt: string;
 }
@@ -203,3 +203,4 @@ export const realtimeService = {
     }
   },
 };
+
