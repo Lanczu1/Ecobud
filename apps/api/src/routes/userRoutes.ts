@@ -9,6 +9,7 @@ import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { PasswordService } from '../security/passwordService';
 import { TokenService } from '../security/tokenService';
+import { emailChangeKey, emailCodeHash, sendEmailChangeCode } from '../security/emailChange';
 import path from 'path';
 import fs from 'fs';
 
@@ -33,7 +34,8 @@ const preferenceSchema = z.object({
 const securitySchema = z.object({
   currentPassword: z.string().min(1).max(100),
   newEmail: z.string().email().optional(),
-  newPassword: z.string().min(8).max(100, 'New password cannot exceed 100 characters.').optional(),
+  emailCode: z.string().regex(/^\d{6}$/).optional(),
+  newPassword: z.string().min(8).max(72).regex(/[a-zA-Z]/).regex(/[0-9]/).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be at most 72 bytes.').optional(),
 });
 
 userRoutes.get(
@@ -119,6 +121,9 @@ userRoutes.patch(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const payload = preferenceSchema.parse(req.body);
+    if (req.auth!.role !== 'user' && payload.city !== undefined && payload.city !== req.auth!.city) {
+      throw new HttpError(403, 'Privileged account jurisdictions cannot be changed through profile preferences.');
+    }
 
     const currentUser = await prisma.user.findUnique({
       where: { id: req.auth!.userId },
@@ -131,12 +136,7 @@ userRoutes.patch(
     if (payload.email) {
       normalizedEmail = payload.email.toLowerCase().trim();
       if (normalizedEmail !== currentUser.email) {
-        const existingUser = await prisma.user.findUnique({
-          where: { email: normalizedEmail },
-        });
-        if (existingUser && existingUser.id !== req.auth!.userId) {
-          throw new HttpError(409, 'This email is already in use by another account.');
-        }
+        throw new HttpError(400, 'Change your email through security settings with password confirmation and email verification.');
       }
     }
 
@@ -180,6 +180,7 @@ userRoutes.patch(
         email: updatedUser.email,
         role: updatedUser.role,
         status: updatedUser.status,
+        sessionVersion: updatedUser.sessionVersion,
       });
 
       return {
@@ -242,10 +243,26 @@ userRoutes.post(
           fs.unlinkSync(req.file.path);
         }
       } catch {}
-      throw new HttpError(500, `Failed to upload avatar: ${error.message}`);
+      throw new HttpError(500, 'Failed to upload avatar.');
     }
   }),
 );
+
+userRoutes.post('/me/email-code', authenticateRequest, requireUserAccess, securityUpdateLimiter,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const payload = z.object({ currentPassword: z.string().min(1).max(128), newEmail: z.string().trim().toLowerCase().email() }).parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+    if (!user || !await PasswordService.compare(payload.currentPassword, user.passwordHash)) throw new HttpError(401, 'Incorrect current password.');
+    if (await prisma.user.findUnique({ where: { email: payload.newEmail } })) throw new HttpError(409, 'This email cannot be used.');
+    await sendEmailChangeCode(user.id, payload.newEmail);
+    return res.json({ success: true });
+  }));
+
+userRoutes.post('/me/logout-all', authenticateRequest, requireUserAccess,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    await prisma.user.update({ where: { id: req.auth!.userId }, data: { sessionVersion: { increment: 1 } } });
+    return res.status(204).end();
+  }));
 
 userRoutes.patch(
   '/me/security',
@@ -275,6 +292,13 @@ userRoutes.patch(
           throw new HttpError(409, 'This email is already in use by another account.');
         }
         updateData.email = normalizedEmail;
+        if (!payload.emailCode) throw new HttpError(400, 'Verify the new email using its six-digit code.');
+        const attempted = await prisma.otpCode.updateMany({
+          where: { email: emailChangeKey(user.id, normalizedEmail), attempts: { lt: 5 }, expiresAt: { gt: new Date() } },
+          data: { attempts: { increment: 1 } },
+        });
+        if (attempted.count !== 1) throw new HttpError(400, 'Email code expired or attempt limit reached. Request a new code.');
+        updateData.googleIdentityId = null;
       }
     }
 
@@ -284,9 +308,16 @@ userRoutes.patch(
 
     let updatedUser = user;
     if (Object.keys(updateData).length > 0) {
-      updatedUser = await prisma.user.update({
-        where: { id: req.auth!.userId },
-        data: updateData,
+      updatedUser = await prisma.$transaction(async tx => {
+        if (updateData.email) {
+          const key = emailChangeKey(user.id, updateData.email);
+          const consumed = await tx.otpCode.deleteMany({ where: { email: key, code: emailCodeHash(key, payload.emailCode!), expiresAt: { gt: new Date() } } });
+          if (consumed.count !== 1) throw new HttpError(400, 'Invalid or expired email verification code.');
+        }
+        return tx.user.update({
+          where: { id: user.id, sessionVersion: user.sessionVersion },
+          data: { ...updateData, sessionVersion: { increment: 1 } },
+        });
       });
     }
 
@@ -296,6 +327,7 @@ userRoutes.patch(
       email: updatedUser.email,
       role: updatedUser.role,
       status: updatedUser.status,
+      sessionVersion: updatedUser.sessionVersion,
     });
 
     return res.json({

@@ -25,6 +25,10 @@ export const errorResponder = (
   }
 
   if (error instanceof HttpError) {
+    if (error.statusCode === 500) {
+      console.error('Internal request failure.');
+      return res.status(500).json({ message: 'Unexpected server error.' });
+    }
     return res.status(error.statusCode).json({ message: error.message });
   }
 

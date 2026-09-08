@@ -120,6 +120,12 @@ export interface CommunityImpactCardProps {
  * The consolidated state and handlers returned by the useHomeDashboard hook.
  */
 export interface EcoBudMobileModel {
+  notificationDestination: {type:string;id:string} | null;
+  setNotificationDestination: (value:{type:string;id:string}|null) => void;
+  pendingNotificationId: string | null;
+  setPendingNotificationId: (id:string|null) => void;
+  focusedEventId: string | null;
+  setFocusedEventId: (id:string|null) => void;
   initializing: boolean;
   booting: boolean;
   isHydrating: boolean;
@@ -240,7 +246,7 @@ export interface EcoBudMobileModel {
   handleClaimChallengeReward: (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => Promise<void>;
   handleUpdateProfileImage: (uri: string) => Promise<any>;
   handleUpdateProfile: (payload: { displayName?: string; email?: string; city?: string }) => Promise<void>;
-  handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => Promise<void>;
+  handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; emailCode?: string; newPassword?: string }) => Promise<void>;
   coachMarksCurrentStep: number;
   setCoachMarksCurrentStep: (step: number) => void;
   coachMarksVisible: boolean;
@@ -257,4 +263,7 @@ export interface EcoBudMobileModel {
   /** Hardware and gesture back button handler (Facebook-style tab history & overlay pop) */
   handleHardwareBackPress: () => boolean;
 }
+
+
+
 

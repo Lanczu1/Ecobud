@@ -29,6 +29,7 @@ eventRoutes.get(
     }
 
     const events = await prisma.event.findMany({
+      where: { isPublished: true },
       include: {
         _count: {
           select: { registrations: true }
@@ -91,7 +92,7 @@ eventRoutes.post(
       include: { registrations: true },
     });
 
-    if (!event) {
+    if (!event || !event.isPublished) {
       throw new HttpError(404, 'Event not found.');
     }
 
@@ -165,7 +166,7 @@ eventRoutes.post(
       include: { registrations: true },
     });
 
-    if (!event) {
+    if (!event || !event.isPublished) {
       throw new HttpError(404, 'Event not found.');
     }
 
@@ -255,3 +256,4 @@ eventRoutes.post(
 );
 
 export { eventRoutes };
+

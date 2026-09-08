@@ -19,10 +19,10 @@ adminRoutes.post("/upload/delete", AdminController.deleteImage);
 
 // Lessons Management
 adminRoutes.get("/lessons", AdminController.getLessons);
-adminRoutes.post("/lessons", uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.createLesson);
-adminRoutes.put("/lessons/:id", uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.updateLesson);
+adminRoutes.post("/lessons", requireAdminAccess, uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.createLesson);
+adminRoutes.put("/lessons/:id", requireAdminAccess, uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.updateLesson);
 adminRoutes.delete("/lessons/:id", AdminController.deleteLesson);
-adminRoutes.patch("/lessons/:id/publish", AdminController.patchPublish);
+adminRoutes.patch("/lessons/:id/publish", requireAdminAccess, AdminController.patchPublish);
 adminRoutes.patch("/lessons/:id/feature", AdminController.patchFeature);
 adminRoutes.post("/transcribe", uploadMiddleware.single('video'), AdminController.transcribeVideo);
 
@@ -38,8 +38,8 @@ adminRoutes.post("/users/:userId/unblock", requireAdminAccess, AdminController.u
 
 // Challenges Management
 adminRoutes.get("/challenges", AdminController.getChallenges);
-adminRoutes.post("/challenges", AdminController.createChallenge);
-adminRoutes.put("/challenges/:id", AdminController.updateChallenge);
+adminRoutes.post("/challenges", requireAdminAccess, AdminController.createChallenge);
+adminRoutes.put("/challenges/:id", requireAdminAccess, AdminController.updateChallenge);
 adminRoutes.delete("/challenges/:id", AdminController.deleteChallenge);
 
 // Dashboard Stats
@@ -54,10 +54,11 @@ adminRoutes.delete("/submissions/:id", AdminController.deleteSubmission);
 
 // Events Management
 adminRoutes.get("/events", AdminController.getEvents);
-adminRoutes.post("/events", eventUploadMiddleware.single('image'), AdminController.createEvent);
-adminRoutes.put("/events/:id", eventUploadMiddleware.single('image'), AdminController.updateEvent);
+adminRoutes.post("/events", requireAdminAccess, eventUploadMiddleware.single('image'), AdminController.createEvent);
+adminRoutes.put("/events/:id", requireAdminAccess, eventUploadMiddleware.single('image'), AdminController.updateEvent);
 adminRoutes.delete("/events/:id", AdminController.deleteEvent);
 adminRoutes.get("/events/:id/qr", AdminController.getEventQr);
 adminRoutes.post("/events/:id/qr", AdminController.generateEventQr);
 
 export { adminRoutes };
+

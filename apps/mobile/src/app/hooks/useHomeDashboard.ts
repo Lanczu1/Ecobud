@@ -1,3 +1,4 @@
+import { useNotifications } from './useNotifications';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
 import { homeService } from '../services/homeService';
@@ -76,6 +77,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [isHydrating, setIsHydrating] = useState(false);
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [session, setSession] = useState<SessionPayload | null>(null);
+  const [notificationDestination, setNotificationDestination] = useState<{type:string;id:string}|null>(null);
+  const [pendingNotificationId, setPendingNotificationId] = useState<string|null>(null);
+  const notificationCount = useNotifications(session?.token);
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
+  useEffect(() => { const sub = DeviceEventEmitter.addListener('openNotification', (id: string) => { setActiveOverlayState('notifications'); setPendingNotificationId(id); }); return () => sub.remove(); }, []);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [activeTab, setActiveTabState] = useState<AppTab>('home');
   const [tabHistory, setTabHistory] = useState<AppTab[]>(['home']);
@@ -1044,11 +1050,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      // Check if this google account already exists in database
+      const { data: verifiedSession } = await supabaseClient.auth.getSession();
+      const supabaseAccessToken = verifiedSession.session?.access_token;
+      if (!supabaseAccessToken) throw new Error('Google sign-in session is missing. Please try again.');
+
+      // The backend only returns account information for the verified identity.
       let userExists = false;
       let existingCity: string | null = null;
       try {
-        const checkResult = await homeService.checkEmail(authEmail);
+        const checkResult = await homeService.checkEmail(authEmail, supabaseAccessToken);
         userExists = Boolean(checkResult.exists);
         existingCity = checkResult.city ?? null;
       } catch (err) {
@@ -1060,6 +1070,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           setAuthLoading(true);
           try {
             const nextSession = await homeService.googleLogin({
+              accessToken: supabaseAccessToken,
               email: authEmail,
               displayName: authDisplayName,
               avatarUrl: authAvatarUrl,
@@ -1238,7 +1249,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
             return;
           }
 
-          Alert.alert(notice.title, notice.message);
+          DeviceEventEmitter.emit('notificationsChanged');
+          DeviceEventEmitter.emit('notificationsInboxRefresh');
+          if (notice.scope !== 'notifications') Alert.alert(notice.title, notice.message);
           queueRealtimeRefresh(`notice:${notice.scope}`);
         },
         onSignal: (signal) => {
@@ -2124,18 +2137,19 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
   }, [ensureSession, runWithActionLoader, persistSession]);
 
-  const handleUpdateSecuritySettings = useCallback(async (payload: { currentPassword: string; newEmail?: string; newPassword?: string }) => {
+  const handleUpdateSecuritySettings = useCallback(async (payload: { currentPassword: string; newEmail?: string; emailCode?: string; newPassword?: string }) => {
     await runWithActionLoader('Updating security settings...', async () => {
       try {
         const activeSession = ensureSession();
-        await homeService.updateSecuritySettings(activeSession.token, payload);
-        if (payload.newEmail) {
-          // Update local session
+        const result = await homeService.updateSecuritySettings(activeSession.token, payload);
+        {
+          // Persist the replacement token after old sessions are revoked.
           const updatedSession = {
             ...activeSession,
+            token: result.token,
             user: {
               ...activeSession.user,
-              email: payload.newEmail,
+              email: payload.newEmail || activeSession.user.email,
             }
           };
           await persistSession(updatedSession);
@@ -2217,7 +2231,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     userDisplayName,
     hasUsableInternet: presence.hasUsableInternet,
     isUserOnline,
-    notificationCount: Math.min(9, events.length),
+    notificationCount, notificationDestination, setNotificationDestination, focusedEventId, setFocusedEventId, pendingNotificationId, setPendingNotificationId,
     challengesViewMode,
     setChallengesViewMode,
     setActiveTab,
@@ -2281,3 +2295,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
   };
 
 }
+
+
+

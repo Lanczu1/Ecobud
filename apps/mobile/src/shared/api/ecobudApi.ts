@@ -1,3 +1,4 @@
+import type { NotificationPage } from '../../app/types/notifications';
 import Constants from 'expo-constants';
 import { NativeModules, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -561,19 +562,25 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
 };
 
 export const ecobudApi = {
+  notification: (token:string,id:string) => request<import('../../app/types/notifications').AppNotification>('/notifications/'+encodeURIComponent(id),{token}),
+  notifications: (token:string, query='') => request<NotificationPage>('/notifications'+query,{token}),
+  readNotification: (token:string,id:string) => request('/notifications/'+encodeURIComponent(id)+'/read',{token,method:'PATCH'}),
+  readAllNotifications: (token:string) => request('/notifications/read-all',{token,method:'PATCH'}),
+  registerPush: (token:string,deviceToken:string) => request('/notifications/devices',{token,method:'POST',body:{token:deviceToken}}),
+  unregisterPush: (token:string,deviceToken:string) => request('/notifications/devices',{token,method:'DELETE',body:{token:deviceToken}}),
   login: (email: string, password: string) =>
     request<SessionPayload>('/auth/login', {
       method: 'POST',
       body: { email, password },
     }),
-  googleLogin: (payload: { idToken?: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
+  googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
     request<SessionPayload>('/auth/google', {
       method: 'POST',
       body: payload,
     }),
-  checkEmailExists: (email: string) =>
+  checkEmailExists: (email: string, accessToken: string) =>
     request<{ exists: boolean; hasCity: boolean; city?: string | null }>(
-      `/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+      '/auth/check-email', { token: accessToken },
     ),
   checkUsernameAvailability: (displayName: string) =>
     request<{ available: boolean; message: string }>(
@@ -701,12 +708,14 @@ export const ecobudApi = {
       token,
       body: payload,
     }),
-  updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; newPassword?: string }) =>
-    request<{ success: boolean; message: string }>('/users/me/security', {
+  updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; emailCode?: string; newPassword?: string }) =>
+    request<{ success: boolean; message: string; token: string }>('/users/me/security', {
       method: 'PATCH',
       token,
       body: payload,
     }),
+  sendEmailChangeCode: (token: string, currentPassword: string, newEmail: string) =>
+    request<{ success: boolean }>('/users/me/email-code', { method: 'POST', token, body: { currentPassword, newEmail } }),
   fetchRewards: (token: string) =>
     request<RewardsData>('/experience/rewards', { token }),
   fetchLeaderboard: (token: string) =>
@@ -815,3 +824,5 @@ export const ecobudApi = {
 };
 
 export const ecobudApiOrigin = apiOrigin;
+
+

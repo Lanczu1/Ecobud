@@ -43,6 +43,9 @@ const createLogRecord = (
 };
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error('Destructive demo seeding requires ALLOW_DEMO_SEED=true and is forbidden in production.');
+  }
   await prisma.presenceSession.deleteMany();
   await prisma.habitCheckIn.deleteMany();
   await prisma.challengeSubmission.deleteMany();
@@ -90,38 +93,38 @@ async function main() {
     'Abo', 'Alibungbungan', 'Alumbrado', 'Balayong', 'Balimbing', 'Balinacon', 'Bambang', 'Banago', 'Banca-banca', 'Bangcuro', 'Banilad', 'Bayaquitos', 'Buboy', 'Buenavista', 'Buhanginan', 'Bukal', 'Bunga', 'Cabuyew', 'Calumpang', 'Kanluran Kabubuhayan', 'Silangan Kabubuhayan', 'Labangan', 'Lawaguin', 'Kanluran Lazaan', 'Silangan Lazaan', 'Lagulo', 'Maiit', 'Malaya', 'Malinao', 'Manaol', 'Maravilla', 'Nagcalbang', 'Poblacion I (Poblacion)', 'Poblacion II (Poblacion)', 'Poblacion III (Poblacion)', 'Oples', 'Palayan', 'Palina', 'Sabang', 'San Francisco', 'Sibulan', 'Silangan Napapatid', 'Silangan Ilaya', 'Sinipian', 'Santa Lucia', 'Sulsuguin', 'Talahib', 'Talangan', 'Taytay', 'Tipacan', 'Wakat', 'Yukos'
   ];
 
-  const moderators = await Promise.all(
-    BARANGAYS.map((barangay) => {
-      const emailPrefix = barangay.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-      const email = barangay === 'Abo'
-        ? 'moderator@ecobud.app'
-        : barangay === 'Yukos'
-        ? 'moderator.yukos@ecobud.app'
-        : `moderator.${emailPrefix}@ecobud.app`;
+  const moderators = [];
+  for (const barangay of BARANGAYS) {
+    const emailPrefix = barangay.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const email = barangay === 'Abo'
+      ? 'moderator.abo@ecobud.app'
+      : barangay === 'Yukos'
+      ? 'moderator.yukos@ecobud.app'
+      : `moderator.${emailPrefix}@ecobud.app`;
 
-      return prisma.user.create({
-        data: {
-          name: `${barangay} Moderator`,
-          email,
-          passwordHash: moderatorPassword,
-          role: 'moderator',
-          status: 'active',
-          points: 240,
-          currentStreak: 3,
-          lastActionDate: new Date(),
-          profile: {
-            create: {
-              displayName: `${barangay} Moderator`,
-              headline: `Community moderator for Barangay ${barangay}.`,
-              city: barangay,
-            },
+    const newModerator = await prisma.user.create({
+      data: {
+        name: `${barangay} Moderator`,
+        email,
+        passwordHash: moderatorPassword,
+        role: 'moderator',
+        status: 'active',
+        points: 240,
+        currentStreak: 3,
+        lastActionDate: new Date(),
+        profile: {
+          create: {
+            displayName: `${barangay} Moderator`,
+            headline: `Community moderator for Barangay ${barangay}.`,
+            city: barangay,
           },
         },
-      });
-    })
-  );
+      },
+    });
+    moderators.push(newModerator);
+  }
 
-  const moderator = moderators.find((m) => m.email === 'moderator@ecobud.app')!;
+  const moderator = moderators.find((m) => m.email === 'moderator.abo@ecobud.app')!;
 
   await prisma.userStats.createMany({
     data: [
@@ -165,16 +168,17 @@ async function main() {
     ['Giveaway Master', 'Host 10 giveaways to earn this badge', 'https://cdn-icons-png.flaticon.com/512/3229/3229053.png', 999999, '#F59E0B'],
   ] as const;
 
-  const badges = await Promise.all(
-    badgeData.map(([name, description, iconUrl, requiredPoints, accentColor]) =>
-      prisma.badge.create({
+  const badges = [];
+  for (const [name, description, iconUrl, requiredPoints, accentColor] of badgeData) {
+    badges.push(
+      await prisma.badge.create({
         data: { name, description, iconUrl, requiredPoints, accentColor },
-      }),
-    ),
-  );
+      })
+    );
+  }
 
-  const lessons = await Promise.all(
-    [
+  const lessons = [];
+  for (const lesson of [
       {
         title: 'Waste Management Basics',
         description: 'Learn how to sort, reduce, and handle household waste correctly.',
@@ -203,11 +207,12 @@ async function main() {
         featured: true,
         isPublished: true,
       },
-    ].map((lesson) => prisma.lesson.create({ data: lesson })),
-  );
+    ]) {
+      lessons.push(await prisma.lesson.create({ data: lesson }));
+  }
 
-  const challenges = await Promise.all(
-    [
+  const challenges = [];
+  for (const challenge of [
       {
         title: '7-Day Waste Segregation Challenge',
         description: 'Properly segregate household waste for an entire week.',
@@ -244,18 +249,22 @@ async function main() {
           'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=80',
         badgeLabel: 'Green Plate',
       },
-    ].map((challenge) => prisma.challenge.create({ data: challenge as any })),
-  );
-  const challengeInstances = await Promise.all(
-    challenges.map((challenge) => prisma.challengeInstance.create({
-      data: {
-        challengeId: challenge.id,
-        startDate: new Date(),
-        endDate: addDays(7),
-        status: 'OPEN',
-      }
-    }))
-  );
+    ]) {
+      challenges.push(await prisma.challenge.create({ data: challenge as any }));
+  }
+  const challengeInstances = [];
+  for (const challenge of challenges) {
+    challengeInstances.push(
+      await prisma.challengeInstance.create({
+        data: {
+          challengeId: challenge.id,
+          startDate: new Date(),
+          endDate: addDays(7),
+          status: 'OPEN',
+        }
+      })
+    );
+  }
 
   const habitData = [
     ['used-reusable-water-bottle', 'Used reusable water bottle', 5],
@@ -265,20 +274,21 @@ async function main() {
     ['refused-single-use-plastic', 'Refused single-use plastic', 5],
   ] as const;
 
-  const habits = await Promise.all(
-    habitData.map(([slug, title, pointsReward]) =>
-      prisma.habit.create({
+  const habits = [];
+  for (const [slug, title, pointsReward] of habitData) {
+    habits.push(
+      await prisma.habit.create({
         data: {
           slug,
           title,
           pointsReward,
         },
-      }),
-    ),
-  );
+      })
+    );
+  }
 
-  const events = await Promise.all(
-    [
+  const events = [];
+  for (const event of [
       {
         title: 'City Park Clean-up Drive',
         description: 'Join volunteers to restore a busy urban park and collect recyclable waste.',
@@ -324,8 +334,9 @@ async function main() {
         latitude: 13.7565,
         longitude: 121.0583,
       },
-    ].map((event) => prisma.event.create({ data: event })),
-  );
+    ]) {
+      events.push(await prisma.event.create({ data: event }));
+  }
 
   const logA = createLogRecord(
     'GENESIS_HASH_ECOBUD',
@@ -387,7 +398,7 @@ async function main() {
   BARANGAYS.forEach((barangay) => {
     const emailPrefix = barangay.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     const email = barangay === 'Abo'
-      ? 'moderator@ecobud.app'
+      ? 'moderator.abo@ecobud.app'
       : barangay === 'Yukos'
       ? 'moderator.yukos@ecobud.app'
       : `moderator.${emailPrefix}@ecobud.app`;

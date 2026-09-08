@@ -1,0 +1,29 @@
+[Unit]
+Description=ECOBUD API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecobud
+Group=ecobud
+WorkingDirectory=/opt/ecobud/apps/api
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=TRUST_PROXY=loopback
+EnvironmentFile=/etc/ecobud/api.env
+ExecStart=/usr/bin/node scripts/start.cjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+LimitNOFILE=4096
+MemoryMax=1G
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import express from 'express';
+import request from 'supertest';
+const m = vi.hoisted(() => ({ db: { user: { findUnique: vi.fn(), create: vi.fn() }, profile: { findFirst: vi.fn() }, otpCode: { updateMany: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() } }, send: vi.fn() }));
+vi.mock('../prismaClient', () => ({ prisma: m.db }));
+vi.mock('nodemailer', () => ({ default: { createTransport: () => ({ sendMail: m.send }) } }));
+vi.mock('../security/passwordService', () => ({ PasswordService: { hash: vi.fn(async () => 'hash') } }));
+import { authRoutes } from './authRoutes';
+import { errorResponder } from '../http/errorResponder';
+import { emailCodeHash } from '../security/emailChange';
+const app = express();
+app.use(express.json());
+app.use('/auth', authRoutes);
+app.use(errorResponder);
+const payload = { email: 'welcome.test@gmail.com', password: 'ExamplePass123', name: 'Eco Tester', city: 'Poblacion', otpCode: '123456' };
+beforeEach(() => { vi.clearAllMocks(); m.db.user.findUnique.mockResolvedValue(null); m.db.profile.findFirst.mockResolvedValue(null); m.db.otpCode.updateMany.mockResolvedValue({ count: 1 }); m.db.otpCode.deleteMany.mockResolvedValue({ count: 1 }); m.db.otpCode.findUnique.mockResolvedValue({ code: emailCodeHash(payload.email, payload.otpCode), expiresAt: new Date(Date.now() + 60000) }); m.db.user.create.mockResolvedValue({ id: 'new-user', name: payload.name, email: payload.email, sessionVersion: 0, role: 'user', status: 'active', points: 0, currentStreak: 0, lastActionDate: null, profile: null }); });
+describe('welcome integration preserves verification', () => {
+    it('preserves the existing OTP email subject, text and HTML verbatim', () => { const source = readFileSync('src/routes/authRoutes.ts', 'utf8'); const start = source.indexOf("subject: 'Your ECOBUD Verification Code'"); const email = source.slice(start, source.indexOf('      });', start)).replace(/\r\n/g, '\n'); expect(createHash('sha256').update(email).digest('hex')).toBe('13a8dff5752ad597bf04f7798e4fa97e85e0e79e823fb9171daa02c1135e024a'); });
+    it('adds the welcome eligibility marker only after successful verification', async () => { await request(app).post('/auth/register').send(payload).expect(201); expect(m.db.user.create.mock.calls[0][0].data.verifiedAt).toBeInstanceOf(Date); expect(m.send).not.toHaveBeenCalled(); });
+    it('does not create a user or welcome marker for an invalid code', async () => { await request(app).post('/auth/register').send({ ...payload, otpCode: '000000' }).expect(400); expect(m.db.user.create).not.toHaveBeenCalled(); expect(m.send).not.toHaveBeenCalled(); });
+    it('does not create a user or welcome marker for expired verification', async () => { m.db.otpCode.updateMany.mockResolvedValue({ count: 0 }); await request(app).post('/auth/register').send(payload).expect(400); expect(m.db.user.create).not.toHaveBeenCalled(); });
+});

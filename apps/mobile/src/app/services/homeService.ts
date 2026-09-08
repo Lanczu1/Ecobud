@@ -18,11 +18,11 @@ export const homeService = {
   login: (email: string, pass: string) =>
     ecobudApi.login(email.trim(), pass),
 
-  googleLogin: (payload: { idToken?: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
+  googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
     ecobudApi.googleLogin(payload),
 
-  checkEmail: (email: string) =>
-    ecobudApi.checkEmailExists(email.trim()),
+  checkEmail: (email: string, accessToken: string) =>
+    ecobudApi.checkEmailExists(email.trim(), accessToken),
 
   register: (email: string, pass: string, username: string, city: string, otpCode: string) =>
     ecobudApi.register(email.trim(), pass, username.trim(), city, otpCode.trim()),
@@ -77,7 +77,7 @@ export const homeService = {
   updateProfile: (token: string, payload: { displayName?: string; email?: string; city?: string }) =>
     ecobudApi.updateProfile(token, payload),
 
-  updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; newPassword?: string }) =>
+  updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; emailCode?: string; newPassword?: string }) =>
     ecobudApi.updateSecuritySettings(token, payload),
 
   // ─── Actions ───────────────────────────────────────────────────────────────────

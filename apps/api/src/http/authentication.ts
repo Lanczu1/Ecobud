@@ -2,6 +2,8 @@ import { NextFunction, Request } from 'express';
 import { Response } from 'express';
 import { prisma } from '../prismaClient';
 import { AccessRole, TokenService, TokenSession } from '../security/tokenService';
+import { JsonWebTokenError } from 'jsonwebtoken';
+import { ZodError } from 'zod';
 
 export interface AuthenticatedRequest extends Request {
   auth?: TokenSession;
@@ -38,6 +40,7 @@ export const authenticateRequest = async (
         email: true,
         role: true,
         status: true,
+        sessionVersion: true,
         profile: {
           select: {
             city: true,
@@ -50,7 +53,7 @@ export const authenticateRequest = async (
       return res.status(401).json({ message: 'The access token is no longer valid.' });
     }
 
-    if (session.email && user.email.toLowerCase() !== session.email.toLowerCase()) {
+    if (session.sessionVersion !== user.sessionVersion || user.email.toLowerCase() !== session.email.toLowerCase()) {
       return res.status(401).json({ message: 'Session credentials have changed. Please log in again.' });
     }
 
@@ -65,11 +68,15 @@ export const authenticateRequest = async (
       role: user.role,
       status: user.status,
       city: user.profile?.city ?? null,
+      sessionVersion: user.sessionVersion,
     };
 
     return next();
-  } catch {
-    return res.status(401).json({ message: 'The access token is invalid or expired.' });
+  } catch (error) {
+    if (error instanceof JsonWebTokenError || error instanceof ZodError) {
+      return res.status(401).json({ message: 'The access token is invalid or expired.' });
+    }
+    return next(error);
   }
 };
 
