@@ -323,6 +323,8 @@ export class GamificationService {
   }
 
   async markEventAttendance(eventId: string, registrationId: string) {
+    // Event claims write balances, reward history, badges, and the ledger together.
+    // Allow those queries to finish on the hosted database before rolling back.
     const result = await this.database.$transaction(async (tx) => {
       const event = await tx.event.findUnique({
         where: { id: eventId },
@@ -352,12 +354,16 @@ export class GamificationService {
         throw new HttpError(400, 'Your attendance photo is still pending admin approval. Please wait for a moderator to review your submission.');
       }
 
-      await tx.eventRegistration.update({
-        where: { id: registrationId },
+      const claimed = await tx.eventRegistration.updateMany({
+        where: { id: registrationId, status: 'ATTENDED' },
         data: {
           status: 'REWARD_CLAIMED',
         },
       });
+
+      if (claimed.count === 0) {
+        return { alreadyCompleted: true, pointsAwarded: 0, awardedBadges: [] };
+      }
 
       return this.awardAction(tx, {
         userId: registration.userId,
@@ -369,14 +375,14 @@ export class GamificationService {
           location: event.location,
         },
       });
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     const userId = 'userId' in result && typeof result.userId === 'string'
       ? result.userId
       : null;
 
     if (userId) {
-      await Promise.all([
+      const refreshResults = await Promise.allSettled([
         supabaseRealtimeService.publishUserSectionRefresh(userId, 'tracker', {
           actorRole: 'moderator',
           entityId: eventId,
@@ -388,6 +394,12 @@ export class GamificationService {
           reason: 'event-attendance-verified',
         }),
       ]);
+      // The reward is already committed; refresh delivery must not turn it into a 500.
+      for (const refresh of refreshResults) {
+        if (refresh.status === 'rejected') {
+          console.error('Event reward refresh failed after claim committed.', refresh.reason);
+        }
+      }
     }
 
     return result;

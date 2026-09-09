@@ -52,8 +52,6 @@ export function LoadingScreenVisual({
         { backgroundColor: theme.colors.background },
         style,
       ]}
-      renderToHardwareTextureAndroid={isAndroid}
-      shouldRasterizeIOS
     >
       <View style={[styles.contentWrap, isLegacyAndroid && styles.contentWrapLegacy]}>
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -76,6 +74,7 @@ export function LoadingScreenVisual({
             source={loadingAnimation}
             autoPlay
             loop={loop}
+            resizeMode="contain"
             onAnimationFinish={onAnimationFinish}
             style={{ width: lottieSize, height: lottieSize, alignSelf: 'center' }}
           />

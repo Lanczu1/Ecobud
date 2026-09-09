@@ -12,8 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { EcoBudMobileModel } from '../types/home';
-import { SurfaceCard, TopNavbar, PrimaryButton, SecondaryButton } from './CommonComponents';
-import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { TopNavbar, PrimaryButton } from './CommonComponents';
+import { useTheme, type ThemeColors } from '../../shared/theme/ecoTheme';
 import { homeService } from '../services/homeService';
 
 interface EventAttendanceOverlayProps {
@@ -23,6 +23,8 @@ interface EventAttendanceOverlayProps {
 }
 
 export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttendanceOverlayProps) {
+  const { theme } = useTheme();
+  const styles = React.useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<'select_image' | 'image_preview' | 'qr' | 'uploading' | 'success'>('select_image');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       <View style={styles.overlayContainer}>
         <TopNavbar model={model} showBack={false} onBack={() => {}} />
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#126027" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Submitting Proof & QR...</Text>
         </View>
       </View>
@@ -110,7 +112,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       <View style={styles.overlayContainer}>
         <TopNavbar model={model} showBack={false} onBack={() => {}} />
         <View style={styles.centerContent}>
-          <Ionicons name="time" size={80} color="#FFD700" />
+          <Ionicons name="time" size={80} color={theme.colors.warning} />
           <Text style={styles.titleText}>Waiting for Approval</Text>
           <Text style={styles.descText}>Your picture and QR code scan have been submitted. An organizer will review it shortly.</Text>
           <PrimaryButton label="Done" onPress={onClose} style={{ marginTop: 24, width: '100%' }} />
@@ -160,7 +162,9 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
                 setMode('qr');
               }
             }} />
-            <SecondaryButton label="Retake/Reselect" onPress={() => setMode('select_image')} />
+            <TouchableOpacity style={styles.reselectButton} onPress={() => setMode('select_image')} accessibilityRole="button">
+              <Text style={styles.reselectText}>Retake/Reselect</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -176,13 +180,13 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
         
         <View style={styles.optionsContainer}>
           <TouchableOpacity style={styles.optionCard} onPress={handlePickImage}>
-            <Ionicons name="images" size={40} color="#126027" />
+            <Ionicons name="images" size={40} color={theme.colors.primary} />
             <Text style={styles.optionTitle}>Upload Photo</Text>
             <Text style={styles.optionDesc}>Upload a photo from your gallery.</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.optionCard} onPress={handleTakePhoto}>
-            <Ionicons name="camera" size={40} color="#126027" />
+            <Ionicons name="camera" size={40} color={theme.colors.primary} />
             <Text style={styles.optionTitle}>Take Photo</Text>
             <Text style={styles.optionDesc}>Snap a real-time photo of your participation.</Text>
           </TouchableOpacity>
@@ -192,11 +196,11 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   overlayContainer: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#F7FAF9',
+    backgroundColor: colors.background,
     zIndex: 9999,
   },
   content: {
@@ -212,13 +216,13 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#1A211D',
+    color: colors.textPrimary,
     marginBottom: 8,
     textAlign: 'center',
   },
   descText: {
     fontSize: 15,
-    color: '#6B7A75',
+    color: colors.textMuted,
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -227,7 +231,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   optionCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.card,
     padding: 20,
     borderRadius: 16,
     alignItems: 'center',
@@ -237,23 +241,28 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  reselectButton: {
+    padding: 16, borderRadius: 18, alignItems: 'center',
+    backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.cardBorder,
+  },
+  reselectText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
   optionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1A211D',
+    color: colors.textPrimary,
     marginTop: 12,
     marginBottom: 4,
   },
   optionDesc: {
     fontSize: 14,
-    color: '#6B7A75',
+    color: colors.textMuted,
     textAlign: 'center',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     fontWeight: '600',
-    color: '#126027',
+    color: colors.primary,
   },
   qrOverlay: {
     flex: 1,
@@ -264,7 +273,7 @@ const styles = StyleSheet.create({
     width: 250,
     height: 250,
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: colors.primary,
     backgroundColor: 'transparent',
   },
   qrText: {
@@ -278,7 +287,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#E0EBE4',
+    backgroundColor: colors.surfaceMuted,
   },
   imagePreview: {
     width: '100%',

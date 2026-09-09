@@ -69,13 +69,19 @@ const getValidImageUrl = (url: string | null | undefined) => {
 // Local components used in Views
 export function BootView({ onFinish }: { onFinish?: () => void }) {
   const { theme, isDark } = useTheme();
+  useEffect(() => {
+    if (!onFinish) return;
+    // Continue if the native animation cannot load or report completion.
+    const timeout = setTimeout(onFinish, 8000);
+    return () => clearTimeout(timeout);
+  }, [onFinish]);
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <LoadingScreenVisual
         label="Growing your EcoBud journey..."
         loop={!onFinish}
-        onAnimationFinish={onFinish ? () => onFinish() : undefined}
+        onAnimationFinish={onFinish ? (isCancelled) => { if (!isCancelled) onFinish(); } : undefined}
       />
     </SafeAreaView>
   );

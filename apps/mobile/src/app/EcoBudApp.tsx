@@ -76,6 +76,13 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const scrollRef = React.useRef<ScrollView>(null);
   const [hideMarketplaceChrome, setHideMarketplaceChrome] = useState(false);
+  const [onboardingAnimationPending, setOnboardingAnimationPending] = useState(false);
+  const finishOnboardingAnimation = useCallback(() => setOnboardingAnimationPending(false), []);
+
+  const handleCompleteOnboarding = useCallback(() => {
+    setOnboardingAnimationPending(true);
+    void model.completeOnboarding();
+  }, [model.completeOnboarding]);
 
   const handleMarketplaceChromeChange = useCallback((hidden: boolean) => {
     setHideMarketplaceChrome(hidden);
@@ -103,12 +110,12 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
 
   let content: React.ReactNode;
 
-  if (model.booting) {
-    content = <BootView />;
+  if (model.booting || onboardingAnimationPending) {
+    content = <BootView onFinish={onboardingAnimationPending ? finishOnboardingAnimation : undefined} />;
   } else if (model.initializing) {
     content = <LaunchBackdrop />;
   } else if (!model.hasOnboarded) {
-    content = <OnboardingView onComplete={model.completeOnboarding} />;
+    content = <OnboardingView onComplete={handleCompleteOnboarding} />;
   } else if (!model.session) {
     content = (
       <AuthView
