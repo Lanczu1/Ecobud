@@ -1582,12 +1582,18 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
     Platform.OS === 'android' ? (isSmall ? 16 : 20) : (isSmall ? 12 : 16)
   );
 
+  // Offset for iOS: status bar (~44) + nav bar (~56) + safe-area top — keeps the
+  // composer flush against the keyboard without overcompensating.
+  const iosKeyboardOffset = Platform.OS === 'ios'
+    ? insets.top + (isSmall ? 94 : 106)
+    : 0;
+
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} title="AI Assistant" />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={iosKeyboardOffset}
         style={{ flex: 1, width: '100%', alignItems: 'center' }}
       >
         <View style={{ flex: 1, width: '100%', maxWidth: maxContainerWidth }}>

@@ -13,6 +13,7 @@ import { LoginAttemptTracker } from '../security/loginAttemptTracker';
 import { verifyGoogleIdentity } from '../security/googleIdentity';
 import { emailCodeHash } from '../security/emailChange';
 import { welcomeEmail } from '../services/welcomeEmail';
+import { sendDirectNotification } from '../services/notificationService';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -243,6 +244,27 @@ authRoutes.post(
       },
     });
 
+    // Fire-and-forget: welcome in-app + push notification
+    void sendDirectNotification({
+      userId: user.id,
+      type: 'system',
+      title: 'Welcome to EcoBud! 🌿',
+      message: "You're now part of a growing community making real environmental impact. Complete challenges, join Eco Events, and earn EXP & Eco-Coins while building greener habits. Let's grow together! 🌱",
+      priority: 'high',
+      notificationKey: `welcome:${user.id}`,
+    }).catch(() => {});
+
+    // Fire-and-forget: welcome email
+    if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+      transporter.sendMail({
+        from: `"ECOBUD" <${process.env.GMAIL_USER}>`,
+        to: user.email,
+        ...welcomeEmail(process.env.ECOBUD_WELCOME_URL || 'ecobud://'),
+      }).catch((err) => {
+        console.error('Failed to send welcome email to new user:', err?.message || err);
+      });
+    }
+
     return res.status(201).json(toAuthResponse(user));
   }),
 );
@@ -428,6 +450,16 @@ authRoutes.post(
           console.error('Failed to send welcome email to new Google user:', err?.message || err);
         });
       }
+
+      // Fire-and-forget: welcome in-app + push notification for Google sign-in
+      void sendDirectNotification({
+        userId: user.id,
+        type: 'system',
+        title: 'Welcome to EcoBud! 🌿',
+        message: "You're now part of a growing community making real environmental impact. Complete challenges, join Eco Events, and earn EXP & Eco-Coins while building greener habits. Let's grow together! 🌱",
+        priority: 'high',
+        notificationKey: `welcome:${user.id}`,
+      }).catch(() => {});
     } else {
       if (user.role !== 'user' || (user.googleIdentityId && user.googleIdentityId !== identity.id) ||
           (!user.googleIdentityId && !identity.canLinkByEmail)) {

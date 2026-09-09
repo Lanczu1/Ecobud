@@ -3,7 +3,7 @@ import { ActivityIndicator, Platform, StyleProp, StyleSheet, Text, View, ViewSty
 import LottieView from 'lottie-react-native';
 import { useTheme } from '../theme/ecoTheme';
 
-const loadingAnimation = require('../../../assets/Loading.json');
+const loadingAnimation = require('../../../assets/Loading.lottie');
 
 const isAndroid = Platform.OS === 'android';
 const isLegacyAndroid = isAndroid && typeof Platform.Version === 'number' && Platform.Version < 29;

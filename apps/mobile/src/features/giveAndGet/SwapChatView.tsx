@@ -235,7 +235,11 @@ export function SwapChatView({
   const status = conversation.status;
 
   return (
-    <SafeAreaView style={[localStyles.safeArea, { backgroundColor: isDark ? theme.colors.background : ecoTheme.colors.primaryDark }]}>
+    <SafeAreaView
+      style={[localStyles.safeArea, { backgroundColor: isDark ? theme.colors.background : ecoTheme.colors.primaryDark }]}
+      edges={['top', 'left', 'right']}
+    >
+      {/* Header */}
       <View style={[localStyles.header, isDark && { backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={onBack} style={localStyles.backBtn}>
           <Feather name="arrow-left" size={22} color="#FFF" />
@@ -262,112 +266,121 @@ export function SwapChatView({
         </TouchableOpacity>
       </View>
 
-      <View style={[localStyles.swapInfoBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
-        <View style={localStyles.swapInfoItem}>
-          <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Offering</Text>
-          <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-            {conversation.listing.quantity} {conversation.listing.title}
-          </Text>
-        </View>
-        <View style={[localStyles.swapInfoDivider, { backgroundColor: theme.colors.border }]} />
-        <View style={localStyles.swapInfoItem}>
-          <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Looking For</Text>
-          <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-            {conversation.listing.lookingFor}
-          </Text>
-        </View>
-      </View>
-
-      {status === 'pending' && isOwner && (
-        <View style={localStyles.actionBar}>
-          <TouchableOpacity onPress={onDeclineSwap} style={localStyles.declineBtn}>
-            <Text style={localStyles.declineBtnText}>Decline</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onAcceptSwap} style={localStyles.acceptBtn}>
-            <Text style={localStyles.acceptBtnText}>
-              {conversation.listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Accept' : 'Accept Swap'}
+      {/* Keyboard-aware body: messages + input bar lift above keyboard */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <View style={[localStyles.swapInfoBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+          <View style={localStyles.swapInfoItem}>
+            <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Offering</Text>
+            <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {conversation.listing.quantity} {conversation.listing.title}
             </Text>
-          </TouchableOpacity>
+          </View>
+          <View style={[localStyles.swapInfoDivider, { backgroundColor: theme.colors.border }]} />
+          <View style={localStyles.swapInfoItem}>
+            <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Looking For</Text>
+            <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {conversation.listing.lookingFor}
+            </Text>
+          </View>
         </View>
-      )}
 
-      {status === 'accepted' && (
-        <View style={localStyles.actionBar}>
-          <TouchableOpacity onPress={onMarkCompleted} style={localStyles.completeBtn}>
-            <Ionicons name="checkmark-circle" size={16} color="#FFF" />
-            <Text style={localStyles.completeBtnText}>Mark as Completed</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {status === 'pending' && isOwner && (
+          <View style={localStyles.actionBar}>
+            <TouchableOpacity onPress={onDeclineSwap} style={localStyles.declineBtn}>
+              <Text style={localStyles.declineBtnText}>Decline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onAcceptSwap} style={localStyles.acceptBtn}>
+              <Text style={localStyles.acceptBtnText}>
+                {conversation.listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Accept' : 'Accept Swap'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-      {loading ? (
-        <View style={[localStyles.loadingWrap, { backgroundColor: theme.colors.background }]}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      ) : (
-        <ScrollView
-          ref={scrollRef}
-          style={[localStyles.messagesScroll, { backgroundColor: theme.colors.background }]}
-          contentContainerStyle={[localStyles.messagesContent, { backgroundColor: theme.colors.background }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map((msg) => {
-            const isMine = msg.senderId === currentUserId;
-            return (
-              <View
-                key={msg.id}
-                style={[
-                  localStyles.messageBubble,
-                  isMine
-                    ? [localStyles.messageBubbleMine, isDark && { backgroundColor: theme.colors.primary }]
-                    : [localStyles.messageBubbleTheirs, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }],
-                ]}
-              >
-                {msg.imageUrl && (
-                  <Image source={{ uri: msg.imageUrl }} style={localStyles.messageImage} />
-                )}
-                <Text style={[localStyles.messageText, isMine ? [localStyles.messageTextMine, isDark && { color: '#0E1512' }] : { color: theme.colors.textPrimary }]}>
-                  {msg.text}
-                </Text>
-                <View style={localStyles.messageFooter}>
-                  <Text style={[localStyles.messageTime, isMine ? [localStyles.messageTimeMine, isDark && { color: 'rgba(14,21,18,0.7)' }] : { color: theme.colors.textMuted }]}>
-                    {formatMessageTime(msg.timestamp)}
-                  </Text>
-                  {isMine && (
-                    <Ionicons
-                      name={msg.read ? 'checkmark-done' : 'checkmark'}
-                      size={14}
-                      color={isDark ? '#064E3B' : (msg.read ? '#4ADE80' : '#9CA3AF')}
-                      style={{ marginLeft: 4 }}
-                    />
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-      )}
+        {status === 'accepted' && (
+          <View style={localStyles.actionBar}>
+            <TouchableOpacity onPress={onMarkCompleted} style={localStyles.completeBtn}>
+              <Ionicons name="checkmark-circle" size={16} color="#FFF" />
+              <Text style={localStyles.completeBtnText}>Mark as Completed</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-      {status !== 'completed' && status !== 'cancelled' && status !== 'declined' && (
-        <View style={[localStyles.inputBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
-          <TextInput
-            style={[localStyles.chatInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
-            placeholder="Type a message..."
-            placeholderTextColor={theme.colors.textMuted}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-            style={[localStyles.sendBtn, isDark && { backgroundColor: theme.colors.primary }, (!inputText.trim() || sending) && { opacity: 0.5 }]}
+        {loading ? (
+          <View style={[localStyles.loadingWrap, { backgroundColor: theme.colors.background }]}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </View>
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            style={[localStyles.messagesScroll, { backgroundColor: theme.colors.background }]}
+            contentContainerStyle={[localStyles.messagesContent, { backgroundColor: theme.colors.background }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            <Ionicons name="send" size={18} color={isDark ? '#0E1512' : '#FFF'} />
-          </TouchableOpacity>
-        </View>
-      )}
+            {messages.map((msg) => {
+              const isMine = msg.senderId === currentUserId;
+              return (
+                <View
+                  key={msg.id}
+                  style={[
+                    localStyles.messageBubble,
+                    isMine
+                      ? [localStyles.messageBubbleMine, isDark && { backgroundColor: theme.colors.primary }]
+                      : [localStyles.messageBubbleTheirs, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }],
+                  ]}
+                >
+                  {msg.imageUrl && (
+                    <Image source={{ uri: msg.imageUrl }} style={localStyles.messageImage} />
+                  )}
+                  <Text style={[localStyles.messageText, isMine ? [localStyles.messageTextMine, isDark && { color: '#0E1512' }] : { color: theme.colors.textPrimary }]}>
+                    {msg.text}
+                  </Text>
+                  <View style={localStyles.messageFooter}>
+                    <Text style={[localStyles.messageTime, isMine ? [localStyles.messageTimeMine, isDark && { color: 'rgba(14,21,18,0.7)' }] : { color: theme.colors.textMuted }]}>
+                      {formatMessageTime(msg.timestamp)}
+                    </Text>
+                    {isMine && (
+                      <Ionicons
+                        name={msg.read ? 'checkmark-done' : 'checkmark'}
+                        size={14}
+                        color={isDark ? '#064E3B' : (msg.read ? '#4ADE80' : '#9CA3AF')}
+                        style={{ marginLeft: 4 }}
+                      />
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {status !== 'completed' && status !== 'cancelled' && status !== 'declined' && (
+          <View style={[localStyles.inputBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
+            <TextInput
+              style={[localStyles.chatInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
+              placeholder="Type a message..."
+              placeholderTextColor={theme.colors.textMuted}
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={1000}
+              returnKeyType="default"
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending}
+              style={[localStyles.sendBtn, isDark && { backgroundColor: theme.colors.primary }, (!inputText.trim() || sending) && { opacity: 0.5 }]}
+            >
+              <Ionicons name="send" size={18} color={isDark ? '#0E1512' : '#FFF'} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </KeyboardAvoidingView>
 
       <PublicProfileModal
         visible={showProfileModal}
@@ -586,7 +599,7 @@ const localStyles = StyleSheet.create({
     gap: scale(8),
     paddingHorizontal: scale(12),
     paddingVertical: verticalScale(8),
-    paddingBottom: verticalScale(12),
+    paddingBottom: Platform.select({ ios: verticalScale(12), android: verticalScale(16) }),
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F5F2',

@@ -5,6 +5,7 @@ import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { TransparencyLedgerService } from './TransparencyLedgerService';
 import { UserActivityService } from './userActivityService';
 import { UserStatsService } from './UserStatsService';
+import { sendDirectNotification } from './notificationService';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -455,6 +456,24 @@ export class GamificationService {
       );
 
       const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
+
+      // Fire push notifications for every newly unlocked badge (fire-and-forget, outside transaction)
+      if (awardedBadges.length > 0) {
+        setImmediate(() => {
+          for (const badge of awardedBadges) {
+            void sendDirectNotification({
+              userId: user.id,
+              type: 'badge',
+              title: '🏅 Badge Unlocked!',
+              message: `You earned the "${badge.name}" badge. Keep up the great eco work!`,
+              relatedId: badge.id,
+              relatedType: 'badge',
+              priority: 'high',
+              notificationKey: `badge_unlocked:${user.id}:${badge.id}`,
+            });
+          }
+        });
+      }
       const logAction = {
         ...action,
         metadata: {

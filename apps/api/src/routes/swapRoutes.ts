@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
 import { swapService } from '../services/swapService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
+import { sendDirectNotification } from '../services/notificationService';
 import { prisma } from '../prismaClient';
 import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 
@@ -177,12 +178,32 @@ router.post('/conversations/:conversationId/messages', authenticateRequest, asyn
     if (conv) {
       const targetUserId = conv.otherUser.id;
       if (targetUserId && targetUserId !== req.auth!.userId) {
+        // Realtime UI update (in-app)
         supabaseRealtimeService.publishSwapEvent({
           actorUserId: req.auth!.userId,
           targetUserId,
           eventType: 'message',
           swapRequestId: req.params.conversationId,
         }).catch(() => {});
+
+        // Push notification for the recipient
+        const sender = await prisma.user.findUnique({
+          where: { id: req.auth!.userId },
+          select: { name: true, profile: { select: { displayName: true } } },
+        });
+        const senderName = sender?.profile?.displayName || sender?.name || 'Someone';
+        const listingTitle = conv.listing?.title || 'Give & Get';
+        const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : '📷 Image';
+        void sendDirectNotification({
+          userId: targetUserId,
+          type: 'swap',
+          title: `${senderName} sent you a message`,
+          message: `${listingTitle}: ${preview}`,
+          relatedId: conv.swapRequestId || conversationId,
+          relatedType: 'swap',
+          priority: 'high',
+          notificationKey: `swap_chat_msg:${message.id}`,
+        });
       }
     }
     res.status(201).json(message);
