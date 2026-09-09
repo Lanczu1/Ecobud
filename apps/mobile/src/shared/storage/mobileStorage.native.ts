@@ -59,6 +59,27 @@ export const mobileStorage = {
     }
   },
 
+  getItemSync(key: string): string | null {
+    try {
+      if (typeof (sqliteStorage as any).getItemSync === 'function') {
+        return (sqliteStorage as any).getItemSync(key);
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
+  },
+
+  setItemSync(key: string, value: string) {
+    try {
+      if (typeof (sqliteStorage as any).setItemSync === 'function') {
+        (sqliteStorage as any).setItemSync(key, value);
+      }
+    } catch (err) {
+      console.warn('[mobileStorage sqlite setItemSync error]:', err);
+    }
+  },
+
   async removeItem(key: string) {
     await migrateLegacyKey(key);
     try {

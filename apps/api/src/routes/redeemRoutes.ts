@@ -5,6 +5,8 @@ import { authenticateRequest, requireModeratorAccess, requireUserAccess, type Au
 import { redeemUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { apiCache } from '../lib/cache';
+import { sendDirectNotification } from '../services/notificationService';
+import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import path from 'path';
 import fs from 'fs';
 
@@ -232,6 +234,8 @@ router.patch('/requests/:id/approve', authenticateRequest, requireModeratorAcces
       `Claim within the given period (until ${claimUntil.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}).`,
     ].join('\n');
 
+    const item = await prisma.redeemItem.findUnique({ where: { id: request.itemId } });
+
     const updated = await prisma.redeemRequest.update({
       where: { id },
       data: {
@@ -242,6 +246,25 @@ router.patch('/requests/:id/approve', authenticateRequest, requireModeratorAcces
         claimInstructions: instructions,
       },
     });
+
+    await supabaseRealtimeService.publishUserNotice(request.userId, {
+      level: 'success',
+      message: `Your redemption request for "${item?.title || 'reward'}" has been approved! Claim code: ${code}`,
+      scope: 'moderation',
+      title: 'Reward Ready to Claim',
+    });
+
+    void sendDirectNotification({
+      userId: request.userId,
+      type: 'reward',
+      title: 'Reward Ready to Claim',
+      message: `Your redemption request for "${item?.title || 'reward'}" has been approved! Claim code: ${code}`,
+      relatedId: updated.id,
+      relatedType: 'reward',
+      priority: 'high',
+      notificationKey: `redeem_approved:${id}`,
+    });
+
     res.json(updated);
   } catch (error) {
     console.error('Error approving redeem request:', error);
@@ -291,6 +314,24 @@ router.patch('/requests/:id/reject', authenticateRequest, requireModeratorAccess
 
     // Refund coins and restore stock in a transaction
     await prisma.$transaction(transaction);
+
+    await supabaseRealtimeService.publishUserNotice(request.userId, {
+      level: 'warning',
+      message: `Your redemption request for "${item?.title || 'reward'}" was rejected and your ${request.coinCost} EcoCoins were refunded.${reason ? ` Reason: ${reason}` : ''}`,
+      scope: 'moderation',
+      title: 'Redemption Request Rejected',
+    });
+
+    void sendDirectNotification({
+      userId: request.userId,
+      type: 'reward',
+      title: 'Redemption Request Rejected',
+      message: `Your redemption request for "${item?.title || 'reward'}" was rejected and your ${request.coinCost} EcoCoins were refunded.${reason ? ` Reason: ${reason}` : ''}`,
+      relatedId: request.id,
+      relatedType: 'reward',
+      priority: 'high',
+      notificationKey: `redeem_rejected:${id}`,
+    });
 
     res.json({ success: true, message: 'Request rejected and coins refunded' });
   } catch (error) {

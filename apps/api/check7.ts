@@ -2,10 +2,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const users = await prisma.user.findMany();
-  console.log('Total users:', users.length);
-  const events = await prisma.event.findMany();
-  console.log('Events:', events.length);
+  const migrations = await prisma.$queryRaw`SELECT migration_name, finished_at, rolled_back_at FROM _prisma_migrations`;
+  console.log('MIGRATIONS:', migrations);
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

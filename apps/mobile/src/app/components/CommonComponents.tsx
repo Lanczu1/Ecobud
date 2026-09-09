@@ -190,14 +190,14 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           transform: [{ scale: pressScale }]
         }}
       >
-      {/* Speech Bubble: Positioned on the TOP-LEFT of the Mascot */}
+      {/* Speech Bubble: Responsively positioned strictly at the TOP-LEFT of the Mascot */}
       <Animated.View
         pointerEvents="none"
         style={{
           position: 'absolute',
-          bottom: mascotSize * 0.52,
-          right: mascotSize * 0.55,
-          maxWidth: bubbleMaxWidth,
+          bottom: mascotSize * 0.76,
+          right: mascotSize * 0.72,
+          width: bubbleMaxWidth,
           opacity: bubbleOpacity,
           transform: [
             { translateY: bubbleTranslateY },
@@ -211,15 +211,15 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
             borderRadius: moderateScale(18),
             borderBottomRightRadius: moderateScale(4),
             paddingHorizontal: scale(14),
-            paddingTop: verticalScale(9),
+            paddingTop: verticalScale(10),
             paddingBottom: verticalScale(10),
             borderWidth: 1.5,
             borderColor: isDark ? 'rgba(74, 222, 128, 0.45)' : 'rgba(16, 185, 129, 0.28)',
             shadowColor: '#0E5A35',
-            shadowOpacity: isDark ? 0.25 : 0.1,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 3 },
-            elevation: 3,
+            shadowOpacity: isDark ? 0.25 : 0.12,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 4,
           }}
         >
           {/* Top Pill / Badge row */}
@@ -310,16 +310,16 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
         <View
           style={{
             alignSelf: 'flex-end',
-            marginRight: scale(18),
+            marginRight: scale(14),
             width: 0,
             height: 0,
-            borderTopWidth: verticalScale(8),
+            borderTopWidth: verticalScale(9),
             borderTopColor: isDark ? '#111D17' : '#FFFFFF',
-            borderLeftWidth: scale(7),
+            borderLeftWidth: scale(8),
             borderLeftColor: 'transparent',
             borderRightWidth: scale(3),
             borderRightColor: 'transparent',
-            marginTop: -0.5,
+            marginTop: -1,
           }}
         />
       </Animated.View>

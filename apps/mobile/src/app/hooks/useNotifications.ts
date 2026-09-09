@@ -24,7 +24,7 @@ if (nativePush) {
   }
 }
 
-export function useNotifications(token?: string) {
+export function useNotifications(token?: string, pushEnabled: boolean = true) {
   const [count, setCount] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -36,6 +36,13 @@ export function useNotifications(token?: string) {
     };
     const register = async () => {
       if (!nativePush || registering || !alive) return;
+      if (!pushEnabled) {
+        if (deviceToken) {
+          await ecobudApi.unregisterPush(token, deviceToken).catch(() => {});
+          deviceToken = undefined;
+        }
+        return;
+      }
       registering = true;
       try {
         if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('ecobud', { name: 'ECOBUD', importance: Notifications.AndroidImportance.HIGH });
@@ -61,7 +68,7 @@ export function useNotifications(token?: string) {
     const app = AppState.addEventListener('change', state => { if (state === 'active') { refresh(); void register(); } });
     const changed = DeviceEventEmitter.addListener('notificationsChanged', refresh);
     const subscriptions: { remove(): void }[] = [];
-    if (nativePush) {
+    if (nativePush && pushEnabled) {
       try {
         subscriptions.push(Notifications.addNotificationReceivedListener(() => {
           refresh(); DeviceEventEmitter.emit('notificationsInboxRefresh');
@@ -84,6 +91,6 @@ export function useNotifications(token?: string) {
       clearInterval(interval); app.remove(); changed.remove(); subscriptions.forEach(subscription => subscription.remove());
       if (deviceToken) void ecobudApi.unregisterPush(token, deviceToken).catch(() => {});
     };
-  }, [token]);
+  }, [token, pushEnabled]);
   return count;
 }

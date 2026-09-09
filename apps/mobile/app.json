@@ -4,19 +4,25 @@
     "slug": "eco-bud",
     "scheme": "ecobud",
     "version": "1.0.0",
-    "icon": "./assets/logo.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/logo icon.png",
+    "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.anonymous.ecobudmobile",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/logo icon.png",
         "backgroundColor": "#126027"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "name": "ECO-BUD",
       "shortName": "ECO-BUD",
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/logo icon.png"
     },
     "plugins": [
       "expo-font",
@@ -27,7 +33,12 @@
       "expo-secure-store",
       "expo-sqlite",
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e070c8d5-8fb7-4426-b07d-faa8b65c7cbf"
+      }
+    },
+    "owner": "lanczu12"
   }
 }
-

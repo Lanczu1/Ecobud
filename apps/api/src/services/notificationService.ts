@@ -128,3 +128,67 @@ export async function notificationTick() {
 export function startNotificationWorker() { void notificationTick(); timer = setInterval(() => void notificationTick(), 10000); timer.unref(); }
 export function stopNotificationWorker() { if (timer)
     clearInterval(timer); }
+
+export async function sendDirectNotification(params: {
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    relatedId?: string;
+    relatedType?: string;
+    priority?: string;
+    notificationKey?: string;
+}) {
+    try {
+        const key = params.notificationKey || `${params.type}:${params.relatedId || 'direct'}:${Date.now()}`;
+        const user = await prisma.user.findUnique({
+            where: { id: params.userId },
+            select: { id: true, email: true, status: true, sessionVersion: true }
+        });
+
+        if (!user || user.status !== 'active') {
+            return null;
+        }
+
+        const notification = await prisma.notification.create({
+            data: {
+                userId: user.id,
+                notificationKey: key,
+                type: params.type,
+                title: params.title,
+                message: params.message,
+                relatedId: params.relatedId || null,
+                relatedType: params.relatedType || params.type,
+                priority: params.priority || (['challenge', 'verification', 'swap', 'reward'].includes(params.type) ? 'high' : 'medium'),
+            }
+        });
+
+        // Insert deliveries for realtime and push
+        await prisma.$executeRaw`
+            INSERT INTO notification_deliveries(id, notification_id, channel, destination)
+            VALUES (${`rt_${notification.id}`}, ${notification.id}, 'realtime', ${user.id})
+            ON CONFLICT DO NOTHING
+        `;
+
+        const devices = await prisma.$queryRaw<any[]>`
+            SELECT token FROM notification_devices 
+            WHERE user_id = ${user.id} AND session_version = ${user.sessionVersion}
+        `;
+
+        for (const dev of devices) {
+            await prisma.$executeRaw`
+                INSERT INTO notification_deliveries(id, notification_id, channel, destination)
+                VALUES (${`push_${notification.id}_${dev.token}`}, ${notification.id}, 'push', ${dev.token})
+                ON CONFLICT DO NOTHING
+            `;
+        }
+
+        // Trigger an immediate tick or deliver right away
+        void notificationTick();
+
+        return notification;
+    } catch (err) {
+        console.error('Failed to send direct notification:', err);
+        return null;
+    }
+}

@@ -43,6 +43,7 @@ const ONBOARDING_STORAGE_KEY = 'ecobud.mobile.onboarding';
 const VIEWED_MISSIONS_KEY = 'ecobud.mobile.viewedMissions';
 const RECENT_VIEWED_KEY = 'ecobud.mobile.recentViewedMission';
 const CHATBOT_ENABLED_STORAGE_KEY = 'ecobud.mobile.chatbotEnabled';
+const PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY = 'ecobud.mobile.pushNotificationsEnabled';
 const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
 
 // ─── Internal Utilities ─────────────────────────────────────────────────────────
@@ -79,7 +80,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{type:string;id:string}|null>(null);
   const [pendingNotificationId, setPendingNotificationId] = useState<string|null>(null);
-  const notificationCount = useNotifications(session?.token);
+  const [pushNotificationsEnabled, setPushNotificationsEnabledState] = useState(true);
+  const notificationCount = useNotifications(session?.token, pushNotificationsEnabled);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
   useEffect(() => { const sub = DeviceEventEmitter.addListener('openNotification', (id: string) => { setActiveOverlayState('notifications'); setPendingNotificationId(id); }); return () => sub.remove(); }, []);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -165,6 +167,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const [progressBarLayout, setProgressBarLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [isChatbotEnabled, setIsChatbotEnabled] = useState(true);
+
+  const setPushNotificationsEnabled = useCallback(async (enabled: boolean) => {
+    setPushNotificationsEnabledState(enabled);
+    try {
+      await mobileStorage.setItem(PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY, JSON.stringify(enabled));
+    } catch (e) {
+      console.warn('Failed to persist push notifications preference', e);
+    }
+  }, []);
 
   const setChatbotEnabled = useCallback(async (enabled: boolean) => {
     setIsChatbotEnabled(enabled);
@@ -2291,6 +2302,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setProgressBarLayout,
     isChatbotEnabled,
     setChatbotEnabled,
+    pushNotificationsEnabled,
+    setPushNotificationsEnabled,
     handleHardwareBackPress,
   };
 

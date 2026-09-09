@@ -146,22 +146,34 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
         await model.refreshEverything();
         await model.openLesson(id);
       } else if (n.type === 'challenge' && id) {
-        const challenges = await homeService.getChallenges(token);
-        const mission = challenges.items.find((x: any) => x.id === id);
+        let challenges = await homeService.getChallenges(token).catch(() => ({ items: [] }));
+        let mission = challenges.items?.find((x: any) => x.id === id || x.cycle?.instanceId === id);
+        if (!mission && model.challenges) {
+          mission = model.challenges.find((x: any) => x.id === id || x.cycle?.instanceId === id);
+        }
         if (mission) {
           model.openChallengeMission(mission);
         } else {
-          Alert.alert('Content unavailable', 'This challenge is no longer available.');
+          await model.refreshEverything();
+          const refreshed = model.challenges.find((x: any) => x.id === id || x.cycle?.instanceId === id);
+          if (refreshed) {
+            model.openChallengeMission(refreshed);
+          } else {
+            Alert.alert('Content unavailable', 'This challenge is no longer available.');
+          }
         }
       } else if (n.type === 'event' && id) {
+        model.setActiveOverlay(null);
         model.setFocusedEventId(id);
         model.setActiveOverlay('events');
       } else if (n.type === 'verification') {
         model.setActiveOverlay(null);
         model.setActiveTab('profile');
       } else if (n.type === 'leaderboard') {
+        model.setActiveOverlay(null);
         model.setActiveOverlay('leaderboard');
       } else if (n.type === 'reward') {
+        model.setActiveOverlay(null);
         model.setActiveOverlay('redeemPoints');
       } else if (n.type === 'swap' || n.type === 'chat') {
         if (id) {
