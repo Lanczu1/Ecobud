@@ -1,3 +1,4 @@
+import { getQuizLessonProgress } from '../utils/lessonProgress';
 import { useNotifications } from './useNotifications';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
@@ -514,6 +515,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         // Immediately update critical home state for fast UI rendering
         setDashboard(homeData?.dashboard ?? null);
+        for (const lesson of safeLessons) {
+          try {
+            const raw = mobileStorage.getItemSync('@lesson_progress_' + existingSession.user.id + ':' + lesson.id);
+            const saved = raw ? JSON.parse(raw) : null;
+            if (saved && Number.isFinite(saved.progress) && Number.isFinite(saved.timestamp) && lesson.status !== 'completed') {
+              lesson.progress = Math.max(lesson.progress, saved.progress);
+              lesson.videoTimestamp = Math.max(lesson.videoTimestamp ?? 0, saved.timestamp);
+            }
+          } catch { /* Ignore invalid local records. */ }
+        }
         setLessons(safeLessons);
         setChallenges(Array.isArray(homeData?.challenges) ? homeData.challenges : []);
         setIsCycleActive(homeData?.isCycleActive ?? true);
@@ -1436,16 +1447,26 @@ export function useHomeDashboard(): EcoBudMobileModel {
     selectedLessonId,
   ]);
 
+  const lessonSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
+
   const handleUpdateLessonProgress = useCallback(async (lessonId: string, progress: number, videoTimestamp?: number) => {
     try {
       const activeSession = ensureSession();
       // Optimistically update locally without a loading overlay
       const clampedProgress = Math.min(100, Math.max(0, Math.round(progress)));
 
-      // Fire and forget server update
-      homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress, videoTimestamp).catch((err) => {
-        console.error('[handleUpdateLessonProgress] API error:', err);
-      });
+      const key = '@lesson_progress_' + activeSession.user.id + ':' + lessonId;
+      let previous = { timestamp: 0, progress: 0 };
+      try { previous = JSON.parse(mobileStorage.getItemSync(key) ?? 'null') ?? previous; } catch {}
+      mobileStorage.setItemSync(key, JSON.stringify({
+        timestamp: videoTimestamp ?? previous.timestamp,
+        progress: Math.max(previous.progress, clampedProgress),
+        savedAt: Date.now(),
+      }));
+      // Keep timestamp and percentage updates in order, including the transition to quiz.
+      lessonSaveQueue.current = lessonSaveQueue.current.catch(() => {}).then(() =>
+        homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress, videoTimestamp)
+      ).catch((err) => console.warn('[handleUpdateLessonProgress] API error:', err));
 
       // Update local state so it's snappy
       setLessons((current) =>
@@ -1473,14 +1494,32 @@ export function useHomeDashboard(): EcoBudMobileModel {
       [questions[i], questions[j]] = [questions[j], questions[i]];
     }
 
-    setQuizQuestions(questions);
-    setCurrentQuestionIndex(0);
-    setSelectedAnswer(null);
-    setQuizAnswers({});
+    let restored: { order: string[]; index: number; answers: Record<string, string> } | null = null;
+    try {
+      const raw = mobileStorage.getItemSync('@lesson_quiz_' + session?.user.id + ':' + selectedLesson?.id);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (saved && Array.isArray(saved.order) && saved.order.length === questions.length &&
+          new Set(saved.order).size === questions.length && saved.order.every((id: string) => questions.some(q => q.id === id)) &&
+          Number.isInteger(saved.index) && saved.index >= 0 && saved.index < questions.length && saved.answers && typeof saved.answers === 'object') restored = saved;
+    } catch {}
+    const ordered = restored ? restored.order.map(id => questions.find(q => q.id === id)!) : questions;
+    const index = restored?.index ?? 0;
+    setQuizQuestions(ordered);
+    setCurrentQuestionIndex(index);
+    setSelectedAnswer(restored?.answers[ordered[index]?.id] ?? null);
+    setQuizAnswers(restored?.answers ?? {});
     setQuizCompleted(false);
     setQuizScore(0);
     setActiveOverlayState('quiz');
-  }, [selectedLesson, setActiveOverlayState]);
+  }, [selectedLesson, session?.user.id, setActiveOverlayState]);
+
+  useEffect(() => {
+    if (activeOverlay !== 'quiz' || !selectedLessonId || !quizQuestions.length || quizCompleted) return;
+    mobileStorage.setItemSync('@lesson_quiz_' + session?.user.id + ':' + selectedLessonId, JSON.stringify({
+      order: quizQuestions.map(q => q.id), index: currentQuestionIndex, answers: quizAnswers,
+    }));
+    void handleUpdateLessonProgress(selectedLessonId, getQuizLessonProgress(currentQuestionIndex, quizQuestions.length));
+  }, [activeOverlay, selectedLessonId, session?.user.id, quizQuestions, currentQuestionIndex, quizAnswers, quizCompleted, handleUpdateLessonProgress]);
 
   const selectAnswer = useCallback((questionId: string, answer: string) => {
     triggerImpactLight();
@@ -1520,6 +1559,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const finalScore = res.score ?? 100;
         setQuizScore(finalScore);
         setQuizCompleted(true);
+        await mobileStorage.removeItem('@lesson_quiz_' + activeSession.user.id + ':' + selectedLessonId);
 
         await hydrateApp(activeSession, true);
         const points = res.pointsAwarded ?? (selectedLesson?.pointsReward ?? 10);
