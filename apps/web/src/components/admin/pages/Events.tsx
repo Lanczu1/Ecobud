@@ -1,13 +1,45 @@
 import React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, Leaf, FileText, BarChart3, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { 
+  Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, 
+  AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, 
+  Leaf, FileText, BarChart3, ChevronDown, ChevronUp, Star,
+  CheckCircle2, XCircle, ShieldCheck, RefreshCw
+} from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+export interface EventSubmission {
+  id: string;
+  userId: string;
+  challengeId?: string;
+  proofText?: string | null;
+  proofUrl: string | null;
+  afterProofUrl?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | string;
+  moderatorNotes: string | null;
+  createdAt: string;
+  submissionType?: string;
+  user: {
+    id: string;
+    name: string;
+    profile: {
+      displayName: string | null;
+      avatarUrl: string | null;
+      city?: string | null;
+    } | null;
+  };
+  challenge: {
+    id: string;
+    title: string;
+    type?: string;
+  };
+}
 
 interface AdminEvent {
   id: string;
@@ -495,11 +527,61 @@ export function Events() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean }>({ open: false, eventId: null, qrData: null, loading: false });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
-  const [activeTab, setActiveTab] = useState<'events' | 'reports'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>('events');
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
   const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
+
+  // ── Event Submissions state ────────────────────────────────────────────────
+  const [submissions, setSubmissions] = useState<EventSubmission[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [processingSubId, setProcessingSubId] = useState<string | null>(null);
+  const [subSearch, setSubSearch] = useState('');
+  const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
+  const [selectedImage, setSelectedImage] = useState<{ url: string; title: string } | null>(null);
+
+  const loadSubmissions = async () => {
+    setSubmissionsLoading(true);
+    try {
+      const data = await adminGet<EventSubmission[]>('/admin/submissions');
+      // Keep only event submissions
+      setSubmissions(data.filter(s => s.submissionType === 'EVENT' || (s.challenge && s.challenge.type === 'EVENT')));
+    } catch (err: any) {
+      console.error('Failed to load event submissions', err);
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
+  const handleApproveSubmission = async (id: string) => {
+    if (!confirm('Are you sure you want to approve this attendance proof?')) return;
+    setProcessingSubId(id);
+    try {
+      await adminPost(`/admin/submissions/${id}/review`, { status: 'approved' });
+      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
+      load(); // Refresh event attendees count
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve submission.');
+    } finally {
+      setProcessingSubId(null);
+    }
+  };
+
+  const handleRejectSubmission = async (id: string) => {
+    const notes = window.prompt('Enter reason for rejection (optional):');
+    if (notes === null) return;
+    setProcessingSubId(id);
+    try {
+      await adminPost(`/admin/submissions/${id}/review`, { status: 'rejected', notes });
+      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'rejected', moderatorNotes: notes } : s));
+      load(); // Refresh event attendees count
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject submission.');
+    } finally {
+      setProcessingSubId(null);
+    }
+  };
 
   const load = async () => {
     try {
@@ -539,6 +621,13 @@ export function Events() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch submissions when switching to submissions tab or initially
+  useEffect(() => {
+    if (activeTab === 'submissions') {
+      loadSubmissions();
+    }
+  }, [activeTab]);
+
   // Fetch report data for all events when switching to reports tab
   useEffect(() => {
     if (activeTab === 'reports') {
@@ -554,6 +643,23 @@ export function Events() {
       });
     }
   }, [activeTab, events]);
+
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter(sub => {
+      const userName = sub.user?.profile?.displayName || sub.user?.name || '';
+      const userCity = sub.user?.profile?.city || '';
+      const eventTitle = sub.challenge?.title || '';
+      const notes = sub.moderatorNotes || '';
+      const matchSearch = subSearch.trim() === '' ||
+        userName.toLowerCase().includes(subSearch.toLowerCase()) ||
+        userCity.toLowerCase().includes(subSearch.toLowerCase()) ||
+        eventTitle.toLowerCase().includes(subSearch.toLowerCase()) ||
+        notes.toLowerCase().includes(subSearch.toLowerCase());
+
+      const matchStatus = subStatusFilter === 'All' || sub.status === subStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [submissions, subSearch, subStatusFilter]);
 
   const filtered = useMemo(() => {
     return events.filter(e => {
@@ -848,6 +954,22 @@ export function Events() {
           Events
         </button>
         <button
+          onClick={() => setActiveTab('submissions')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+            activeTab === 'submissions'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white dark:border dark:border-gray-700'
+              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          Submissions
+          {submissions.filter(s => s.status === 'pending').length > 0 && (
+            <span className="ml-1 px-2 py-0.5 text-xs font-bold rounded-full bg-orange-500 text-white animate-pulse">
+              {submissions.filter(s => s.status === 'pending').length}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab('reports')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
             activeTab === 'reports'
@@ -1040,6 +1162,289 @@ export function Events() {
         </div>
       )}
         </>
+      )}
+
+      {/* ═══ SUBMISSIONS TAB ═══ */}
+      {activeTab === 'submissions' && (
+        <div className="space-y-6 animate-reveal">
+          {/* Submissions Stats */}
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label: 'Pending Review', value: submissions.filter(s => s.status === 'pending').length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-100 dark:border-orange-800' },
+              { label: 'Approved Attendance', value: submissions.filter(s => s.status === 'approved').length, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-100 dark:border-green-800' },
+              { label: 'Rejected', value: submissions.filter(s => s.status === 'rejected').length, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-100 dark:border-red-800' },
+              { label: 'Total Submissions', value: submissions.length, color: 'text-gray-900 dark:text-white', bg: 'bg-white dark:bg-gray-900', border: 'border-gray-100 dark:border-gray-800' },
+            ].map((s, idx) => {
+              const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
+              return (
+                <div key={s.label} className={`${s.bg} rounded-2xl border ${s.border} p-5 shadow-sm animate-reveal ${delayClass}`}>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
+                  <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{submissionsLoading ? '—' : s.value}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Info Banner */}
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-2xl p-4 flex items-center justify-between gap-3 animate-reveal delay-160">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="text-sm text-emerald-800 dark:text-emerald-300">
+                <strong>Event Attendance Verification:</strong> Review photos and QR submissions from participants who attended your eco-events. Approve to verify their attendance or reject with reasons.
+              </div>
+            </div>
+            <button 
+              onClick={loadSubmissions} 
+              disabled={submissionsLoading}
+              className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline flex items-center gap-1.5 font-semibold shrink-0 bg-emerald-100/70 dark:bg-emerald-800/40 px-3 py-1.5 rounded-lg active:scale-95 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 space-y-3 animate-reveal delay-160">
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search by participant name, event title, or notes..." 
+                  value={subSearch} 
+                  onChange={e => setSubSearch(e.target.value)} 
+                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:text-white transition-all" 
+                />
+              </div>
+
+              {/* Status Filter buttons */}
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                {[
+                  { key: 'All', label: 'All' },
+                  { key: 'pending', label: 'Pending' },
+                  { key: 'approved', label: 'Approved' },
+                  { key: 'rejected', label: 'Rejected' },
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setSubStatusFilter(f.key)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
+                      subStatusFilter === f.key
+                        ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-green-300'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Submissions List / Table */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden animate-reveal delay-280">
+            {submissionsLoading ? (
+              <div className="p-12 text-center">
+                <Loader2 className="w-8 h-8 text-green-600 animate-spin mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">Loading event submissions...</p>
+              </div>
+            ) : filteredSubmissions.length === 0 ? (
+              <div className="p-12 text-center">
+                <ShieldCheck className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" />
+                <p className="text-gray-500 dark:text-gray-400 font-medium">No event submissions found.</p>
+                <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+                  {submissions.length === 0 
+                    ? 'When attendees submit attendance proofs on mobile, they will appear here for your review.' 
+                    : 'No submissions match your search or filter.'}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/70 dark:bg-gray-800/50">
+                      <th className="px-6 py-3.5">Participant</th>
+                      <th className="px-5 py-3.5">Event Title</th>
+                      <th className="px-5 py-3.5">Photo Proof</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5">Submitted Date</th>
+                      <th className="px-6 py-3.5 text-right">Review Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {filteredSubmissions.map((sub) => {
+                      const fullPhotoUrl = sub.proofUrl 
+                        ? (sub.proofUrl.startsWith('http') ? sub.proofUrl : `${API_HOST}${sub.proofUrl}`)
+                        : null;
+                      const displayName = sub.user?.profile?.displayName || sub.user?.name || 'Participant';
+                      const city = sub.user?.profile?.city;
+                      const cleanEventTitle = (sub.challenge?.title || 'Eco Event').replace(/^\[EVENT\]\s*/i, '');
+
+                      const statusBadge: Record<string, string> = {
+                        pending: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800',
+                        approved: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
+                        rejected: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+                      };
+
+                      return (
+                        <tr key={sub.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
+                          {/* Participant */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden">
+                                {sub.user?.profile?.avatarUrl ? (
+                                  <img 
+                                    src={sub.user.profile.avatarUrl.startsWith('http') ? sub.user.profile.avatarUrl : `${API_HOST}${sub.user.profile.avatarUrl}`} 
+                                    alt={displayName} 
+                                    className="w-full h-full object-cover" 
+                                  />
+                                ) : (
+                                  displayName.charAt(0).toUpperCase()
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-900 dark:text-white text-sm truncate">{displayName}</p>
+                                {city && (
+                                  <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin className="w-3 h-3 shrink-0" />{city}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Event */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                              <span className="font-medium text-gray-800 dark:text-gray-200 text-sm line-clamp-1" title={cleanEventTitle}>
+                                {cleanEventTitle}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Photo Proof */}
+                          <td className="px-5 py-4">
+                            {fullPhotoUrl ? (
+                              <button 
+                                onClick={() => setSelectedImage({ url: fullPhotoUrl, title: `${displayName} - ${cleanEventTitle}` })}
+                                className="relative w-14 h-11 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group cursor-pointer hover:ring-2 hover:ring-green-400 transition-all shadow-xs block"
+                                title="Click to inspect photo proof"
+                              >
+                                <img src={fullPhotoUrl} alt="Attendance Proof" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <ImageIcon className="w-4 h-4 text-white" />
+                                </div>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">No photo attached</span>
+                            )}
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-5 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border ${statusBadge[sub.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                              {sub.status === 'pending'
+                                ? '⏳ Pending Approval'
+                                : sub.status === 'approved'
+                                ? '✅ Approved'
+                                : sub.status === 'rejected'
+                                ? '❌ Rejected'
+                                : sub.status}
+                            </span>
+                            {sub.moderatorNotes && (
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 max-w-44 truncate" title={sub.moderatorNotes}>
+                                Note: {sub.moderatorNotes}
+                              </p>
+                            )}
+                          </td>
+
+                          {/* Date */}
+                          <td className="px-5 py-4">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                              {new Date(sub.createdAt).toLocaleString('en-PH', { 
+                                timeZone: 'Asia/Manila',
+                                month: 'short', 
+                                day: 'numeric', 
+                                hour: 'numeric', 
+                                minute: '2-digit', 
+                                hour12: true 
+                              })}
+                            </span>
+                          </td>
+
+                          {/* Review Action */}
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {sub.status === 'pending' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleApproveSubmission(sub.id)}
+                                    disabled={processingSubId === sub.id}
+                                    title="Approve Event Attendance"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50"
+                                  >
+                                    {processingSubId === sub.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    )}
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectSubmission(sub.id)}
+                                    disabled={processingSubId === sub.id}
+                                    title="Reject Event Attendance"
+                                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-xl transition-all active:scale-95 disabled:opacity-50"
+                                  >
+                                    {processingSubId === sub.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    )}
+                                    Reject
+                                  </button>
+                                </>
+                              ) : sub.status === 'approved' ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1">
+                                    <CheckCircle2 className="w-4 h-4" /> Approved
+                                  </span>
+                                  <button
+                                    onClick={() => handleRejectSubmission(sub.id)}
+                                    disabled={processingSubId === sub.id}
+                                    title="Change status to Rejected"
+                                    className="text-[11px] text-gray-400 hover:text-red-600 underline ml-1"
+                                  >
+                                    Change
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
+                                    <XCircle className="w-4 h-4" /> Rejected
+                                  </span>
+                                  <button
+                                    onClick={() => handleApproveSubmission(sub.id)}
+                                    disabled={processingSubId === sub.id}
+                                    title="Change status to Approved"
+                                    className="text-[11px] text-gray-400 hover:text-green-600 underline ml-1"
+                                  >
+                                    Re-approve
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ═══ AUTOMATED REPORTS TAB ═══ */}
@@ -1304,6 +1709,32 @@ export function Events() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Photo Proof Zoom Modal */}
+      {selectedImage && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-modal" onClick={e => e.stopPropagation()}>
+            <div className="w-full flex items-center justify-between pb-3 text-white">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-wide text-white/90">
+                  {selectedImage.title || 'Attendance Photo Proof'}
+                </span>
+              </div>
+              <button 
+                onClick={() => setSelectedImage(null)} 
+                className="p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer"
+              >
+                <XCircle className="w-7 h-7" />
+              </button>
+            </div>
+
+            <div className="relative inline-block overflow-hidden rounded-2xl border border-white/15 shadow-2xl bg-black/50">
+              <img src={selectedImage.url} alt="Proof" className="max-w-full max-h-[80vh] object-contain block" />
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
