@@ -647,7 +647,19 @@ export const ecobudApi = {
   fetchChallenges: (token: string) =>
     request<{ items: ChallengeWithProgress[]; isCycleActive?: boolean }>('/challenges/active', { token }),
   analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
-    uploadFileAsync<{ passed: boolean; object: string; confidence: number; reason?: string; proofUrl?: string; box_2d?: [number, number, number, number] | null }>(
+    uploadFileAsync<{
+      passed: boolean;
+      object: string;
+      confidence: number;
+      reason?: string;
+      proofUrl?: string;
+      analysisToken?: string;
+      detectedCount?: number;
+      calculatedExpReward?: number;
+      calculatedEcoCoins?: number;
+      box_2d?: [number, number, number, number] | null;
+      boxes?: Array<{ object: string; box_2d: [number, number, number, number] }> | null;
+    }>(
       `/challenges/${challengeId}/analyze`,
       token,
       uri
@@ -662,7 +674,13 @@ export const ecobudApi = {
     request(`/challenges/${challengeId}/submissions`, {
       method: 'POST',
       token,
-      body: { proofUrl, afterProofUrl, detectedQuantity: detectedQuantity || 1, proofText: proofText || analysisToken },
+      body: {
+        proofUrl,
+        afterProofUrl,
+        detectedQuantity: detectedQuantity || 1,
+        analysisToken: analysisToken || undefined,
+        proofText: proofText || undefined,
+      },
     }),
   verifyChallengeQr: (token: string, challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) =>
     request<{ message: string; submission: any }>(`/challenges/${challengeId}/verify-qr`, {

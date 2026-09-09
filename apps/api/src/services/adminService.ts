@@ -4,6 +4,7 @@ import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { apiCache } from "../lib/cache";
 import { expireStaleSubmissions } from './cycleManagerService';
+import { sendDirectNotification } from './notificationService';
 
 export class AdminService {
   static async getAllLessons() {
@@ -831,6 +832,17 @@ export class AdminService {
           title: 'Pending After Photo',
         });
 
+        void sendDirectNotification({
+          userId: submission.userId,
+          type: 'challenge',
+          title: 'Pending After Photo',
+          message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
+          relatedId: submission.challengeInstanceId,
+          relatedType: 'challenge',
+          priority: 'high',
+          notificationKey: `challenge_sub_prelim:${id}`,
+        });
+
         return submission;
       }
 
@@ -887,6 +899,17 @@ export class AdminService {
           title: 'Challenge submission rejected',
         });
 
+        void sendDirectNotification({
+          userId: challengeSub.userId,
+          type: 'challenge',
+          title: 'Challenge submission rejected',
+          message: `Your proof for "${challenge?.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
+          relatedId: challengeSub.challengeInstanceId,
+          relatedType: 'challenge',
+          priority: 'high',
+          notificationKey: `challenge_sub_rejected:${id}`,
+        });
+
         return updated;
       }
 
@@ -938,6 +961,17 @@ export class AdminService {
         message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
         scope: 'moderation',
         title: 'Challenge fully approved',
+      });
+
+      void sendDirectNotification({
+        userId: submission.userId,
+        type: 'challenge',
+        title: 'Challenge fully approved',
+        message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
+        relatedId: submission.challengeInstanceId,
+        relatedType: 'challenge',
+        priority: 'high',
+        notificationKey: `challenge_sub_approved:${id}`,
       });
 
       await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
@@ -1004,14 +1038,27 @@ export class AdminService {
         }
       });
 
+      const eventNotificationTitle = status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected';
+      const eventNotificationMessage = status === 'approved'
+        ? `Your attendance for event "${submission.event.title}" has been approved.`
+        : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`;
+
       await supabaseRealtimeService.publishUserNotice(submission.userId, {
         level: status === 'approved' ? 'success' : 'warning',
-        message:
-          status === 'approved'
-            ? `Your attendance for event "${submission.event.title}" has been approved.`
-            : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
+        message: eventNotificationMessage,
         scope: 'moderation',
-        title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
+        title: eventNotificationTitle,
+      });
+
+      void sendDirectNotification({
+        userId: submission.userId,
+        type: 'event',
+        title: eventNotificationTitle,
+        message: eventNotificationMessage,
+        relatedId: submission.eventId,
+        relatedType: 'event',
+        priority: 'high',
+        notificationKey: `event_sub_${status}:${submission.id}`,
       });
 
       return {

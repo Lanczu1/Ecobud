@@ -192,9 +192,19 @@ export const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
+    try {
+      const syncSaved = mobileStorage.getItemSync(THEME_STORAGE_KEY);
+      if (syncSaved === 'light' || syncSaved === 'dark' || syncSaved === 'onyx') {
+        return syncSaved as ThemeMode;
+      }
+    } catch {
+      // Fallback
+    }
+    return 'light';
+  });
 
-  // Load persisted theme on mount
+  // Load persisted theme on mount (async double-check / fallback)
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -215,6 +225,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setThemeMode = useCallback(async (mode: ThemeMode) => {
     setThemeModeState(mode);
     try {
+      mobileStorage.setItemSync(THEME_STORAGE_KEY, mode);
       await mobileStorage.setItem(THEME_STORAGE_KEY, mode);
     } catch (err) {
       console.warn('Failed to persist theme preference:', err);

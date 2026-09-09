@@ -69,31 +69,14 @@ const getValidImageUrl = (url: string | null | undefined) => {
 // Local components used in Views
 export function BootView({ onFinish }: { onFinish?: () => void }) {
   const { theme, isDark } = useTheme();
-  const fadeIn = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(fadeIn, {
-      toValue: 1,
-      duration: 350,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeIn]);
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Animated.View
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            opacity: fadeIn,
-          },
-        ]}
-      >
-        <LoadingScreenVisual
-          label="Growing your EcoBud journey"
-          loop={!onFinish}
-          onAnimationFinish={onFinish ? () => onFinish() : undefined}
-        />
-      </Animated.View>
+      <LoadingScreenVisual
+        label="Growing your EcoBud journey..."
+        loop={!onFinish}
+        onAnimationFinish={onFinish ? () => onFinish() : undefined}
+      />
     </SafeAreaView>
   );
 }
@@ -104,7 +87,7 @@ export function LaunchBackdrop({ onFinish }: { onFinish?: () => void }) {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <LoadingScreenVisual
-        label="Preparing your EcoBud welcome"
+        label="Setting up your ecobud experience..."
         loop={!onFinish}
         onAnimationFinish={onFinish ? () => onFinish() : undefined}
       />
@@ -2672,22 +2655,6 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
           <View style={[profileStyles.actionListCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.05 }]}>
             <TouchableOpacity 
               style={profileStyles.actionItem}
-              onPress={() => model.setActiveOverlay('editProfile')}
-            >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E0F2FE' }]}>
-                <Ionicons name="person-outline" size={20} color={isDark ? theme.colors.primary : '#0369A1'} />
-              </View>
-              <View style={profileStyles.actionTextCol}>
-                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Edit Profile</Text>
-                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Update username, email & barangay</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
-            </TouchableOpacity>
-
-            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
-
-            <TouchableOpacity 
-              style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('redeemPoints')}
             >
               <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#FEF3C7' }]}>
@@ -2712,22 +2679,6 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               <View style={profileStyles.actionTextCol}>
                 <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Coins History</Text>
                 <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Check your points and task completion logs</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
-            </TouchableOpacity>
-
-            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
-
-            <TouchableOpacity 
-              style={profileStyles.actionItem}
-              onPress={() => model.setActiveOverlay('settings')}
-            >
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
-                <Ionicons name="shield-checkmark-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
-              </View>
-              <View style={profileStyles.actionTextCol}>
-                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Settings & Security</Text>
-                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Manage account security & password</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>

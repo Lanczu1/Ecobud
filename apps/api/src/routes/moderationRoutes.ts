@@ -5,6 +5,7 @@ import { authenticateRequest, AuthenticatedRequest, requireModeratorAccess } fro
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import { GamificationService } from '../services/GamificationService';
+import { sendDirectNotification } from '../services/notificationService';
 
 const moderationRoutes = Router();
 const gamificationService = new GamificationService();
@@ -286,6 +287,17 @@ moderationRoutes.post(
       title: 'Challenge approved',
     });
 
+    void sendDirectNotification({
+      userId: item.userId,
+      type: 'challenge',
+      title: 'Challenge approved',
+      message: `Your proof for "${item.challengeInstance?.challenge.title}" has been approved.`,
+      relatedId: item.challengeInstanceId,
+      relatedType: 'challenge',
+      priority: 'high',
+      notificationKey: `mod_challenge_approved:${item.id}`,
+    });
+
     return res.json({ item });
   }),
 );
@@ -321,6 +333,17 @@ moderationRoutes.post(
       message: `Your proof for "${item.challengeInstance?.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
       scope: 'moderation',
       title: 'Challenge review update',
+    });
+
+    void sendDirectNotification({
+      userId: item.userId,
+      type: 'challenge',
+      title: 'Challenge review update',
+      message: `Your proof for "${item.challengeInstance?.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+      relatedId: item.challengeInstanceId,
+      relatedType: 'challenge',
+      priority: 'high',
+      notificationKey: `mod_challenge_rejected:${item.id}`,
     });
 
     return res.json({ item });
@@ -359,6 +382,17 @@ moderationRoutes.post(
       message: `Your proof for "${item.challengeInstance?.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
       scope: 'moderation',
       title: 'Challenge flagged',
+    });
+
+    void sendDirectNotification({
+      userId: item.userId,
+      type: 'challenge',
+      title: 'Challenge flagged',
+      message: `Your proof for "${item.challengeInstance?.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
+      relatedId: item.challengeInstanceId,
+      relatedType: 'challenge',
+      priority: 'high',
+      notificationKey: `mod_challenge_flagged:${item.id}`,
     });
 
     return res.json({ item });

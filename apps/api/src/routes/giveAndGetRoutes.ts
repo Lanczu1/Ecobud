@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
+import { sendDirectNotification } from '../services/notificationService';
+import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 
 const router = Router();
 
@@ -133,6 +135,25 @@ router.patch('/swap-listings/:id/approve', authenticateRequest, requireModerator
       where: { id: req.params.id },
       data: { approvalStatus: 'approved', isReported: false, reportCount: 0, reportReason: null },
     });
+
+    await supabaseRealtimeService.publishUserNotice(listing.userId, {
+      level: 'success',
+      message: `Your item listing "${listing.title}" was approved and is now live in Give & Get!`,
+      scope: 'moderation',
+      title: 'Listing Approved',
+    });
+
+    void sendDirectNotification({
+      userId: listing.userId,
+      type: 'swap',
+      title: 'Listing Approved',
+      message: `Your item listing "${listing.title}" was approved and is now live in Give & Get!`,
+      relatedId: listing.id,
+      relatedType: 'swap',
+      priority: 'high',
+      notificationKey: `swap_listing_approved:${listing.id}`,
+    });
+
     res.json(listing);
   } catch (error) {
     console.error('Error approving swap listing:', error);
@@ -148,6 +169,25 @@ router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorA
       where: { id: req.params.id },
       data: { approvalStatus: 'rejected', isActive: false, reportReason: reason || null },
     });
+
+    await supabaseRealtimeService.publishUserNotice(listing.userId, {
+      level: 'warning',
+      message: `Your item listing "${listing.title}" was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+      scope: 'moderation',
+      title: 'Listing Rejected',
+    });
+
+    void sendDirectNotification({
+      userId: listing.userId,
+      type: 'swap',
+      title: 'Listing Rejected',
+      message: `Your item listing "${listing.title}" was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+      relatedId: listing.id,
+      relatedType: 'swap',
+      priority: 'high',
+      notificationKey: `swap_listing_rejected:${listing.id}`,
+    });
+
     res.json(listing);
   } catch (error) {
     console.error('Error rejecting swap listing:', error);

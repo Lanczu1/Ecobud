@@ -16,6 +16,7 @@ import rateLimit from 'express-rate-limit';
 import { JWT_SECRET } from '../security/tokenService';
 import { recognizeChallengeImage } from '../services/challengeImageService';
 import { signChallengeAnalysis, detectionSettingsHash, verifyChallengeAnalysis } from '../security/challengeAnalysisToken';
+import { sendDirectNotification } from '../services/notificationService';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
@@ -577,6 +578,17 @@ challengeRoutes.post(
         adminFinalApproved: true,
         adminFinalApprovedAt: new Date(),
       },
+    });
+
+    void sendDirectNotification({
+      userId,
+      type: 'challenge',
+      title: 'Challenge Verified & Approved!',
+      message: `QR code verified! Your mission "${submission.challengeInstance?.challenge?.title || 'Eco Challenge'}" is officially approved. You can now claim your reward.`,
+      relatedId: submission.challengeInstanceId,
+      relatedType: 'challenge',
+      priority: 'high',
+      notificationKey: `qr_verified_approved:${submission.id}`,
     });
 
     return res.json({

@@ -12,6 +12,7 @@ import { emailRegistrationSchema } from '../security/emailValidator';
 import { LoginAttemptTracker } from '../security/loginAttemptTracker';
 import { verifyGoogleIdentity } from '../security/googleIdentity';
 import { emailCodeHash } from '../security/emailChange';
+import { welcomeEmail } from '../services/welcomeEmail';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -416,6 +417,17 @@ authRoutes.post(
           profile: true,
         },
       });
+
+      // Directly dispatch welcome email to the newly registered Google user
+      if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+        transporter.sendMail({
+          from: `"ECOBUD" <${process.env.GMAIL_USER}>`,
+          to: normalizedEmail,
+          ...welcomeEmail(process.env.ECOBUD_WELCOME_URL || 'ecobud://'),
+        }).catch((err) => {
+          console.error('Failed to send welcome email to new Google user:', err?.message || err);
+        });
+      }
     } else {
       if (user.role !== 'user' || (user.googleIdentityId && user.googleIdentityId !== identity.id) ||
           (!user.googleIdentityId && !identity.canLinkByEmail)) {

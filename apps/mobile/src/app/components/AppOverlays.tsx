@@ -22,6 +22,7 @@ import {
   Dimensions,
   DeviceEventEmitter,
   ActivityIndicator,
+  Switch,
   RefreshControl,
   useWindowDimensions,
 } from 'react-native';
@@ -107,6 +108,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     confidence: number;
     reason?: string;
     proofUrl?: string;
+    analysisToken?: string;
     detectedCount?: number;
     targetQuantity?: number;
     calculatedExpReward?: number;
@@ -379,7 +381,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         confidence: mockResult.confidence,
       });
       const detectedQty = mockResult.detectedCount || 1;
-      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedQty, undefined, proofMetadata);
+      await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedQty, mockResult.analysisToken, proofMetadata);
       Alert.alert(
         'Before Photo Submitted!',
         `Your mission proof has been submitted. The admin will review it shortly.`,
@@ -1292,6 +1294,13 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
+  const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
+
+  const playPopSound = () => {
+    player.seekTo(0);
+    player.play();
+  };
+
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTablet = width >= 600;
@@ -1411,6 +1420,18 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     Animated.parallel(animations).start(() => {
       model.setActiveOverlay(null);
     });
+
+    const timers = [
+      setTimeout(() => playPopSound(), 50),
+      setTimeout(() => playPopSound(), 250),
+      setTimeout(() => playPopSound(), 450),
+      setTimeout(() => playPopSound(), 650),
+      setTimeout(() => playPopSound(), 850),
+    ];
+
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+    };
   }, []);
 
   return (
@@ -4529,6 +4550,12 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
         ]);
       });
 
+      setTimeout(() => playPopSound(), 100);
+      setTimeout(() => playPopSound(), 350);
+      setTimeout(() => playPopSound(), 600);
+      setTimeout(() => playPopSound(), 850);
+      setTimeout(() => playPopSound(), 1100);
+
       Animated.parallel(animations).start(() => {
         model.setActiveOverlay(null);
         DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
@@ -6331,6 +6358,29 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
                 <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
               </TouchableOpacity>
             </View>
+          </SurfaceCard>
+
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Notifications</Text>
+          <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, marginRight: 12 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? '#1C2E24' : '#E8F5EE', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name={model.pushNotificationsEnabled ? 'notifications' : 'notifications-off'} size={20} color={model.pushNotificationsEnabled ? '#126027' : theme.colors.textMuted} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>
+                  Push Notifications
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                  Receive alerts for approved challenges, rewards, events, and trade offers
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={model.pushNotificationsEnabled}
+              onValueChange={(val) => void model.setPushNotificationsEnabled(val)}
+              trackColor={{ false: isDark ? '#333' : '#D1D5DB', true: '#126027' }}
+              thumbColor={model.pushNotificationsEnabled ? '#FFF' : '#F3F4F6'}
+            />
           </SurfaceCard>
 
           <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Change Password</Text>

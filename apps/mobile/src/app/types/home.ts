@@ -233,11 +233,13 @@ export interface EcoBudMobileModel {
     confidence: number;
     reason?: string;
     proofUrl?: string;
+    analysisToken?: string;
     detectedCount?: number;
     targetQuantity?: number;
     calculatedExpReward?: number;
     calculatedEcoCoins?: number;
     box_2d?: [number, number, number, number] | null;
+    boxes?: Array<{ object: string; box_2d: [number, number, number, number] }> | null;
   }>;
   uploadChallengeProofImage: (challengeId: string, uri: string) => Promise<{ proofUrl: string }>;
   handleSubmitChallengeProof: (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, analysisToken?: string, proofText?: string) => Promise<void>;
@@ -260,6 +262,9 @@ export interface EcoBudMobileModel {
   /** Whether the floating leaf mascot AI chatbot is enabled or hidden by the user */
   isChatbotEnabled: boolean;
   setChatbotEnabled: (enabled: boolean) => Promise<void>;
+  /** Whether push notifications are enabled or disabled by the user */
+  pushNotificationsEnabled: boolean;
+  setPushNotificationsEnabled: (enabled: boolean) => Promise<void>;
   /** Hardware and gesture back button handler (Facebook-style tab history & overlay pop) */
   handleHardwareBackPress: () => boolean;
 }

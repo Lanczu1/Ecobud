@@ -49,7 +49,7 @@ export function LoadingScreenVisual({
     <View
       style={[
         styles.screenRoot,
-        { backgroundColor: isDark ? theme.colors.background : '#FFFFFF' },
+        { backgroundColor: theme.colors.background },
         style,
       ]}
       renderToHardwareTextureAndroid={isAndroid}
