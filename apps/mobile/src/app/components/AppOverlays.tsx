@@ -25,6 +25,7 @@ import {
   Switch,
   RefreshControl,
   useWindowDimensions,
+  AppState,
 } from 'react-native';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2812,6 +2813,40 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+// ─── Lesson video progress crash-safe storage helpers ─────────────────────────
+const LESSON_PROGRESS_STORAGE_PREFIX = '@lesson_progress_';
+
+const getLessonProgressStorageKey = (lessonId: string) =>
+  `${LESSON_PROGRESS_STORAGE_PREFIX}${lessonId}`;
+
+const readLocalLessonProgress = async (
+  lessonId: string
+): Promise<{ timestamp: number; progress: number } | null> => {
+  try {
+    const raw = await mobileStorage.getItem(getLessonProgressStorageKey(lessonId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.timestamp === 'number' && typeof parsed.progress === 'number') {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalLessonProgress = (lessonId: string, timestamp: number, progress: number) => {
+  try {
+    void mobileStorage.setItem(
+      getLessonProgressStorageKey(lessonId),
+      JSON.stringify({ timestamp, progress, savedAt: Date.now() })
+    );
+  } catch {
+    // Non-fatal
+  }
+};
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
@@ -2846,7 +2881,37 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const maxAllowedProgress = model.selectedLesson?.hasQuiz ? 90 : 100;
   const numPages = model.selectedLesson?.pages?.length ?? 0;
-  const calculatedInitialProgress = model.selectedLesson?.status === 'completed'
+
+  // ── Crash-safe local progress state ──────────────────────────────────────────
+  // localRestoredRef holds the timestamp/progress loaded from mobileStorage
+  // so the progress bar & seek both use it at mount time before the server data arrives.
+  const localRestoredRef = React.useRef<{ timestamp: number; progress: number } | null>(null);
+  const [localRestoredProgress, setLocalRestoredProgress] = React.useState<number | null>(null);
+
+  // Load local storage on lesson open
+  React.useEffect(() => {
+    if (!model.selectedLesson?.videoUrl || !model.selectedLesson?.id) return;
+    if (model.selectedLesson.status === 'completed') return;
+
+    readLocalLessonProgress(model.selectedLesson.id).then((stored) => {
+      if (stored && stored.timestamp > 0) {
+        localRestoredRef.current = stored;
+        // Use the max of server progress and locally stored progress
+        const serverProgress = model.selectedLesson?.progress ?? 0;
+        const bestProgress = Math.max(serverProgress, stored.progress);
+        setLocalRestoredProgress(bestProgress);
+        // Prime maxWatchedTimeRef so the anti-cheat guard doesn't block the restored seek
+        if (stored.timestamp > maxWatchedTimeRef.current) {
+          maxWatchedTimeRef.current = stored.timestamp;
+        }
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.selectedLesson?.id]);
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // Effective initial progress: prefer locally-stored value if available
+  const serverProgress = model.selectedLesson?.status === 'completed'
     ? 100
     : model.selectedLesson?.videoUrl
       ? Math.max(model.selectedLesson?.progress ?? 0, 0)
@@ -2854,10 +2919,14 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         ? Math.round(((currentPageIndex + 1) / numPages) * maxAllowedProgress)
         : maxAllowedProgress);
 
-  const initialProgress = calculatedInitialProgress;
+  const initialProgress = localRestoredProgress !== null
+    ? Math.max(localRestoredProgress, serverProgress)
+    : serverProgress;
+
   const animatedProgress = React.useRef(new Animated.Value(initialProgress)).current;
   const [displayProgress, setDisplayProgress] = React.useState(initialProgress);
 
+  // Sync animatedProgress when initialProgress changes (local restore or server update)
   React.useEffect(() => {
     animatedProgress.addListener(({ value }) => {
       setDisplayProgress(Math.round(value));
@@ -2865,39 +2934,50 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
     const targetValue = model.selectedLesson?.status === 'completed'
       ? 100
-      : model.selectedLesson?.videoUrl
-        ? Math.max(model.selectedLesson?.progress ?? 0, 0)
-        : (numPages > 0
-          ? Math.round(((currentPageIndex + 1) / numPages) * maxAllowedProgress)
-          : maxAllowedProgress);
+      : localRestoredProgress !== null
+        ? Math.max(localRestoredProgress, model.selectedLesson?.progress ?? 0)
+        : model.selectedLesson?.videoUrl
+          ? Math.max(model.selectedLesson?.progress ?? 0, 0)
+          : (numPages > 0
+            ? Math.round(((currentPageIndex + 1) / numPages) * maxAllowedProgress)
+            : maxAllowedProgress);
 
     Animated.timing(animatedProgress, {
       toValue: targetValue,
-      duration: 1500,
+      duration: 800,
       useNativeDriver: false,
     }).start();
 
     return () => {
       animatedProgress.removeAllListeners();
     };
-  }, [model.selectedLesson?.progress, model.selectedLesson?.videoUrl, model.selectedLesson?.hasQuiz, currentPageIndex, numPages, model.selectedLesson?.status, maxAllowedProgress]);
+  }, [model.selectedLesson?.progress, model.selectedLesson?.videoUrl, model.selectedLesson?.hasQuiz, currentPageIndex, numPages, model.selectedLesson?.status, maxAllowedProgress, localRestoredProgress]);
 
   const maxWatchedTimeRef = React.useRef(0);
   const lastKnownPlayerTimeRef = React.useRef(0);
   const lastSaveTime = React.useRef(Date.now());
+  // null = not yet sought for this lesson, lessonId = already sought
   const initialSeekDoneForLessonRef = React.useRef<string | null>(null);
+  // Cache duration here so doSave can run even after player is destroyed
+  const cachedDurationRef = React.useRef(0);
   const progressDataRef = React.useRef({ time: 0, duration: 0 });
   const hasSavedOnExit = React.useRef(false);
 
   const lessonRef = React.useRef(model.selectedLesson);
   React.useEffect(() => {
     lessonRef.current = model.selectedLesson;
+    // New lesson opened — reset seek & watch tracking
     if (model.selectedLesson?.id !== initialSeekDoneForLessonRef.current) {
       setCurrentPageIndex(0);
       maxWatchedTimeRef.current = 0;
       lastKnownPlayerTimeRef.current = 0;
+      cachedDurationRef.current = 0;
+      hasSavedOnExit.current = false;
+      localRestoredRef.current = null;
+      // Reset seek marker so statusChange will seek again
+      initialSeekDoneForLessonRef.current = null;
     }
-  }, [model.selectedLesson]);
+  }, [model.selectedLesson?.id]);
 
   const handleUpdateRef = React.useRef(model.handleUpdateLessonProgress);
   React.useEffect(() => { handleUpdateRef.current = model.handleUpdateLessonProgress; }, [model.handleUpdateLessonProgress]);
@@ -2905,15 +2985,18 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const doSave = React.useCallback(() => {
     const lesson = lessonRef.current;
     if (!lesson) {
-      console.log('[LessonOverlay] doSave: no lesson, skipping');
       return;
     }
 
-    let duration = progressDataRef.current.duration;
-
+    // Prefer live player duration, fall back to our cached value
+    let duration = cachedDurationRef.current;
     try {
-      if (player.duration > 0) duration = player.duration;
+      if (player.duration > 0) {
+        duration = player.duration;
+        cachedDurationRef.current = duration;
+      }
     } catch {
+      // player may be destroyed — use cached value
     }
 
     if (!duration || isNaN(duration) || duration <= 0) {
@@ -2929,6 +3012,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     const maxVideoProgress = lesson.hasQuiz ? 90 : 100;
     const currentProgress = Math.min(maxVideoProgress, (effectiveWatchedTime / duration) * maxVideoProgress);
 
+    // 1. Persist to local storage first — survives hard kill / OS crash
+    writeLocalLessonProgress(lesson.id, effectiveWatchedTime, currentProgress);
+
+    // 2. Fire-and-forget server update
     try {
       handleUpdateRef.current(lesson.id, currentProgress, effectiveWatchedTime);
     } catch (err) {
@@ -2936,6 +3023,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }, [player]);
 
+  // Save on unmount (covers normal back-navigation)
   React.useEffect(() => {
     return () => {
       if (!hasSavedOnExit.current) {
@@ -2945,6 +3033,20 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     };
   }, [doSave]);
 
+  // Save when app goes to background (covers home-button press & OS swipe-away)
+  React.useEffect(() => {
+    if (!model.selectedLesson?.videoUrl) return;
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        doSave();
+        lastSaveTime.current = Date.now();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [doSave, model.selectedLesson?.videoUrl]);
+
   useEventListener(player, 'playingChange', ({ isPlaying }: { isPlaying: boolean }) => {
     if (!isPlaying) {
       doSave();
@@ -2953,14 +3055,24 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
   useEventListener(player, 'statusChange', ({ status }: { status: string }) => {
     if (status === 'readyToPlay' && player.duration > 0 && model.selectedLesson) {
-      if (initialSeekDoneForLessonRef.current !== model.selectedLesson.id) {
-        const targetTime = model.selectedLesson.videoTimestamp && model.selectedLesson.videoTimestamp > 0
-          ? model.selectedLesson.videoTimestamp
-          : ((model.selectedLesson.progress ?? 0) / 100) * player.duration;
+      // Cache duration immediately so doSave has it even after player destruction
+      cachedDurationRef.current = player.duration;
 
-        if (targetTime > 0) {
+      if (initialSeekDoneForLessonRef.current !== model.selectedLesson.id) {
+        // Prefer locally-stored timestamp > server videoTimestamp > progress-derived
+        const localTimestamp = localRestoredRef.current?.timestamp ?? 0;
+        const serverTimestamp = model.selectedLesson.videoTimestamp ?? 0;
+        const progressDerived = ((model.selectedLesson.progress ?? 0) / 100) * player.duration;
+
+        const targetTime = localTimestamp > 0
+          ? localTimestamp
+          : serverTimestamp > 0
+            ? serverTimestamp
+            : progressDerived;
+
+        if (targetTime > 0 && targetTime < player.duration - 2) {
           player.currentTime = targetTime;
-          maxWatchedTimeRef.current = targetTime;
+          maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, targetTime);
         }
         initialSeekDoneForLessonRef.current = model.selectedLesson.id;
       }
@@ -2973,6 +3085,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         const isPlaying = player.playing;
         const curTime = player.currentTime;
         const curDuration = player.duration;
+
+        if (curDuration > 0) {
+          cachedDurationRef.current = curDuration;
+        }
 
         if (isPlaying && curDuration > 0) {
           if (curTime > maxWatchedTimeRef.current + 1.5) {
@@ -3015,6 +3131,8 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       const curTime = player.currentTime;
       const curDuration = player.duration;
       if (!curDuration || curDuration <= 0) return;
+
+      cachedDurationRef.current = curDuration;
 
       // Prevent fast-forwarding ahead
       if (curTime > maxWatchedTimeRef.current + 1.5) {
