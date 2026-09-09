@@ -2685,18 +2685,21 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
-            {/* App Appearance / Theme Mode Switch */}
-            <View style={profileStyles.actionItem}>
-              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? '#262626' : '#F5F3FF' }]}>
-                <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={isDark ? '#FBBF24' : '#7C3AED'} />
+            {/* App Appearance / Theme Mode Switch (Below Coins History, Text on top & Buttons below) */}
+            <View style={[profileStyles.actionItem, { flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+                <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? '#262626' : '#F5F3FF' }]}>
+                  <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={isDark ? '#FBBF24' : '#7C3AED'} />
+                </View>
+                <View style={profileStyles.actionTextCol}>
+                  <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>App Appearance</Text>
+                  <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>
+                    {isDark ? 'Dark Mode (Night)' : 'Light Mode (Day)'}
+                  </Text>
+                </View>
               </View>
-              <View style={profileStyles.actionTextCol}>
-                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>App Appearance</Text>
-                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>
-                  {isDark ? 'Dark Mode (Night)' : 'Light Mode (Day)'}
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 20, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
+
+              <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
                 <TouchableOpacity
                   onPress={() => {
                     triggerSelectionHaptic();
@@ -2704,18 +2707,20 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                   }}
                   activeOpacity={0.8}
                   style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 16,
+                    flex: 1,
+                    paddingVertical: 7,
+                    borderRadius: 11,
                     backgroundColor: themeMode === 'light' ? '#126027' : 'transparent',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 3,
+                    justifyContent: 'center',
+                    gap: 5,
                   }}
                 >
-                  <Ionicons name="sunny" size={13} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'light' ? '#FFF' : theme.colors.textMuted }}>Light</Text>
+                  <Ionicons name="sunny" size={14} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'light' ? '#FFF' : theme.colors.textMuted }}>Light</Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   onPress={() => {
                     triggerSelectionHaptic();
@@ -2723,18 +2728,20 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                   }}
                   activeOpacity={0.8}
                   style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 16,
+                    flex: 1,
+                    paddingVertical: 7,
+                    borderRadius: 11,
                     backgroundColor: themeMode === 'dark' ? theme.colors.primary : 'transparent',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 3,
+                    justifyContent: 'center',
+                    gap: 5,
                   }}
                 >
-                  <Ionicons name="moon" size={13} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
+                  <Ionicons name="moon" size={14} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   onPress={() => {
                     triggerSelectionHaptic();
@@ -2742,17 +2749,18 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                   }}
                   activeOpacity={0.8}
                   style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 16,
+                    flex: 1,
+                    paddingVertical: 7,
+                    borderRadius: 11,
                     backgroundColor: themeMode === 'onyx' ? '#FFF' : 'transparent',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 3,
+                    justifyContent: 'center',
+                    gap: 5,
                   }}
                 >
-                  <Ionicons name="moon-outline" size={13} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
+                  <Ionicons name="moon-outline" size={14} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2790,7 +2798,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
-            <TouchableOpacity
+            <TouchableOpacity 
               style={profileStyles.actionItem}
               onPress={() => {
                 model.setActiveTab('home');

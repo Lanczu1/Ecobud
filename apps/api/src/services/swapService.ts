@@ -313,7 +313,7 @@ export const swapService = {
       throw new Error('You are not authorized to view this conversation');
     }
 
-    const swapRequestId = conv ? conv.swapRequestId : conversationOrSwapRequestId;
+    const swapRequestId = conv ? conv.id : conversationOrSwapRequestId;
     const rows = await prisma.swapMessage.findMany({
       where: { swapRequestId },
       orderBy: { timestamp: 'asc' },
@@ -335,7 +335,7 @@ export const swapService = {
       throw new Error('You are not authorized to send messages in this conversation');
     }
 
-    const swapRequestId = conv ? conv.swapRequestId : conversationOrSwapRequestId;
+    const swapRequestId = conv ? conv.id : conversationOrSwapRequestId;
     const row = await prisma.swapMessage.create({
       data: {
         swapRequestId,
@@ -359,7 +359,7 @@ export const swapService = {
         ],
       },
     });
-    const swapRequestId = conv ? conv.swapRequestId : conversationOrSwapRequestId;
+    const swapRequestId = conv ? conv.id : conversationOrSwapRequestId;
 
     await prisma.swapMessage.updateMany({
       where: {
