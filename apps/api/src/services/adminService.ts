@@ -4,6 +4,11 @@ import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { apiCache } from "../lib/cache";
 
+type ReviewerContext = {
+  role: string;
+  city?: string | null;
+};
+
 export class AdminService {
   static async getAllLessons() {
   return apiCache.getOrSet('admin_lessons_list', 30, async () => {
@@ -621,8 +626,13 @@ export class AdminService {
     });
   }
 
-  static async getSubmissions() {
+  static async getSubmissions(filterBarangay?: string | null) {
+    const barangay = filterBarangay?.trim() || undefined;
+    const where = barangay
+      ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
+      : undefined;
     const challengeSubs = await prisma.challengeSubmission.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         user: {
@@ -637,6 +647,7 @@ export class AdminService {
     });
 
     const eventSubs = await prisma.eventSubmission.findMany({
+      where,
       orderBy: { submittedAt: 'desc' },
       include: {
         user: {
@@ -686,16 +697,23 @@ export class AdminService {
     return unified;
   }
 
-  static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string) {
+  static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string, reviewerContext?: ReviewerContext) {
     const challengeSub = await prisma.challengeSubmission.findUnique({ 
       where: { id },
       include: {
         challengeInstance: { include: { challenge: true } },
-        user: true
+        user: { include: { profile: true } }
       }
     });
-    
+
     if (challengeSub) {
+      if (reviewerContext?.role === 'moderator') {
+        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
+        const submissionBarangay = challengeSub.user.profile?.city?.trim().toLowerCase();
+        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
+          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
+        }
+      }
       const challenge = challengeSub.challengeInstance?.challenge;
 
       // Handle preliminary approval (approved_collection)
@@ -882,8 +900,18 @@ export class AdminService {
       return submission;
     }
 
-    const eventSub = await prisma.eventSubmission.findUnique({ where: { id } });
+    const eventSub = await prisma.eventSubmission.findUnique({
+      where: { id },
+      include: { user: { include: { profile: true } } },
+    });
     if (eventSub) {
+      if (reviewerContext?.role === 'moderator') {
+        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
+        const submissionBarangay = eventSub.user.profile?.city?.trim().toLowerCase();
+        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
+          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
+        }
+      }
       const eventStatus = status === 'approved' ? 'approved' : 'rejected';
       const submission = await prisma.eventSubmission.update({
         where: { id },
@@ -953,13 +981,13 @@ export class AdminService {
     throw new Error('Submission not found');
   }
 
-  static async deleteSubmission(id: string) {
+  static async deleteSubmission(id: string, _reviewerContext?: ReviewerContext) {
     return await prisma.challengeSubmission.delete({
       where: { id },
     });
   }
 
-  static async deleteEventSubmission(id: string) {
+  static async deleteEventSubmission(id: string, _reviewerContext?: ReviewerContext) {
     const sub = await prisma.eventSubmission.findUnique({ where: { id } });
     if (sub) {
       await prisma.eventRegistration.updateMany({
