@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { getVideoLessonProgress, getQuizLessonProgress } = require('./lessonProgress.ts');
+const { getVideoLessonProgress, getQuizLessonProgress, getVideoDurationForProgress } = require('./lessonProgress.ts');
 
 test('video timestamp maps to the same percentage when restored', () => {
   const checkpoint = JSON.parse(JSON.stringify({ timestamp: 325, duration: 370 }));
@@ -28,4 +28,12 @@ test('invalid duration and out-of-range times remain bounded', () => {
   assert.equal(getVideoLessonProgress(-5, 100, true), 0);
   assert.equal(getVideoLessonProgress(200, 100, true), 80);
   assert.equal(getQuizLessonProgress(0, 0), 80);
+});
+
+test('uses the configured lesson duration when native metadata is unavailable', () => {
+  assert.equal(getVideoDurationForProgress(0, 5), 300);
+  assert.equal(getVideoDurationForProgress(NaN, 5), 300);
+  assert.equal(getVideoDurationForProgress(275, 5), 275);
+  assert.equal(getVideoDurationForProgress(0, 0), 0);
+  assert.equal(getVideoLessonProgress(150, getVideoDurationForProgress(0, 5), true), 40);
 });
