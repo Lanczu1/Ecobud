@@ -93,9 +93,11 @@ export async function checkAndApplyWeeklyQuantityIncrement(challengeId: string) 
     if (!challenge) return null;
 
     if (challenge.lastCycleKey !== currentKey) {
+      const incrementBy = challenge.weeklyIncrementQuantity || 50;
       const updated = await tx.challenge.update({
         where: { id: challengeId },
         data: {
+          availableQuantity: { increment: incrementBy },
           lastCycleKey: currentKey,
         }
       });
@@ -158,7 +160,7 @@ export async function expireStaleSubmissions(): Promise<number> {
   const GRACE_PERIOD_DAYS = 7;
   const cutoffDate = new Date(Date.now() - GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
 
-  const result = await prisma.challengeSubmission.updateMany({
+  const staleSubmissions = await prisma.challengeSubmission.findMany({
     where: {
       status: { in: ['approved_collection', 'final_review'] },
       adminPreliminaryApproved: true,
@@ -166,12 +168,39 @@ export async function expireStaleSubmissions(): Promise<number> {
         lte: cutoffDate
       }
     },
-    data: {
-      status: 'rejected',
-      moderatorNotes: 'Failed: 1-week grace period expired without completing After Photo or QR verification.',
-      reservedQuantity: 0,
+    include: {
+      challengeInstance: { include: { challenge: true } }
     }
   });
 
-  return result.count;
+  let expiredCount = 0;
+
+  for (const sub of staleSubmissions) {
+    const reserved = sub.reservedQuantity || 0;
+    const challengeId = sub.challengeInstance?.challengeId;
+
+    await prisma.$transaction(async (tx) => {
+      if (reserved > 0 && challengeId) {
+        await tx.challenge.update({
+          where: { id: challengeId },
+          data: {
+            availableQuantity: { increment: reserved }
+          }
+        });
+      }
+
+      await tx.challengeSubmission.update({
+        where: { id: sub.id },
+        data: {
+          status: 'rejected',
+          moderatorNotes: 'Failed: 1-week grace period expired without completing After Photo or QR verification.',
+          reservedQuantity: 0,
+        }
+      });
+    });
+
+    expiredCount++;
+  }
+
+  return expiredCount;
 }

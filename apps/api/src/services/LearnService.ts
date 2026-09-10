@@ -257,7 +257,7 @@ export class LearnService {
     };
   }
 
-  async updateLessonProgress(userId: string, lessonId: string, progressValue: number, videoTimestamp: number = 0) {
+  async updateLessonProgress(userId: string, lessonId: string, progressValue: number, videoTimestamp?: number) {
     const lesson = await this.database.lesson.findFirst({
       where: {
         id: lessonId,
@@ -288,14 +288,15 @@ export class LearnService {
     }
 
     const clampedProgress = Math.min(100, Math.max(0, Math.round(progressValue)));
-    const finalProgress = existingProgress 
-      ? Math.max(existingProgress.progress, clampedProgress) 
+    const isVideoResumeSave = Number.isFinite(videoTimestamp);
+    // Resume saves are serialized by the app and represent the user's actual
+    // stopping position. Page-only progress remains monotonic.
+    const finalProgress = existingProgress
+      ? (isVideoResumeSave ? clampedProgress : Math.max(existingProgress.progress, clampedProgress))
       : clampedProgress;
-    // Autosaves can arrive after a newer save on slower connections. Never
-    // replace a resume position with an older timestamp.
-    const finalVideoTimestamp = existingProgress
-      ? Math.max(existingProgress.videoTimestamp, videoTimestamp)
-      : videoTimestamp;
+    const finalVideoTimestamp = isVideoResumeSave
+      ? videoTimestamp!
+      : (existingProgress?.videoTimestamp ?? 0);
 
     const progress = existingProgress
       ? await this.database.userLessonProgress.update({

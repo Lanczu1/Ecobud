@@ -3,12 +3,13 @@ import { presenceQueryService } from './presenceQueryService';
 import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { apiCache } from "../lib/cache";
-import { expireStaleSubmissions } from './cycleManagerService';
-import { sendDirectNotification } from './notificationService';
 
 export class AdminService {
   static async getAllLessons() {
-    return await prisma.lesson.findMany({
+  const startedAt = Date.now();
+
+  try {
+    const lessons = await prisma.lesson.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         createdBy: {
@@ -24,7 +25,15 @@ export class AdminService {
         }
       }
     });
+
+    console.log(`[PERF] getAllLessons DB: ${Date.now() - startedAt}ms`);
+
+    return lessons;
+  } catch (error) {
+    console.error(`[PERF] getAllLessons failed after ${Date.now() - startedAt}ms`);
+    throw error;
   }
+}
 
   static async createLesson(data: {
     title: string;
@@ -89,7 +98,6 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('dashboard_featured_lessons');
 
     if (lesson.isPublished) {
       await Promise.all([
@@ -176,7 +184,6 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('dashboard_featured_lessons');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -201,7 +208,6 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('dashboard_featured_lessons');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -247,11 +253,8 @@ export class AdminService {
   static async toggleFeature(id: string, featured: boolean) {
     const lesson = await prisma.lesson.update({
       where: { id },
-      data: { featured },
+      data: { featured }
     });
-
-    apiCache.invalidatePrefix('learn_published_');
-    apiCache.delete('dashboard_featured_lessons');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -377,8 +380,8 @@ export class AdminService {
         imageUrl: data.imageUrl,
         badgeLabel: data.badgeLabel,
         type: data.type || "AI Image Recognition Challenge",
-        aiDetectionTargets: data.aiDetectionTargets ?? [],
-        aiMinimumConfidence: data.aiMinimumConfidence ?? 80,
+        aiDetectionTargets: data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle"],
+        aiMinimumConfidence: data.aiMinimumConfidence || 80,
         isFeatured: data.isFeatured ?? false,
         availableQuantity: data.availableQuantity ?? 50,
         weeklyIncrementQuantity: data.weeklyIncrementQuantity ?? 50,
@@ -449,11 +452,7 @@ export class AdminService {
     return challenge;
   }
 
-  static async getDashboardStats(forceFresh = false) {
-    if (!forceFresh) {
-      const cached = apiCache.get('admin_dashboard_stats');
-      if (cached) return cached;
-    }
+  static async getDashboardStats() {
     const snapshotDate = new Date();
     const startOfToday = new Date(snapshotDate);
     startOfToday.setHours(0, 0, 0, 0);
@@ -497,153 +496,45 @@ export class AdminService {
       }),
     ]);
 
-    const sevenDaysAgo = new Date(startOfToday);
-    sevenDaysAgo.setDate(startOfToday.getDate() - 6);
+    const activityTrend = await Promise.all(
+      [...Array(7)].map(async (_, i) => {
+        const date = new Date(snapshotDate);
+        date.setDate(snapshotDate.getDate() - (6 - i));
 
-    const [
-      presenceSessions,
-      actionUsers,
-      lessonProgress,
-      challengeSubmissions,
-      habitCheckIns,
-      signupUsers,
-    ] = await Promise.all([
-      prisma.presenceSession.findMany({
-        where: {
-          user: { role: 'user' },
-          OR: [
-            { lastSeenAt: { gte: sevenDaysAgo } },
-            { connectedAt: { gte: sevenDaysAgo } },
-            { updatedAt: { gte: sevenDaysAgo } },
-          ],
-        },
-        select: {
-          userId: true,
-          lastSeenAt: true,
-          connectedAt: true,
-          updatedAt: true,
-        },
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const [active, signups] = await Promise.all([
+          presenceQueryService.getActiveUsersCountForRange(startOfDay, endOfDay),
+          prisma.user.count({
+            where: {
+              createdAt: {
+                gte: startOfDay,
+                lte: endOfDay,
+              },
+              role: 'user',
+            },
+          }),
+        ]);
+
+        return {
+          active,
+          date: startOfDay.toISOString(),
+          dateLabel: startOfDay.toLocaleDateString('en-US', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          }),
+          day: startOfDay.toLocaleDateString('en-US', { weekday: 'short' }),
+          signups,
+        };
       }),
-      prisma.user.findMany({
-        where: {
-          role: 'user',
-          OR: [
-            { lastActionDate: { gte: sevenDaysAgo } },
-            { createdAt: { gte: sevenDaysAgo } },
-          ],
-        },
-        select: {
-          id: true,
-          lastActionDate: true,
-          createdAt: true,
-        },
-      }),
-      prisma.userLessonProgress.findMany({
-        where: {
-          user: { role: 'user' },
-          OR: [
-            { updatedAt: { gte: sevenDaysAgo } },
-            { createdAt: { gte: sevenDaysAgo } },
-          ],
-        },
-        select: {
-          userId: true,
-          updatedAt: true,
-          createdAt: true,
-        },
-      }),
-      prisma.challengeSubmission.findMany({
-        where: {
-          user: { role: 'user' },
-          OR: [
-            { createdAt: { gte: sevenDaysAgo } },
-            { updatedAt: { gte: sevenDaysAgo } },
-          ],
-        },
-        select: {
-          userId: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      prisma.habitCheckIn.findMany({
-        where: {
-          user: { role: 'user' },
-          createdAt: { gte: sevenDaysAgo },
-        },
-        select: {
-          userId: true,
-          createdAt: true,
-        },
-      }),
-      prisma.user.findMany({
-        where: {
-          role: 'user',
-          createdAt: { gte: sevenDaysAgo },
-        },
-        select: {
-          id: true,
-          createdAt: true,
-        },
-      }),
-    ]);
+    );
 
-    const activityTrend = [...Array(7)].map((_, i) => {
-      const date = new Date(snapshotDate);
-      date.setDate(snapshotDate.getDate() - (6 - i));
-
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const startMs = startOfDay.getTime();
-      const endMs = endOfDay.getTime();
-
-      const activeUserIds = new Set<string>();
-
-      for (const ps of presenceSessions) {
-        const ts = ps.lastSeenAt?.getTime() ?? ps.connectedAt.getTime() ?? ps.updatedAt.getTime();
-        if (ts >= startMs && ts <= endMs) activeUserIds.add(ps.userId);
-      }
-      for (const u of actionUsers) {
-        const ts = u.lastActionDate?.getTime() ?? u.createdAt.getTime();
-        if (ts >= startMs && ts <= endMs) activeUserIds.add(u.id);
-      }
-      for (const lp of lessonProgress) {
-        const ts = lp.updatedAt.getTime() ?? lp.createdAt.getTime();
-        if (ts >= startMs && ts <= endMs) activeUserIds.add(lp.userId);
-      }
-      for (const cs of challengeSubmissions) {
-        const ts = cs.createdAt.getTime() ?? cs.updatedAt.getTime();
-        if (ts >= startMs && ts <= endMs) activeUserIds.add(cs.userId);
-      }
-      for (const hc of habitCheckIns) {
-        const ts = hc.createdAt.getTime();
-        if (ts >= startMs && ts <= endMs) activeUserIds.add(hc.userId);
-      }
-
-      let signups = 0;
-      for (const s of signupUsers) {
-        const ts = s.createdAt.getTime();
-        if (ts >= startMs && ts <= endMs) signups++;
-      }
-
-      return {
-        active: activeUserIds.size,
-        signups,
-        date: startOfDay.toISOString(),
-        dateLabel: startOfDay.toLocaleDateString('en-US', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        }),
-        day: startOfDay.toLocaleDateString('en-US', { weekday: 'short' }),
-      };
-    });
-
-    const result = {
+    return {
       overview: {
         activeToday: presenceOverview.activeToday,
         lessonCompletions,
@@ -660,34 +551,10 @@ export class AdminService {
       presence: presenceOverview,
       activityTrend,
     };
-
-    apiCache.set('admin_dashboard_stats', result, 15);
-    return result;
   }
 
-  static async getSubmissions(filterBarangay?: string | null) {
-    await expireStaleSubmissions();
-
-    const normalizedBarangay = filterBarangay?.trim();
-
-    const challengeWhere: any = {};
-    const eventWhere: any = {};
-
-    if (normalizedBarangay && normalizedBarangay !== 'All') {
-      challengeWhere.user = {
-        profile: {
-          city: normalizedBarangay,
-        },
-      };
-      eventWhere.user = {
-        profile: {
-          city: normalizedBarangay,
-        },
-      };
-    }
-
+  static async getSubmissions() {
     const challengeSubs = await prisma.challengeSubmission.findMany({
-      where: challengeWhere,
       orderBy: { createdAt: 'desc' },
       include: {
         user: {
@@ -702,7 +569,6 @@ export class AdminService {
     });
 
     const eventSubs = await prisma.eventSubmission.findMany({
-      where: eventWhere,
       orderBy: { submittedAt: 'desc' },
       include: {
         user: {
@@ -752,33 +618,16 @@ export class AdminService {
     return unified;
   }
 
-  static async reviewSubmission(
-    id: string,
-    reviewerId: string,
-    status: 'approved' | 'rejected' | 'approved_collection',
-    notes?: string,
-    reviewerContext?: { role: string; city?: string | null },
-  ) {
+  static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string) {
     const challengeSub = await prisma.challengeSubmission.findUnique({ 
       where: { id },
       include: {
         challengeInstance: { include: { challenge: true } },
-        user: {
-          include: {
-            profile: true,
-          },
-        },
+        user: true
       }
     });
     
     if (challengeSub) {
-      if (reviewerContext && reviewerContext.role === 'moderator') {
-        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
-        const submissionBarangay = challengeSub.user.profile?.city?.trim().toLowerCase();
-        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
-          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
-        }
-      }
       const challenge = challengeSub.challengeInstance?.challenge;
 
       // Handle preliminary approval (approved_collection)
@@ -832,31 +681,33 @@ export class AdminService {
           title: 'Pending After Photo',
         });
 
-        void sendDirectNotification({
-          userId: submission.userId,
-          type: 'challenge',
-          title: 'Pending After Photo',
-          message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
-          relatedId: submission.challengeInstanceId,
-          relatedType: 'challenge',
-          priority: 'high',
-          notificationKey: `challenge_sub_prelim:${id}`,
-        });
-
         return submission;
       }
 
-      // Handle Rejection
+      // Handle Rejection -> If quantity was reserved, return/refund it back to availableQuantity
       if (status === 'rejected') {
-        await prisma.challengeSubmission.update({
-          where: { id },
-          data: {
-            status: 'rejected',
-            moderatorNotes: notes || null,
-            reviewedById: reviewerId,
-            reviewedAt: new Date(),
-            reservedQuantity: 0,
-          },
+        const reserved = challengeSub.reservedQuantity || 0;
+        
+        await prisma.$transaction(async (tx) => {
+          if (reserved > 0 && challenge?.id) {
+            await tx.challenge.update({
+              where: { id: challenge.id },
+              data: {
+                availableQuantity: { increment: reserved }
+              }
+            });
+          }
+
+          await tx.challengeSubmission.update({
+            where: { id },
+            data: {
+              status: 'rejected',
+              moderatorNotes: notes,
+              reviewedById: reviewerId,
+              reviewedAt: new Date(),
+              reservedQuantity: 0,
+            }
+          });
         });
 
         const updated = await prisma.challengeSubmission.findUnique({
@@ -875,6 +726,7 @@ export class AdminService {
               submissionId: id,
               challengeTitle: challenge?.title,
               reviewerId,
+              refundedQuantity: reserved,
               notes
             }),
             timestamp: new Date()
@@ -897,17 +749,6 @@ export class AdminService {
           message: `Your proof for "${challenge?.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
           scope: 'moderation',
           title: 'Challenge submission rejected',
-        });
-
-        void sendDirectNotification({
-          userId: challengeSub.userId,
-          type: 'challenge',
-          title: 'Challenge submission rejected',
-          message: `Your proof for "${challenge?.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
-          relatedId: challengeSub.challengeInstanceId,
-          relatedType: 'challenge',
-          priority: 'high',
-          notificationKey: `challenge_sub_rejected:${id}`,
         });
 
         return updated;
@@ -963,17 +804,6 @@ export class AdminService {
         title: 'Challenge fully approved',
       });
 
-      void sendDirectNotification({
-        userId: submission.userId,
-        type: 'challenge',
-        title: 'Challenge fully approved',
-        message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
-        relatedId: submission.challengeInstanceId,
-        relatedType: 'challenge',
-        priority: 'high',
-        notificationKey: `challenge_sub_approved:${id}`,
-      });
-
       await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
         actorRole: 'admin',
         actorUserId: reviewerId,
@@ -984,24 +814,8 @@ export class AdminService {
       return submission;
     }
 
-    const eventSub = await prisma.eventSubmission.findUnique({
-      where: { id },
-      include: {
-        user: {
-          include: {
-            profile: true,
-          },
-        },
-      },
-    });
+    const eventSub = await prisma.eventSubmission.findUnique({ where: { id } });
     if (eventSub) {
-      if (reviewerContext && reviewerContext.role === 'moderator') {
-        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
-        const submissionBarangay = eventSub.user.profile?.city?.trim().toLowerCase();
-        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
-          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
-        }
-      }
       const eventStatus = status === 'approved' ? 'approved' : 'rejected';
       const submission = await prisma.eventSubmission.update({
         where: { id },
@@ -1038,27 +852,14 @@ export class AdminService {
         }
       });
 
-      const eventNotificationTitle = status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected';
-      const eventNotificationMessage = status === 'approved'
-        ? `Your attendance for event "${submission.event.title}" has been approved.`
-        : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`;
-
       await supabaseRealtimeService.publishUserNotice(submission.userId, {
         level: status === 'approved' ? 'success' : 'warning',
-        message: eventNotificationMessage,
+        message:
+          status === 'approved'
+            ? `Your attendance for event "${submission.event.title}" has been approved.`
+            : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
         scope: 'moderation',
-        title: eventNotificationTitle,
-      });
-
-      void sendDirectNotification({
-        userId: submission.userId,
-        type: 'event',
-        title: eventNotificationTitle,
-        message: eventNotificationMessage,
-        relatedId: submission.eventId,
-        relatedType: 'event',
-        priority: 'high',
-        notificationKey: `event_sub_${status}:${submission.id}`,
+        title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
       });
 
       return {
@@ -1084,38 +885,15 @@ export class AdminService {
     throw new Error('Submission not found');
   }
 
-  static async deleteSubmission(id: string, reviewerContext?: { role: string; city?: string | null }) {
-    if (reviewerContext && reviewerContext.role === 'moderator') {
-      const challengeSub = await prisma.challengeSubmission.findUnique({
-        where: { id },
-        include: { user: { include: { profile: true } } },
-      });
-      if (challengeSub) {
-        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
-        const submissionBarangay = challengeSub.user.profile?.city?.trim().toLowerCase();
-        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
-          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
-        }
-      }
-    }
+  static async deleteSubmission(id: string) {
     return await prisma.challengeSubmission.delete({
       where: { id },
     });
   }
 
-  static async deleteEventSubmission(id: string, reviewerContext?: { role: string; city?: string | null }) {
-    const sub = await prisma.eventSubmission.findUnique({
-      where: { id },
-      include: { user: { include: { profile: true } } },
-    });
+  static async deleteEventSubmission(id: string) {
+    const sub = await prisma.eventSubmission.findUnique({ where: { id } });
     if (sub) {
-      if (reviewerContext && reviewerContext.role === 'moderator') {
-        const assignedBarangay = reviewerContext.city?.trim().toLowerCase();
-        const submissionBarangay = sub.user?.profile?.city?.trim().toLowerCase();
-        if (!assignedBarangay || assignedBarangay !== submissionBarangay) {
-          throw new Error('UNAUTHORIZED_BARANGAY_ACCESS');
-        }
-      }
       await prisma.eventRegistration.updateMany({
         where: { userId: sub.userId, eventId: sub.eventId, status: 'PENDING_APPROVAL' },
         data: { status: 'REGISTERED' }
@@ -1176,7 +954,6 @@ export class AdminService {
     latitude?: number;
     longitude?: number;
     isFeatured?: boolean;
-    isPublished?: boolean;
     managedById: string;
   }) {
     return await prisma.event.create({
@@ -1194,7 +971,6 @@ export class AdminService {
         latitude: data.latitude,
         longitude: data.longitude,
         isFeatured: data.isFeatured ?? false,
-        isPublished: data.isPublished ?? true,
       },
       include: {
         registrations: { select: { id: true } },
@@ -1216,7 +992,6 @@ export class AdminService {
     latitude: number;
     longitude: number;
     isFeatured: boolean;
-    isPublished: boolean;
   }>) {
     const updateData: any = { ...data };
     if (data.startDatetime) {
@@ -1274,4 +1049,3 @@ export class AdminService {
     });
   }
 }
-
