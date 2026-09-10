@@ -6,12 +6,31 @@ import { apiCache } from "../lib/cache";
 
 export class AdminService {
   static async getAllLessons() {
+  return apiCache.getOrSet('admin_lessons_list', 30, async () => {
   const startedAt = Date.now();
 
   try {
     const lessons = await prisma.lesson.findMany({
       orderBy: { createdAt: 'desc' },
-      include: {
+      // The table view does not need lesson bodies, transcripts, pages, or
+      // quiz answers. Those can be very large and made every list refresh
+      // serialize and transfer the complete course catalogue.
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        category: true,
+        difficulty: true,
+        durationMinutes: true,
+        rating: true,
+        pointsReward: true,
+        isPublished: true,
+        featured: true,
+        videoUrl: true,
+        imageUrl: true,
+        createdAt: true,
+        updatedAt: true,
+        scheduledAt: true,
         createdBy: {
           select: {
             id: true,
@@ -19,10 +38,7 @@ export class AdminService {
             email: true
           }
         },
-        quizQuestions: true,
-        pages: {
-          orderBy: { order: 'asc' }
-        }
+        _count: { select: { quizQuestions: true, pages: true } },
       }
     });
 
@@ -33,7 +49,19 @@ export class AdminService {
     console.error(`[PERF] getAllLessons failed after ${Date.now() - startedAt}ms`);
     throw error;
   }
+  });
 }
+
+  static async getLessonById(id: string) {
+    return prisma.lesson.findUnique({
+      where: { id },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        quizQuestions: true,
+        pages: { orderBy: { order: 'asc' } },
+      },
+    });
+  }
 
   static async createLesson(data: {
     title: string;
@@ -98,6 +126,8 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('admin_lessons_list');
+    apiCache.delete('admin_dashboard_stats');
 
     if (lesson.isPublished) {
       await Promise.all([
@@ -184,6 +214,8 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('admin_lessons_list');
+    apiCache.delete('admin_dashboard_stats');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -208,6 +240,8 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('admin_lessons_list');
+    apiCache.delete('admin_dashboard_stats');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -233,6 +267,8 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
+    apiCache.delete('admin_lessons_list');
+    apiCache.delete('admin_dashboard_stats');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -452,7 +488,74 @@ export class AdminService {
     return challenge;
   }
 
+  static async getSevenDayActivityTrend(snapshotDate: Date) {
+    const days = [...Array(7)].map((_, i) => {
+      const start = new Date(snapshotDate);
+      start.setDate(snapshotDate.getDate() - (6 - i));
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      return { start, end, userIds: new Set<string>(), signups: 0 };
+    });
+    const range = { gte: days[0].start, lte: days[6].end };
+    const addActivity = (userId: string, timestamp: Date | null) => {
+      if (!timestamp) return;
+      const day = days.find((candidate) => timestamp >= candidate.start && timestamp <= candidate.end);
+      if (day) day.userIds.add(userId);
+    };
+
+    // Fetch the seven-day window once per data source. The former version
+    // executed five database reads for every day (35 reads) just for this
+    // chart, which saturated the connection pool on small instances.
+    const [presenceRows, userRows, lessonRows, submissionRows, habitRows] = await Promise.all([
+      prisma.presenceSession.findMany({
+        where: { user: { role: 'user' }, OR: [{ lastSeenAt: range }, { connectedAt: range }, { updatedAt: range }] },
+        select: { userId: true, lastSeenAt: true, connectedAt: true, updatedAt: true },
+      }),
+      prisma.user.findMany({
+        where: { role: 'user', OR: [{ lastActionDate: range }, { createdAt: range }] },
+        select: { id: true, lastActionDate: true, createdAt: true },
+      }),
+      prisma.userLessonProgress.findMany({
+        where: { user: { role: 'user' }, OR: [{ updatedAt: range }, { createdAt: range }] },
+        select: { userId: true, updatedAt: true, createdAt: true },
+      }),
+      prisma.challengeSubmission.findMany({
+        where: { user: { role: 'user' }, OR: [{ createdAt: range }, { updatedAt: range }] },
+        select: { userId: true, createdAt: true, updatedAt: true },
+      }),
+      prisma.habitCheckIn.findMany({
+        where: { user: { role: 'user' }, createdAt: range },
+        select: { userId: true, createdAt: true },
+      }),
+    ]);
+
+    presenceRows.forEach((row) => {
+      addActivity(row.userId, row.lastSeenAt);
+      addActivity(row.userId, row.connectedAt);
+      addActivity(row.userId, row.updatedAt);
+    });
+    userRows.forEach((row) => {
+      addActivity(row.id, row.lastActionDate);
+      addActivity(row.id, row.createdAt);
+      const signupDay = days.find((candidate) => row.createdAt >= candidate.start && row.createdAt <= candidate.end);
+      if (signupDay) signupDay.signups += 1;
+    });
+    lessonRows.forEach((row) => { addActivity(row.userId, row.updatedAt); addActivity(row.userId, row.createdAt); });
+    submissionRows.forEach((row) => { addActivity(row.userId, row.createdAt); addActivity(row.userId, row.updatedAt); });
+    habitRows.forEach((row) => addActivity(row.userId, row.createdAt));
+
+    return days.map(({ start, userIds, signups }) => ({
+      active: userIds.size,
+      date: start.toISOString(),
+      dateLabel: start.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+      day: start.toLocaleDateString('en-US', { weekday: 'short' }),
+      signups,
+    }));
+  }
+
   static async getDashboardStats() {
+    return apiCache.getOrSet('admin_dashboard_stats', 15, async () => {
     const snapshotDate = new Date();
     const startOfToday = new Date(snapshotDate);
     startOfToday.setHours(0, 0, 0, 0);
@@ -496,43 +599,7 @@ export class AdminService {
       }),
     ]);
 
-    const activityTrend = await Promise.all(
-      [...Array(7)].map(async (_, i) => {
-        const date = new Date(snapshotDate);
-        date.setDate(snapshotDate.getDate() - (6 - i));
-
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const [active, signups] = await Promise.all([
-          presenceQueryService.getActiveUsersCountForRange(startOfDay, endOfDay),
-          prisma.user.count({
-            where: {
-              createdAt: {
-                gte: startOfDay,
-                lte: endOfDay,
-              },
-              role: 'user',
-            },
-          }),
-        ]);
-
-        return {
-          active,
-          date: startOfDay.toISOString(),
-          dateLabel: startOfDay.toLocaleDateString('en-US', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          }),
-          day: startOfDay.toLocaleDateString('en-US', { weekday: 'short' }),
-          signups,
-        };
-      }),
-    );
+    const activityTrend = await this.getSevenDayActivityTrend(snapshotDate);
 
     return {
       overview: {
@@ -551,6 +618,7 @@ export class AdminService {
       presence: presenceOverview,
       activityTrend,
     };
+    });
   }
 
   static async getSubmissions() {
