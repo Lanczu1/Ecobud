@@ -1,4 +1,4 @@
-import { getVideoLessonProgress, getQuizLessonProgress } from '../utils/lessonProgress';
+import { getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress } from '../utils/lessonProgress';
 import { NotificationInbox } from './NotificationInbox';
 import React from 'react';
 import { useAudioPlayer } from 'expo-audio';
@@ -2854,6 +2854,15 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const pageAnim = React.useRef(new Animated.Value(1)).current;
 
   const handleNextPage = () => {
+    const lesson = model.selectedLesson;
+    const pageCount = lesson?.pages?.length ?? 0;
+    if (lesson && pageCount > 0) {
+      const videoContribution = lesson.videoUrl
+        ? getVideoProgressLimit(!!lesson.hasQuiz, pageCount)
+        : 0;
+      const pageContribution = (maxAllowedProgress - videoContribution) * ((currentPageIndex + 1) / pageCount);
+      void model.handleUpdateLessonProgress(lesson.id, Math.round(videoContribution + pageContribution));
+    }
     Animated.sequence([
       Animated.timing(pageAnim, {
         toValue: 0,
@@ -2929,9 +2938,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     ? 100
     : model.selectedLesson?.videoUrl
       ? Math.max(model.selectedLesson?.progress ?? 0, 0)
-      : (numPages > 0
-        ? Math.round(((currentPageIndex + 1) / numPages) * maxAllowedProgress)
-        : maxAllowedProgress);
+      : Math.max(model.selectedLesson?.progress ?? 0, 0);
 
   const initialProgress = localRestoredProgress !== null
     ? Math.max(localRestoredProgress, serverProgress)
@@ -2952,9 +2959,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         ? Math.max(localRestoredProgress, model.selectedLesson?.progress ?? 0)
         : model.selectedLesson?.videoUrl
           ? Math.max(model.selectedLesson?.progress ?? 0, 0)
-          : (numPages > 0
-            ? Math.round(((currentPageIndex + 1) / numPages) * maxAllowedProgress)
-            : maxAllowedProgress);
+          : Math.max(model.selectedLesson?.progress ?? 0, 0);
 
     Animated.timing(animatedProgress, {
       toValue: targetValue,
@@ -3025,7 +3030,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       return;
     }
 
-    const currentProgress = getVideoLessonProgress(effectiveWatchedTime, duration, !!lesson.hasQuiz);
+    const currentProgress = getVideoLessonProgress(effectiveWatchedTime, duration, !!lesson.hasQuiz, lesson.pages?.length ?? 0);
 
     // 1. Persist to local storage first — survives hard kill / OS crash
     writeLocalLessonProgress(model.session?.user.id + ":" + lesson.id, effectiveWatchedTime, Math.max(currentProgress, lesson.progress));
@@ -3069,9 +3074,11 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   });
 
   useEventListener(player, 'playToEnd', () => {
-    if (cachedDurationRef.current > 0) {
-      maxWatchedTimeRef.current = cachedDurationRef.current;
-      animatedProgress.setValue(model.selectedLesson?.status === 'completed' ? 100 : maxAllowedProgress);
+    const duration = cachedDurationRef.current || player.duration || 0;
+    if (duration > 0) {
+      cachedDurationRef.current = duration;
+      maxWatchedTimeRef.current = duration;
+      animatedProgress.setValue(model.selectedLesson?.status === 'completed' ? 100 : getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, numPages));
       doSave();
     }
   });
@@ -3140,7 +3147,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           if (lesson) writeLocalLessonProgress(
             model.session?.user.id + ':' + lesson.id,
             maxWatchedTimeRef.current,
-            Math.max(lesson.progress, getVideoLessonProgress(maxWatchedTimeRef.current, curDuration, !!lesson.hasQuiz))
+            Math.max(lesson.progress, getVideoLessonProgress(maxWatchedTimeRef.current, curDuration, !!lesson.hasQuiz, lesson.pages?.length ?? 0))
           );
           if (Date.now() - lastSaveTime.current >= 5000) {
             doSave();
@@ -3149,7 +3156,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
           if (model.selectedLesson?.status !== 'completed') {
             const effectiveWatchedTime = Math.max(maxWatchedTimeRef.current, 0);
-            const liveCalculatedPercent = getVideoLessonProgress(effectiveWatchedTime, curDuration, !!lessonRef.current?.hasQuiz);
+            const liveCalculatedPercent = getVideoLessonProgress(effectiveWatchedTime, curDuration, !!lessonRef.current?.hasQuiz, lessonRef.current?.pages?.length ?? 0);
 
             setDisplayProgress((prev) => {
               if (liveCalculatedPercent > prev) {
@@ -3190,7 +3197,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
       if (model.selectedLesson?.status !== 'completed') {
         const effectiveWatchedTime = Math.max(maxWatchedTimeRef.current, 0);
-        const liveCalculatedPercent = getVideoLessonProgress(effectiveWatchedTime, curDuration, !!lessonRef.current?.hasQuiz);
+        const liveCalculatedPercent = getVideoLessonProgress(effectiveWatchedTime, curDuration, !!lessonRef.current?.hasQuiz, lessonRef.current?.pages?.length ?? 0);
 
         setDisplayProgress((prev) => {
           if (liveCalculatedPercent > prev) {
@@ -3215,6 +3222,9 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const [showConfetti, setShowConfetti] = React.useState(false);
+  const videoIsComplete = !model.selectedLesson?.videoUrl
+    || displayProgress >= getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, numPages)
+    || model.selectedLesson?.status === 'completed';
 
   React.useEffect(() => {
     if (displayProgress >= maxAllowedProgress && initialProgress < maxAllowedProgress && !showConfetti) {
@@ -3382,7 +3392,8 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       </ScrollView>
 
       {model.selectedLesson && (
-        (model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1) ||
+        (videoIsComplete && model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1) ||
+        (videoIsComplete && model.selectedLesson.pages && currentPageIndex === model.selectedLesson.pages.length - 1) ||
         (!model.selectedLesson.videoUrl && (!model.selectedLesson.pages || model.selectedLesson.pages.length === 0)) ||
         displayProgress >= maxAllowedProgress ||
         model.selectedLesson.status === 'completed'
@@ -3400,7 +3411,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
             shadowRadius: 12,
             elevation: 10
           }}>
-            {model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1 ? (
+            {videoIsComplete && model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1 ? (
               <PrimaryButton
                 label="Next Page"
                 onPress={handleNextPage}
@@ -3431,7 +3442,22 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const currentQuestion = model.quizQuestions[model.currentQuestionIndex];
   const totalQuestions = model.quizQuestions.length;
-  const progress = getQuizLessonProgress(model.currentQuestionIndex, totalQuestions);
+  const progress = Math.max(
+    model.selectedLesson?.progress ?? 0,
+    getQuizLessonProgress(Object.keys(model.quizAnswers).length, totalQuestions),
+  );
+  const quizProgressAnim = React.useRef(new Animated.Value(progress)).current;
+  const [displayQuizProgress, setDisplayQuizProgress] = React.useState(progress);
+
+  React.useEffect(() => {
+    const listener = quizProgressAnim.addListener(({ value }) => setDisplayQuizProgress(Math.round(value)));
+    Animated.timing(quizProgressAnim, {
+      toValue: Math.min(100, Math.max(0, progress)),
+      duration: 350,
+      useNativeDriver: false,
+    }).start();
+    return () => quizProgressAnim.removeListener(listener);
+  }, [progress, quizProgressAnim]);
 
   if (model.quizCompleted) {
     return (
@@ -3535,15 +3561,18 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
       }}
       topRightAccessory={
         <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF' }}>
-          {Math.round(progress)}%
+          {displayQuizProgress}%
         </Text>
       }
       topProgressBar={
         <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.2)', width: '100%' }}>
-          <View style={{
+          <Animated.View style={{
             height: '100%',
             backgroundColor: '#4ade80',
-            width: `${progress}%`,
+            width: quizProgressAnim.interpolate({
+              inputRange: [0, 100],
+              outputRange: ['0%', '100%'],
+            }),
           }} />
         </View>
       }

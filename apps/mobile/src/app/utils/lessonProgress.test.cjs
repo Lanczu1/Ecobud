@@ -17,6 +17,11 @@ test('quiz continues from 80 and reserves 100 for confirmed completion', () => {
   assert.equal(getVideoLessonProgress(370, 370, false), 99);
 });
 
+test('video shares the pre-quiz progress with required content pages', () => {
+  assert.equal(getVideoLessonProgress(370, 370, true, 3), 70);
+  assert.equal(getVideoLessonProgress(370, 370, false, 3), 70);
+});
+
 test('invalid duration and out-of-range times remain bounded', () => {
   assert.equal(getVideoLessonProgress(11, 0, true), 0);
   assert.equal(getVideoLessonProgress(11, NaN, true), 0);
