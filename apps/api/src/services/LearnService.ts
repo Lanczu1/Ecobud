@@ -291,6 +291,11 @@ export class LearnService {
     const finalProgress = existingProgress 
       ? Math.max(existingProgress.progress, clampedProgress) 
       : clampedProgress;
+    // Autosaves can arrive after a newer save on slower connections. Never
+    // replace a resume position with an older timestamp.
+    const finalVideoTimestamp = existingProgress
+      ? Math.max(existingProgress.videoTimestamp, videoTimestamp)
+      : videoTimestamp;
 
     const progress = existingProgress
       ? await this.database.userLessonProgress.update({
@@ -299,7 +304,7 @@ export class LearnService {
         },
         data: {
           progress: finalProgress,
-          videoTimestamp: videoTimestamp > 0 ? videoTimestamp : undefined,
+          videoTimestamp: finalVideoTimestamp > 0 ? finalVideoTimestamp : undefined,
         },
       })
       : await this.database.userLessonProgress.create({
@@ -308,7 +313,7 @@ export class LearnService {
           lessonId,
           status: 'seen',
           progress: clampedProgress,
-          videoTimestamp,
+          videoTimestamp: finalVideoTimestamp,
         },
       });
 
