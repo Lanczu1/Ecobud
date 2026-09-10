@@ -82,7 +82,7 @@ export class GamificationService {
           category: lesson.category,
         },
       });
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     await this.broadcastUserActivity(userId, ['learn', 'tracker'], {
       actorRole: 'user',

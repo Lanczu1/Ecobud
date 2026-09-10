@@ -1518,7 +1518,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     mobileStorage.setItemSync('@lesson_quiz_' + session?.user.id + ':' + selectedLessonId, JSON.stringify({
       order: quizQuestions.map(q => q.id), index: currentQuestionIndex, answers: quizAnswers,
     }));
-    void handleUpdateLessonProgress(selectedLessonId, getQuizLessonProgress(currentQuestionIndex, quizQuestions.length));
+    void handleUpdateLessonProgress(selectedLessonId, getQuizLessonProgress(Object.keys(quizAnswers).length, quizQuestions.length));
   }, [activeOverlay, selectedLessonId, session?.user.id, quizQuestions, currentQuestionIndex, quizAnswers, quizCompleted, handleUpdateLessonProgress]);
 
   const selectAnswer = useCallback((questionId: string, answer: string) => {
