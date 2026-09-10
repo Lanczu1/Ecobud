@@ -19,6 +19,7 @@ adminRoutes.post("/upload/delete", AdminController.deleteImage);
 
 // Lessons Management
 adminRoutes.get("/lessons", AdminController.getLessons);
+adminRoutes.get("/lessons/:id", AdminController.getLessonById);
 adminRoutes.post("/lessons", requireAdminAccess, uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.createLesson);
 adminRoutes.put("/lessons/:id", requireAdminAccess, uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.updateLesson);
 adminRoutes.delete("/lessons/:id", AdminController.deleteLesson);

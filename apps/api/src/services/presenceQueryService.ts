@@ -69,8 +69,6 @@ export class PresenceQueryService {
   }
 
   async getPresenceOverview(snapshotDate: Date = new Date()): Promise<AdminPresenceOverview> {
-    await this.presenceService.cleanupStaleSessions();
-
     const [activeToday, presenceSummaryRows] = await Promise.all([
       this.getActiveTodayCount(snapshotDate),
       this.getPresenceSummaryRows(snapshotDate),
@@ -134,7 +132,6 @@ export class PresenceQueryService {
   }
 
   async getAdminUsers(snapshotDate: Date = new Date()): Promise<AdminPresenceUser[]> {
-    await this.presenceService.cleanupStaleSessions();
     const [users, presenceSummaryRows] = await Promise.all([
       this.database.user.findMany({
         orderBy: {

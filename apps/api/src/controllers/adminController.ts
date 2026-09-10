@@ -36,6 +36,16 @@ export class AdminController {
     }
   }
 
+  static async getLessonById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const lesson = await AdminService.getLessonById(req.params.id);
+      if (!lesson) return res.status(404).json({ message: 'Lesson not found.' });
+      return res.status(200).json(lesson);
+    } catch {
+      return res.status(500).json({ message: 'Failed to retrieve lesson.' });
+    }
+  }
+
   static async createLesson(req: AuthenticatedRequest, res: Response) {
     const { title, description, isPublished, category, difficulty, quizPassingScore, quizQuestions, durationMinutes, pages, pointsReward, scheduledAt } = req.body;
 

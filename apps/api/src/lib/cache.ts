@@ -5,6 +5,7 @@ interface CacheEntry<T> {
 
 class MemoryCache {
   private store = new Map<string, CacheEntry<any>>();
+  private pending = new Map<string, Promise<any>>();
 
   set<T>(key: string, value: T, ttlSeconds: number): void {
     const expiresAt = Date.now() + ttlSeconds * 1000;
@@ -33,9 +34,20 @@ class MemoryCache {
       return cached;
     }
 
-    const fresh = await fetcher();
-    this.set(key, fresh, ttlSeconds);
-    return fresh;
+    // A dashboard can be requested by more than one mounted admin view at
+    // once. Reuse the in-flight fetch so that cache misses do not multiply
+    // the database work.
+    const inFlight = this.pending.get(key);
+    if (inFlight) return inFlight as Promise<T>;
+
+    const request = fetcher()
+      .then((fresh) => {
+        this.set(key, fresh, ttlSeconds);
+        return fresh;
+      })
+      .finally(() => this.pending.delete(key));
+    this.pending.set(key, request);
+    return request;
   }
 
   delete(key: string): void {

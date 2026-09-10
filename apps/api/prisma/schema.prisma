@@ -50,6 +50,8 @@ model User {
   swapRequestsReceived        SwapRequest[] @relation("SwapRequestTo")
 
   @@map("users")
+  @@index([role, createdAt], map: "users_role_created_at_idx")
+  @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
 }
 
 model Profile {
@@ -144,6 +146,8 @@ model UserLessonProgress {
   @@unique([userId, lessonId])
   @@index([userId, status])
   @@index([lessonId])
+  @@index([createdAt], map: "lesson_progress_created_at_idx")
+  @@index([updatedAt], map: "lesson_progress_updated_at_idx")
   @@map("lesson_progress")
 }
 
@@ -274,6 +278,9 @@ model ChallengeSubmission {
   @@index([userId, status])
   @@index([challengeInstanceId, status])
   @@index([reviewedById])
+  @@index([status], map: "challenge_submissions_status_idx")
+  @@index([createdAt], map: "challenge_submissions_created_at_idx")
+  @@index([updatedAt], map: "challenge_submissions_updated_at_idx")
 }
 
 model Habit {
@@ -300,6 +307,7 @@ model HabitCheckIn {
   @@unique([userId, habitId, dateKey])
   @@index([userId, dateKey])
   @@index([habitId])
+  @@index([createdAt], map: "habit_check_ins_created_at_idx")
 }
 
 model Badge {
@@ -498,6 +506,7 @@ model PresenceSession {
   @@index([userId])
   @@index([isOnline, expiresAt], map: "presence_sessions_online_expiry_idx")
   @@index([lastSeenAt], map: "presence_sessions_last_seen_idx")
+  @@index([updatedAt], map: "presence_sessions_updated_at_idx")
   @@map("presence_sessions")
 }
 

@@ -8,7 +8,7 @@ interface Lesson {
   id: string;
   title: string;
   description: string;
-  content: string;
+  content?: string;
   category: string;
   difficulty?: string;
   durationMinutes: number;
@@ -93,7 +93,7 @@ const formatLocalDatetime = (dateString?: string | null) => {
 function LessonModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormDataState>(
     initial
-      ? { title: initial.title, description: initial.description, content: initial.content, category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, featured: initial.featured || false, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes ?? 0, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }], scheduledAt: formatLocalDatetime(initial.scheduledAt) }
+      ? { title: initial.title, description: initial.description, content: initial.content || '', category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, featured: initial.featured || false, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes ?? 0, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }], scheduledAt: formatLocalDatetime(initial.scheduledAt) }
       : emptyForm
   );
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -501,6 +501,7 @@ export function LearningContent() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [editing, setEditing] = useState<Lesson | null>(null);
+  const [openingLessonId, setOpeningLessonId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
 
@@ -536,6 +537,19 @@ export function LearningContent() {
     if (!editing) return;
     const updated = await adminPutForm<Lesson>(`/admin/lessons/${editing.id}`, form);
     setLessons(prev => prev.map(l => l.id === updated.id ? updated : l));
+  };
+
+  const openEdit = async (lessonId: string) => {
+    setOpeningLessonId(lessonId);
+    try {
+      const lesson = await adminGet<Lesson>(`/admin/lessons/${lessonId}`, { bypassCache: true });
+      setEditing(lesson);
+      setModal('edit');
+    } catch (err: any) {
+      setError(err.message || 'Failed to load lesson details.');
+    } finally {
+      setOpeningLessonId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -688,8 +702,8 @@ export function LearningContent() {
                   >
                     {toggling === item.id + 'featured' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className={`w-3 h-3 ${item.featured ? 'fill-current' : ''}`} />}
                   </button>
-                  <button onClick={() => { setEditing(item); setModal('edit'); }} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
-                    <Edit3 className="w-3 h-3" />
+                  <button onClick={() => void openEdit(item.id)} disabled={openingLessonId === item.id} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-60">
+                    {openingLessonId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Edit3 className="w-3 h-3" />}
                   </button>
                   <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
                     {deleting === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
