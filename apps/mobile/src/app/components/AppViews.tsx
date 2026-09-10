@@ -1774,10 +1774,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                               </View>
 
                               {item.isApproved ? (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                   style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                                   onPress={(e) => {
-                                    void model.handleClaimChallengeReward(challenge.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }, item.sub?.id);
+                                    // Claims in History may belong to an older cycle. Use that
+                                    // concrete instance so the API never resolves it to a newer cycle.
+                                    void model.handleClaimChallengeReward(challenge.cycle?.instanceId ?? challenge.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }, item.sub?.id);
                                   }}
                                 >
                                   <Ionicons name="gift" size={14} color="#FFFFFF" />
