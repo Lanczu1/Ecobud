@@ -1,4 +1,4 @@
-import { getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress } from '../utils/lessonProgress';
+import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress } from '../utils/lessonProgress';
 import { NotificationInbox } from './NotificationInbox';
 import React from 'react';
 import { useAudioPlayer } from 'expo-audio';
@@ -3020,7 +3020,8 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       // player may be destroyed — use cached value
     }
 
-    if (!duration || isNaN(duration) || duration <= 0) {
+    duration = getVideoDurationForProgress(duration, lesson.durationMinutes);
+    if (!duration) {
       return;
     }
 
@@ -3074,7 +3075,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   });
 
   useEventListener(player, 'playToEnd', () => {
-    const duration = cachedDurationRef.current || player.duration || 0;
+    const duration = getVideoDurationForProgress(
+      cachedDurationRef.current || player.duration || 0,
+      model.selectedLesson?.durationMinutes,
+    );
     if (duration > 0) {
       cachedDurationRef.current = duration;
       maxWatchedTimeRef.current = duration;
@@ -3088,9 +3092,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   });
 
   useEventListener(player, 'statusChange', ({ status }: { status: string }) => {
-    if (status === 'readyToPlay' && player.duration > 0 && model.selectedLesson) {
+    if (status === 'readyToPlay' && model.selectedLesson) {
       // Cache duration immediately so doSave has it even after player destruction
-      cachedDurationRef.current = player.duration;
+      const actualDuration = player.duration;
+      if (actualDuration > 0) cachedDurationRef.current = actualDuration;
 
       if (initialSeekDoneForLessonRef.current !== model.selectedLesson.id) {
         // Prefer locally-stored timestamp > server videoTimestamp > progress-derived
@@ -3104,7 +3109,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
             ? serverTimestamp
             : progressDerived;
 
-        if (targetTime > 0 && targetTime <= player.duration) {
+        if (targetTime > 0 && actualDuration > 0 && targetTime <= actualDuration) {
           player.currentTime = targetTime;
           maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, targetTime);
         }
@@ -3126,7 +3131,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         }
         const isPlaying = player.playing;
         const curTime = player.currentTime;
-        const curDuration = player.duration > 0 ? player.duration : cachedDurationRef.current;
+        const curDuration = getVideoDurationForProgress(
+          player.duration > 0 ? player.duration : cachedDurationRef.current,
+          lessonToRestore?.durationMinutes,
+        );
 
         if (curDuration > 0) {
           cachedDurationRef.current = curDuration;
@@ -3178,7 +3186,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   useEventListener(player, 'timeUpdate', () => {
     try {
       const curTime = player.currentTime;
-      const curDuration = player.duration > 0 ? player.duration : cachedDurationRef.current;
+      const curDuration = getVideoDurationForProgress(
+        player.duration > 0 ? player.duration : cachedDurationRef.current,
+        lessonRef.current?.durationMinutes,
+      );
       if (!curDuration || curDuration <= 0) return;
 
       cachedDurationRef.current = curDuration;
@@ -3326,24 +3337,44 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                   />
                 </View>
               ) : null}
+              {/* Pages - only unlocked after video completes */}
               {model.selectedLesson.pages && model.selectedLesson.pages.length > 0 ? (
-                <Animated.View style={{
-                  marginTop: 24,
-                  backgroundColor: isDark ? theme.colors.surface : '#FAFCFB',
-                  padding: 20,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: theme.colors.cardBorder,
-                  opacity: pageAnim,
-                  transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
-                }}>
-                  <Text style={[styles.lessonBodyText, { marginTop: 0, color: theme.colors.textPrimary }]}>
-                    {model.selectedLesson.pages[currentPageIndex].content}
-                  </Text>
-                  <Text style={{ textAlign: 'center', marginTop: 16, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
-                    Page {currentPageIndex + 1} of {model.selectedLesson.pages.length}
-                  </Text>
-                </Animated.View>
+                videoIsComplete ? (
+                  <Animated.View style={{
+                    marginTop: 24,
+                    backgroundColor: isDark ? theme.colors.surface : '#FAFCFB',
+                    padding: 20,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: theme.colors.cardBorder,
+                    opacity: pageAnim,
+                    transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
+                  }}>
+                    <Text style={[styles.lessonBodyText, { marginTop: 0, color: theme.colors.textPrimary }]}>
+                      {model.selectedLesson.pages[currentPageIndex].content}
+                    </Text>
+                    <Text style={{ textAlign: 'center', marginTop: 16, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                      Page {currentPageIndex + 1} of {model.selectedLesson.pages.length}
+                    </Text>
+                  </Animated.View>
+                ) : (
+                  <View style={{
+                    marginTop: 24,
+                    padding: 16,
+                    borderRadius: 14,
+                    backgroundColor: isDark ? theme.colors.surfaceMuted : '#EFF8F3',
+                    borderWidth: 1,
+                    borderColor: isDark ? theme.colors.border : '#C8E6D3',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}>
+                    <Ionicons name="play-circle" size={26} color={isDark ? theme.colors.primary : '#126027'} />
+                    <Text style={{ flex: 1, fontSize: 13, color: isDark ? theme.colors.primary : '#126027', fontWeight: '700', lineHeight: 19 }}>
+                      Finish watching the video above to unlock the lesson pages.
+                    </Text>
+                  </View>
+                )
               ) : null}
 
               {model.selectedLesson.transcript ? (
@@ -3391,49 +3422,68 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         ) : null}
       </ScrollView>
 
-      {model.selectedLesson && (
-        (videoIsComplete && model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1) ||
-        (videoIsComplete && model.selectedLesson.pages && currentPageIndex === model.selectedLesson.pages.length - 1) ||
-        (!model.selectedLesson.videoUrl && (!model.selectedLesson.pages || model.selectedLesson.pages.length === 0)) ||
-        displayProgress >= maxAllowedProgress ||
-        model.selectedLesson.status === 'completed'
-      ) && (
-          <View style={{
-            paddingHorizontal: 24,
-            paddingTop: 16,
-            paddingBottom: 40,
-            backgroundColor: theme.colors.card,
-            borderTopWidth: 1,
-            borderTopColor: theme.colors.cardBorder,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: isDark ? 0.3 : 0.05,
-            shadowRadius: 12,
-            elevation: 10
-          }}>
-            {videoIsComplete && model.selectedLesson.pages && currentPageIndex < model.selectedLesson.pages.length - 1 ? (
-              <PrimaryButton
-                label="Next Page"
-                onPress={handleNextPage}
-              />
-            ) : (
-              <PrimaryButton
-                label={model.selectedLesson.status === 'completed' ? 'Lesson Completed' : (model.selectedLesson.hasQuiz ? 'Next' : 'Complete Lesson')}
-                onPress={() => {
-                  if (model.selectedLesson?.status === 'completed') return;
-                  if (model.selectedLesson?.hasQuiz) {
-                    doSave();
-                    void model.handleUpdateLessonProgress(model.selectedLesson.id, 80);
-                    model.startQuiz();
-                  } else {
-                    void model.handleCompleteLesson();
-                  }
-                }}
-                disabled={model.selectedLesson.status === 'completed'}
-              />
-            )}
+      {/* -- Bottom Action Bar -------------------------------------------- */}
+      {model.selectedLesson && (() => {
+        const lesson = model.selectedLesson;
+        const hasVideo = !!lesson.videoUrl;
+        const hasPages = !!(lesson.pages && lesson.pages.length > 0);
+        const pageCount = lesson.pages?.length ?? 0;
+        const isCompleted = lesson.status === 'completed';
+        const isOnLastPage = !hasPages || currentPageIndex === pageCount - 1;
+
+        // Show bar only when video is done (or no video), or already completed
+        const showBar = isCompleted || !hasVideo || (hasVideo && videoIsComplete);
+        if (!showBar) return null;
+
+        const barStyle = {
+          paddingHorizontal: 24,
+          paddingTop: 16,
+          paddingBottom: 40,
+          backgroundColor: theme.colors.card,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.cardBorder,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: isDark ? 0.3 : 0.05,
+          shadowRadius: 12,
+          elevation: 10,
+        };
+
+        if (isCompleted) {
+          return (
+            <View style={barStyle}>
+              <PrimaryButton label="Lesson Completed" onPress={() => {}} disabled />
+            </View>
+          );
+        }
+
+        // Still have pages to navigate
+        if (hasPages && !isOnLastPage) {
+          return (
+            <View style={barStyle}>
+              <PrimaryButton label="Next Page" onPress={handleNextPage} />
+            </View>
+          );
+        }
+
+        // On last page (or no pages) -> quiz or complete
+        return (
+          <View style={barStyle}>
+            <PrimaryButton
+              label={lesson.hasQuiz ? 'Start Quiz' : 'Complete Lesson'}
+              onPress={() => {
+                if (lesson.hasQuiz) {
+                  doSave();
+                  void model.handleUpdateLessonProgress(lesson.id, 80);
+                  model.startQuiz();
+                } else {
+                  void model.handleCompleteLesson();
+                }
+              }}
+            />
           </View>
-        )}
+        );
+      })()}
     </OverlayScaffold>
   );
 }
@@ -3459,52 +3509,24 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => quizProgressAnim.removeListener(listener);
   }, [progress, quizProgressAnim]);
 
+  // quizCompleted=true only when quiz passes. submitQuiz() immediately navigates to
+  // 'lessonCompleted' overlay, so this is just a safety-net loading screen.
   if (model.quizCompleted) {
     return (
       <OverlayScaffold
-        title="Quiz Results"
-        subtitle={`${model.quizScore}% score`}
+        title="Quiz Passed!"
+        subtitle="Loading reward..."
         onBack={() => {
           model.resetQuiz();
           model.setActiveOverlay('lesson');
         }}
       >
-        <ScrollView contentContainerStyle={styles.overlayScroll}>
-          <SurfaceCard style={styles.lessonDetailCard}>
-            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
-              <View style={[styles.badgeCircleMedium, {
-                width: 80,
-                height: 80,
-                borderRadius: 40,
-                marginBottom: 16,
-                backgroundColor: model.quizScore >= 70 ? '#4ade80' : '#f87171'
-              }]}>
-                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFF' }}>
-                  {model.quizScore}%
-                </Text>
-              </View>
-              <Text style={[styles.cardTitle, { textAlign: 'center', marginBottom: 8, color: theme.colors.textPrimary }]}>
-                {model.quizScore >= 70 ? 'Congratulations!' : 'Keep Learning!'}
-              </Text>
-              <Text style={[styles.sectionCaption, { textAlign: 'center', color: theme.colors.textMuted }]}>
-                {model.quizScore >= 70
-                  ? 'You passed the quiz and completed the lesson. Great job!'
-                  : 'You need at least 70% to pass. Review the lesson and try again.'}
-              </Text>
-            </View>
-            <PrimaryButton
-              label={model.quizScore >= 70 ? 'Back to Lessons' : 'Try Again'}
-              onPress={() => {
-                model.resetQuiz();
-                if (model.quizScore >= 70) {
-                  model.setActiveOverlay(null);
-                } else {
-                  model.setActiveOverlay('lesson');
-                }
-              }}
-            />
-          </SurfaceCard>
-        </ScrollView>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
+          <ActivityIndicator size="large" color={isDark ? theme.colors.primary : '#126027'} />
+          <Text style={{ marginTop: 16, fontSize: 15, fontWeight: '700', color: isDark ? theme.colors.primary : '#126027' }}>
+            Calculating your results...
+          </Text>
+        </View>
       </OverlayScaffold>
     );
   }

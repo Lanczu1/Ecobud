@@ -1559,9 +1559,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const finalScore = res.score ?? 100;
         setQuizScore(finalScore);
         setQuizCompleted(true);
-        await mobileStorage.removeItem('@lesson_quiz_' + activeSession.user.id + ':' + selectedLessonId);
 
-        await hydrateApp(activeSession, true);
+        // The API has already accepted and completed the quiz at this point.
+        // SQLite-backed local cleanup must not turn that successful submission
+        // into a user-visible submission failure when its database is unavailable.
+        try {
+          await mobileStorage.removeItem('@lesson_quiz_' + activeSession.user.id + ':' + selectedLessonId);
+        } catch (error) {
+          console.warn('[submitQuiz] Unable to clear saved quiz state:', error);
+        }
+
+        try {
+          await hydrateApp(activeSession, true);
+        } catch (error) {
+          // The completion response is authoritative; the normal background
+          // refresh can retry later without blocking the reward sequence.
+          console.warn('[submitQuiz] Unable to refresh completed lesson:', error);
+        }
         const points = res.pointsAwarded ?? (selectedLesson?.pointsReward ?? 10);
         setEarnedPoints(points);
         setCompletionCelebrationType('quiz');
