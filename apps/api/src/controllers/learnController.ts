@@ -13,7 +13,7 @@ const lessonActionSchema = z.object({
 const lessonProgressSchema = z.object({
   lessonId: z.string().min(1),
   progress: z.number().min(0).max(100),
-  videoTimestamp: z.number().min(0).optional().default(0),
+  videoTimestamp: z.number().min(0).optional(),
 });
 
 export const learnController = {

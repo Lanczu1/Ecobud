@@ -1458,9 +1458,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
       const key = '@lesson_progress_' + activeSession.user.id + ':' + lessonId;
       let previous = { timestamp: 0, progress: 0 };
       try { previous = JSON.parse(mobileStorage.getItemSync(key) ?? 'null') ?? previous; } catch {}
+      const isVideoResumeSave = Number.isFinite(videoTimestamp);
       mobileStorage.setItemSync(key, JSON.stringify({
-        timestamp: videoTimestamp ?? previous.timestamp,
-        progress: Math.max(previous.progress, clampedProgress),
+        timestamp: isVideoResumeSave ? videoTimestamp : previous.timestamp,
+        // The resume marker and the displayed video percentage must describe
+        // the same position. Page-only updates still retain their high-water
+        // progress because they do not include a video timestamp.
+        progress: isVideoResumeSave ? clampedProgress : Math.max(previous.progress, clampedProgress),
         savedAt: Date.now(),
       }));
       // Keep timestamp and percentage updates in order, including the transition to quiz.
@@ -1474,8 +1478,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
           if (lesson.id === lessonId) {
             return {
               ...lesson,
-              progress: Math.max(lesson.progress, clampedProgress),
-              videoTimestamp: videoTimestamp ?? lesson.videoTimestamp,
+              progress: isVideoResumeSave ? clampedProgress : Math.max(lesson.progress, clampedProgress),
+              videoTimestamp: isVideoResumeSave ? videoTimestamp : lesson.videoTimestamp,
             };
           }
           return lesson;
