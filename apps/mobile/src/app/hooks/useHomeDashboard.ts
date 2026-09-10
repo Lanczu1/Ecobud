@@ -2067,7 +2067,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => {
-    const challenge = challenges.find((c) => c.id === challengeId || (c as any).instanceId === challengeId);
+    const challenge = challenges.find((c) =>
+      c.id === challengeId || c.cycle?.instanceId === challengeId || (c as any).instanceId === challengeId
+    );
     if (!challenge) {
       return;
     }
@@ -2086,16 +2088,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
       setEarnedPoints(totalExp);
       setEarnedCoins(totalCoins);
 
+      const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
+
+      // Only celebrate and update the optimistic state after the reward transaction
+      // has committed. This prevents a failed History claim from looking successful.
       if (origin) {
         setClaimRewardData({ points: totalExp, coins: totalCoins, origin });
       }
-      
       setCompletionCelebrationType('claim');
       setActiveOverlayState('claimParticles');
-
       setChallenges((prev) =>
         prev.map((c) =>
-          c.id === challengeId || (c as any).instanceId === challengeId
+          c.id === challengeId || c.cycle?.instanceId === challengeId || (c as any).instanceId === challengeId
             ? {
                 ...c,
                 progress: c.progress
@@ -2116,8 +2120,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
             : c
         )
       );
-
-      const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
       if (res?.awardedBadges && res.awardedBadges.length > 0) {
         setNewlyUnlockedBadges(res.awardedBadges);
         setPendingBadgeQueue((prev) => [...prev, ...res.awardedBadges!]);

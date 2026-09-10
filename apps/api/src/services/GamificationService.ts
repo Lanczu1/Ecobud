@@ -160,6 +160,9 @@ export class GamificationService {
   }
 
   async claimChallenge(userId: string, challengeInstanceId: string, submissionId?: string) {
+    // A claim writes the submission, balances, stats, badges, and immutable
+    // ledger entry. On the hosted database that can exceed Prisma's default
+    // 5-second interactive transaction window, which rolls the claim back.
     const result = await this.database.$transaction(async (tx) => {
       let submission: any = null;
       let effectiveInstanceId = challengeInstanceId;
@@ -254,7 +257,7 @@ export class GamificationService {
           submissionId: submission?.id,
         },
       });
-    });
+    }, { maxWait: 10_000, timeout: 30_000 });
 
     await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
       actorRole: 'user',

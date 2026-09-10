@@ -1297,6 +1297,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
 export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
+  const setActiveOverlay = model.setActiveOverlay;
 
   const playPopSound = () => {
     player.seekTo(0);
@@ -1354,16 +1355,26 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => {
     if (particleTypes.length === 0) {
       // If no particles to show, just close overlay immediately
-      model.setActiveOverlay(null);
+      setActiveOverlay(null);
       return;
     }
 
     const animations = particleAnims.map((particle, index) => {
       const type = particleTypes[index];
-      const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
-      const radius = 70 + Math.random() * 50;
-      const burstX = originX + Math.cos(angle) * radius;
-      const burstY = originY + Math.sin(angle) * radius;
+      // Separate rewards into clear, responsive lanes: leaves burst to the left
+      // while coins burst to the right. Clamp the destinations to the viewport so
+      // neither type is cropped on compact phones or wide tablets.
+      const horizontalRange = Math.min(width * (isTablet ? 0.23 : 0.31), scale(150));
+      const verticalRange = Math.min(height * 0.14, verticalScale(110));
+      const direction = type === 'leaf' ? -1 : 1;
+      const burstX = Math.max(
+        scale(12),
+        Math.min(width - scale(46), originX + direction * (horizontalRange * (0.55 + Math.random() * 0.45))),
+      );
+      const burstY = Math.max(
+        topSafeArea + verticalScale(8),
+        Math.min(height - insets.bottom - verticalScale(46), originY + (Math.random() - 0.5) * verticalRange * 2),
+      );
 
       particle.pos.setValue({ x: originX, y: originY });
       particle.scale.setValue(0);
@@ -1420,7 +1431,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     });
 
     Animated.parallel(animations).start(() => {
-      model.setActiveOverlay(null);
+      setActiveOverlay(null);
     });
 
     const timers = [
@@ -1434,7 +1445,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => {
       timers.forEach((t) => clearTimeout(t));
     };
-  }, []);
+  }, [height, insets.bottom, numParticles, originX, originY, particleAnims, setActiveOverlay, targetProgressBarX, targetProgressBarY, topSafeArea, width]);
 
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent', zIndex: 10000 }]} pointerEvents="none">
