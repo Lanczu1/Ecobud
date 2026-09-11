@@ -662,13 +662,13 @@ export function AuthView({
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.safeArea}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <ScrollView
           contentContainerStyle={[styles.authShell, isLegacyAndroid && styles.authShellLegacy]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
           <View style={[styles.topNavbar, { justifyContent: 'center' }]}>
             <AnimatedThemeToggle isDark={isDark} onToggle={toggleTheme} />
@@ -2100,4 +2100,3 @@ const styles = StyleSheet.create({
     color: palette.textMuted,
   },
 });
-

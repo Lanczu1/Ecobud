@@ -484,6 +484,10 @@ export function Challenges() {
   const [collapsedUsers, setCollapsedUsers] = useState<Record<string, boolean>>({});
   const [collapsedChallenges, setCollapsedChallenges] = useState<Record<string, boolean>>({});
 
+  const isChallengeSubmission = (submission: ChallengeSubmission) =>
+    submission.submissionType === 'CHALLENGE' ||
+    (!submission.submissionType && submission.challenge?.type !== 'EVENT');
+
   useEffect(() => {
     if (isModerator && moderatorBarangay) {
       setSelectedBarangayFilter(moderatorBarangay);
@@ -508,8 +512,8 @@ export function Challenges() {
     setSubmissionsLoading(true);
     try {
       const data = await adminGet<ChallengeSubmission[]>('/admin/submissions');
-      // Filter to only challenge submissions (not events)
-      setSubmissions(data.filter(s => !s.submissionType || s.submissionType === 'CHALLENGE'));
+      // Filter to only challenge submissions; event submissions belong in the Events page.
+      setSubmissions(data.filter(isChallengeSubmission));
     } catch (err: any) { console.error('Failed to load submissions', err); alert(`Failed to load submissions: ${err.message || err}`); }
     finally { setSubmissionsLoading(false); }
   };
@@ -524,7 +528,7 @@ export function Challenges() {
         adminGet('/admin/submissions')
           .then((res: any) => {
             const raw = res.data || res.items || res;
-            if (Array.isArray(raw)) setSubmissions(raw);
+            if (Array.isArray(raw)) setSubmissions(raw.filter(isChallengeSubmission));
           })
           .catch(() => {});
       }, 20000);

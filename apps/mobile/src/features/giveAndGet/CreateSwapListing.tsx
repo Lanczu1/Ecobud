@@ -186,7 +186,7 @@ export function CreateSwapListing({
     <View style={[localStyles.safeArea, { backgroundColor: theme.colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={localStyles.header}>
           <View style={localStyles.headerRow}>
@@ -223,6 +223,7 @@ export function CreateSwapListing({
           contentContainerStyle={[localStyles.bodyContent, { backgroundColor: theme.colors.background }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
+          automaticallyAdjustKeyboardInsets
         >
           {step === 1 && (
             <>

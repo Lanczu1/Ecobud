@@ -930,7 +930,7 @@ export function BottomTabBar({
   const items: { key: AppTab; label: string; shortLabel: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { key: 'home', label: 'Home', shortLabel: 'Home', icon: 'home-outline' },
     { key: 'learn', label: 'Learn', shortLabel: 'Learn', icon: 'book-outline' },
-    { key: 'challenges', label: 'Tasks', shortLabel: 'Tasks', icon: 'trophy-outline' },
+    { key: 'challenges', label: 'Challenges', shortLabel: 'Challenges', icon: 'trophy-outline' },
     { key: 'marketplace', label: 'G&G', shortLabel: 'G&G', icon: 'cart-outline' },
     { key: 'profile', label: 'Profile', shortLabel: 'Profile', icon: 'person-outline' },
   ];
@@ -1035,6 +1035,7 @@ export function BottomTabBar({
               }}
               isNarrow={isNarrow}
               isVeryNarrow={isVeryNarrow}
+              isCenterAction={item.key === 'challenges'}
             />
           );
         })}
@@ -1049,12 +1050,14 @@ function TabItem({
   onPress,
   isNarrow = false,
   isVeryNarrow = false,
+  isCenterAction = false,
 }: {
   item: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap };
   isActive: boolean;
   onPress: () => void;
   isNarrow?: boolean;
   isVeryNarrow?: boolean;
+  isCenterAction?: boolean;
 }) {
   const { theme, isDark } = useTheme();
   const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
@@ -1075,6 +1078,8 @@ function TabItem({
   const fontSize = isVeryNarrow ? 8.5 : isNarrow ? 9.5 : 11;
   const activeColor = isDark ? theme.colors.primary : theme.colors.primaryDark;
   const inactiveColor = isDark ? theme.colors.textMuted : '#8A959F';
+  const centerDiameter = iconSize * 3;
+  const centerIconSize = Math.round(iconSize * 1.35);
 
   return (
     <TouchableOpacity
@@ -1083,18 +1088,44 @@ function TabItem({
       style={styles.bottomBarItem}
     >
       <Animated.View
-        style={{
-          transform: [{ scale: scaleAnim }],
+        style={[
+          {
+          transform: [
+            { translateY: isCenterAction ? -Math.round(centerDiameter * 0.22) : 0 },
+            { scale: scaleAnim },
+          ],
           alignItems: 'center',
           justifyContent: 'center',
           gap: 2,
-        }}
+          },
+        ]}
       >
-        <Ionicons
-          name={activeIconName}
-          size={iconSize}
-          color={isActive ? activeColor : inactiveColor}
-        />
+        {isCenterAction ? (
+          <View
+            style={[
+              styles.centerTabCircle,
+              {
+                width: centerDiameter,
+                height: centerDiameter,
+                borderRadius: centerDiameter / 2,
+                backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1',
+                borderColor: isActive ? activeColor : (isDark ? theme.colors.border : '#CFE3D7'),
+              },
+            ]}
+          >
+            <Ionicons
+              name={activeIconName}
+              size={centerIconSize}
+              color={isActive ? activeColor : inactiveColor}
+            />
+          </View>
+        ) : (
+          <Ionicons
+            name={activeIconName}
+            size={iconSize}
+            color={isActive ? activeColor : inactiveColor}
+          />
+        )}
         <Text
           style={[
             styles.bottomBarLabel,

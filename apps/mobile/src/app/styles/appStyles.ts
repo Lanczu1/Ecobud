@@ -2565,6 +2565,16 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
   },
+  centerTabCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    shadowColor: '#071C19',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+  },
   bottomBarLabel: {
     fontSize: responsiveFontSize(11),
     fontWeight: '600',
