@@ -256,7 +256,7 @@ export function SwapChatView({
       style={[localStyles.safeArea, { backgroundColor: theme.colors.background }]}
     >
       {/* Header */}
-      <View style={[localStyles.header, { backgroundColor: isDark ? theme.colors.card : theme.colors.primaryDark, borderBottomColor: theme.colors.border }]}> 
+      <View style={[localStyles.header, { backgroundColor: isDark ? theme.colors.card : theme.colors.primaryDark, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={onBack} style={[localStyles.backBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
           <Feather name="arrow-left" size={22} color={isDark ? theme.colors.textPrimary : theme.colors.surface} />
         </TouchableOpacity>
@@ -317,7 +317,7 @@ export function SwapChatView({
               style={[localStyles.acceptBtn, { backgroundColor: theme.colors.primary }]}
             >
               <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.background} />
-              <Text style={[localStyles.acceptBtnText, { color: theme.colors.background }]}> 
+              <Text style={[localStyles.acceptBtnText, { color: theme.colors.background }]}>
                 {conversation.listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Accept' : 'Accept Swap'}
               </Text>
             </TouchableOpacity>
@@ -630,7 +630,7 @@ const localStyles = StyleSheet.create({
     gap: scale(8),
     paddingHorizontal: scale(12),
     paddingVertical: verticalScale(8),
-    paddingBottom: Platform.select({ ios: verticalScale(12), android: verticalScale(10) }),
+    paddingBottom: Platform.select({ ios: verticalScale(12), android: verticalScale(35) }),
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F5F2',
