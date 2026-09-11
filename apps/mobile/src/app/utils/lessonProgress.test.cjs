@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { getVideoLessonProgress, getQuizLessonProgress, getVideoDurationForProgress } = require('./lessonProgress.ts');
+const { getVideoLessonProgress, getQuizLessonProgress, getVideoDurationForProgress, isLocalLessonProgressNewer } = require('./lessonProgress.ts');
 
 test('video timestamp maps to the same percentage when restored', () => {
   const checkpoint = JSON.parse(JSON.stringify({ timestamp: 325, duration: 370 }));
@@ -36,4 +36,11 @@ test('uses the configured lesson duration when native metadata is unavailable', 
   assert.equal(getVideoDurationForProgress(275, 5), 275);
   assert.equal(getVideoDurationForProgress(0, 0), 0);
   assert.equal(getVideoLessonProgress(150, getVideoDurationForProgress(0, 5), true), 40);
+});
+
+test('restores only the newest checkpoint instead of the highest timestamp', () => {
+  const serverUpdatedAt = '2026-09-12T01:00:00.000Z';
+  assert.equal(isLocalLessonProgressNewer(Date.parse('2026-09-12T01:00:01.000Z'), serverUpdatedAt), true);
+  assert.equal(isLocalLessonProgressNewer(Date.parse('2026-09-12T00:59:59.000Z'), serverUpdatedAt), false);
+  assert.equal(isLocalLessonProgressNewer(Date.parse('2026-09-12T01:00:01.000Z')), true);
 });

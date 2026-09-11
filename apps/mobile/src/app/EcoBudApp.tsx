@@ -171,6 +171,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
             (model.activeTab === 'marketplace' && !hideMarketplaceChrome))
         ) && (
           <ChatbotFAB
+            size={model.chatbotSize}
             onPress={() => model.setActiveOverlay('assistant')}
             onLongPress={() => void model.setChatbotEnabled(false)}
           />

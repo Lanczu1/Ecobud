@@ -35,9 +35,11 @@ import { Header } from './Header';
 export const ChatbotFAB = React.memo(function ChatbotFAB({
   onPress,
   onLongPress,
+  size = 'medium',
 }: {
   onPress: () => void;
   onLongPress?: () => void;
+  size?: 'small' | 'medium' | 'large';
 }) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -48,8 +50,10 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   const isLargeDevice = screenWidth >= 600 || screenHeight >= 900;
   const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
-  // Dynamic sizing derived directly from screen dimensions via responsive scaling:
-  const mascotSize = scale(isSmallDevice ? 94 : isLargeDevice ? 130 : 108);
+  // Dynamic sizing derived directly from screen dimensions and user preference multiplier:
+  const baseSize = scale(isSmallDevice ? 94 : isLargeDevice ? 130 : 108);
+  const sizeMultiplier = size === 'small' ? 0.8 : size === 'large' ? 1.25 : 1.0;
+  const mascotSize = Math.round(baseSize * sizeMultiplier);
 
   // Dynamic bottom offset calculated from tab bar height (64) + safe area insets + responsive clearance
   const bottomBarHeight = verticalScale(64);

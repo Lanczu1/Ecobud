@@ -28,6 +28,7 @@ export interface LearnLessonPayload {
   created_at: string;
   progress: number;
   videoTimestamp?: number;
+  progressUpdatedAt?: string;
   status: LessonStatus;
   imageUrl?: string | null;
   videoUrl?: string | null;
@@ -347,6 +348,7 @@ export class LearnService {
       status: string;
       progress: number;
       videoTimestamp: number;
+      updatedAt: Date;
     }>;
     quizQuestions?: Array<{ id: string; question: string; optionA: string; optionB: string; optionC: string; optionD: string }>;
     pages?: Array<{ id: string; title: string; description: string; content: string; order: number }>;
@@ -373,6 +375,7 @@ export class LearnService {
       created_at: lesson.createdAt.toISOString(),
       progress: status === 'completed' ? 100 : (progressRecord?.progress ?? 0),
       videoTimestamp: progressRecord?.videoTimestamp ?? 0,
+      progressUpdatedAt: progressRecord?.updatedAt.toISOString(),
       status,
       imageUrl: lesson.imageUrl,
       videoUrl: lesson.videoUrl,

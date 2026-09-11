@@ -1,4 +1,4 @@
-import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress } from '../utils/lessonProgress';
+import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { NotificationInbox } from './NotificationInbox';
 import React from 'react';
 import { useAudioPlayer } from 'expo-audio';
@@ -2828,18 +2828,19 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 // ─── Lesson video progress crash-safe storage helpers ─────────────────────────
 const LESSON_PROGRESS_STORAGE_PREFIX = '@lesson_progress_';
 const lessonProgressWriteQueues = new Map<string, Promise<void>>();
+const LESSON_PROGRESS_SERVER_SAVE_INTERVAL_MS = 1_000;
 
 const getLessonProgressStorageKey = (lessonId: string) =>
   `${LESSON_PROGRESS_STORAGE_PREFIX}${lessonId}`;
 
 const readLocalLessonProgress = async (
   lessonId: string
-): Promise<{ timestamp: number; progress: number } | null> => {
+): Promise<{ timestamp: number; progress: number; savedAt: number } | null> => {
   try {
     const raw = mobileStorage.getItemSync(getLessonProgressStorageKey(lessonId)) ?? await mobileStorage.getItem(getLessonProgressStorageKey(lessonId));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (Number.isFinite(parsed.timestamp) && parsed.timestamp >= 0 && Number.isFinite(parsed.progress) && parsed.progress >= 0 && parsed.progress <= 100) {
+    if (Number.isFinite(parsed.timestamp) && parsed.timestamp >= 0 && Number.isFinite(parsed.progress) && parsed.progress >= 0 && parsed.progress <= 100 && Number.isFinite(parsed.savedAt)) {
       return parsed;
     }
     return null;
@@ -2875,6 +2876,9 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
   const pageAnim = React.useRef(new Animated.Value(1)).current;
+
+  const maxAllowedProgress = model.selectedLesson?.hasQuiz ? 80 : 99;
+  const numPages = model.selectedLesson?.pages?.length ?? 0;
 
   const handleNextPage = () => {
     const lesson = model.selectedLesson;
@@ -2913,14 +2917,27 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     player.timeUpdateEventInterval = 1;
   });
 
-  const maxAllowedProgress = model.selectedLesson?.hasQuiz ? 80 : 99;
-  const numPages = model.selectedLesson?.pages?.length ?? 0;
-
   // ── Crash-safe local progress state ──────────────────────────────────────────
   // localRestoredRef holds the timestamp/progress loaded from mobileStorage
   // so the progress bar & seek both use it at mount time before the server data arrives.
-  const localRestoredRef = React.useRef<{ timestamp: number; progress: number } | null>(null);
+  const localRestoredRef = React.useRef<{ timestamp: number; progress: number; savedAt: number } | null>(null);
   const [localRestoredProgress, setLocalRestoredProgress] = React.useState<number | null>(null);
+
+  // Safe helper to interact with native player instance without throwing fatal exceptions
+  const safeSeekPlayer = React.useCallback((targetTime: number) => {
+    try {
+      if (!player) return false;
+      const curDur = player.duration;
+      if (Number.isFinite(curDur) && curDur > 0 && Number.isFinite(targetTime) && targetTime >= 0) {
+        const boundedTime = Math.min(targetTime, curDur);
+        player.currentTime = boundedTime;
+        return true;
+      }
+    } catch (e) {
+      // Catch native bridge call errors when player is unmounted/destroyed
+    }
+    return false;
+  }, [player]);
 
   // Load local storage on lesson open
   React.useEffect(() => {
@@ -2930,7 +2947,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     let cancelled = false;
     readLocalLessonProgress(model.session?.user.id + ":" + model.selectedLesson.id).then((stored) => {
       if (cancelled) return;
-      if (stored && stored.timestamp > 0) {
+      if (stored && stored.timestamp > 0 && isLocalLessonProgressNewer(stored.savedAt, model.selectedLesson?.progressUpdatedAt)) {
         localRestoredRef.current = stored;
         // A local save is the newest source of truth for this device. Do not
         // combine its timestamp with an older server percentage: doing so can
@@ -2944,22 +2961,23 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         // as already restored.
         pendingRestoreTimestampRef.current = stored.timestamp;
         initialSeekDoneForLessonRef.current = null;
+
+        // Prime maxWatchedTimeRef so the anti-cheat guard doesn't block the restored seek
+        maxWatchedTimeRef.current = stored.timestamp;
+        lastKnownPlayerTimeRef.current = stored.timestamp;
+
         try {
-          if (player.duration > 0) {
-            player.currentTime = Math.min(stored.timestamp, player.duration);
+          if (safeSeekPlayer(stored.timestamp)) {
             cachedDurationRef.current = player.duration;
             initialSeekDoneForLessonRef.current = model.selectedLesson!.id;
             pendingRestoreTimestampRef.current = 0;
           }
         } catch { /* statusChange restores when the player is ready. */ }
-        // Prime maxWatchedTimeRef so the anti-cheat guard doesn't block the restored seek
-        maxWatchedTimeRef.current = stored.timestamp;
-        lastKnownPlayerTimeRef.current = stored.timestamp;
       }
     }).catch(() => {});
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.selectedLesson?.id]);
+  }, [model.selectedLesson?.id, safeSeekPlayer]);
   // ─────────────────────────────────────────────────────────────────────────────
 
   // Effective initial progress: prefer locally-stored value if available
@@ -3001,14 +3019,14 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     };
   }, [model.selectedLesson?.progress, model.selectedLesson?.videoUrl, model.selectedLesson?.hasQuiz, currentPageIndex, numPages, model.selectedLesson?.status, maxAllowedProgress, localRestoredProgress]);
 
-  const maxWatchedTimeRef = React.useRef(0);
-  const lastKnownPlayerTimeRef = React.useRef(0);
+  const maxWatchedTimeRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
+  const lastKnownPlayerTimeRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
   const lastSaveTime = React.useRef(Date.now());
   // null = not yet sought for this lesson, lessonId = already sought
   const initialSeekDoneForLessonRef = React.useRef<string | null>(null);
   // Kept separately from the progress percentage: a saved position can arrive
   // from storage after the player has already emitted readyToPlay.
-  const pendingRestoreTimestampRef = React.useRef(0);
+  const pendingRestoreTimestampRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
   // Cache duration here so doSave can run even after player is destroyed
   const cachedDurationRef = React.useRef(0);
   const progressDataRef = React.useRef({ time: 0, duration: 0 });
@@ -3020,18 +3038,19 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     lessonRef.current = model.selectedLesson;
     // New lesson opened — reset seek & watch tracking
     if (model.selectedLesson?.id !== initialSeekDoneForLessonRef.current) {
+      const initialTs = model.selectedLesson?.videoTimestamp ?? 0;
       setCurrentPageIndex(0);
-      maxWatchedTimeRef.current = 0;
-      lastKnownPlayerTimeRef.current = 0;
+      maxWatchedTimeRef.current = initialTs;
+      lastKnownPlayerTimeRef.current = initialTs;
       cachedDurationRef.current = 0;
-      pendingRestoreTimestampRef.current = 0;
+      pendingRestoreTimestampRef.current = initialTs;
       hasSavedOnExit.current = false;
       localRestoredRef.current = null;
       setLocalRestoredProgress(null);
       // Reset seek marker so statusChange will seek again
       initialSeekDoneForLessonRef.current = null;
     }
-  }, [model.selectedLesson?.id]);
+  }, [model.selectedLesson?.id, model.selectedLesson?.videoTimestamp]);
 
   const handleUpdateRef = React.useRef(model.handleUpdateLessonProgress);
   React.useEffect(() => { handleUpdateRef.current = model.handleUpdateLessonProgress; }, [model.handleUpdateLessonProgress]);
@@ -3045,7 +3064,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     // Prefer live player duration, fall back to our cached value
     let duration = cachedDurationRef.current;
     try {
-      if (player.duration > 0) {
+      if (player && player.duration > 0) {
         duration = player.duration;
         cachedDurationRef.current = duration;
       }
@@ -3110,8 +3129,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   });
 
   useEventListener(player, 'playToEnd', () => {
+    let pDur = 0;
+    try { pDur = player?.duration ?? 0; } catch {}
     const duration = getVideoDurationForProgress(
-      cachedDurationRef.current || player.duration || 0,
+      cachedDurationRef.current || pDur,
       model.selectedLesson?.durationMinutes,
     );
     if (duration > 0) {
@@ -3129,34 +3150,39 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
   useEventListener(player, 'statusChange', ({ status }: { status: string }) => {
     if (status === 'readyToPlay' && model.selectedLesson) {
-      // Cache duration immediately so doSave has it even after player destruction
-      const actualDuration = player.duration;
-      if (actualDuration > 0) cachedDurationRef.current = actualDuration;
+      try {
+        // Cache duration immediately so doSave has it even after player destruction
+        const actualDuration = player?.duration ?? 0;
+        if (actualDuration > 0) cachedDurationRef.current = actualDuration;
 
-      const pendingTimestamp = pendingRestoreTimestampRef.current;
-      if (initialSeekDoneForLessonRef.current !== model.selectedLesson.id || pendingTimestamp > 0) {
-        // Prefer locally-stored timestamp > server videoTimestamp > progress-derived
-        const localTimestamp = localRestoredRef.current?.timestamp ?? 0;
-        const serverTimestamp = model.selectedLesson.videoTimestamp ?? 0;
-        const progressDerived = 0; // Quiz progress is not a video timestamp.
+        const pendingTimestamp = pendingRestoreTimestampRef.current;
+        if (initialSeekDoneForLessonRef.current !== model.selectedLesson.id || pendingTimestamp > 0) {
+          // Prefer locally-stored timestamp > server videoTimestamp > progress-derived
+          const localTimestamp = localRestoredRef.current?.timestamp ?? 0;
+          const serverTimestamp = model.selectedLesson.videoTimestamp ?? 0;
+          const progressDerived = 0; // Quiz progress is not a video timestamp.
 
-        const targetTime = pendingTimestamp > 0
-          ? pendingTimestamp
-          : localTimestamp > 0
-          ? localTimestamp
-          : serverTimestamp > 0
-            ? serverTimestamp
-            : progressDerived;
+          const targetTime = pendingTimestamp > 0
+            ? pendingTimestamp
+            : localTimestamp > 0
+            ? localTimestamp
+            : serverTimestamp > 0
+              ? serverTimestamp
+              : progressDerived;
 
-        if (targetTime > 0 && actualDuration > 0 && targetTime <= actualDuration) {
-          player.currentTime = targetTime;
-          maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, targetTime);
-          lastKnownPlayerTimeRef.current = targetTime;
-          pendingRestoreTimestampRef.current = 0;
-          initialSeekDoneForLessonRef.current = model.selectedLesson.id;
-        } else if (targetTime <= 0) {
-          initialSeekDoneForLessonRef.current = model.selectedLesson.id;
+          if (targetTime > 0 && actualDuration > 0 && targetTime <= actualDuration) {
+            maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, targetTime);
+            lastKnownPlayerTimeRef.current = targetTime;
+            if (safeSeekPlayer(targetTime)) {
+              pendingRestoreTimestampRef.current = 0;
+              initialSeekDoneForLessonRef.current = model.selectedLesson.id;
+            }
+          } else if (targetTime <= 0) {
+            initialSeekDoneForLessonRef.current = model.selectedLesson.id;
+          }
         }
+      } catch (err) {
+        // Catch any native player errors during status change
       }
     }
   });
@@ -3164,8 +3190,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => {
     const timer = setInterval(() => {
       try {
+        if (!player) return;
         const lessonToRestore = lessonRef.current;
-        const actualDuration = player.duration;
+        let actualDuration = 0;
+        try { actualDuration = player.duration ?? 0; } catch {}
         const pendingTimestamp = pendingRestoreTimestampRef.current;
         if (actualDuration > 0 && lessonToRestore && (initialSeekDoneForLessonRef.current !== lessonToRestore.id || pendingTimestamp > 0)) {
           const target = Math.min(
@@ -3173,17 +3201,25 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
             pendingTimestamp || Math.max(localRestoredRef.current?.timestamp ?? 0, lessonToRestore.videoTimestamp ?? 0),
           );
           if (target > 0) {
-            player.currentTime = target;
-            maxWatchedTimeRef.current = target;
+            maxWatchedTimeRef.current = Math.max(maxWatchedTimeRef.current, target);
             lastKnownPlayerTimeRef.current = target;
-            pendingRestoreTimestampRef.current = 0;
+            if (safeSeekPlayer(target)) {
+              pendingRestoreTimestampRef.current = 0;
+            }
           }
           initialSeekDoneForLessonRef.current = lessonToRestore.id;
         }
-        const isPlaying = player.playing;
-        const curTime = player.currentTime;
+        let isPlaying = false;
+        let curTime = 0;
+        try {
+          isPlaying = Boolean(player.playing);
+          curTime = player.currentTime ?? 0;
+        } catch {
+          return;
+        }
+
         const curDuration = getVideoDurationForProgress(
-          player.duration > 0 ? player.duration : cachedDurationRef.current,
+          actualDuration > 0 ? actualDuration : cachedDurationRef.current,
           lessonToRestore?.durationMinutes,
         );
 
@@ -3192,8 +3228,11 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         }
 
         if (isPlaying && curDuration > 0) {
-          if (curTime > maxWatchedTimeRef.current + Math.max(3, (player.playbackRate || 1) * 2)) {
-            player.currentTime = maxWatchedTimeRef.current;
+          let playRate = 1;
+          try { playRate = player.playbackRate || 1; } catch {}
+
+          if (curTime > maxWatchedTimeRef.current + Math.max(15, playRate * 5)) {
+            safeSeekPlayer(maxWatchedTimeRef.current);
             return;
           }
 
@@ -3210,7 +3249,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
             curTime,
             getVideoLessonProgress(curTime, curDuration, !!lesson.hasQuiz, lesson.pages?.length ?? 0)
           );
-          if (Date.now() - lastSaveTime.current >= 5000) {
+          if (Date.now() - lastSaveTime.current >= LESSON_PROGRESS_SERVER_SAVE_INTERVAL_MS) {
             doSave();
             lastSaveTime.current = Date.now();
           }
@@ -3233,22 +3272,33 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [player, maxAllowedProgress, model.selectedLesson?.status, animatedProgress, doSave, model.session?.user.id]);
+  }, [player, maxAllowedProgress, model.selectedLesson?.status, animatedProgress, doSave, model.session?.user.id, safeSeekPlayer]);
 
   useEventListener(player, 'timeUpdate', () => {
     try {
-      const curTime = player.currentTime;
+      if (!player) return;
+      let curTime = 0;
+      let pDur = 0;
+      let playRate = 1;
+      try {
+        curTime = player.currentTime ?? 0;
+        pDur = player.duration ?? 0;
+        playRate = player.playbackRate || 1;
+      } catch {
+        return;
+      }
+
       const curDuration = getVideoDurationForProgress(
-        player.duration > 0 ? player.duration : cachedDurationRef.current,
+        pDur > 0 ? pDur : cachedDurationRef.current,
         lessonRef.current?.durationMinutes,
       );
       if (!curDuration || curDuration <= 0) return;
 
       cachedDurationRef.current = curDuration;
 
-      // Prevent fast-forwarding ahead
-      if (curTime > maxWatchedTimeRef.current + Math.max(3, (player.playbackRate || 1) * 2)) {
-        player.currentTime = maxWatchedTimeRef.current;
+      // Prevent fast-forwarding ahead, with a reasonable buffer for JS thread pauses
+      if (curTime > maxWatchedTimeRef.current + Math.max(15, playRate * 5)) {
+        safeSeekPlayer(maxWatchedTimeRef.current);
         return;
       }
 
@@ -3285,7 +3335,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         });
       }
 
-      if (Date.now() - lastSaveTime.current > 5000) {
+      if (Date.now() - lastSaveTime.current >= LESSON_PROGRESS_SERVER_SAVE_INTERVAL_MS) {
         doSave();
         lastSaveTime.current = Date.now();
       }

@@ -22,6 +22,42 @@ interface CreateListingInput {
   longitude?: number;
 }
 
+const userSummarySelect = {
+  id: true,
+  name: true,
+  createdAt: true,
+  profile: {
+    select: {
+      displayName: true,
+      avatarUrl: true,
+    },
+  },
+};
+
+function formatParticipant(user: any) {
+  if (!user) {
+    return {
+      id: '',
+      displayName: 'Anonymous',
+      avatarUrl: null,
+      successfulSwaps: 0,
+      rating: 0,
+      memberSince: new Date().toISOString(),
+      isVerified: false,
+    };
+  }
+  const profile = user.profile;
+  return {
+    id: user.id,
+    displayName: profile?.displayName || user.name || 'Anonymous',
+    avatarUrl: profile?.avatarUrl || null,
+    successfulSwaps: 0,
+    rating: 0,
+    memberSince: user.createdAt || new Date().toISOString(),
+    isVerified: false,
+  };
+}
+
 const profileInclude = {
   user: {
     select: {
@@ -239,7 +275,7 @@ export const swapService = {
       },
     });
 
-    await prisma.swapConversation.create({
+    const conversation = await prisma.swapConversation.create({
       data: {
         swapRequestId: request.id,
         listingId,
@@ -248,6 +284,19 @@ export const swapService = {
         status: 'pending',
       },
     });
+
+    if (message && message.trim()) {
+      await prisma.swapMessage.create({
+        data: {
+          swapRequestId: conversation.id,
+          senderId: fromUserId,
+          text: message.trim(),
+          timestamp: new Date(),
+          read: false,
+          delivered: true,
+        },
+      });
+    }
 
     return request;
   },
@@ -276,26 +325,59 @@ export const swapService = {
         OR: [{ user1Id: userId }, { user2Id: userId }],
       },
       include: {
-        swapRequest: true,
+        swapRequest: {
+          include: {
+            fromUser: { select: userSummarySelect },
+            toUser: { select: userSummarySelect },
+          },
+        },
         listing: {
           include: profileInclude,
+        },
+        messages: {
+          orderBy: { timestamp: 'desc' },
+          take: 1,
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return rows.map((row) => {
-      const listing = formatListing(row.listing);
-      return {
-        id: row.id,
-        swapRequestId: row.swapRequestId,
-        listing,
-        otherUser: listing.user,
-        unreadCount: row.unreadCount,
-        status: row.status,
-        meetupMethod: listing.meetupMethod,
-      };
-    });
+    const results = await Promise.all(
+      rows.map(async (row) => {
+        const listing = formatListing(row.listing);
+        const otherUserRaw =
+          row.user1Id === userId
+            ? row.swapRequest?.toUser || row.listing?.user
+            : row.swapRequest?.fromUser;
+        const otherUser = formatParticipant(otherUserRaw);
+
+        const lastMessage =
+          row.messages && row.messages.length > 0
+            ? formatMessage(row.messages[0])
+            : undefined;
+
+        const unreadCount = await prisma.swapMessage.count({
+          where: {
+            swapRequestId: row.id,
+            NOT: { senderId: userId },
+            read: false,
+          },
+        });
+
+        return {
+          id: row.id,
+          swapRequestId: row.swapRequestId,
+          listing,
+          otherUser,
+          lastMessage,
+          unreadCount,
+          status: row.status,
+          meetupMethod: listing.meetupMethod,
+        };
+      })
+    );
+
+    return results;
   },
 
   async fetchMessages(conversationOrSwapRequestId: string, userId: string, role: string) {

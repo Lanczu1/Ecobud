@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -191,12 +192,26 @@ export function SwapChatView({
   }, [loadMessages]);
 
   useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setTimeout(() => {
+          scrollRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+    return () => {
+      showSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         scrollRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [messages.length]);
 
   const handleSend = async () => {
     const text = inputText.trim();
@@ -215,6 +230,9 @@ export function SwapChatView({
       delivered: true,
     };
     setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 50);
 
     try {
       const realMsg = await swapService.sendMessage(
@@ -236,30 +254,30 @@ export function SwapChatView({
 
   return (
     <SafeAreaView
-      style={[localStyles.safeArea, { backgroundColor: isDark ? theme.colors.background : ecoTheme.colors.primaryDark }]}
+      style={[localStyles.safeArea, { backgroundColor: theme.colors.background }]}
       edges={['top', 'left', 'right']}
     >
       {/* Header */}
-      <View style={[localStyles.header, isDark && { backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={onBack} style={localStyles.backBtn}>
-          <Feather name="arrow-left" size={22} color="#FFF" />
+      <View style={[localStyles.header, { backgroundColor: isDark ? theme.colors.card : theme.colors.primaryDark, borderBottomColor: theme.colors.border }]}> 
+        <TouchableOpacity onPress={onBack} style={[localStyles.backBtn, { backgroundColor: theme.colors.surfaceMuted }]}>
+          <Feather name="arrow-left" size={22} color={isDark ? theme.colors.textPrimary : theme.colors.surface} />
         </TouchableOpacity>
         <View style={localStyles.headerInfo}>
-          <Text style={localStyles.headerName} numberOfLines={1}>
+          <Text style={[localStyles.headerName, { color: isDark ? theme.colors.textPrimary : theme.colors.surface }]} numberOfLines={1}>
             {conversation.otherUser.displayName}
           </Text>
-          <Text style={localStyles.headerStatus}>
+          <Text style={[localStyles.headerStatus, { color: isDark ? theme.colors.textMuted : theme.colors.surfaceMuted }]}>
             {getStatusLabel(status)}
           </Text>
         </View>
-        <TouchableOpacity style={localStyles.headerAvatar} onPress={() => setShowProfileModal(true)}>
+        <TouchableOpacity style={[localStyles.headerAvatar, { backgroundColor: theme.colors.surfaceMuted }]} onPress={() => setShowProfileModal(true)}>
           {conversation.otherUser.avatarUrl ? (
             <Image
               source={{ uri: getValidImageUrl(conversation.otherUser.avatarUrl) }}
               style={localStyles.headerAvatarImage}
             />
           ) : (
-            <Text style={localStyles.headerAvatarText}>
+            <Text style={[localStyles.headerAvatarText, { color: isDark ? theme.colors.textPrimary : theme.colors.surface }]}>
               {getInitials(conversation.otherUser.displayName)}
             </Text>
           )}
@@ -270,7 +288,7 @@ export function SwapChatView({
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <View style={[localStyles.swapInfoBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
           <View style={localStyles.swapInfoItem}>
@@ -289,12 +307,20 @@ export function SwapChatView({
         </View>
 
         {status === 'pending' && isOwner && (
-          <View style={localStyles.actionBar}>
-            <TouchableOpacity onPress={onDeclineSwap} style={localStyles.declineBtn}>
-              <Text style={localStyles.declineBtnText}>Decline</Text>
+          <View style={[localStyles.actionBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+            <TouchableOpacity
+              onPress={onDeclineSwap}
+              style={[localStyles.declineBtn, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.error }]}
+            >
+              <Ionicons name="close-circle-outline" size={18} color={theme.colors.error} />
+              <Text style={[localStyles.declineBtnText, { color: theme.colors.error }]}>Decline</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onAcceptSwap} style={localStyles.acceptBtn}>
-              <Text style={localStyles.acceptBtnText}>
+            <TouchableOpacity
+              onPress={onAcceptSwap}
+              style={[localStyles.acceptBtn, { backgroundColor: theme.colors.primary }]}
+            >
+              <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.background} />
+              <Text style={[localStyles.acceptBtnText, { color: theme.colors.background }]}> 
                 {conversation.listing.lookingFor?.toLowerCase() === 'giveaway' ? 'Accept' : 'Accept Swap'}
               </Text>
             </TouchableOpacity>
@@ -302,10 +328,13 @@ export function SwapChatView({
         )}
 
         {status === 'accepted' && (
-          <View style={localStyles.actionBar}>
-            <TouchableOpacity onPress={onMarkCompleted} style={localStyles.completeBtn}>
-              <Ionicons name="checkmark-circle" size={16} color="#FFF" />
-              <Text style={localStyles.completeBtnText}>Mark as Completed</Text>
+          <View style={[localStyles.actionBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+            <TouchableOpacity
+              onPress={onMarkCompleted}
+              style={[localStyles.completeBtn, { backgroundColor: theme.colors.primary }]}
+            >
+              <Ionicons name="checkmark-done-circle-outline" size={18} color={theme.colors.background} />
+              <Text style={[localStyles.completeBtnText, { color: theme.colors.background }]}>Mark as Completed</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -321,34 +350,35 @@ export function SwapChatView({
             contentContainerStyle={[localStyles.messagesContent, { backgroundColor: theme.colors.background }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
           >
             {messages.map((msg) => {
-              const isMine = msg.senderId === currentUserId;
+              const isMine = String(msg.senderId).trim() === String(currentUserId).trim();
               return (
                 <View
                   key={msg.id}
                   style={[
                     localStyles.messageBubble,
                     isMine
-                      ? [localStyles.messageBubbleMine, isDark && { backgroundColor: theme.colors.primary }]
+                      ? [localStyles.messageBubbleMine, { backgroundColor: theme.colors.primary }]
                       : [localStyles.messageBubbleTheirs, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }],
                   ]}
                 >
                   {msg.imageUrl && (
                     <Image source={{ uri: msg.imageUrl }} style={localStyles.messageImage} />
                   )}
-                  <Text style={[localStyles.messageText, isMine ? [localStyles.messageTextMine, isDark && { color: '#0E1512' }] : { color: theme.colors.textPrimary }]}>
+                  <Text style={[localStyles.messageText, { color: isMine ? '#FFFFFF' : theme.colors.textPrimary }]}>
                     {msg.text}
                   </Text>
                   <View style={localStyles.messageFooter}>
-                    <Text style={[localStyles.messageTime, isMine ? [localStyles.messageTimeMine, isDark && { color: 'rgba(14,21,18,0.7)' }] : { color: theme.colors.textMuted }]}>
+                    <Text style={[localStyles.messageTime, { color: isMine ? 'rgba(255,255,255,0.75)' : theme.colors.textMuted }]}>
                       {formatMessageTime(msg.timestamp)}
                     </Text>
                     {isMine && (
                       <Ionicons
                         name={msg.read ? 'checkmark-done' : 'checkmark'}
                         size={14}
-                        color={isDark ? '#064E3B' : (msg.read ? '#4ADE80' : '#9CA3AF')}
+                        color={msg.read ? '#FFFFFF' : 'rgba(255,255,255,0.7)'}
                         style={{ marginLeft: 4 }}
                       />
                     )}
@@ -374,9 +404,9 @@ export function SwapChatView({
             <TouchableOpacity
               onPress={handleSend}
               disabled={!inputText.trim() || sending}
-              style={[localStyles.sendBtn, isDark && { backgroundColor: theme.colors.primary }, (!inputText.trim() || sending) && { opacity: 0.5 }]}
+              style={[localStyles.sendBtn, { backgroundColor: theme.colors.primary }, (!inputText.trim() || sending) && { opacity: 0.5 }]}
             >
-              <Ionicons name="send" size={18} color={isDark ? '#0E1512' : '#FFF'} />
+              <Ionicons name="send" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         )}
@@ -495,8 +525,10 @@ const localStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FCA5A5',
     backgroundColor: '#FEF2F2',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: scale(6),
   },
   declineBtnText: {
     fontSize: responsiveFontSize(13),
@@ -510,8 +542,10 @@ const localStyles = StyleSheet.create({
     paddingHorizontal: scale(10),
     borderRadius: moderateScale(12),
     backgroundColor: '#059669',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: scale(6),
   },
   acceptBtnText: {
     fontSize: responsiveFontSize(13),
@@ -525,7 +559,7 @@ const localStyles = StyleSheet.create({
     paddingVertical: verticalScale(8),
     paddingHorizontal: scale(10),
     borderRadius: moderateScale(12),
-    backgroundColor: '#2563EB',
+    backgroundColor: ecoTheme.colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
     gap: scale(6),
@@ -599,7 +633,7 @@ const localStyles = StyleSheet.create({
     gap: scale(8),
     paddingHorizontal: scale(12),
     paddingVertical: verticalScale(8),
-    paddingBottom: Platform.select({ ios: verticalScale(12), android: verticalScale(16) }),
+    paddingBottom: Platform.select({ ios: verticalScale(12), android: verticalScale(10) }),
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F5F2',
