@@ -4,7 +4,7 @@ import {
   Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
   Loader2, UploadCloud, Power, Star, XCircle, ShieldCheck, 
   ChevronDown, ChevronRight, User, Layers, Filter, 
-  RefreshCw, CheckCircle2, Clock, MapPin, Lock
+  RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, Info, FileText, CheckSquare
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -440,6 +440,213 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   );
 }
 
+interface ChallengeDetailModalProps {
+  challenge: Challenge;
+  onClose: () => void;
+  onEdit?: (challenge: Challenge) => void;
+  isModerator?: boolean;
+}
+
+function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: ChallengeDetailModalProps) {
+  const [isClosing, setIsClosing] = useState(false);
+  useModalScrollLock(true);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 280);
+  };
+
+  const statusLabel = challenge.active ? 'Active' : 'Inactive';
+
+  return createPortal(
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={handleClose}>
+      <div 
+        className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-100 ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}
+        style={{ maxHeight: 'calc(100vh - 80px)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="flex shrink-0 items-center justify-between p-6 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+              <Trophy className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Mission Details</h2>
+              <p className="text-xs text-gray-500">Challenge specification, requirements, and verification rules</p>
+            </div>
+          </div>
+          <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto challenge-modal-scroll p-6 space-y-6">
+          {/* Challenge Hero Card */}
+          <div className="flex flex-col sm:flex-row gap-4 p-4 rounded-xl bg-gray-50 border border-gray-100 items-start">
+            {challenge.imageUrl ? (
+              <div className="w-full sm:w-28 h-28 rounded-xl overflow-hidden border border-gray-200 shrink-0 bg-gray-100">
+                <img 
+                  src={challenge.imageUrl.startsWith('http') ? challenge.imageUrl : `${API_HOST}${challenge.imageUrl}`} 
+                  alt={challenge.title}
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+            ) : (
+              <div className="w-full sm:w-28 h-28 rounded-xl bg-emerald-100 border border-emerald-200 shrink-0 flex items-center justify-center text-emerald-600">
+                <Trophy className="w-10 h-10 opacity-70" />
+              </div>
+            )}
+            <div className="flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[statusLabel] || 'bg-gray-100 text-gray-700'}`}>
+                  {statusLabel}
+                </span>
+                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${difficultyColors[challenge.difficulty] || 'bg-gray-100 text-gray-700'}`}>
+                  {challenge.difficulty} Difficulty
+                </span>
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                  {challenge.category || 'General'}
+                </span>
+                {challenge.isFeatured && (
+                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-current" /> Featured
+                  </span>
+                )}
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 leading-tight">
+                {challenge.title}
+              </h3>
+              {challenge.badgeLabel && (
+                <p className="text-xs text-gray-500">
+                  Badge: <span className="font-semibold text-emerald-600">{challenge.badgeLabel}</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Mission Description Section */}
+          <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-100 space-y-2">
+            <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-600" />
+              Mission Description
+            </h4>
+            <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed font-normal">
+              {challenge.description || 'No description provided for this challenge.'}
+            </p>
+          </div>
+
+          {/* Mission Requirements & Parameters Grid */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-emerald-600" />
+              Mission Requirements & Verification Rules
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Target Items */}
+              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1.5">
+                <span className="text-xs font-semibold text-gray-500 block">Accepted Target Items</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0 ? (
+                    challenge.aiDetectionTargets.map(target => (
+                      <span key={target} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        {target}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-600">Plastic Bottle (Default)</span>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Detection Confidence */}
+              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1">
+                <span className="text-xs font-semibold text-gray-500 block">AI Minimum Confidence</span>
+                <p className="text-sm font-bold text-gray-800">
+                  {challenge.aiMinimumConfidence || 80}% Accuracy Threshold
+                </p>
+              </div>
+
+              {/* Rewards */}
+              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1">
+                <span className="text-xs font-semibold text-gray-500 block">Reward Allocation</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-orange-600 flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5" /> {challenge.expReward} EXP Points
+                  </span>
+                  {challenge.ecoCoinReward > 0 && (
+                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                      <Coins className="w-3.5 h-3.5" /> {challenge.ecoCoinReward} Eco Coins
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Collection Point */}
+              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1">
+                <span className="text-xs font-semibold text-gray-500 block">Collection Point</span>
+                <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-red-500" />
+                  {challenge.collectionPointName || 'Barangay Collection Point'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Step-by-Step Workflow Guide */}
+          <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/70 space-y-2.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              Mission Workflow & Verification Steps
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                <span><strong>Before Photo:</strong> Resident captures recyclable items with AI scan.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                <span><strong>Moderator Review:</strong> Preliminary approval of scanned items.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                <span><strong>Barangay Drop-off:</strong> Resident brings items to collection desk.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">4</span>
+                <span><strong>After Photo & Final Award:</strong> Drop-off verified; rewards released!</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="shrink-0 p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+          {!isModerator && onEdit && (
+            <button
+              onClick={() => {
+                handleClose();
+                onEdit(challenge);
+              }}
+              className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-1.5"
+            >
+              <Edit3 className="w-4 h-4" /> Edit Challenge
+            </button>
+          )}
+          <button
+            onClick={handleClose}
+            className="px-5 py-2 text-sm font-semibold rounded-xl bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export function Challenges() {
   const [challenges, setChallenges] = useState<Challenge[]>(() => getCachedAdminData<Challenge[]>('/admin/challenges') || []);
   const [loading, setLoading] = useState(() => !getCachedAdminData<Challenge[]>('/admin/challenges'));
@@ -447,6 +654,7 @@ export function Challenges() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
+  const [viewingChallenge, setViewingChallenge] = useState<Challenge | null>(null);
   const [editing, setEditing] = useState<Challenge | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -903,6 +1111,18 @@ export function Challenges() {
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
       {modal === 'add' && <ChallengeModal onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <ChallengeModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
+      {viewingChallenge && (
+        <ChallengeDetailModal 
+          challenge={viewingChallenge} 
+          onClose={() => setViewingChallenge(null)} 
+          onEdit={(c) => { 
+            setViewingChallenge(null); 
+            setEditing(c); 
+            setModal('edit'); 
+          }} 
+          isModerator={isModerator} 
+        />
+      )}
 
       <div className="flex items-center justify-between">
         <div>
@@ -1027,8 +1247,12 @@ export function Challenges() {
               : filtered.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-green-50 border border-green-100 shrink-0 flex items-center justify-center">
+                    <div 
+                      onClick={() => setViewingChallenge(c)} 
+                      className="flex items-center gap-3 cursor-pointer group/title"
+                      title="Click to view full mission details & requirements"
+                    >
+                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-green-50 border border-green-100 shrink-0 flex items-center justify-center transition-transform group-hover/title:scale-105">
                         {c.imageUrl ? (
                           <img src={c.imageUrl.startsWith('http') ? c.imageUrl : `${API_HOST}${c.imageUrl}`} className="w-full h-full object-cover" alt="Challenge" />
                         ) : (
@@ -1036,7 +1260,9 @@ export function Challenges() {
                         )}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{c.title}</p>
+                        <p className="text-sm font-semibold text-gray-900 group-hover/title:text-emerald-600 transition-colors flex items-center gap-1.5">
+                          {c.title}
+                        </p>
                         <p className="text-xs text-gray-400">{c.category || 'General'}{c.badgeLabel ? ` · ${c.badgeLabel}` : ''}</p>
                       </div>
                     </div>
@@ -1068,6 +1294,13 @@ export function Challenges() {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => setViewingChallenge(c)} 
+                        title="View Mission Details & Requirements" 
+                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button onClick={() => handleToggleFeatured(c)} disabled={togglingFeatured === c.id} title={c.isFeatured ? 'Unfeature' : 'Feature'} className={`p-1.5 rounded-lg transition-colors disabled:opacity-60 ${c.isFeatured ? 'text-yellow-500 hover:bg-yellow-50' : 'text-gray-400 hover:bg-gray-100'}`}>
                         {togglingFeatured === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className={`w-4 h-4 ${c.isFeatured ? 'fill-current' : ''}`} />}
                       </button>
@@ -1394,10 +1627,30 @@ export function Challenges() {
                                               <Trophy className="w-3.5 h-3.5" />
                                             </div>
                                             <div>
-                                              <span className="text-xs font-bold text-gray-900 dark:text-white">
-                                                {challengeGroup.challengeTitle}
-                                              </span>
-                                              <span className="text-[11px] text-gray-500 dark:text-gray-400 ml-2">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                                  {challengeGroup.challengeTitle}
+                                                </span>
+                                                {(() => {
+                                                  const matched = challenges.find(c => c.id === challengeGroup.challengeId);
+                                                  if (!matched) return null;
+                                                  return (
+                                                    <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setViewingChallenge(matched);
+                                                      }}
+                                                      title="View Challenge Description & Requirements"
+                                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                                                    >
+                                                      <Info className="w-3 h-3 text-emerald-600" />
+                                                      <span>Mission Info</span>
+                                                    </button>
+                                                  );
+                                                })()}
+                                              </div>
+                                              <span className="text-[11px] text-gray-500 dark:text-gray-400">
                                                 ({challengeGroup.submissions.length} {challengeGroup.submissions.length === 1 ? 'submission' : 'submissions'} · {challengeGroup.totalQuantity} {challengeGroup.quantityUnit})
                                               </span>
                                             </div>

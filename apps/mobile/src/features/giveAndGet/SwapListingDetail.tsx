@@ -348,17 +348,32 @@ export function SwapListingDetail({
               )}
 
               {/* Offering vs Looking For */}
-              <View style={[localStyles.offerLookingCard, isDark && { borderColor: theme.colors.border }]}>
-                <View style={[localStyles.offerSection, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+              <View style={[
+                localStyles.offerLookingCard,
+                {
+                  backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAF9',
+                  borderColor: isDark ? theme.colors.border : '#E2ECE5',
+                }
+              ]}>
+                <View style={[
+                  localStyles.offerSection,
+                  { backgroundColor: isDark ? theme.colors.card : '#F0FAF3' }
+                ]}>
                   <Text style={[localStyles.sectionLabel, { color: theme.colors.textMuted }]}>Offering</Text>
                   <Text style={[localStyles.sectionValue, { color: theme.colors.textPrimary }]} numberOfLines={2}>
                     {listing.quantity} {listing.title}
                   </Text>
                 </View>
-                <View style={localStyles.offerDivider}>
+                <View style={[
+                  localStyles.offerDivider,
+                  { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAF9' }
+                ]}>
                   <Ionicons name="swap-horizontal" size={18} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                 </View>
-                <View style={[localStyles.lookingSection, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                <View style={[
+                  localStyles.lookingSection,
+                  { backgroundColor: isDark ? (theme.colors.cardAlt || theme.colors.card) : '#FEF9EC' }
+                ]}>
                   <Text style={[localStyles.sectionLabel, { color: theme.colors.textMuted }]}>Looking For</Text>
                   <Text style={[localStyles.sectionValue, { color: theme.colors.textPrimary }]} numberOfLines={2}>{listing.lookingFor}</Text>
                 </View>
@@ -482,7 +497,7 @@ export function SwapListingDetail({
                   </View>
                 </View>
               </View>
-              <View style={localStyles.profileArrow}>
+              <View style={[localStyles.profileArrow, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
                 <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
               </View>
             </TouchableOpacity>
@@ -538,7 +553,7 @@ export function SwapListingDetail({
             onPress={() => setShowActions(false)}
           >
             <View style={[localStyles.actionSheet, { backgroundColor: theme.colors.card }]}>
-              <View style={[localStyles.actionHandle, isDark && { backgroundColor: theme.colors.border }]} />
+              <View style={[localStyles.actionHandle, { backgroundColor: theme.colors.border }]} />
               {isOwnListing ? (
                 <>
                   {isApproved && (
@@ -547,10 +562,10 @@ export function SwapListingDetail({
                         setShowActions(false);
                         setShowEditModal(true);
                       }}
-                      style={localStyles.actionItem}
+                      style={[localStyles.actionItem, { borderBottomColor: theme.colors.border }]}
                     >
-                      <Ionicons name="create-outline" size={20} color="#126027" />
-                      <Text style={[localStyles.actionText, { color: '#126027' }]}>Edit Listing Details</Text>
+                      <Ionicons name="create-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
+                      <Text style={[localStyles.actionText, { color: isDark ? theme.colors.primary : '#126027' }]}>Edit Listing Details</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
@@ -558,10 +573,10 @@ export function SwapListingDetail({
                       setShowActions(false);
                       handleDelete();
                     }}
-                    style={localStyles.actionItem}
+                    style={[localStyles.actionItem, { borderBottomColor: theme.colors.border }]}
                   >
-                    <Ionicons name="trash-outline" size={20} color="#DC2626" />
-                    <Text style={[localStyles.actionText, { color: '#DC2626' }]}>Delete Listing</Text>
+                    <Ionicons name="trash-outline" size={20} color={theme.colors.error || '#DC2626'} />
+                    <Text style={[localStyles.actionText, { color: theme.colors.error || '#DC2626' }]}>Delete Listing</Text>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -571,17 +586,17 @@ export function SwapListingDetail({
                       setShowActions(false);
                       onReport?.();
                     }}
-                    style={localStyles.actionItem}
+                    style={[localStyles.actionItem, { borderBottomColor: theme.colors.border }]}
                   >
-                    <Ionicons name="flag-outline" size={20} color="#DC2626" />
-                    <Text style={[localStyles.actionText, { color: '#DC2626' }]}>Report Listing</Text>
+                    <Ionicons name="flag-outline" size={20} color={theme.colors.error || '#DC2626'} />
+                    <Text style={[localStyles.actionText, { color: theme.colors.error || '#DC2626' }]}>Report Listing</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setShowActions(false)}
-                    style={localStyles.actionItem}
+                    style={[localStyles.actionItem, { borderBottomColor: theme.colors.border }]}
                   >
-                    <Ionicons name="person-remove-outline" size={20} color="#DC2626" />
-                    <Text style={[localStyles.actionText, { color: '#DC2626' }]}>Block User</Text>
+                    <Ionicons name="person-remove-outline" size={20} color={theme.colors.error || '#DC2626'} />
+                    <Text style={[localStyles.actionText, { color: theme.colors.error || '#DC2626' }]}>Block User</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -589,7 +604,7 @@ export function SwapListingDetail({
                 onPress={() => setShowActions(false)}
                 style={[localStyles.actionItem, { borderBottomWidth: 0, justifyContent: 'center' }]}
               >
-                <Text style={localStyles.actionCancelText}>Cancel</Text>
+                <Text style={[localStyles.actionCancelText, { color: theme.colors.textMuted }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -606,11 +621,14 @@ export function SwapListingDetail({
             style={localStyles.editModalOverlay}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <View style={localStyles.editModalContent}>
+            <View style={[localStyles.editModalContent, { backgroundColor: theme.colors.card }]}>
               <View style={localStyles.editModalHeader}>
-                <Text style={localStyles.editModalTitle}>Edit Listing Details</Text>
-                <TouchableOpacity onPress={() => setShowEditModal(false)} style={localStyles.editModalClose}>
-                  <Ionicons name="close" size={22} color="#1A211D" />
+                <Text style={[localStyles.editModalTitle, { color: theme.colors.textPrimary }]}>Edit Listing Details</Text>
+                <TouchableOpacity
+                  onPress={() => setShowEditModal(false)}
+                  style={[localStyles.editModalClose, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F3FAF5' }]}
+                >
+                  <Ionicons name="close" size={22} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
               </View>
 
@@ -620,75 +638,140 @@ export function SwapListingDetail({
                 keyboardShouldPersistTaps="handled"
                 automaticallyAdjustKeyboardInsets
               >
-                <Text style={localStyles.editFieldLabel}>Item Title *</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Item Title *</Text>
                 <TextInput
-                  style={localStyles.editInput}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editTitle}
                   onChangeText={setEditTitle}
                   placeholder="Listing title"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
-                <Text style={localStyles.editFieldLabel}>Quantity *</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Quantity *</Text>
                 <TextInput
-                  style={localStyles.editInput}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editQuantity}
                   onChangeText={setEditQuantity}
                   placeholder="e.g. 10 pcs"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
-                <Text style={localStyles.editFieldLabel}>Looking For *</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Looking For *</Text>
                 <TextInput
-                  style={localStyles.editInput}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editLookingFor}
                   onChangeText={setEditLookingFor}
                   placeholder="What you want in exchange"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
-                <Text style={localStyles.editFieldLabel}>Description</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Description</Text>
                 <TextInput
-                  style={[localStyles.editInput, { height: 90, textAlignVertical: 'top', paddingTop: 10 }]}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      height: 90,
+                      textAlignVertical: 'top',
+                      paddingTop: 10,
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editDescription}
                   onChangeText={setEditDescription}
                   multiline
                   numberOfLines={4}
                   placeholder="Detailed description"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
-                <Text style={localStyles.editFieldLabel}>Meetup Location</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Meetup Location</Text>
                 <TextInput
-                  style={localStyles.editInput}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editMeetupLocation}
                   onChangeText={setEditMeetupLocation}
                   placeholder="e.g. SM City Calamba"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
-                <Text style={localStyles.editFieldLabel}>Landmark</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Landmark</Text>
                 <TextInput
-                  style={localStyles.editInput}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editMeetupLandmark}
                   onChangeText={setEditMeetupLandmark}
                   placeholder="e.g. Near Entrance"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
-                <Text style={localStyles.editFieldLabel}>Additional Notes</Text>
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Additional Notes</Text>
                 <TextInput
-                  style={[localStyles.editInput, { height: 75, textAlignVertical: 'top', paddingTop: 10 }]}
+                  style={[
+                    localStyles.editInput,
+                    {
+                      height: 75,
+                      textAlignVertical: 'top',
+                      paddingTop: 10,
+                      backgroundColor: theme.colors.inputBackground,
+                      borderColor: theme.colors.inputBorder,
+                      color: theme.colors.textPrimary,
+                    }
+                  ]}
                   value={editMeetupNotes}
                   onChangeText={setEditMeetupNotes}
                   multiline
                   numberOfLines={3}
                   placeholder="Extra instructions"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
 
                 <TouchableOpacity
                   onPress={handleSaveEdit}
                   disabled={savingEdit}
-                  style={localStyles.saveEditButton}
+                  style={[
+                    localStyles.saveEditButton,
+                    { backgroundColor: isDark ? theme.colors.primary : '#126027' }
+                  ]}
                 >
                   {savingEdit ? (
-                    <ActivityIndicator color="#FFF" />
+                    <ActivityIndicator color={isDark ? '#000' : '#FFF'} />
                   ) : (
-                    <Text style={localStyles.saveEditButtonText}>Save Changes</Text>
+                    <Text style={[localStyles.saveEditButtonText, isDark && { color: '#000' }]}>Save Changes</Text>
                   )}
                 </TouchableOpacity>
               </ScrollView>

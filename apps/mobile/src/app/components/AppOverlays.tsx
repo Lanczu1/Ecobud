@@ -1038,6 +1038,201 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     </View>
                   )
                 ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 10, flexShrink: 0 }}>
+                        <Ionicons name="location-outline" size={18} color={isDark ? '#FBBF24' : '#92400E'} />
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? '#FEF08A' : '#78350F' }}>Barangay Center</Text>
+                      </View>
+
+                      {/* Vertical Divider */}
+                      <View style={{ width: 1.5, height: 38, backgroundColor: isDark ? '#854D0E' : '#D97706', marginHorizontal: 8, opacity: 0.6 }} />
+
+                      <View style={{ flex: 1, paddingLeft: 2 }}>
+                        <Text style={{ fontSize: 11, color: isDark ? '#FDE68A' : '#78350F', lineHeight: 16 }}>
+                          Bring your recyclables to the barangay collection desk to verify and claim your rewards.
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Submit Button or Try Again */}
+              {mockResult.passed ? (
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  disabled={processing}
+                  onPress={handleSubmitBeforeProof}
+                  style={{
+                    width: '100%',
+                    backgroundColor: isDark ? theme.colors.primary : '#047857',
+                    borderRadius: 28,
+                    paddingVertical: 15,
+                    paddingHorizontal: 20,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: isDark ? theme.colors.primary : '#047857',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 10,
+                    elevation: 5,
+                    gap: 10,
+                  }}
+                >
+                  <Ionicons name="camera-outline" size={22} color={isDark ? '#0E1512' : '#FFFFFF'} />
+                  <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 }}>
+                    {processing ? "Submitting..." : "Submit Before Photo"}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} style={{ marginLeft: 2 }} />
+                </TouchableOpacity>
+              ) : attemptsLeft > 0 ? (
+                <View style={{ width: '100%', gap: 10 }}>
+                  <PrimaryButton label={`Try Again (${attemptsLeft} ${attemptsLeft === 1 ? 'try' : 'tries'} left)`} onPress={handleTryAgain} />
+                  <TouchableOpacity
+                    onPress={handleClose}
+                    style={{
+                      width: '100%',
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textMuted }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ width: '100%', alignItems: 'center', gap: 14 }}>
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                    borderWidth: 1.5,
+                    borderColor: isDark ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5',
+                    borderRadius: 16,
+                    padding: 16,
+                    alignItems: 'center',
+                    gap: 6
+                  }}>
+                    <Ionicons name="alert-circle" size={28} color="#EF4444" />
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
+                      Maximum AI Attempts Reached (15m Cooldown)
+                    </Text>
+                    <Text style={{ fontSize: 13, color: isDark ? '#FCA5A5' : '#991B1B', textAlign: 'center', lineHeight: 18 }}>
+                      You've used all 3 attempts for this challenge. You'll get 3 more attempts after the 15-minute cooldown ({Math.floor(cooldownRemainingSec / 60)}:{(cooldownRemainingSec % 60) < 10 ? '0' : ''}{cooldownRemainingSec % 60} remaining).
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleClose}
+                    style={{
+                      width: '100%',
+                      backgroundColor: isDark ? theme.colors.surfaceMuted : '#E5E7EB',
+                      borderRadius: 24,
+                      paddingVertical: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Animated.View>
+          </ScrollView>
+        </OverlayScaffold>
+      </Animated.View>
+    );
+  }
+
+  if (step === 'capture' || step === 'capture_after') {
+    return (
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
+        <OverlayScaffold
+          title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"}
+          subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"}
+          onBack={() => {
+            resetCameraSession();
+            setStep('details');
+          }}
+        >
+          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
+            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+              {step === 'capture' && (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',
+                  borderRadius: 14,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  marginBottom: 16,
+                  borderWidth: 1,
+                  borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0',
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="sparkles" size={18} color={theme.colors.primary} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: isDark ? theme.colors.textPrimary : '#166534' }}>
+                      AI Recognition Limit:
+                    </Text>
+                  </View>
+                  <View style={{
+                    backgroundColor: attemptsLeft > 1
+                      ? (isDark ? 'rgba(16, 185, 129, 0.2)' : '#DCFCE7')
+                      : attemptsLeft === 1
+                        ? (isDark ? 'rgba(234, 179, 8, 0.2)' : '#FEF9C3')
+                        : (isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2'),
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: attemptsLeft > 1
+                      ? '#10B981'
+                      : attemptsLeft === 1
+                        ? '#F59E0B'
+                        : '#EF4444'
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: attemptsLeft > 1
+                        ? (isDark ? '#34D399' : '#15803D')
+                        : attemptsLeft === 1
+                          ? (isDark ? '#FBBF24' : '#B45309')
+                          : '#DC2626'
+                    }}>
+                      {attemptsLeft} / {MAX_AI_ATTEMPTS} attempts left
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
+                {capturedImage ? (
+                  <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                ) : permission?.granted ? (
+                  isCameraMountAllowed ? (
+                    <>
+                      <CameraView
+                        key={`cam-${step}-${cameraSessionId}`}
+                        style={{ width: '100%', height: '100%' }}
+                        facing="back"
+                        ref={cameraRef}
+                        onCameraReady={() => setIsCameraReady(true)}
+                      />
+                      {!isCameraReady && (
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
+                          <ActivityIndicator size="large" color="#10B981" />
+                          <Text style={{ marginTop: 12, color: '#6B7A75', fontSize: 14 }}>Starting camera...</Text>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
+                      <ActivityIndicator size="large" color="#10B981" />
+                      <Text style={{ marginTop: 12, color: '#6B7A75', fontSize: 14 }}>Preparing camera...</Text>
+                    </View>
+                  )
+                ) : (
                   <>
                     <Ionicons name="camera" size={64} color="#C8D8CE" />
                     <Text style={{ marginTop: 16, color: '#6B7A75', fontSize: 16 }}>No camera access</Text>
@@ -1080,9 +1275,95 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       <OverlayScaffold title="AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
         <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
           <Animated.View style={{ opacity: fadeAnim }}>
-            <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027', marginBottom: 24 }}>{challenge.title}</Text>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027', marginBottom: 16 }}>{challenge.title}</Text>
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
+            {/* Mission Description Card */}
+            <View style={{
+              backgroundColor: isDark ? 'rgba(16, 185, 129, 0.08)' : '#F0FDF4',
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 18,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Ionicons name="document-text-outline" size={18} color={theme.colors.primary} />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: isDark ? theme.colors.primary : '#14532D', letterSpacing: 0.2 }}>
+                  Mission Description
+                </Text>
+              </View>
+              <Text style={{ fontSize: 14, color: isDark ? theme.colors.textPrimary : '#166534', lineHeight: 22, fontWeight: '500' }}>
+                {challenge.description || 'Participate in this eco mission to segregate recyclables, earn points, and make a positive impact in your community.'}
+              </Text>
+            </View>
+
+            {/* Mission Requirements & Guidelines Card */}
+            <View style={{
+              backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 20,
+              borderWidth: 1,
+              borderColor: theme.colors.cardBorder,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: isDark ? 0.2 : 0.05,
+              shadowRadius: 4,
+              elevation: 2,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.primary} />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: 0.2 }}>
+                  Mission Requirements
+                </Text>
+              </View>
+
+              <View style={{ gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Accepted Target Items:</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
+                      {challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0
+                        ? challenge.aiDetectionTargets.join(', ')
+                        : 'Plastic Bottles / Recyclables'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Cleanliness & Preparation:</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
+                      Ensure items are clean, emptied of liquids, and clearly separated for camera recognition.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>2-Step Verification:</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
+                      1. Scan items with AI (Before Photo) → 2. Drop off at collection point & upload After Photo.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Drop-off Point:</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
+                      Bring items to {collectionPointName}.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 }}>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Difficulty:</Text>
                 <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>{challenge.difficulty}</Text>
@@ -1102,7 +1383,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 }}>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Collection Point:</Text>
                 <Text style={{ fontSize: 14, color: theme.colors.textMuted, maxWidth: 180 }}>
@@ -1111,7 +1392,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 }}>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Targets:</Text>
                 {challenge.aiDetectionTargets?.map(target => (
