@@ -23,3 +23,11 @@ export function getQuizLessonProgress(completedQuestions: number, questionCount:
   if (questionCount <= 0) return 80;
   return Math.min(99, 80 + Math.floor(Math.min(questionCount, Math.max(0, completedQuestions)) / questionCount * 20));
 }
+
+export function isLocalLessonProgressNewer(localSavedAt: number, serverUpdatedAt?: string): boolean {
+  if (!Number.isFinite(localSavedAt)) return false;
+  if (!serverUpdatedAt) return true;
+
+  const serverSavedAt = Date.parse(serverUpdatedAt);
+  return !Number.isFinite(serverSavedAt) || localSavedAt > serverSavedAt;
+}

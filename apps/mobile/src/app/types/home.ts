@@ -262,6 +262,9 @@ export interface EcoBudMobileModel {
   /** Whether the floating leaf mascot AI chatbot is enabled or hidden by the user */
   isChatbotEnabled: boolean;
   setChatbotEnabled: (enabled: boolean) => Promise<void>;
+  /** Mascot size preference: 'small', 'medium', or 'large' */
+  chatbotSize: 'small' | 'medium' | 'large';
+  setChatbotSize: (size: 'small' | 'medium' | 'large') => Promise<void>;
   /** Whether push notifications are enabled or disabled by the user */
   pushNotificationsEnabled: boolean;
   setPushNotificationsEnabled: (enabled: boolean) => Promise<void>;

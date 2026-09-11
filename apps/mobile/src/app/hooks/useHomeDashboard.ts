@@ -1,4 +1,4 @@
-import { getQuizLessonProgress } from '../utils/lessonProgress';
+import { getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { useNotifications } from './useNotifications';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
@@ -37,24 +37,23 @@ import { makeRedirectUri } from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// --- Constants ---
 
 const SESSION_STORAGE_KEY = 'ecobud.mobile.session';
 const ONBOARDING_STORAGE_KEY = 'ecobud.mobile.onboarding';
 const VIEWED_MISSIONS_KEY = 'ecobud.mobile.viewedMissions';
 const RECENT_VIEWED_KEY = 'ecobud.mobile.recentViewedMission';
 const CHATBOT_ENABLED_STORAGE_KEY = 'ecobud.mobile.chatbotEnabled';
+const CHATBOT_SIZE_STORAGE_KEY = 'ecobud.mobile.chatbotSize';
 const PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY = 'ecobud.mobile.pushNotificationsEnabled';
 const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
 
-// ─── Internal Utilities ─────────────────────────────────────────────────────────
+// --- Internal Utilities ---
 
 function formatChatTime(isoDate: string) {
   return new Date(isoDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-// EcoBud uses Philippines (Asia/Manila, UTC+8) calendar days. Intl keeps the
-// key correct regardless of the device's own timezone.
 const formatPhParts = (date: Date, options: Intl.DateTimeFormatOptions) => {
   const parts = new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila',
@@ -71,13 +70,19 @@ const getPhDateKey = (date: Date = new Date()): string => {
 
 const getPhMonthKey = (date: Date = new Date()): string => getPhDateKey(date).slice(0, 7);
 
-// ─── Hook ───────────────────────────────────────────────────────────────────────
+// --- Hook ---
 
 export function useHomeDashboard(): EcoBudMobileModel {
   const [initializing, setInitializing] = useState(true);
   const [booting, setBooting] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
-  const [hasOnboarded, setHasOnboarded] = useState(false);
+  const [hasOnboarded, setHasOnboarded] = useState(() => {
+    try {
+      return mobileStorage.getItemSync(ONBOARDING_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{type:string;id:string}|null>(null);
   const [pendingNotificationId, setPendingNotificationId] = useState<string|null>(null);
@@ -167,7 +172,26 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const [progressBarLayout, setProgressBarLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const [isChatbotEnabled, setIsChatbotEnabled] = useState(true);
+
+  const [isChatbotEnabled, setIsChatbotEnabled] = useState(() => {
+    try {
+      const syncVal = mobileStorage.getItemSync(CHATBOT_ENABLED_STORAGE_KEY);
+      if (syncVal !== null) {
+        return JSON.parse(syncVal) !== false;
+      }
+    } catch { }
+    return true;
+  });
+
+  const [chatbotSize, setChatbotSizeState] = useState<'small' | 'medium' | 'large'>(() => {
+    try {
+      const syncVal = mobileStorage.getItemSync(CHATBOT_SIZE_STORAGE_KEY);
+      if (syncVal === 'small' || syncVal === 'medium' || syncVal === 'large') {
+        return syncVal;
+      }
+    } catch { }
+    return 'medium';
+  });
 
   const setPushNotificationsEnabled = useCallback(async (enabled: boolean) => {
     setPushNotificationsEnabledState(enabled);
@@ -181,9 +205,24 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const setChatbotEnabled = useCallback(async (enabled: boolean) => {
     setIsChatbotEnabled(enabled);
     try {
+      mobileStorage.setItemSync(CHATBOT_ENABLED_STORAGE_KEY, JSON.stringify(enabled));
+    } catch { }
+    try {
       await mobileStorage.setItem(CHATBOT_ENABLED_STORAGE_KEY, JSON.stringify(enabled));
     } catch (e) {
       console.warn('Failed to persist chatbot preference', e);
+    }
+  }, []);
+
+  const setChatbotSize = useCallback(async (size: 'small' | 'medium' | 'large') => {
+    setChatbotSizeState(size);
+    try {
+      mobileStorage.setItemSync(CHATBOT_SIZE_STORAGE_KEY, size);
+    } catch { }
+    try {
+      await mobileStorage.setItem(CHATBOT_SIZE_STORAGE_KEY, size);
+    } catch (e) {
+      console.warn('Failed to persist chatbot size preference', e);
     }
   }, []);
 
@@ -519,9 +558,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
           try {
             const raw = mobileStorage.getItemSync('@lesson_progress_' + existingSession.user.id + ':' + lesson.id);
             const saved = raw ? JSON.parse(raw) : null;
-            if (saved && Number.isFinite(saved.progress) && Number.isFinite(saved.timestamp) && lesson.status !== 'completed') {
-              lesson.progress = Math.max(lesson.progress, saved.progress);
-              lesson.videoTimestamp = Math.max(lesson.videoTimestamp ?? 0, saved.timestamp);
+            if (saved && Number.isFinite(saved.progress) && Number.isFinite(saved.timestamp) &&
+                isLocalLessonProgressNewer(saved.savedAt, lesson.progressUpdatedAt) && lesson.status !== 'completed') {
+              lesson.progress = saved.progress;
+              lesson.videoTimestamp = saved.timestamp;
             }
           } catch { /* Ignore invalid local records. */ }
         }
@@ -655,6 +695,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           savedViewedIds,
           savedRecent,
           savedChatbotEnabled,
+          savedChatbotSize,
           savedSession,
           cachedHome,
           savedOnboarded,
@@ -662,6 +703,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           mobileStorage.getItem(VIEWED_MISSIONS_KEY),
           mobileStorage.getItem(RECENT_VIEWED_KEY),
           mobileStorage.getItem(CHATBOT_ENABLED_STORAGE_KEY),
+          mobileStorage.getItem(CHATBOT_SIZE_STORAGE_KEY),
           mobileStorage.getItem(SESSION_STORAGE_KEY),
           mobileStorage.getItem(CACHED_HOME_DATA_STORAGE_KEY),
           mobileStorage.getItem(ONBOARDING_STORAGE_KEY),
@@ -681,6 +723,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         if (savedChatbotEnabled !== null) {
           try { setIsChatbotEnabled(JSON.parse(savedChatbotEnabled) !== false); } catch (e) { }
+        }
+
+        if (savedChatbotSize === 'small' || savedChatbotSize === 'medium' || savedChatbotSize === 'large') {
+          setChatbotSizeState(savedChatbotSize);
         }
 
         if (savedSession) {
@@ -877,6 +923,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setBooting(true);
     try {
       setHasOnboarded(true);
+      try { mobileStorage.setItemSync(ONBOARDING_STORAGE_KEY, 'true'); } catch {}
       await mobileStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
     } finally {
       setBooting(false);
@@ -1447,7 +1494,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
     selectedLessonId,
   ]);
 
-  const lessonSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const pendingVideoProgressSaves = useRef(new Map<string, {
+    token: string;
+    userId: string;
+    lessonId: string;
+    progress: number;
+    videoTimestamp: number;
+  }>());
+  const activeVideoProgressSaves = useRef(new Set<string>());
 
   const handleUpdateLessonProgress = useCallback(async (lessonId: string, progress: number, videoTimestamp?: number) => {
     try {
@@ -1467,10 +1521,50 @@ export function useHomeDashboard(): EcoBudMobileModel {
         progress: isVideoResumeSave ? clampedProgress : Math.max(previous.progress, clampedProgress),
         savedAt: Date.now(),
       }));
-      // Keep timestamp and percentage updates in order, including the transition to quiz.
-      lessonSaveQueue.current = lessonSaveQueue.current.catch(() => {}).then(() =>
-        homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress, videoTimestamp)
-      ).catch((err) => console.warn('[handleUpdateLessonProgress] API error:', err));
+      if (isVideoResumeSave) {
+        const saveKey = `${activeSession.user.id}:${lessonId}`;
+        pendingVideoProgressSaves.current.set(saveKey, {
+          token: activeSession.token,
+          userId: activeSession.user.id,
+          lessonId,
+          progress: clampedProgress,
+          videoTimestamp: videoTimestamp!,
+        });
+
+        // Coalesce rapid playback events: while one request is in flight,
+        // replace the pending checkpoint so the next request is always the
+        // learner's newest position instead of replaying a stale backlog.
+        if (!activeVideoProgressSaves.current.has(saveKey)) {
+          activeVideoProgressSaves.current.add(saveKey);
+          void (async () => {
+            try {
+              while (true) {
+                const latest = pendingVideoProgressSaves.current.get(saveKey);
+                if (!latest) break;
+                pendingVideoProgressSaves.current.delete(saveKey);
+                try {
+                  await homeService.updateLessonProgress(
+                    latest.token,
+                    latest.lessonId,
+                    latest.progress,
+                    latest.videoTimestamp,
+                  );
+                } catch (error) {
+                  // The synchronous local checkpoint remains authoritative on
+                  // this device and is uploaded when the lesson opens again.
+                  console.warn('[handleUpdateLessonProgress] API error:', error);
+                  break;
+                }
+              }
+            } finally {
+              activeVideoProgressSaves.current.delete(saveKey);
+            }
+          })();
+        }
+      } else {
+        void homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress)
+          .catch((error) => console.warn('[handleUpdateLessonProgress] API error:', error));
+      }
 
       // Update local state so it's snappy
       setLessons((current) =>
@@ -2362,6 +2456,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setProgressBarLayout,
     isChatbotEnabled,
     setChatbotEnabled,
+    chatbotSize,
+    setChatbotSize,
     pushNotificationsEnabled,
     setPushNotificationsEnabled,
     handleHardwareBackPress,

@@ -172,6 +172,7 @@ export interface LessonWithProgress {
   created_at: string;
   progress: number;
   videoTimestamp?: number;
+  progressUpdatedAt?: string;
   status: 'not_started' | 'seen' | 'completed';
   imageUrl?: string | null;
   videoUrl?: string | null;

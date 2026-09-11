@@ -2783,7 +2783,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               <View style={profileStyles.actionTextCol}>
                 <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Mascot AI Chatbot</Text>
                 <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>
-                  {model.isChatbotEnabled ? 'Floating leaf mascot enabled' : 'Hidden from screen'}
+                  {model.isChatbotEnabled ? 'Floating leaf mascot visible on screen' : 'Hidden from screen'}
                 </Text>
               </View>
               <Switch
@@ -2803,6 +2803,83 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                 }
               />
             </View>
+
+            {/* Mascot Size Selector */}
+            {model.isChatbotEnabled && (
+              <View style={{ marginTop: 8, marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textMuted }}>Mascot Size</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? theme.colors.primary : '#059669', textTransform: 'capitalize' }}>
+                    {model.chatbotSize}
+                  </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      triggerSelectionHaptic();
+                      void model.setChatbotSize('small');
+                    }}
+                    activeOpacity={0.8}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 7,
+                      borderRadius: 11,
+                      backgroundColor: model.chatbotSize === 'small' ? (isDark ? theme.colors.primary : '#126027') : 'transparent',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Ionicons name="sparkles-outline" size={12} color={model.chatbotSize === 'small' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: model.chatbotSize === 'small' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted }}>Small</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      triggerSelectionHaptic();
+                      void model.setChatbotSize('medium');
+                    }}
+                    activeOpacity={0.8}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 7,
+                      borderRadius: 11,
+                      backgroundColor: model.chatbotSize === 'medium' ? (isDark ? theme.colors.primary : '#126027') : 'transparent',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Ionicons name="sparkles" size={14} color={model.chatbotSize === 'medium' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: model.chatbotSize === 'medium' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted }}>Medium</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      triggerSelectionHaptic();
+                      void model.setChatbotSize('large');
+                    }}
+                    activeOpacity={0.8}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 7,
+                      borderRadius: 11,
+                      backgroundColor: model.chatbotSize === 'large' ? (isDark ? theme.colors.primary : '#126027') : 'transparent',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Ionicons name="sparkles" size={16} color={model.chatbotSize === 'large' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: model.chatbotSize === 'large' ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted }}>Large</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
