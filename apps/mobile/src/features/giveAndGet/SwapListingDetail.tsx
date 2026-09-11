@@ -13,6 +13,8 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -600,7 +602,10 @@ export function SwapListingDetail({
           transparent
           onRequestClose={() => setShowEditModal(false)}
         >
-          <View style={localStyles.editModalOverlay}>
+          <KeyboardAvoidingView
+            style={localStyles.editModalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
             <View style={localStyles.editModalContent}>
               <View style={localStyles.editModalHeader}>
                 <Text style={localStyles.editModalTitle}>Edit Listing Details</Text>
@@ -609,7 +614,12 @@ export function SwapListingDetail({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: '80%' }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: '80%' }}
+                keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets
+              >
                 <Text style={localStyles.editFieldLabel}>Item Title *</Text>
                 <TextInput
                   style={localStyles.editInput}
@@ -683,7 +693,7 @@ export function SwapListingDetail({
                 </TouchableOpacity>
               </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         <PublicProfileModal

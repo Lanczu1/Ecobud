@@ -14,7 +14,6 @@ import {
   Modal,
   Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -253,9 +252,8 @@ export function SwapChatView({
   const status = conversation.status;
 
   return (
-    <SafeAreaView
+    <View
       style={[localStyles.safeArea, { backgroundColor: theme.colors.background }]}
-      edges={['top', 'left', 'right']}
     >
       {/* Header */}
       <View style={[localStyles.header, { backgroundColor: isDark ? theme.colors.card : theme.colors.primaryDark, borderBottomColor: theme.colors.border }]}> 
@@ -288,7 +286,6 @@ export function SwapChatView({
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <View style={[localStyles.swapInfoBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
           <View style={localStyles.swapInfoItem}>
@@ -417,7 +414,7 @@ export function SwapChatView({
         onClose={() => setShowProfileModal(false)}
         user={conversation.otherUser}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

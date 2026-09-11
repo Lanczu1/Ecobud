@@ -1554,6 +1554,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const scrollViewRef = React.useRef<ScrollView>(null);
+  const [assistantHeaderHeight, setAssistantHeaderHeight] = React.useState(0);
 
   React.useEffect(() => {
     if (model.sendingMessage) {
@@ -1595,18 +1596,14 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
     Platform.OS === 'android' ? (isSmall ? 16 : 20) : (isSmall ? 12 : 16)
   );
 
-  // Offset for iOS: status bar (~44) + nav bar (~56) + safe-area top — keeps the
-  // composer flush against the keyboard without overcompensating.
-  const iosKeyboardOffset = Platform.OS === 'ios'
-    ? insets.top + (isSmall ? 94 : 106)
-    : 0;
-
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
-      <TopNavbar model={model} showBack={true} title="AI Assistant" />
+      <View onLayout={(event) => setAssistantHeaderHeight(event.nativeEvent.layout.height)}>
+        <TopNavbar model={model} showBack={true} title="AI Assistant" />
+      </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={iosKeyboardOffset}
+        keyboardVerticalOffset={assistantHeaderHeight}
         style={{ flex: 1, width: '100%', alignItems: 'center' }}
       >
         <View style={{ flex: 1, width: '100%', maxWidth: maxContainerWidth }}>
@@ -6378,8 +6375,8 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
       subtitle="Update your username and barangay"
       onBack={() => model.setActiveOverlay(null)}
     >
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Username</Text>
           <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
@@ -6603,8 +6600,8 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       subtitle="Update your appearance and account security"
       onBack={() => model.setActiveOverlay(null)}
     >
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.overlayScroll}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           {/* App Appearance Section */}
           <SurfaceCard style={{ padding: 16 }}>
             <Text style={{ color: theme.colors.textPrimary }}>Change email</Text>
