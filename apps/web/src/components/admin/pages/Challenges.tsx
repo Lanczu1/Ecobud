@@ -135,7 +135,7 @@ const difficultyColors: Record<string, string> = {
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard', 'Expert'];
 const CATEGORIES = ['General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
-const AI_TARGET_OPTIONS = ['Plastic Bottle', 'Glass Bottle'];
+const AI_TARGET_OPTIONS = ['Plastic Bottle', 'Glass Bottle', 'Plastic Wrapper'];
 
 const BARANGAYS = [
   'Abo',
