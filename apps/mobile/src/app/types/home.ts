@@ -60,6 +60,12 @@ export interface AssistantMessage {
   time: string;
 }
 
+export interface AssistantNotice {
+  title: string;
+  message: string;
+  tone: 'warning' | 'error';
+}
+
 // ─── Component Props ───────────────────────────────────────────────────────────
 
 export interface HeaderProps {
@@ -154,6 +160,7 @@ export interface EcoBudMobileModel {
   assistantInput: string;
   assistantMessages: AssistantMessage[];
   assistantQuickReplies: string[];
+  assistantNotice: AssistantNotice | null;
   authEmail: string;
   authPassword: string;
   authMode: AuthMode;
@@ -193,6 +200,7 @@ export interface EcoBudMobileModel {
   setLearnFilter: (value: LearnFilterType) => void;
   setLearnCategory: (value: string) => void;
   setAssistantInput: (value: string) => void;
+  dismissAssistantNotice: () => void;
   setAuthEmail: (value: string) => void;
   setAuthPassword: (value: string) => void;
   completeOnboarding: () => Promise<void>;
