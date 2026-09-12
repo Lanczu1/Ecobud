@@ -344,6 +344,13 @@ export async function getEcoGuideReply(
     tokenCount,
   }));
 
+  // [TEMPORARY DEBUG] Log raw Mistral response to diagnose rendering issues
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('\n[EcoGuide Debug] Raw Mistral/Fallback response:');
+    console.log(replyText);
+    console.log('---------------------------------------------------\n');
+  }
+
   return {
     reply: replyText,
     quickReplies: generateQuickReplies(replyText),
