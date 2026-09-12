@@ -1728,6 +1728,62 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
             ) : null}
           </ScrollView>
 
+          {model.assistantNotice ? (
+            <View
+              accessibilityRole="alert"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                gap: 10,
+                marginHorizontal: horizontalPadding,
+                marginBottom: isSmall ? 8 : 10,
+                padding: isSmall ? 12 : 14,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: model.assistantNotice.tone === 'warning' ? theme.colors.warning : theme.colors.error,
+                backgroundColor: model.assistantNotice.tone === 'warning'
+                  ? (isDark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB')
+                  : (isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2'),
+              }}
+            >
+              <Ionicons
+                name={model.assistantNotice.tone === 'warning' ? 'time-outline' : 'alert-circle-outline'}
+                size={20}
+                color={model.assistantNotice.tone === 'warning' ? theme.colors.warning : theme.colors.error}
+              />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    color: theme.colors.textPrimary,
+                    fontSize: responsive.fontSize(14),
+                    fontWeight: '700',
+                    marginBottom: 3,
+                  }}
+                >
+                  {model.assistantNotice.title}
+                </Text>
+                <Text
+                  style={{
+                    color: theme.colors.textSecondary,
+                    fontSize: responsive.fontSize(12),
+                    lineHeight: Math.round(responsive.fontSize(12) * 1.4),
+                  }}
+                >
+                  {model.assistantNotice.message}
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss assistant notice"
+                onPress={model.dismissAssistantNotice}
+                hitSlop={8}
+                style={{ padding: 2 }}
+              >
+                <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {model.assistantQuickReplies.length > 0 && (
             <View style={{ paddingHorizontal: horizontalPadding, paddingBottom: isSmall ? 8 : 12 }}>
               <ScrollView

@@ -6,6 +6,7 @@ import { homeService } from '../services/homeService';
 import {
   type AppTab,
   type AssistantMessage,
+  type AssistantNotice,
   type AuthMode,
   type EcoBudMobileModel,
   type HabitTodayData,
@@ -106,6 +107,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [assistantInput, setAssistantInput] = useState('');
   const [claimRewardData, setClaimRewardData] = useState<{ points: number; coins: number; origin?: { x: number; y: number } } | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
+  const [assistantNotice, setAssistantNotice] = useState<AssistantNotice | null>(null);
   const [assistantQuickReplies, setAssistantQuickReplies] = useState<string[]>([
     'How to compost?', 'What goes in recycling?', 'Tips for reducing waste', 'Tell me about eco-points',
   ]);
@@ -1921,6 +1923,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       setAssistantMessages((current) => [...current, userMessage]);
       setAssistantInput('');
+      setAssistantNotice(null);
       setSendingMessage(true);
 
       try {
@@ -1955,7 +1958,22 @@ export function useHomeDashboard(): EcoBudMobileModel {
           setAssistantQuickReplies(reply.quickReplies);
         }
       } catch (error) {
-        Alert.alert('Assistant unavailable', error instanceof Error ? error.message : 'Please try again.');
+        const status = typeof error === 'object' && error !== null && 'status' in error
+          ? (error as { status?: unknown }).status
+          : undefined;
+
+        triggerWarningHaptic();
+        setAssistantNotice(status === 429
+          ? {
+              title: 'Chat limit reached',
+              message: 'You’ve used the available AI messages for now. Please wait a few minutes, then try again.',
+              tone: 'warning',
+            }
+          : {
+              title: 'Assistant unavailable',
+              message: error instanceof Error ? error.message : 'Please try again in a moment.',
+              tone: 'error',
+            });
       } finally {
         setSendingMessage(false);
       }
@@ -2397,6 +2415,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     claimRewardData,
     assistantMessages,
     assistantQuickReplies,
+    assistantNotice,
     authEmail,
     authPassword,
     authMode,
@@ -2434,6 +2453,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setLearnFilter,
     setLearnCategory,
     setAssistantInput,
+    dismissAssistantNotice: () => setAssistantNotice(null),
     setAuthEmail,
     setAuthPassword,
     completeOnboarding,
