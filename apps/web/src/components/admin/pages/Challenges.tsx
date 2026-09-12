@@ -459,34 +459,38 @@ function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: Chall
   const statusLabel = challenge.active ? 'Active' : 'Inactive';
 
   return createPortal(
-    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={handleClose}>
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={handleClose}>
       <div 
-        className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-100 ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}
+        className={`relative z-10 bg-white dark:bg-[#122019] rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden border border-gray-100 dark:border-[#1a2e24] ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`}
         style={{ maxHeight: 'calc(100vh - 80px)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex shrink-0 items-center justify-between p-6 border-b border-gray-100">
+        <div className="flex shrink-0 items-center justify-between p-6 border-b border-gray-100 dark:border-[#1a2e24] bg-white dark:bg-[#122019]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-[#0b2d1d] border border-emerald-200 dark:border-[#0e4028] flex items-center justify-center text-emerald-600 dark:text-emerald-400">
               <Trophy className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Mission Details</h2>
-              <p className="text-xs text-gray-500">Challenge specification, requirements, and verification rules</p>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-[#e2f0e7]">Mission Details</h2>
+              <p className="text-xs text-gray-500 dark:text-[#88a293]">Challenge specification, requirements, and verification rules</p>
             </div>
           </div>
-          <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+          <button 
+            onClick={handleClose} 
+            type="button" 
+            className="p-2 text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1a2e24] rounded-lg transition-colors"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto challenge-modal-scroll p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto challenge-modal-scroll p-6 space-y-6 bg-white dark:bg-[#122019]">
           {/* Challenge Hero Card */}
-          <div className="flex flex-col sm:flex-row gap-4 p-4 rounded-xl bg-gray-50 border border-gray-100 items-start">
+          <div className="flex flex-col sm:flex-row gap-4 p-4 rounded-xl bg-gray-50 dark:bg-[#090f0c] border border-gray-100 dark:border-[#1a2e24] items-start">
             {challenge.imageUrl ? (
-              <div className="w-full sm:w-28 h-28 rounded-xl overflow-hidden border border-gray-200 shrink-0 bg-gray-100">
+              <div className="w-full sm:w-28 h-28 rounded-xl overflow-hidden border border-gray-200 dark:border-[#233d30] shrink-0 bg-gray-100 dark:bg-[#122019]">
                 <img 
                   src={challenge.imageUrl.startsWith('http') ? challenge.imageUrl : `${API_HOST}${challenge.imageUrl}`} 
                   alt={challenge.title}
@@ -494,149 +498,107 @@ function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: Chall
                 />
               </div>
             ) : (
-              <div className="w-full sm:w-28 h-28 rounded-xl bg-emerald-100 border border-emerald-200 shrink-0 flex items-center justify-center text-emerald-600">
+              <div className="w-full sm:w-28 h-28 rounded-xl bg-emerald-100 dark:bg-[#0b2d1d] border border-emerald-200 dark:border-[#0e4028] shrink-0 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                 <Trophy className="w-10 h-10 opacity-70" />
               </div>
             )}
             <div className="flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[statusLabel] || 'bg-gray-100 text-gray-700'}`}>
+                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusColors[statusLabel] || 'bg-gray-100 dark:bg-[#1a2e24] text-gray-700 dark:text-gray-300 border-gray-200 dark:border-[#233d30]'}`}>
                   {statusLabel}
                 </span>
-                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${difficultyColors[challenge.difficulty] || 'bg-gray-100 text-gray-700'}`}>
+                <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${difficultyColors[challenge.difficulty] || 'bg-gray-100 dark:bg-[#1a2e24] text-gray-700 dark:text-gray-300'}`}>
                   {challenge.difficulty} Difficulty
                 </span>
-                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 dark:bg-[#0b223a] text-blue-700 dark:text-[#60a5fa] border border-blue-100 dark:border-[#1e3a5f]">
                   {challenge.category || 'General'}
                 </span>
                 {challenge.isFeatured && (
-                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-50 dark:bg-[#3b2c0b] text-amber-700 dark:text-[#fde047] border border-amber-200 dark:border-[#5f4711] flex items-center gap-1">
                     <Star className="w-3 h-3 fill-current" /> Featured
                   </span>
                 )}
               </div>
-              <h3 className="text-xl font-bold text-gray-900 leading-tight">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-[#e2f0e7] leading-tight">
                 {challenge.title}
               </h3>
               {challenge.badgeLabel && (
-                <p className="text-xs text-gray-500">
-                  Badge: <span className="font-semibold text-emerald-600">{challenge.badgeLabel}</span>
+                <p className="text-xs text-gray-500 dark:text-[#88a293]">
+                  Badge: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{challenge.badgeLabel}</span>
                 </p>
               )}
             </div>
           </div>
 
           {/* Mission Description Section */}
-          <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-100 space-y-2">
-            <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-emerald-600" />
+          <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-[#0b2d1d]/80 border border-emerald-100 dark:border-[#0e4028] space-y-2">
+            <h4 className="text-sm font-bold text-emerald-900 dark:text-[#a7f3d0] flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               Mission Description
             </h4>
-            <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed font-normal">
+            <p className="text-sm text-gray-700 dark:text-[#d1e4d7] whitespace-pre-line leading-relaxed font-normal">
               {challenge.description || 'No description provided for this challenge.'}
             </p>
           </div>
 
           {/* Mission Requirements & Parameters Grid */}
           <div className="space-y-3">
-            <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              <CheckSquare className="w-4 h-4 text-emerald-600" />
-              Mission Requirements & Verification Rules
+            <h4 className="text-sm font-bold text-gray-900 dark:text-[#e2f0e7] flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              Mission Requirements & Parameters
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Target Items */}
-              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1.5">
-                <span className="text-xs font-semibold text-gray-500 block">Accepted Target Items</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0 ? (
-                    challenge.aiDetectionTargets.map(target => (
-                      <span key={target} className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        {target}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-gray-600">Plastic Bottle (Default)</span>
-                  )}
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* AI Detection Confidence */}
-              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1">
-                <span className="text-xs font-semibold text-gray-500 block">AI Minimum Confidence</span>
-                <p className="text-sm font-bold text-gray-800">
-                  {challenge.aiMinimumConfidence || 80}% Accuracy Threshold
+              <div className="p-3.5 rounded-xl border border-gray-100 dark:border-[#1a2e24] bg-white dark:bg-[#090f0c] space-y-1">
+                <span className="text-xs font-semibold text-gray-500 dark:text-[#88a293] block">AI Minimum Confidence</span>
+                <p className="text-sm font-bold text-gray-800 dark:text-[#e2f0e7]">
+                  {challenge.aiMinimumConfidence || 80}% Accuracy
                 </p>
               </div>
 
               {/* Rewards */}
-              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1">
-                <span className="text-xs font-semibold text-gray-500 block">Reward Allocation</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-orange-600 flex items-center gap-1">
-                    <Trophy className="w-3.5 h-3.5" /> {challenge.expReward} EXP Points
+              <div className="p-3.5 rounded-xl border border-gray-100 dark:border-[#1a2e24] bg-white dark:bg-[#090f0c] space-y-1">
+                <span className="text-xs font-semibold text-gray-500 dark:text-[#88a293] block">Reward Allocation</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-orange-600 dark:text-[#f97316] flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5" /> {challenge.expReward} EXP
                   </span>
                   {challenge.ecoCoinReward > 0 && (
-                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                      <Coins className="w-3.5 h-3.5" /> {challenge.ecoCoinReward} Eco Coins
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <Coins className="w-3.5 h-3.5" /> {challenge.ecoCoinReward} Coins
                     </span>
                   )}
                 </div>
               </div>
 
               {/* Collection Point */}
-              <div className="p-3.5 rounded-xl border border-gray-100 bg-white space-y-1">
-                <span className="text-xs font-semibold text-gray-500 block">Collection Point</span>
-                <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-red-500" />
-                  {challenge.collectionPointName || 'Barangay Collection Point'}
+              <div className="p-3.5 rounded-xl border border-gray-100 dark:border-[#1a2e24] bg-white dark:bg-[#090f0c] space-y-1">
+                <span className="text-xs font-semibold text-gray-500 dark:text-[#88a293] block">Collection Point</span>
+                <p className="text-sm font-semibold text-gray-800 dark:text-[#e2f0e7] flex items-center gap-1 truncate">
+                  <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span className="truncate">{challenge.collectionPointName || 'Barangay Collection Point'}</span>
                 </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Step-by-Step Workflow Guide */}
-          <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/70 space-y-2.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-              Mission Workflow & Verification Steps
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
-              <div className="flex items-start gap-2">
-                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
-                <span><strong>Before Photo:</strong> Resident captures recyclable items with AI scan.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
-                <span><strong>Moderator Review:</strong> Preliminary approval of scanned items.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
-                <span><strong>Barangay Drop-off:</strong> Resident brings items to collection desk.</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">4</span>
-                <span><strong>After Photo & Final Award:</strong> Drop-off verified; rewards released!</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="shrink-0 p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+        <div className="shrink-0 p-4 border-t border-gray-100 dark:border-[#1a2e24] bg-gray-50 dark:bg-[#090f0c] flex justify-end gap-2">
           {!isModerator && onEdit && (
             <button
               onClick={() => {
                 handleClose();
                 onEdit(challenge);
               }}
-              className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-50 dark:bg-[#0b223a] text-blue-700 dark:text-[#60a5fa] hover:bg-blue-100 dark:hover:bg-[#1e3a5f]/80 transition-colors flex items-center gap-1.5"
             >
               <Edit3 className="w-4 h-4" /> Edit Challenge
             </button>
           )}
           <button
             onClick={handleClose}
-            className="px-5 py-2 text-sm font-semibold rounded-xl bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+            className="px-5 py-2 text-sm font-semibold rounded-xl bg-gray-200 dark:bg-[#1a2e24] text-gray-700 dark:text-[#e2f0e7] hover:bg-gray-300 dark:hover:bg-[#233d30] transition-colors"
           >
             Close
           </button>

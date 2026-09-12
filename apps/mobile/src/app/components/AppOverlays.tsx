@@ -76,6 +76,7 @@ import {
 import { UpcomingEventCard } from './UpcomingEventCard';
 import { FireStreak } from './FireStreak';
 import { EcoLevelsOverlay } from './EcoLevelsOverlay';
+import { LegalDocumentModal, LegalDocumentType } from '../../shared/ui/LegalDocumentModal';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
@@ -1038,201 +1039,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     </View>
                   )
                 ) : (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 10, flexShrink: 0 }}>
-                        <Ionicons name="location-outline" size={18} color={isDark ? '#FBBF24' : '#92400E'} />
-                        <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? '#FEF08A' : '#78350F' }}>Barangay Center</Text>
-                      </View>
-
-                      {/* Vertical Divider */}
-                      <View style={{ width: 1.5, height: 38, backgroundColor: isDark ? '#854D0E' : '#D97706', marginHorizontal: 8, opacity: 0.6 }} />
-
-                      <View style={{ flex: 1, paddingLeft: 2 }}>
-                        <Text style={{ fontSize: 11, color: isDark ? '#FDE68A' : '#78350F', lineHeight: 16 }}>
-                          Bring your recyclables to the barangay collection desk to verify and claim your rewards.
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Submit Button or Try Again */}
-              {mockResult.passed ? (
-                <TouchableOpacity
-                  activeOpacity={0.88}
-                  disabled={processing}
-                  onPress={handleSubmitBeforeProof}
-                  style={{
-                    width: '100%',
-                    backgroundColor: isDark ? theme.colors.primary : '#047857',
-                    borderRadius: 28,
-                    paddingVertical: 15,
-                    paddingHorizontal: 20,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    shadowColor: isDark ? theme.colors.primary : '#047857',
-                    shadowOffset: { width: 0, height: 6 },
-                    shadowOpacity: 0.35,
-                    shadowRadius: 10,
-                    elevation: 5,
-                    gap: 10,
-                  }}
-                >
-                  <Ionicons name="camera-outline" size={22} color={isDark ? '#0E1512' : '#FFFFFF'} />
-                  <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 }}>
-                    {processing ? "Submitting..." : "Submit Before Photo"}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} style={{ marginLeft: 2 }} />
-                </TouchableOpacity>
-              ) : attemptsLeft > 0 ? (
-                <View style={{ width: '100%', gap: 10 }}>
-                  <PrimaryButton label={`Try Again (${attemptsLeft} ${attemptsLeft === 1 ? 'try' : 'tries'} left)`} onPress={handleTryAgain} />
-                  <TouchableOpacity
-                    onPress={handleClose}
-                    style={{
-                      width: '100%',
-                      paddingVertical: 12,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textMuted }}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={{ width: '100%', alignItems: 'center', gap: 14 }}>
-                  <View style={{
-                    width: '100%',
-                    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
-                    borderWidth: 1.5,
-                    borderColor: isDark ? 'rgba(239, 68, 68, 0.35)' : '#FCA5A5',
-                    borderRadius: 16,
-                    padding: 16,
-                    alignItems: 'center',
-                    gap: 6
-                  }}>
-                    <Ionicons name="alert-circle" size={28} color="#EF4444" />
-                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#EF4444', textAlign: 'center' }}>
-                      Maximum AI Attempts Reached (15m Cooldown)
-                    </Text>
-                    <Text style={{ fontSize: 13, color: isDark ? '#FCA5A5' : '#991B1B', textAlign: 'center', lineHeight: 18 }}>
-                      You've used all 3 attempts for this challenge. You'll get 3 more attempts after the 15-minute cooldown ({Math.floor(cooldownRemainingSec / 60)}:{(cooldownRemainingSec % 60) < 10 ? '0' : ''}{cooldownRemainingSec % 60} remaining).
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={handleClose}
-                    style={{
-                      width: '100%',
-                      backgroundColor: isDark ? theme.colors.surfaceMuted : '#E5E7EB',
-                      borderRadius: 24,
-                      paddingVertical: 14,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>Close</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </Animated.View>
-          </ScrollView>
-        </OverlayScaffold>
-      </Animated.View>
-    );
-  }
-
-  if (step === 'capture' || step === 'capture_after') {
-    return (
-      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold
-          title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"}
-          subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"}
-          onBack={() => {
-            resetCameraSession();
-            setStep('details');
-          }}
-        >
-          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
-            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
-              {step === 'capture' && (
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',
-                  borderRadius: 14,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  marginBottom: 16,
-                  borderWidth: 1,
-                  borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0',
-                }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="sparkles" size={18} color={theme.colors.primary} />
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: isDark ? theme.colors.textPrimary : '#166534' }}>
-                      AI Recognition Limit:
-                    </Text>
-                  </View>
-                  <View style={{
-                    backgroundColor: attemptsLeft > 1
-                      ? (isDark ? 'rgba(16, 185, 129, 0.2)' : '#DCFCE7')
-                      : attemptsLeft === 1
-                        ? (isDark ? 'rgba(234, 179, 8, 0.2)' : '#FEF9C3')
-                        : (isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2'),
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: attemptsLeft > 1
-                      ? '#10B981'
-                      : attemptsLeft === 1
-                        ? '#F59E0B'
-                        : '#EF4444'
-                  }}>
-                    <Text style={{
-                      fontSize: 12,
-                      fontWeight: '800',
-                      color: attemptsLeft > 1
-                        ? (isDark ? '#34D399' : '#15803D')
-                        : attemptsLeft === 1
-                          ? (isDark ? '#FBBF24' : '#B45309')
-                          : '#DC2626'
-                    }}>
-                      {attemptsLeft} / {MAX_AI_ATTEMPTS} attempts left
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
-                {capturedImage ? (
-                  <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
-                ) : permission?.granted ? (
-                  isCameraMountAllowed ? (
-                    <>
-                      <CameraView
-                        key={`cam-${step}-${cameraSessionId}`}
-                        style={{ width: '100%', height: '100%' }}
-                        facing="back"
-                        ref={cameraRef}
-                        onCameraReady={() => setIsCameraReady(true)}
-                      />
-                      {!isCameraReady && (
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
-                          <ActivityIndicator size="large" color="#10B981" />
-                          <Text style={{ marginTop: 12, color: '#6B7A75', fontSize: 14 }}>Starting camera...</Text>
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
-                      <ActivityIndicator size="large" color="#10B981" />
-                      <Text style={{ marginTop: 12, color: '#6B7A75', fontSize: 14 }}>Preparing camera...</Text>
-                    </View>
-                  )
-                ) : (
                   <>
                     <Ionicons name="camera" size={64} color="#C8D8CE" />
                     <Text style={{ marginTop: 16, color: '#6B7A75', fontSize: 16 }}>No camera access</Text>
@@ -1322,31 +1128,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                   <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Accepted Target Items:</Text>
-                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
-                      {challenge.aiDetectionTargets && challenge.aiDetectionTargets.length > 0
-                        ? challenge.aiDetectionTargets.join(', ')
-                        : 'Plastic Bottles / Recyclables'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
-                  <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Cleanliness & Preparation:</Text>
                     <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
                       Ensure items are clean, emptied of liquids, and clearly separated for camera recognition.
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>2-Step Verification:</Text>
-                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
-                      1. Scan items with AI (Before Photo) → 2. Drop off at collection point & upload After Photo.
                     </Text>
                   </View>
                 </View>
@@ -1390,25 +1174,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   {collectionPointName}
                 </Text>
               </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 }}>
-              <View>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Targets:</Text>
-                {challenge.aiDetectionTargets?.map(target => (
-                  <View key={target} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Ionicons name="checkmark-circle-outline" size={15} color={isDark ? theme.colors.primary : '#166534'} />
-                    <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>{target}</Text>
-                  </View>
-                ))}
-                {(!challenge.aiDetectionTargets || challenge.aiDetectionTargets.length === 0) && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Ionicons name="checkmark-circle-outline" size={15} color={isDark ? theme.colors.primary : '#166534'} />
-                    <Text style={{ fontSize: 16, color: theme.colors.textMuted }}>Plastic Bottle</Text>
-                  </View>
-                )}
-              </View>
-
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>AI Recognition Attempts:</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1417,16 +1182,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               </View>
             </View>
-
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>Mission Workflow:</Text>
-            <Text style={{ fontSize: 14, color: theme.colors.textSecondary, marginBottom: 16, lineHeight: 22 }}>
-              1. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Before Picture (User)</Text>: Capture items with AI waste recognition.{'\n'}
-              2. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Manual Review (Admin)</Text>: Preliminary review & approval of your submitted items.{'\n'}
-              3. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Accept Mission</Text>: Receive approval to proceed with the drop-off.{'\n'}
-              4. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Barangay Drop-off</Text>: Bring the approved recyclable items to {collectionPointName}.{'\n'}
-              5. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>After Picture</Text>: Take and upload a photo at the drop-off location.{'\n'}
-              6. <Text style={{ fontWeight: 'bold', color: isDark ? theme.colors.primary : '#166534' }}>Final Approval (Admin)</Text>: Final verification to release your Eco Points & Coins!
-            </Text>
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 16 }}>Sample Images</Text>
             <View style={{ marginBottom: 32, marginHorizontal: -24 }}>
@@ -1835,8 +1590,6 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const scrollViewRef = React.useRef<ScrollView>(null);
-  const [assistantHeaderHeight, setAssistantHeaderHeight] = React.useState(0);
-
   React.useEffect(() => {
     if (model.sendingMessage) {
       const timer = setTimeout(() => {
@@ -1879,12 +1632,12 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
 
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
-      <View onLayout={(event) => setAssistantHeaderHeight(event.nativeEvent.layout.height)}>
+      <View>
         <TopNavbar model={model} showBack={true} title="AI Assistant" />
       </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={assistantHeaderHeight}
+        keyboardVerticalOffset={0}
         style={{ flex: 1, width: '100%', alignItems: 'center' }}
       >
         <View style={{ flex: 1, width: '100%', maxWidth: maxContainerWidth }}>
@@ -2031,6 +1784,7 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
                 paddingBottom: composerBottomPadding,
                 paddingTop: isSmall ? 6 : 8,
                 gap: isSmall ? 8 : 10,
+                alignItems: 'flex-end',
                 backgroundColor: theme.colors.card,
                 borderTopColor: theme.colors.border,
               },
@@ -6693,7 +6447,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
               editable={false}
               autoCapitalize="none"
               keyboardType="email-address"
-              placeholder="Change email in Settings & Security"
+              placeholder="Change email in Privacy & Settings"
               placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
@@ -6840,6 +6594,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [newEmail, setNewEmail] = React.useState('');
   const [emailCode, setEmailCode] = React.useState('');
   const [emailBusy, setEmailBusy] = React.useState(false);
+  const [legalDocument, setLegalDocument] = React.useState<LegalDocumentType | null>(null);
 
   const handleSave = async () => {
     if (!currentPassword) {
@@ -6877,97 +6632,158 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
 
   return (
     <OverlayScaffold
-      title="Settings & Security"
-      subtitle="Update your appearance and account security"
+      title="Privacy & Settings"
+      subtitle="Manage your privacy, appearance, and account security"
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-          {/* App Appearance Section */}
-          <SurfaceCard style={{ padding: 16 }}>
-            <Text style={{ color: theme.colors.textPrimary }}>Change email</Text>
-            <TextInput style={[localStyles.formInput, { color: theme.colors.textPrimary }]} placeholder="Current password" placeholderTextColor={theme.colors.textMuted} secureTextEntry value={currentPassword} onChangeText={setCurrentPassword} />
-            <TextInput style={[localStyles.formInput, { color: theme.colors.textPrimary }]} placeholder="New email" placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" keyboardType="email-address" value={newEmail} onChangeText={value => { setNewEmail(value); setEmailCode(''); }} />
+          <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Change Email</Text>
+          <SurfaceCard style={{ padding: 16, gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 }}>
+              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5EE', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="mail-outline" size={19} color={isDark ? theme.colors.primary : '#126027'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>Update your email address</Text>
+                <Text style={{ fontSize: 12, lineHeight: 17, color: theme.colors.textMuted }}>We'll send a six-digit code to your new email.</Text>
+              </View>
+            </View>
+            <TextInput
+              style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
+              placeholder="Current password"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+            />
+            <TextInput
+              style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
+              placeholder="New email address"
+              placeholderTextColor={theme.colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={newEmail}
+              onChangeText={value => { setNewEmail(value); setEmailCode(''); }}
+            />
             <TouchableOpacity disabled={emailBusy} onPress={async () => {
               if (!model.session || !currentPassword || !newEmail.trim()) { Alert.alert('Missing details', 'Enter your current password and new email.'); return; }
               setEmailBusy(true);
               try { await ecobudApi.sendEmailChangeCode(model.session.token, currentPassword, newEmail.trim()); Alert.alert('Code sent', 'Check your new email for the verification code.'); }
               catch (error) { Alert.alert('Could not send code', error instanceof Error ? error.message : 'Please try again.'); }
               finally { setEmailBusy(false); }
-            }}><Text style={{ color: theme.colors.textPrimary, paddingVertical: 12 }}>Send verification code</Text></TouchableOpacity>
-            <TextInput style={[localStyles.formInput, { color: theme.colors.textPrimary }]} placeholder="Six-digit code" placeholderTextColor={theme.colors.textMuted} keyboardType="number-pad" maxLength={6} value={emailCode} onChangeText={setEmailCode} />
+            }} activeOpacity={0.8} style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.inputBorder, backgroundColor: theme.colors.surfaceMuted, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: emailBusy ? 0.6 : 1 }}>
+              <Ionicons name="paper-plane-outline" size={17} color={theme.colors.textPrimary} />
+              <Text style={{ color: theme.colors.textPrimary, fontSize: 14, fontWeight: '700' }}>{emailBusy ? 'Sending...' : 'Send verification code'}</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary, letterSpacing: emailCode ? 5 : 0 }]}
+              placeholder="Six-digit code"
+              placeholderTextColor={theme.colors.textMuted}
+              keyboardType="number-pad"
+              maxLength={6}
+              value={emailCode}
+              onChangeText={setEmailCode}
+            />
             <TouchableOpacity disabled={emailBusy} onPress={async () => {
               setEmailBusy(true);
               try { await model.handleUpdateSecuritySettings({ currentPassword, newEmail: newEmail.trim(), emailCode }); setNewEmail(''); setEmailCode(''); setCurrentPassword(''); }
               catch { /* The model displays the error. */ }
               finally { setEmailBusy(false); }
-            }}><Text style={{ color: theme.colors.textPrimary, paddingVertical: 12 }}>Verify and change email</Text></TouchableOpacity>
+            }} activeOpacity={0.85} style={{ minHeight: 50, borderRadius: 25, backgroundColor: isDark ? theme.colors.primary : '#126027', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: emailBusy ? 0.6 : 1 }}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} />
+              <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Verify and change email</Text>
+            </TouchableOpacity>
           </SurfaceCard>
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>App Appearance</Text>
-          <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+          <SurfaceCard style={{ padding: 16, gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? '#262626' : '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={isDark ? '#FBBF24' : '#7C3AED'} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>
-                  {isDark ? 'Dark Mode' : 'Light Mode'}
-                </Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>App Appearance</Text>
                 <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
-                  {isDark ? 'Easier on the eyes in low light' : 'Crisp and bright theme'}
+                  {themeMode === 'light' ? 'Light Mode (Day)' : themeMode === 'dark' ? 'Dark Mode (Night)' : 'Onyx Mode (Pure Black)'}
                 </Text>
               </View>
             </View>
-            <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 20, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
+            <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
               <TouchableOpacity
-                onPress={() => setThemeMode('light')}
+                onPress={() => { triggerSelectionHaptic(); void setThemeMode('light'); }}
                 activeOpacity={0.8}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 16,
+                  flex: 1,
+                  paddingVertical: 7,
+                  borderRadius: 11,
                   backgroundColor: themeMode === 'light' ? '#126027' : 'transparent',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 3,
+                  justifyContent: 'center',
+                  gap: 5,
                 }}
               >
-                <Ionicons name="sunny" size={13} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
+                <Ionicons name="sunny" size={14} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'light' ? '#FFF' : theme.colors.textMuted }}>Light</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => setThemeMode('dark')}
+                onPress={() => { triggerSelectionHaptic(); void setThemeMode('dark'); }}
                 activeOpacity={0.8}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 16,
+                  flex: 1,
+                  paddingVertical: 7,
+                  borderRadius: 11,
                   backgroundColor: themeMode === 'dark' ? theme.colors.primary : 'transparent',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 3,
+                  justifyContent: 'center',
+                  gap: 5,
                 }}
               >
-                <Ionicons name="moon" size={13} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
+                <Ionicons name="moon" size={14} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => setThemeMode('onyx')}
+                onPress={() => { triggerSelectionHaptic(); void setThemeMode('onyx'); }}
                 activeOpacity={0.8}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 16,
+                  flex: 1,
+                  paddingVertical: 7,
+                  borderRadius: 11,
                   backgroundColor: themeMode === 'onyx' ? '#FFF' : 'transparent',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 3,
+                  justifyContent: 'center',
+                  gap: 5,
                 }}
               >
-                <Ionicons name="moon-outline" size={13} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
+                <Ionicons name="moon-outline" size={14} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
               </TouchableOpacity>
             </View>
+          </SurfaceCard>
+
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Legal</Text>
+          <SurfaceCard style={{ paddingHorizontal: 16 }}>
+            {([
+              { type: 'terms' as const, title: 'Terms & Conditions', subtitle: 'Rules for using ECOBUD and its community features', icon: 'document-text-outline' as const },
+              { type: 'privacy' as const, title: 'Privacy Policy', subtitle: 'How ECOBUD handles and protects your information', icon: 'shield-checkmark-outline' as const },
+            ]).map((item, index) => (
+              <React.Fragment key={item.type}>
+                {index > 0 ? <View style={{ height: 1, backgroundColor: theme.colors.border }} /> : null}
+                <TouchableOpacity activeOpacity={0.75} onPress={() => setLegalDocument(item.type)} style={{ minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5EE' }}>
+                    <Ionicons name={item.icon} size={20} color={isDark ? theme.colors.primary : '#126027'} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>{item.title}</Text>
+                    <Text style={{ marginTop: 2, fontSize: 12, lineHeight: 17, color: theme.colors.textMuted }}>{item.subtitle}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={19} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              </React.Fragment>
+            ))}
           </SurfaceCard>
 
           <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Notifications</Text>
@@ -7033,6 +6849,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
           <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
         </View>
       </KeyboardAvoidingView>
+      <LegalDocumentModal document={legalDocument} onClose={() => setLegalDocument(null)} />
     </OverlayScaffold>
   );
 }

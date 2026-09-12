@@ -556,20 +556,60 @@
   background-color: #1a2e24 !important;
 }
 
-/* Dark mode overrides for lesson-modal-scroll */
-.dark .lesson-modal-scroll::-webkit-scrollbar-track {
+/* Dark mode overrides for lesson-modal-scroll & challenge-modal-scroll */
+.dark .lesson-modal-scroll::-webkit-scrollbar-track,
+.dark .challenge-modal-scroll::-webkit-scrollbar-track {
   background: #122019;
 }
 
-.dark .lesson-modal-scroll::-webkit-scrollbar-thumb {
+.dark .lesson-modal-scroll::-webkit-scrollbar-thumb,
+.dark .challenge-modal-scroll::-webkit-scrollbar-thumb {
   background-color: #34d399;
   border: 2px solid #122019;
+  border-radius: 9999px;
 }
 
-.dark .lesson-modal-scroll::-webkit-scrollbar-thumb:hover {
+.dark .lesson-modal-scroll::-webkit-scrollbar-thumb:hover,
+.dark .challenge-modal-scroll::-webkit-scrollbar-thumb:hover {
   background-color: #10b981;
 }
 
-.dark .lesson-modal-scroll {
+.dark .lesson-modal-scroll,
+.dark .challenge-modal-scroll {
   scrollbar-color: #34d399 #122019;
 }
+
+/* Emerald & Amber Dark Palette Overrides */
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/60,
+.dark .bg-emerald-50\/70 {
+  background-color: #0b2d1d !important;
+}
+
+.dark .border-emerald-100,
+.dark .border-emerald-200 {
+  border-color: #0e4028 !important;
+}
+
+.dark .text-emerald-900,
+.dark .text-emerald-800 {
+  color: #a7f3d0 !important;
+}
+
+.dark .text-emerald-700,
+.dark .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+.dark .bg-amber-50 {
+  background-color: #3b2c0b !important;
+}
+
+.dark .border-amber-200 {
+  border-color: #5f4711 !important;
+}
+
+.dark .text-amber-700 {
+  color: #fde047 !important;
+}
+
