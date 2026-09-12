@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "438349489797",
+    "project_id": "ecobud-project",
+    "storage_bucket": "ecobud-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:438349489797:android:d37a0219e33304bcc8ebec",
+        "android_client_info": {
+          "package_name": "com.anonymous.ecobudmobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApvV1eix-_7txHKHXgII0ELGd0SC3jZpI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

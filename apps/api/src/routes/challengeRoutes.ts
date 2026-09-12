@@ -20,6 +20,61 @@ import { sendDirectNotification } from '../services/notificationService';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
+const MAX_AI_ATTEMPTS = 3;
+
+type AiAttemptRow = {
+  attempts_used: number;
+  reset_at: Date;
+};
+
+const toAiAttemptState = (row?: AiAttemptRow) => {
+  const now = Date.now();
+  if (!row || row.reset_at.getTime() <= now) {
+    return { attemptsLeft: MAX_AI_ATTEMPTS, resetAt: null, cooldownRemainingSec: 0 };
+  }
+  const attemptsLeft = Math.max(0, MAX_AI_ATTEMPTS - row.attempts_used);
+  return {
+    attemptsLeft,
+    resetAt: row.reset_at.toISOString(),
+    cooldownRemainingSec: attemptsLeft === 0 ? Math.ceil((row.reset_at.getTime() - now) / 1000) : 0,
+  };
+};
+
+async function getAiAttemptState(userId: string, challengeId: string) {
+  const rows = await prisma.$queryRaw<AiAttemptRow[]>`
+    SELECT attempts_used, reset_at
+    FROM challenge_ai_attempt_limits
+    WHERE user_id = ${userId} AND challenge_id = ${challengeId}
+  `;
+  return toAiAttemptState(rows[0]);
+}
+
+async function consumeAiAttempt(userId: string, challengeId: string) {
+  const rows = await prisma.$queryRaw<AiAttemptRow[]>`
+    INSERT INTO challenge_ai_attempt_limits(user_id, challenge_id, attempts_used, reset_at)
+    VALUES (${userId}, ${challengeId}, 1, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
+    ON CONFLICT (user_id, challenge_id) DO UPDATE
+    SET attempts_used = CASE
+          WHEN challenge_ai_attempt_limits.reset_at <= CURRENT_TIMESTAMP THEN 1
+          ELSE challenge_ai_attempt_limits.attempts_used + 1
+        END,
+        reset_at = CASE
+          WHEN challenge_ai_attempt_limits.reset_at <= CURRENT_TIMESTAMP
+            THEN CURRENT_TIMESTAMP + INTERVAL '15 minutes'
+          ELSE challenge_ai_attempt_limits.reset_at
+        END,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE challenge_ai_attempt_limits.reset_at <= CURRENT_TIMESTAMP
+       OR challenge_ai_attempt_limits.attempts_used < ${MAX_AI_ATTEMPTS}
+    RETURNING attempts_used, reset_at
+  `;
+
+  if (!rows[0]) {
+    const state = await getAiAttemptState(userId, challengeId);
+    throw new HttpError(429, `AI attempt limit reached. Try again in ${state.cooldownRemainingSec} seconds.`);
+  }
+  return toAiAttemptState(rows[0]);
+}
 
 // OWASP: DoS / Resource Exhaustion Protection on AI processing and file uploads
 const analyzeLimiter = rateLimit({
@@ -284,12 +339,14 @@ challengeRoutes.post(
         throw new HttpError(404, 'Active AI challenge not found.');
       }
 
+      const attemptState = await consumeAiAttempt(req.auth!.userId, challenge.id);
+
       const bytes = await fs.promises.readFile(req.file.path);
 
       const { mimeType, ...result } = await recognizeChallengeImage(bytes, challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1);
 
       if (!result.passed) {
-        return res.json(result);
+        return res.json({ ...result, ...attemptState });
       }
 
       const ext = mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg';
@@ -318,6 +375,7 @@ challengeRoutes.post(
         analysisToken,
         calculatedExpReward: challenge.expReward,
         calculatedEcoCoins: challenge.ecoCoinReward,
+        ...attemptState,
       });
     } finally {
       if (req.file?.path) {
@@ -348,6 +406,20 @@ async function resolveInstance(paramId: string) {
 
   return instance;
 }
+
+challengeRoutes.get(
+  '/:challengeInstanceId/ai-attempts',
+  authenticateRequest,
+  requireUserAccess,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const instance = await resolveInstance(req.params.challengeInstanceId);
+    const challenge = instance?.challenge;
+    if (!instance || !challenge || !challenge.active || challenge.type !== 'AI Image Recognition Challenge') {
+      throw new HttpError(404, 'Active AI challenge not found.');
+    }
+    return res.json(await getAiAttemptState(req.auth!.userId, challenge.id));
+  }),
+);
 
 challengeRoutes.post(
   '/:challengeInstanceId/upload-proof',
@@ -476,6 +548,17 @@ challengeRoutes.post(
 
       return created;
     }, { isolationLevel: 'Serializable' });
+
+    await sendDirectNotification({
+      userId: req.auth!.userId,
+      type: 'challenge',
+      title: 'Challenge proof submitted',
+      message: `Your proof for "${challenge.title}" was submitted and is waiting for review.`,
+      relatedId: actualInstanceId,
+      relatedType: 'challenge',
+      priority: 'high',
+      notificationKey: `challenge_proof_submitted:${submission.id}`,
+    });
 
     return res.status(201).json(submission);
   }),
@@ -645,6 +728,17 @@ challengeRoutes.post(
         afterProofUrl,
         status: 'final_review',
       }
+    });
+
+    await sendDirectNotification({
+      userId,
+      type: 'challenge',
+      title: 'After photo submitted',
+      message: `Your After photo for "${challenge?.title || 'Eco Challenge'}" was submitted and is waiting for final review.`,
+      relatedId: submission.challengeInstanceId,
+      relatedType: 'challenge',
+      priority: 'high',
+      notificationKey: `challenge_after_photo_submitted:${submission.id}`,
     });
 
     return res.json({

@@ -246,6 +246,9 @@ export interface EcoBudMobileModel {
     targetQuantity?: number;
     calculatedExpReward?: number;
     calculatedEcoCoins?: number;
+    attemptsLeft?: number;
+    resetAt?: string | null;
+    cooldownRemainingSec?: number;
     box_2d?: [number, number, number, number] | null;
     boxes?: Array<{ object: string; box_2d: [number, number, number, number] }> | null;
   }>;

@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { prisma } from '../prismaClient';
 import { welcomeEmail } from './welcomeEmail';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
+import { firebaseMessaging } from '../lib/firebaseMessaging';
 const mail = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }, connectionTimeout: 10000, socketTimeout: 20000 });
 type EventRow = {
     key: string;
@@ -52,12 +53,6 @@ async function fanout() {
         await tx.$executeRaw `UPDATE notification_events SET cursor=${users.at(-1)?.id ?? e.cursor},completed=${users.length < 200 || !!e.user_id} WHERE key=${e.key}`;
     }, { timeout: 30000 });
 }
-async function expo(path: string, body: unknown) {
-    const r = await fetch('https://exp.host/--/api/v2/push/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.EXPO_ACCESS_TOKEN ? { Authorization: `Bearer ${process.env.EXPO_ACCESS_TOKEN}` } : {}) }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
-    if (!r.ok)
-        throw Object.assign(new Error('Push HTTP ' + r.status), { retrySafe: r.status === 429 });
-    return (await r.json()) as any;
-}
 export async function deliverNotification(d: Delivery) {
     const n = await prisma.notification.findUnique({ where: { id: d.notification_id }, include: { user: { select: { status: true, email: true, sessionVersion: true } } } });
     if (!n || n.user.status !== 'active')
@@ -76,24 +71,23 @@ export async function deliverNotification(d: Delivery) {
     const devices = await prisma.$queryRaw<any[]> `SELECT token FROM notification_devices WHERE token=${d.destination} AND user_id=${n.userId} AND session_version=${n.user.sessionVersion}`;
     if (!devices.length)
         return 'cancelled';
-    const result = d.receipt ? (await expo('getReceipts', { ids: [d.receipt] })).data?.[d.receipt] : (await expo('send', { to: d.destination, title: n.title, body: n.message, sound: 'default', data: { notificationId: n.id }, channelId: 'ecobud', priority: n.priority === 'high' ? 'high' : 'normal' })).data;
-    if (!result)
-        return 'receipt';
-    if (result.status === 'error') {
-        if (result.details?.error === 'DeviceNotRegistered')
+    try {
+        const messageId = await firebaseMessaging.send({ token: d.destination, title: n.title, body: n.message, notificationId: n.id, priority: n.priority });
+        await prisma.$executeRaw `UPDATE notification_deliveries SET receipt=${messageId} WHERE id=${d.id}`;
+        return 'sent';
+    }
+    catch (error: any) {
+        const code = String(error?.code || '');
+        if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument'].includes(code)) {
             await prisma.$executeRaw `DELETE FROM notification_devices WHERE token=${d.destination}`;
-        if (result.details?.error === 'MessageRateExceeded') {
-            await prisma.$executeRaw `UPDATE notification_deliveries SET receipt=NULL WHERE id=${d.id}`;
-            return 'pending';
+            console.warn('notification_delivery_rejected', d.id, code);
+            return 'failed';
         }
-        console.warn('notification_delivery_rejected', d.id, result.details?.error);
-        return 'failed';
+        if (['messaging/server-unavailable', 'messaging/internal-error', 'messaging/quota-exceeded'].includes(code)) {
+            throw Object.assign(error, { retrySafe: true });
+        }
+        throw error;
     }
-    if (!d.receipt && result.id) {
-        await prisma.$executeRaw `UPDATE notification_deliveries SET receipt=${result.id} WHERE id=${d.id}`;
-        return 'receipt';
-    }
-    return 'sent';
 }
 let running = false;
 let timer: NodeJS.Timeout | undefined;
@@ -112,7 +106,7 @@ export async function notificationTick() {
                 state = await deliverNotification(d);
             }
             catch (error: any) {
-                state = d.channel === 'realtime' ? 'pending' : d.receipt ? 'receipt' : error?.retrySafe || (d.channel === 'email' && (['ECONNECTION', 'EDNS'].includes(error?.code) || (error?.responseCode >= 400 && error?.responseCode < 500))) ? 'pending' : 'uncertain';
+                state = d.channel === 'realtime' || error?.retrySafe || (d.channel === 'email' && (['ECONNECTION', 'EDNS'].includes(error?.code) || (error?.responseCode >= 400 && error?.responseCode < 500))) ? 'pending' : 'uncertain';
                 console.error('notification_delivery_failed', d.id, state);
             }
             await prisma.$executeRaw `UPDATE notification_deliveries SET state=${state},next_at=${new Date(Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(d.attempts, 6)))} WHERE id=${d.id}`;

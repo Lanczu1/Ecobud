@@ -2,6 +2,7 @@ import { prisma } from "../prismaClient";
 import { presenceQueryService } from './presenceQueryService';
 import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
+import { sendDirectNotification } from './notificationService';
 import { apiCache } from "../lib/cache";
 
 type ReviewerContext = {
@@ -760,11 +761,15 @@ export class AdminService {
           },
         );
 
-        await supabaseRealtimeService.publishUserNotice(submission.userId, {
-          level: 'success',
+        await sendDirectNotification({
+          userId: submission.userId,
+          type: 'challenge',
           message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
-          scope: 'moderation',
           title: 'Pending After Photo',
+          relatedId: submission.challengeInstanceId,
+          relatedType: 'challenge',
+          priority: 'high',
+          notificationKey: `admin_challenge_collection_approved:${submission.id}`,
         });
 
         return submission;
@@ -830,11 +835,15 @@ export class AdminService {
           },
         );
 
-        await supabaseRealtimeService.publishUserNotice(challengeSub.userId, {
-          level: 'warning',
+        await sendDirectNotification({
+          userId: challengeSub.userId,
+          type: 'challenge',
           message: `Your proof for "${challenge?.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
-          scope: 'moderation',
           title: 'Challenge submission rejected',
+          relatedId: challengeSub.challengeInstanceId,
+          relatedType: 'challenge',
+          priority: 'high',
+          notificationKey: `admin_challenge_rejected:${challengeSub.id}`,
         });
 
         return updated;
@@ -883,11 +892,15 @@ export class AdminService {
         },
       );
 
-      await supabaseRealtimeService.publishUserNotice(submission.userId, {
-        level: 'success',
+      await sendDirectNotification({
+        userId: submission.userId,
+        type: 'challenge',
         message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
-        scope: 'moderation',
         title: 'Challenge fully approved',
+        relatedId: submission.challengeInstanceId,
+        relatedType: 'challenge',
+        priority: 'high',
+        notificationKey: `admin_challenge_approved:${submission.id}`,
       });
 
       await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {

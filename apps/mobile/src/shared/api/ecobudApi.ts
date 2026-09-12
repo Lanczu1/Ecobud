@@ -653,6 +653,11 @@ export const ecobudApi = {
     }),
   fetchChallenges: (token: string) =>
     request<{ items: ChallengeWithProgress[]; isCycleActive?: boolean }>('/challenges/active', { token }),
+  challengeAiAttempts: (token: string, challengeId: string) =>
+    request<{ attemptsLeft: number; resetAt: string | null; cooldownRemainingSec: number }>(
+      `/challenges/${encodeURIComponent(challengeId)}/ai-attempts`,
+      { token },
+    ),
   analyzeChallengeImage: (token: string, challengeId: string, uri: string) =>
     uploadFileAsync<{
       passed: boolean;
@@ -664,6 +669,9 @@ export const ecobudApi = {
       detectedCount?: number;
       calculatedExpReward?: number;
       calculatedEcoCoins?: number;
+      attemptsLeft?: number;
+      resetAt?: string | null;
+      cooldownRemainingSec?: number;
       box_2d?: [number, number, number, number] | null;
       boxes?: Array<{ object: string; box_2d: [number, number, number, number] }> | null;
     }>(
