@@ -4,6 +4,31 @@ import { WebAuthView } from './components/WebAuthView';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminSection } from './components/admin/AdminSidebar';
 
+const WEB_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+const WEB_ABSOLUTE_TIMEOUT_MS = 12 * 60 * 60 * 1000;
+const WEB_SESSION_STARTED_KEY = 'ecobud_admin_session_started_at';
+const WEB_LAST_ACTIVITY_KEY = 'ecobud_admin_last_activity_at';
+
+function clearStoredAdminSession() {
+  localStorage.removeItem('ecobud_admin_token');
+  localStorage.removeItem('ecobud_admin_user');
+  localStorage.removeItem('ecobud_admin_authenticated');
+  localStorage.removeItem(WEB_SESSION_STARTED_KEY);
+  localStorage.removeItem(WEB_LAST_ACTIVITY_KEY);
+}
+
+function hasValidStoredAdminSession(): boolean {
+  const now = Date.now();
+  const startedAt = Number(localStorage.getItem(WEB_SESSION_STARTED_KEY));
+  const lastActivityAt = Number(localStorage.getItem(WEB_LAST_ACTIVITY_KEY));
+  const hasCredentials = Boolean(localStorage.getItem('ecobud_admin_token') && localStorage.getItem('ecobud_admin_authenticated') === 'true');
+  if (!hasCredentials || !startedAt || !lastActivityAt || now - startedAt >= WEB_ABSOLUTE_TIMEOUT_MS || now - lastActivityAt >= WEB_IDLE_TIMEOUT_MS) {
+    clearStoredAdminSession();
+    return false;
+  }
+  return true;
+}
+
 const Dashboard = lazy(() => import('./components/admin/Dashboard').then((m) => ({ default: m.Dashboard })));
 const ManageUsers = lazy(() => import('./components/admin/pages/ManageUsers').then((m) => ({ default: m.ManageUsers })));
 const LearningContent = lazy(() => import('./components/admin/pages/LearningContent').then((m) => ({ default: m.LearningContent })));
@@ -47,7 +72,7 @@ function renderSection(section: AdminSection) {
 export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!(localStorage.getItem('ecobud_admin_token') && localStorage.getItem('ecobud_admin_authenticated') === 'true');
+    return hasValidStoredAdminSession();
   });
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
     const userJson = localStorage.getItem('ecobud_admin_user');
@@ -119,12 +144,41 @@ export default function App() {
     }
   }, [isAuthenticated, activeSection]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let lastWrite = 0;
+    const recordActivity = () => {
+      const now = Date.now();
+      if (now - lastWrite >= 30_000) {
+        localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(now));
+        lastWrite = now;
+      }
+    };
+    const enforceTimeout = () => {
+      const now = Date.now();
+      const startedAt = Number(localStorage.getItem(WEB_SESSION_STARTED_KEY));
+      const lastActivityAt = Number(localStorage.getItem(WEB_LAST_ACTIVITY_KEY));
+      if (!startedAt || !lastActivityAt || now - startedAt >= WEB_ABSOLUTE_TIMEOUT_MS || now - lastActivityAt >= WEB_IDLE_TIMEOUT_MS) {
+        clearStoredAdminSession();
+        setIsAuthenticated(false);
+        setAuthError('Your session expired. Please sign in again.');
+      }
+    };
+    const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => window.addEventListener(event, recordActivity, { passive: true }));
+    const timer = window.setInterval(enforceTimeout, 30_000);
+    return () => {
+      activityEvents.forEach(event => window.removeEventListener(event, recordActivity));
+      window.clearInterval(timer);
+    };
+  }, [isAuthenticated]);
+
   const handleLogin = async (email: string, pass: string) => {
     setAuthError(null);
     const res = await fetch(`${API_HOST}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass }),
+      body: JSON.stringify({ email, password: pass, clientType: 'web' }),
     });
 
     const data = await res.json();
@@ -144,15 +198,16 @@ export default function App() {
     localStorage.setItem('ecobud_admin_token', data.token);
     localStorage.setItem('ecobud_admin_user', JSON.stringify(data.user));
     localStorage.setItem('ecobud_admin_authenticated', 'true');
+    const signedInAt = Date.now();
+    localStorage.setItem(WEB_SESSION_STARTED_KEY, String(signedInAt));
+    localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(signedInAt));
     setIsAuthenticated(true);
     setActiveSection(data.user.role === 'moderator' ? 'Challenges' : 'Dashboard');
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    localStorage.removeItem('ecobud_admin_token');
-    localStorage.removeItem('ecobud_admin_user');
-    localStorage.removeItem('ecobud_admin_authenticated');
+    clearStoredAdminSession();
   };
 
   const toggleDarkMode = () => {

@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { PasswordService } from '../security/passwordService';
-import { AccessRole, getRoleRedirectPath, TokenService } from '../security/tokenService';
+import { AccessRole, getRoleRedirectPath, SessionClient, TokenService } from '../security/tokenService';
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import nodemailer from 'nodemailer';
@@ -56,6 +56,7 @@ const registerSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
   city: z.string().min(1, 'Please select a barangay.'),
   otpCode: z.string().length(6),
+  clientType: z.enum(['mobile', 'web']).default('mobile'),
 }).refine((payload) => Boolean(payload.name ?? payload.displayName), {
   message: 'A display name is required.',
   path: ['displayName'],
@@ -68,11 +69,22 @@ const otpSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1, 'Password is required.'),
+  clientType: z.enum(['mobile', 'web']).default('mobile'),
 });
 
 const usernameAvailabilitySchema = z.object({
   displayName: z.string().trim().min(2).max(50),
 });
+
+function assertAccountNotLocked(email: string): void {
+  const lockStatus = LoginAttemptTracker.isLocked(email.trim().toLowerCase());
+  if (lockStatus.locked) {
+    throw new HttpError(
+      429,
+      `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 900) / 60)} minute(s).`,
+    );
+  }
+}
 
 const toAuthResponse = (user: {
   id: string;
@@ -85,7 +97,7 @@ const toAuthResponse = (user: {
   currentStreak: number;
   lastActionDate: Date | null;
   profile: { displayName: string; avatarUrl: string | null; city?: string | null } | null;
-}) => {
+}, clientType: SessionClient = 'mobile', authTime = Math.floor(Date.now() / 1000)) => {
   const token = TokenService.sign({
     userId: user.id,
     name: user.name,
@@ -94,10 +106,15 @@ const toAuthResponse = (user: {
     status: user.status,
     city: user.profile?.city ?? null,
     sessionVersion: user.sessionVersion,
+    clientType,
+    authTime,
   });
 
   return {
     token,
+    refreshToken: clientType === 'mobile'
+      ? TokenService.signRefresh({ userId: user.id, sessionVersion: user.sessionVersion, authTime })
+      : undefined,
     redirectPath: getRoleRedirectPath(user.role),
     user: {
       id: user.id,
@@ -178,6 +195,7 @@ authRoutes.post(
   '/register',
   errorBoundary(async (req, res) => {
     const payload = registerSchema.parse(req.body);
+    assertAccountNotLocked(payload.email);
     const displayName = payload.name ?? payload.displayName!;
     const existingUser = await prisma.user.findUnique({ where: { email: payload.email } });
     const existingProfile = await findProfileByDisplayName(displayName);
@@ -265,7 +283,7 @@ authRoutes.post(
       });
     }
 
-    return res.status(201).json(toAuthResponse(user));
+    return res.status(201).json(toAuthResponse(user, payload.clientType));
   }),
 );
 
@@ -274,6 +292,7 @@ authRoutes.post(
   otpLimiter,
   errorBoundary(async (req, res) => {
     const { email } = otpSchema.parse(req.body);
+    assertAccountNotLocked(email);
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
@@ -372,13 +391,14 @@ authRoutes.post(
     // Reset failed attempts upon successful login
     LoginAttemptTracker.recordSuccess(normalizedEmail);
 
-    return res.json(toAuthResponse(user));
+    return res.json(toAuthResponse(user, payload.clientType));
   }),
 );
 
 const googleAuthSchema = z.object({
   accessToken: z.string().min(1).max(16384),
   city: z.string().trim().min(1).max(80).optional(),
+  clientType: z.enum(['mobile', 'web']).default('mobile'),
 });
 
 authRoutes.post(
@@ -387,6 +407,7 @@ authRoutes.post(
     const payload = googleAuthSchema.parse(req.body);
     const identity = await verifyGoogleIdentity(payload.accessToken);
     const normalizedEmail = identity.email;
+    assertAccountNotLocked(normalizedEmail);
     const displayName = identity.name;
 
     let user = await prisma.user.findUnique({
@@ -479,7 +500,31 @@ authRoutes.post(
       throw new HttpError(500, 'Failed to authenticate user.');
     }
 
-    return res.json(toAuthResponse(user));
+    return res.json(toAuthResponse(user, payload.clientType));
+  }),
+);
+
+authRoutes.post(
+  '/refresh',
+  authLimiter,
+  errorBoundary(async (req, res) => {
+    const { refreshToken } = z.object({ refreshToken: z.string().min(1).max(16384) }).parse(req.body);
+    let refreshSession;
+    try {
+      refreshSession = TokenService.verifyRefresh(refreshToken);
+    } catch {
+      throw new HttpError(401, 'Your mobile session has expired. Please sign in again.');
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: refreshSession.userId },
+      include: { profile: true },
+    });
+
+    if (!user || user.status !== 'active' || user.sessionVersion !== refreshSession.sessionVersion) {
+      throw new HttpError(401, 'Your mobile session is no longer valid. Please sign in again.');
+    }
+
+    return res.json(toAuthResponse(user, 'mobile', refreshSession.authTime));
   }),
 );
 

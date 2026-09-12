@@ -733,7 +733,29 @@ export function useHomeDashboard(): EcoBudMobileModel {
           try {
             const parsed = JSON.parse(savedSession) as SessionPayload;
             if (parsed && typeof parsed === 'object' && parsed.token && parsed.user) {
-              setSession(parsed);
+              let activeSession: SessionPayload | null = parsed;
+
+              // Mobile sessions use a 30-day access token and a 90-day absolute
+              // refresh window. Refresh silently on launch while preserving an
+              // existing access token as an offline fallback.
+              if (parsed.refreshToken) {
+                try {
+                  activeSession = await homeService.refreshSession(parsed.refreshToken);
+                  await persistSession(activeSession);
+                } catch (refreshError) {
+                  const status = (refreshError as any)?.status;
+                  if (status === 401 || status === 403) {
+                    await persistSession(null);
+                    activeSession = null;
+                  }
+                }
+              }
+
+              if (!activeSession?.token) {
+                return;
+              }
+
+              setSession(activeSession);
 
               // ─── Instant Stale-While-Revalidate Hydration ──────────────
               // If cached home dashboard data exists, apply it immediately to skip the loading state!
@@ -756,7 +778,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               }
 
               // Background fetch the latest fresh data without blocking the user
-              void hydrateApp(parsed, true);
+              void hydrateApp(activeSession, true);
             } else {
               await mobileStorage.removeItem(SESSION_STORAGE_KEY);
             }
