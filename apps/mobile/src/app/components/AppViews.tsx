@@ -1053,8 +1053,6 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const currentActiveList = viewMode === 'Discover' ? discoverChallenges : [];
   const challengeColumnCount = width >= 900 ? 3 : 2;
   const challengeGridGap = scale(width < 360 ? 8 : 14);
-  const challengeContentWidth = Math.max(0, width - scale(48));
-  const challengeGridCardWidth = (challengeContentWidth - challengeGridGap * (challengeColumnCount - 1)) / challengeColumnCount;
 
   return (
     <>
@@ -1293,55 +1291,64 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         {/* === VIEW MODE 1: DISCOVER TAB (ALL AVAILABLE CHALLENGES) === */}
         {viewMode === 'Discover' && (
           isCardsLoading ? (
-            <View style={contentLayout === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: challengeGridGap } : {}}>
-              {Array.from({ length: Math.max(3, currentActiveList.length || 0) }).map((_, idx) => (
-                <View key={`skel-${idx}`} style={{ width: contentLayout === 'grid' ? challengeGridCardWidth : '100%' }}>
-                  <DiscoverChallengeSkeleton />
-                </View>
-              ))}
-            </View>
+            contentLayout === 'grid' ? (
+              <View style={{ gap: challengeGridGap }}>
+                {Array.from({ length: Math.ceil(3 / challengeColumnCount) }).map((_, rowIndex) => (
+                  <View key={`challenge-skeleton-row-${rowIndex}`} style={{ flexDirection: 'row', gap: challengeGridGap }}>
+                    {Array.from({ length: challengeColumnCount }).map((__, columnIndex) => {
+                      const itemIndex = rowIndex * challengeColumnCount + columnIndex;
+                      return itemIndex < 3
+                        ? <View key={`challenge-skeleton-${itemIndex}`} style={{ flex: 1 }}><DiscoverChallengeSkeleton /></View>
+                        : <View key={`challenge-skeleton-spacer-${itemIndex}`} style={{ flex: 1 }} />;
+                    })}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View>{[1, 2, 3].map((item) => <DiscoverChallengeSkeleton key={item} />)}</View>
+            )
           ) : (
-            <View style={contentLayout === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: challengeGridGap } : {}}>
-              {currentActiveList.map((challenge, index) => {
-              if (index === 0) {
-                return (
-                  <View key={challenge.uniqueId || challenge.id} style={{ width: contentLayout === 'grid' ? challengeGridCardWidth : '100%' }}>
-                    <CoachMarkTarget
-                      name="featuredChallenge"
-                      borderRadius={moderateScale(22)}
-                      active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
-                      onMeasure={(rect) => {
-                        model.setSpotlightTargetRect?.(rect);
-                      }}
-                      style={{ marginBottom: verticalScale(16) }}
-                    >
+            <View style={{ gap: contentLayout === 'grid' ? challengeGridGap : 0 }}>
+              {(contentLayout === 'grid'
+                ? Array.from({ length: Math.ceil(currentActiveList.length / challengeColumnCount) }, (_, rowIndex) =>
+                    currentActiveList.slice(rowIndex * challengeColumnCount, (rowIndex + 1) * challengeColumnCount)
+                  )
+                : currentActiveList.map((challenge) => [challenge])
+              ).map((challengeRow, rowIndex) => (
+                <View key={`challenge-row-${rowIndex}`} style={{ flexDirection: 'row', gap: contentLayout === 'grid' ? challengeGridGap : 0 }}>
+                  {challengeRow.map((challenge, columnIndex) => {
+                    const challengeIndex = contentLayout === 'grid' ? rowIndex * challengeColumnCount + columnIndex : rowIndex;
+                    const card = (
                       <DiscoverChallengeCard
                         challenge={challenge}
                         isTablet={contentLayout === 'grid'}
-                        style={{ marginBottom: 0, width: '100%' }}
-                        onPress={() => {
-                          model.openChallengeMission(challenge);
-                        }}
+                        style={{ marginBottom: contentLayout === 'grid' ? 0 : verticalScale(16), width: '100%' }}
+                        onPress={() => model.openChallengeMission(challenge)}
                       />
-                    </CoachMarkTarget>
-                  </View>
-                );
-              }
+                    );
 
-              return (
-                <View key={challenge.uniqueId || challenge.id} style={{ width: contentLayout === 'grid' ? challengeGridCardWidth : '100%' }}>
-                  <DiscoverChallengeCard
-                    challenge={challenge}
-                    isTablet={contentLayout === 'grid'}
-                    style={{ width: '100%' }}
-                    onPress={() => {
-                      model.openChallengeMission(challenge);
-                    }}
-                  />
+                    return (
+                      <View key={challenge.uniqueId || challenge.id} style={{ flex: 1 }}>
+                        {challengeIndex === 0 ? (
+                          <CoachMarkTarget
+                            name="featuredChallenge"
+                            borderRadius={moderateScale(22)}
+                            active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
+                            onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}
+                          >
+                            {card}
+                          </CoachMarkTarget>
+                        ) : card}
+                      </View>
+                    );
+                  })}
+                  {contentLayout === 'grid' && challengeRow.length < challengeColumnCount &&
+                    Array.from({ length: challengeColumnCount - challengeRow.length }).map((_, spacerIndex) => (
+                      <View key={`challenge-spacer-${spacerIndex}`} style={{ flex: 1 }} />
+                    ))}
                 </View>
-              );
-            })}
-          </View>
+              ))}
+            </View>
           )
         )}
 
