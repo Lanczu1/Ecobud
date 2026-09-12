@@ -159,7 +159,7 @@ export class GamificationService {
     return result;
   }
 
-  async claimChallenge(userId: string, challengeInstanceId: string, submissionId?: string) {
+  async claimChallenge(userId: string, challengeInstanceId: string, submissionId?: string, requestKey?: string) {
     // A claim writes the submission, balances, stats, badges, and immutable
     // ledger entry. On the hosted database that can exceed Prisma's default
     // 5-second interactive transaction window, which rolls the claim back.
@@ -205,15 +205,48 @@ export class GamificationService {
       });
 
       if (submission) {
+        if (submission.userId !== userId) {
+          throw new HttpError(403, 'You do not own this challenge submission.');
+        }
         if (submission.status !== 'approved' && submission.status !== 'completed') {
           throw new HttpError(400, 'Submission is not approved yet.');
         }
         if (submission.rewardAwarded) {
-          throw new HttpError(400, 'Reward already claimed for this submission.');
+          return {
+            alreadyCompleted: true,
+            awardedBadges: [],
+            pointsAwarded: submission.expAwarded,
+            ecoCoinsAwarded: submission.ecoCoinsAwarded,
+          };
         }
       } else {
         if (!userChallenge || userChallenge.status !== 'UNCLAIMED') {
           throw new HttpError(400, 'Challenge is not ready to be claimed.');
+        }
+      }
+
+      // Fixed flat reward for challenge completion
+      const totalExpAwarded = challenge.expReward;
+      const totalEcoCoinsAwarded = challenge.ecoCoinReward;
+
+      if (submission) {
+        const reserved = await tx.challengeSubmission.updateMany({
+          where: { id: submission.id, rewardAwarded: false },
+          data: {
+            rewardAwarded: true,
+            ecoCoinsAwarded: totalEcoCoinsAwarded,
+            expAwarded: totalExpAwarded,
+            status: 'approved',
+            claimRequestKey: requestKey,
+          },
+        });
+        if (reserved.count === 0) {
+          return {
+            alreadyCompleted: true,
+            awardedBadges: [],
+            pointsAwarded: totalExpAwarded,
+            ecoCoinsAwarded: totalEcoCoinsAwarded,
+          };
         }
       }
 
@@ -229,22 +262,6 @@ export class GamificationService {
         },
       });
 
-      // Fixed flat reward for challenge completion
-      const totalExpAwarded = challenge.expReward;
-      const totalEcoCoinsAwarded = challenge.ecoCoinReward;
-
-      if (submission) {
-        await tx.challengeSubmission.update({
-          where: { id: submission.id },
-          data: {
-            rewardAwarded: true,
-            ecoCoinsAwarded: totalEcoCoinsAwarded,
-            expAwarded: totalExpAwarded,
-            status: 'approved',
-          },
-        });
-      }
-
       return this.awardAction(tx, {
         userId,
         actionType: `Challenge completed: ${challenge.title}`,
@@ -259,11 +276,13 @@ export class GamificationService {
       });
     }, { maxWait: 10_000, timeout: 30_000 });
 
-    await this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
-      actorRole: 'user',
-      actorUserId: userId,
-      entityId: challengeInstanceId,
-      reason: 'challenge-completed',
+    setImmediate(() => {
+      void this.broadcastUserActivity(userId, ['challenges', 'tracker'], {
+        actorRole: 'user',
+        actorUserId: userId,
+        entityId: challengeInstanceId,
+        reason: 'challenge-completed',
+      }).catch((error) => console.error('challenge_completion_broadcast_failed', error));
     });
 
     return result;

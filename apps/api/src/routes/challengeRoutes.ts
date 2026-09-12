@@ -22,6 +22,17 @@ const challengeRoutes = Router();
 const gamificationService = new GamificationService();
 const MAX_AI_ATTEMPTS = 3;
 
+const readIdempotencyKey = (req: AuthenticatedRequest) => {
+  const value = req.header('Idempotency-Key')?.trim();
+  return value && value.length <= 200 ? value : undefined;
+};
+
+const runInBackground = (label: string, task: () => Promise<unknown>) => {
+  setImmediate(() => {
+    void task().catch((error) => console.error(`${label}_failed`, error));
+  });
+};
+
 type AiAttemptRow = {
   attempts_used: number;
   reset_at: Date;
@@ -494,6 +505,7 @@ challengeRoutes.post(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const payload = submissionSchema.parse(req.body);
+    const requestKey = readIdempotencyKey(req);
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const challenge = instance?.challenge;
 
@@ -511,7 +523,21 @@ challengeRoutes.post(
       : 1;
 
     const submission = await prisma.$transaction(async tx => {
-      if (payload.proofUrl && await tx.challengeSubmission.findFirst({ where: { userId: req.auth!.userId, challengeInstanceId: actualInstanceId, proofUrl: payload.proofUrl } })) {
+      if (requestKey) {
+        const idempotentSubmission = await tx.challengeSubmission.findFirst({
+          where: {
+            userId: req.auth!.userId,
+            challengeInstanceId: actualInstanceId,
+            submissionRequestKey: requestKey,
+          },
+        });
+        if (idempotentSubmission) {
+          return idempotentSubmission;
+        }
+      }
+      if (payload.proofUrl && await tx.challengeSubmission.findFirst({
+        where: { userId: req.auth!.userId, challengeInstanceId: actualInstanceId, proofUrl: payload.proofUrl },
+      })) {
         throw new HttpError(409, 'This analyzed photo has already been submitted.');
       }
       const created = await tx.challengeSubmission.create({
@@ -524,6 +550,7 @@ challengeRoutes.post(
           status: 'pending',
           detectedQuantity,
           reservedQuantity: detectedQuantity,
+          submissionRequestKey: requestKey,
         },
       });
 
@@ -549,7 +576,9 @@ challengeRoutes.post(
       return created;
     }, { isolationLevel: 'Serializable' });
 
-    await sendDirectNotification({
+    res.status(201).json(submission);
+
+    runInBackground('challenge_proof_notification', () => sendDirectNotification({
       userId: req.auth!.userId,
       type: 'challenge',
       title: 'Challenge proof submitted',
@@ -558,9 +587,7 @@ challengeRoutes.post(
       relatedType: 'challenge',
       priority: 'high',
       notificationKey: `challenge_proof_submitted:${submission.id}`,
-    });
-
-    return res.status(201).json(submission);
+    }));
   }),
 );
 
@@ -687,6 +714,7 @@ challengeRoutes.post(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const { afterProofUrl, submissionId } = req.body;
+    const requestKey = readIdempotencyKey(req);
     const userId = req.auth!.userId;
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const actualInstanceId = instance?.id || req.params.challengeInstanceId;
@@ -715,6 +743,19 @@ challengeRoutes.post(
     if (!submission) {
       throw new HttpError(404, 'Submission not found.');
     }
+    if (submission.userId !== userId) {
+      throw new HttpError(403, 'You do not own this challenge submission.');
+    }
+
+    if (
+      (requestKey && submission.afterPhotoRequestKey === requestKey) ||
+      submission.afterProofUrl === afterProofUrl
+    ) {
+      return res.json({
+        message: 'After photo already submitted. Awaiting final admin approval.',
+        submission,
+      });
+    }
 
     const challenge = submission.challengeInstance?.challenge;
 
@@ -727,10 +768,16 @@ challengeRoutes.post(
       data: {
         afterProofUrl,
         status: 'final_review',
+        afterPhotoRequestKey: requestKey,
       }
     });
 
-    await sendDirectNotification({
+    res.json({
+      message: 'After photo submitted successfully! Awaiting final admin approval.',
+      submission: updated
+    });
+
+    runInBackground('challenge_after_photo_notification', () => sendDirectNotification({
       userId,
       type: 'challenge',
       title: 'After photo submitted',
@@ -739,12 +786,7 @@ challengeRoutes.post(
       relatedType: 'challenge',
       priority: 'high',
       notificationKey: `challenge_after_photo_submitted:${submission.id}`,
-    });
-
-    return res.json({
-      message: 'After photo submitted successfully! Awaiting final admin approval.',
-      submission: updated
-    });
+    }));
   }),
 );
 
@@ -780,7 +822,12 @@ challengeRoutes.post(
       }
     }
 
-    const result = await gamificationService.claimChallenge(userId, actualInstanceId, submissionId);
+    const result = await gamificationService.claimChallenge(
+      userId,
+      actualInstanceId,
+      submissionId,
+      readIdempotencyKey(req),
+    );
 
     return res.json({ message: 'Reward claimed successfully!', ...result });
   }),
