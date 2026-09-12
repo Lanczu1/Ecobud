@@ -18,6 +18,9 @@ export const homeService = {
   login: (email: string, pass: string) =>
     ecobudApi.login(email.trim(), pass),
 
+  refreshSession: (refreshToken: string) =>
+    ecobudApi.refreshSession(refreshToken),
+
   googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
     ecobudApi.googleLogin(payload),
 

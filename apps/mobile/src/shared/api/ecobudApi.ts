@@ -104,6 +104,7 @@ export interface SessionUser {
 
 export interface SessionPayload {
   token: string;
+  refreshToken?: string;
   redirectPath: string;
   user: SessionUser;
 }
@@ -572,12 +573,12 @@ export const ecobudApi = {
   login: (email: string, password: string) =>
     request<SessionPayload>('/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { email, password, clientType: 'mobile' },
     }),
   googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
     request<SessionPayload>('/auth/google', {
       method: 'POST',
-      body: payload,
+      body: { ...payload, clientType: 'mobile' },
     }),
   checkEmailExists: (email: string, accessToken: string) =>
     request<{ exists: boolean; hasCity: boolean; city?: string | null }>(
@@ -590,7 +591,12 @@ export const ecobudApi = {
   register: (email: string, password: string, displayName: string, city: string, otpCode: string) =>
     request<SessionPayload>('/auth/register', {
       method: 'POST',
-      body: { email, password, displayName, city, otpCode },
+      body: { email, password, displayName, city, otpCode, clientType: 'mobile' },
+    }),
+  refreshSession: (refreshToken: string) =>
+    request<SessionPayload>('/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken },
     }),
   sendOTP: (email: string) =>
     request<{ success: boolean; message: string }>('/auth/send-otp', {

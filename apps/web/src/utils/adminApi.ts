@@ -26,6 +26,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
       localStorage.removeItem('ecobud_admin_token');
       localStorage.removeItem('ecobud_admin_user');
       localStorage.removeItem('ecobud_admin_authenticated');
+      localStorage.removeItem('ecobud_admin_session_started_at');
+      localStorage.removeItem('ecobud_admin_last_activity_at');
       window.location.href = '/';
     }
 

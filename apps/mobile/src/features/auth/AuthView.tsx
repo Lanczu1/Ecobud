@@ -365,6 +365,11 @@ export function AuthView({
   const loadingOpacity = useRef(new Animated.Value(0)).current;
   const isLoading = authLoading || isSendingCode || isConfirmingGoogleBarangay;
   const [renderLoadingOverlay, setRenderLoadingOverlay] = useState(isLoading);
+  const isLoginLocked = Boolean(
+    authError &&
+    (authError.toLowerCase().includes('too many failed login attempts') ||
+      authError.toLowerCase().includes('temporarily locked')),
+  );
 
   const copy = AUTH_COPY[mode];
   const fieldErrors = useMemo(
@@ -385,6 +390,14 @@ export function AuthView({
         Object.entries(fieldErrors).filter(([field]) => touched[field as FieldName]),
       ) as FieldErrors,
     [fieldErrors, touched],
+  );
+
+  const isSignupComplete = useMemo(
+    () =>
+      getRequiredFields('signup').every((field) => !fieldErrors[field]) &&
+      usernameCheckState === 'available' &&
+      hasAcceptedLegal,
+    [fieldErrors, hasAcceptedLegal, usernameCheckState],
   );
 
   const filteredBarangays = useMemo(() => {
@@ -416,7 +429,8 @@ export function AuthView({
   const passwordRequirements = useMemo<FieldRequirement[]>(() => {
     return [
       { label: 'At least 8 characters', met: password.length >= 8 },
-      { label: 'Contains at least one number or symbol', met: /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) },
+      { label: 'Contains at least one letter', met: /[a-zA-Z]/.test(password) },
+      { label: 'Contains at least one number', met: /[0-9]/.test(password) },
     ];
   }, [password]);
 
@@ -649,7 +663,10 @@ export function AuthView({
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
   }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal]);
 
-  const bannerMessage = localError || authError;
+  // Login errors belong to the login form and must not leak into the sign-up view.
+  // Sign-up request errors are surfaced through localError; verification errors still
+  // come from the parent auth flow.
+  const bannerMessage = localError || (mode === 'signup' ? null : authError);
   const verifySubtitle =
     mode === 'verify' && email
       ? `Enter the 6-digit code we sent to ${email.trim()} to finish your account setup.`
@@ -928,7 +945,7 @@ export function AuthView({
                 onPress={() => {
                   void handleAction();
                 }}
-                disabled={isLoading}
+                disabled={isLoading || (mode === 'signup' && (!isSignupComplete || isLoginLocked))}
                 loading={isLoading}
               />
 
@@ -952,7 +969,7 @@ export function AuthView({
                         // Handled in parent hook
                       }
                     }}
-                    disabled={isLoading}
+                    disabled={isLoading || isLoginLocked}
                   />
                 </>
               ) : null}
@@ -968,6 +985,8 @@ export function AuthView({
               </Text>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: mode === 'signin' && isLoginLocked }}
+                disabled={mode === 'signin' && isLoginLocked}
                 onPress={() => {
                   if (mode === 'signin') {
                     switchMode('signup');
@@ -977,7 +996,11 @@ export function AuthView({
                     switchMode('signin');
                   }
                 }}
-                style={({ pressed }) => [styles.footerSwitchLink, pressed && styles.footerSwitchLinkPressed]}
+                style={({ pressed }) => [
+                  styles.footerSwitchLink,
+                  pressed && styles.footerSwitchLinkPressed,
+                  mode === 'signin' && isLoginLocked && styles.footerSwitchLinkDisabled,
+                ]}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={[styles.footerSwitchLinkText, isDark && { color: theme.colors.primary }]}>
@@ -2043,6 +2066,9 @@ const styles = StyleSheet.create({
   },
   footerSwitchLinkPressed: {
     opacity: 0.68,
+  },
+  footerSwitchLinkDisabled: {
+    opacity: 0.4,
   },
   footerSwitchLinkText: {
     fontSize: responsiveFontSize(15),
