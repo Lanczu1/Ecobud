@@ -12,51 +12,51 @@ type ReviewerContext = {
 
 export class AdminService {
   static async getAllLessons() {
-  return apiCache.getOrSet('admin_lessons_list', 30, async () => {
-  const startedAt = Date.now();
+    return apiCache.getOrSet('admin_lessons_list', 30, async () => {
+      const startedAt = Date.now();
 
-  try {
-    const lessons = await prisma.lesson.findMany({
-      orderBy: { createdAt: 'desc' },
-      // The table view does not need lesson bodies, transcripts, pages, or
-      // quiz answers. Those can be very large and made every list refresh
-      // serialize and transfer the complete course catalogue.
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        category: true,
-        difficulty: true,
-        durationMinutes: true,
-        rating: true,
-        pointsReward: true,
-        isPublished: true,
-        featured: true,
-        videoUrl: true,
-        imageUrl: true,
-        createdAt: true,
-        updatedAt: true,
-        scheduledAt: true,
-        createdBy: {
+      try {
+        const lessons = await prisma.lesson.findMany({
+          orderBy: { createdAt: 'desc' },
+          // The table view does not need lesson bodies, transcripts, pages, or
+          // quiz answers. Those can be very large and made every list refresh
+          // serialize and transfer the complete course catalogue.
           select: {
             id: true,
-            name: true,
-            email: true
+            title: true,
+            description: true,
+            category: true,
+            difficulty: true,
+            durationMinutes: true,
+            rating: true,
+            pointsReward: true,
+            isPublished: true,
+            featured: true,
+            videoUrl: true,
+            imageUrl: true,
+            createdAt: true,
+            updatedAt: true,
+            scheduledAt: true,
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            },
+            _count: { select: { quizQuestions: true, pages: true } },
           }
-        },
-        _count: { select: { quizQuestions: true, pages: true } },
+        });
+
+        console.log(`[PERF] getAllLessons DB: ${Date.now() - startedAt}ms`);
+
+        return lessons;
+      } catch (error) {
+        console.error(`[PERF] getAllLessons failed after ${Date.now() - startedAt}ms`);
+        throw error;
       }
     });
-
-    console.log(`[PERF] getAllLessons DB: ${Date.now() - startedAt}ms`);
-
-    return lessons;
-  } catch (error) {
-    console.error(`[PERF] getAllLessons failed after ${Date.now() - startedAt}ms`);
-    throw error;
   }
-  });
-}
 
   static async getLessonById(id: string) {
     return prisma.lesson.findUnique({
@@ -164,22 +164,22 @@ export class AdminService {
 
   static async updateLesson(id: string, data: any) {
     const { quizQuestions, pages, ...otherData } = data;
-    
+
     // If quiz questions or pages are provided, we delete existing and recreate
     let updatePayload: any = { ...otherData };
 
     if ('pointsReward' in updatePayload && typeof updatePayload.pointsReward === 'string') {
       updatePayload.pointsReward = parseInt(updatePayload.pointsReward, 10);
     }
-    
+
     if ('quizPassingScore' in updatePayload && typeof updatePayload.quizPassingScore === 'string') {
       updatePayload.quizPassingScore = parseInt(updatePayload.quizPassingScore, 10);
     }
-    
+
     if ('durationMinutes' in updatePayload && typeof updatePayload.durationMinutes === 'string') {
       updatePayload.durationMinutes = parseInt(updatePayload.durationMinutes, 10);
     }
-    
+
     if ('featured' in updatePayload && typeof updatePayload.featured === 'string') {
       updatePayload.featured = updatePayload.featured === 'true';
     }
@@ -196,7 +196,7 @@ export class AdminService {
         }))
       };
     }
-    
+
     if (pages) {
       updatePayload.pages = {
         deleteMany: {},
@@ -562,68 +562,68 @@ export class AdminService {
 
   static async getDashboardStats() {
     return apiCache.getOrSet('admin_dashboard_stats', 15, async () => {
-    const snapshotDate = new Date();
-    const startOfToday = new Date(snapshotDate);
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date(snapshotDate);
-    endOfToday.setHours(23, 59, 59, 999);
-    const presenceOverview = await presenceQueryService.getPresenceOverview(snapshotDate);
+      const snapshotDate = new Date();
+      const startOfToday = new Date(snapshotDate);
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date(snapshotDate);
+      endOfToday.setHours(23, 59, 59, 999);
+      const presenceOverview = await presenceQueryService.getPresenceOverview(snapshotDate);
 
-    const [
-      totalUsers,
-      signupsToday,
-      totalLessons,
-      totalChallenges,
-      userPoints,
-      lessonCompletions,
-      pendingSubmissions,
-    ] = await Promise.all([
-      prisma.user.count({
-        where: { role: 'user' }
-      }),
-      prisma.user.count({
-        where: {
-          createdAt: {
-            gte: startOfToday,
-            lte: endOfToday,
-          },
-          role: 'user',
-        },
-      }),
-      prisma.lesson.count(),
-      prisma.challenge.count(),
-      prisma.user.aggregate({
-        _sum: {
-          points: true,
-        },
-      }),
-      prisma.userLessonProgress.count({
-        where: { status: 'completed' },
-      }),
-      prisma.challengeSubmission.count({
-        where: { status: 'pending' },
-      }),
-    ]);
-
-    const activityTrend = await this.getSevenDayActivityTrend(snapshotDate);
-
-    return {
-      overview: {
-        activeToday: presenceOverview.activeToday,
-        lessonCompletions,
-        onlineNow: presenceOverview.onlineUsers.length,
-        onlineWindowMinutes: PRESENCE_STALE_TTL_MS / 60000,
-        signupsToday,
-        snapshotDate: snapshotDate.toISOString(),
-        totalChallenges,
-        totalLessons,
-        totalPoints: userPoints._sum.points || 0,
+      const [
         totalUsers,
-        totalSignups: totalUsers,
-      },
-      presence: presenceOverview,
-      activityTrend,
-    };
+        signupsToday,
+        totalLessons,
+        totalChallenges,
+        userPoints,
+        lessonCompletions,
+        pendingSubmissions,
+      ] = await Promise.all([
+        prisma.user.count({
+          where: { role: 'user' }
+        }),
+        prisma.user.count({
+          where: {
+            createdAt: {
+              gte: startOfToday,
+              lte: endOfToday,
+            },
+            role: 'user',
+          },
+        }),
+        prisma.lesson.count(),
+        prisma.challenge.count(),
+        prisma.user.aggregate({
+          _sum: {
+            points: true,
+          },
+        }),
+        prisma.userLessonProgress.count({
+          where: { status: 'completed' },
+        }),
+        prisma.challengeSubmission.count({
+          where: { status: 'pending' },
+        }),
+      ]);
+
+      const activityTrend = await this.getSevenDayActivityTrend(snapshotDate);
+
+      return {
+        overview: {
+          activeToday: presenceOverview.activeToday,
+          lessonCompletions,
+          onlineNow: presenceOverview.onlineUsers.length,
+          onlineWindowMinutes: PRESENCE_STALE_TTL_MS / 60000,
+          signupsToday,
+          snapshotDate: snapshotDate.toISOString(),
+          totalChallenges,
+          totalLessons,
+          totalPoints: userPoints._sum.points || 0,
+          totalUsers,
+          totalSignups: totalUsers,
+        },
+        presence: presenceOverview,
+        activityTrend,
+      };
     });
   }
 
@@ -699,7 +699,7 @@ export class AdminService {
   }
 
   static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string, reviewerContext?: ReviewerContext) {
-    const challengeSub = await prisma.challengeSubmission.findUnique({ 
+    const challengeSub = await prisma.challengeSubmission.findUnique({
       where: { id },
       include: {
         challengeInstance: { include: { challenge: true } },
@@ -778,7 +778,7 @@ export class AdminService {
       // Handle Rejection -> If quantity was reserved, return/refund it back to availableQuantity
       if (status === 'rejected') {
         const reserved = challengeSub.reservedQuantity || 0;
-        
+
         await prisma.$transaction(async (tx) => {
           if (reserved > 0 && challenge?.id) {
             await tx.challenge.update({
@@ -1143,9 +1143,9 @@ export class AdminService {
     if (!event) throw new Error('Event not found');
 
     const qrData = require('crypto').randomBytes(16).toString('hex');
-    
+
     // Set expiration to 1 hour after the event end time (or 24 hours if not set)
-    const expiresAt = event.endDatetime 
+    const expiresAt = event.endDatetime
       ? new Date(new Date(event.endDatetime).getTime() + 60 * 60 * 1000)
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
 

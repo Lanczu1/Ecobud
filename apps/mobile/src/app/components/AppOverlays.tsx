@@ -129,8 +129,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(submission?.proofUrl || null);
   const attemptsChallengeIdRef = React.useRef<string | null>(challenge?.id || null);
 
-  const entryFadeAnim = React.useRef(new Animated.Value(0)).current;
   const processFadeAnim = React.useRef(new Animated.Value(0)).current;
+  const activeOperationRef = React.useRef(0);
+  const cameraResetTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getAttemptsStorageKey = React.useCallback((challengeId: string) => {
     const userId = model.session?.user.id || 'anonymous';
@@ -256,6 +257,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
   // Sync step & reload attempts whenever challenge or overlay reopens
   React.useEffect(() => {
+    activeOperationRef.current += 1;
     setCapturedImage(null);
     setMockResult(null);
     setAttemptsLoaded(false);
@@ -269,14 +271,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   }, [challenge?.id, challenge?.progress?.status, isRejectedSubmission, submission?.id, submission?.status, submission?.afterProofUrl, loadChallengeAttempts]);
 
   React.useEffect(() => {
-    Animated.timing(entryFadeAnim, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-  }, [entryFadeAnim]);
-
-  React.useEffect(() => {
     if (processing) {
       Animated.timing(processFadeAnim, {
         toValue: 1,
@@ -288,7 +282,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }, [processing, processFadeAnim]);
 
-  const fadeAnim = React.useRef(new Animated.Value(1)).current;
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = React.useRef<any>(null);
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
@@ -300,14 +293,21 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const [isCameraMountAllowed, setIsCameraMountAllowed] = React.useState(true);
 
   const resetCameraSession = React.useCallback(() => {
+    if (cameraResetTimerRef.current) clearTimeout(cameraResetTimerRef.current);
     setCapturedImage(null);
     setIsCameraReady(false);
     // Briefly unmount camera to allow Android camera hardware to release cleanly
     setIsCameraMountAllowed(false);
     setCameraSessionId(prev => prev + 1);
-    setTimeout(() => {
+    cameraResetTimerRef.current = setTimeout(() => {
       setIsCameraMountAllowed(true);
+      cameraResetTimerRef.current = null;
     }, 250);
+  }, []);
+
+  React.useEffect(() => () => {
+    activeOperationRef.current += 1;
+    if (cameraResetTimerRef.current) clearTimeout(cameraResetTimerRef.current);
   }, []);
 
   React.useEffect(() => {
@@ -366,30 +366,22 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       return;
     }
 
-    if (!(await ensureCameraPermission())) return;
+    const operationId = ++activeOperationRef.current;
+    if (!(await ensureCameraPermission()) || activeOperationRef.current !== operationId) return;
 
     resetCameraSession();
     setMockResult(null);
     setBeforeProofUrl(null);
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setStep('capture');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setStep('capture');
   };
 
   const processImage = async (uri: string) => {
+    const operationId = ++activeOperationRef.current;
     setCapturedImage(uri);
     setProcessing(true);
     try {
       await consumeAiAttempt(challenge.id);
+      if (activeOperationRef.current !== operationId) return;
 
       // Client-side image downscaling & compression to optimize Gemini token usage and upload speed
       let processedUri = uri;
@@ -407,6 +399,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       }
 
       const result = await model.analyzeChallengeImage(challenge.id, processedUri);
+      if (activeOperationRef.current !== operationId) return;
       if (typeof result.attemptsLeft === 'number') {
         const resetAt = result.resetAt ? new Date(result.resetAt).getTime() : 0;
         const persistedValue = JSON.stringify({
@@ -429,16 +422,20 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         setMockResult(enrichedResult);
       }
     } catch (err: any) {
+      if (activeOperationRef.current !== operationId) return;
       setMockResult({ passed: false, object: 'Error', confidence: 0, reason: err.message || 'Failed to analyze image', imageUri: uri });
       await loadChallengeAttempts(challenge.id);
     } finally {
-      setProcessing(false);
-      setStep('result');
+      if (activeOperationRef.current === operationId) {
+        setProcessing(false);
+        setStep('result');
+      }
     }
   };
 
   const handleSubmitBeforeProof = async () => {
     if (!beforeProofUrl || !mockResult) return;
+    const operationId = ++activeOperationRef.current;
     setProcessing(true);
     try {
       const proofMetadata = JSON.stringify({
@@ -449,32 +446,39 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       });
       const detectedQty = mockResult.detectedCount || 1;
       await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedQty, mockResult.analysisToken, proofMetadata);
+      if (activeOperationRef.current !== operationId) return;
       handleClose();
     } catch (err: any) {
+      if (activeOperationRef.current !== operationId) return;
       Alert.alert('Submission Error', err.message || 'Failed to submit challenge proof.');
     } finally {
-      setProcessing(false);
+      if (activeOperationRef.current === operationId) setProcessing(false);
     }
   };
 
   const processAfterImage = async (uri: string) => {
+    const operationId = ++activeOperationRef.current;
     setCapturedImage(uri);
     setProcessing(true);
     try {
       const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
+      if (activeOperationRef.current !== operationId) return;
       await model.handleSubmitChallengeAfterPhoto(challenge.id, uploadResult.proofUrl, challenge.progress?.submissionId);
+      if (activeOperationRef.current !== operationId) return;
       handleClose();
     } catch (err: any) {
+      if (activeOperationRef.current !== operationId) return;
       console.error('Failed to submit after proof', err);
       Alert.alert('Submission Error', err.message || 'Failed to submit proof. Please try again.');
       setCapturedImage(null);
     } finally {
-      setProcessing(false);
+      if (activeOperationRef.current === operationId) setProcessing(false);
     }
   };
 
   const handleCapture = async () => {
-    if (!(await ensureCameraPermission())) return;
+    const operationId = ++activeOperationRef.current;
+    if (!(await ensureCameraPermission()) || activeOperationRef.current !== operationId) return;
     if (!isCameraReady) {
       Alert.alert('Camera Not Ready', 'Please wait a moment for the camera to initialize.');
       return;
@@ -482,11 +486,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     if (cameraRef.current) {
       try {
         const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
+        if (activeOperationRef.current !== operationId) return;
         // Do NOT manually null cameraRef here — let React handle ref lifecycle
         if (step === 'capture_after') {
-          processAfterImage(photo.uri);
+          await processAfterImage(photo.uri);
         } else {
-          processImage(photo.uri);
+          await processImage(photo.uri);
         }
       } catch (err: any) {
         console.error('Camera error', err);
@@ -504,6 +509,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   }, []);
 
   const handleGallery = async () => {
+    const operationId = ++activeOperationRef.current;
     try {
       cameraRef.current = null;
       setCameraSessionId(prev => prev + 1);
@@ -512,11 +518,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         allowsEditing: true,
         quality: 0.5,
       });
+      if (activeOperationRef.current !== operationId) return;
       if (!result.canceled && result.assets && result.assets.length > 0) {
         if (step === 'capture_after') {
-          processAfterImage(result.assets[0].uri);
+          await processAfterImage(result.assets[0].uri);
         } else {
-          processImage(result.assets[0].uri);
+          await processImage(result.assets[0].uri);
         }
       }
     } catch (err: any) {
@@ -526,24 +533,26 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const handleClose = () => {
-    Animated.timing(entryFadeAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      model.setActiveOverlay(null);
-    });
+    activeOperationRef.current += 1;
+    setProcessing(false);
+    if (cameraResetTimerRef.current) clearTimeout(cameraResetTimerRef.current);
+    model.setActiveOverlay(null);
   };
+
+  const returnToDetails = React.useCallback(() => {
+    activeOperationRef.current += 1;
+    setProcessing(false);
+    setMockResult(null);
+    resetCameraSession();
+    setStep('details');
+  }, [resetCameraSession]);
 
   // Hardware back button support within AiMissionOverlay:
   // If user is in capture or result, step back to details rather than immediately closing
   React.useEffect(() => {
     const onBackPress = () => {
       if (step === 'capture' || step === 'result' || step === 'capture_after') {
-        setProcessing(false);
-        setMockResult(null);
-        resetCameraSession();
-        setStep('details');
+        returnToDetails();
         return true;
       }
       handleClose();
@@ -552,25 +561,15 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [step]);
+  }, [step, returnToDetails]);
 
   const handleTryAgain = () => {
+    activeOperationRef.current += 1;
     setProcessing(false);
     setMockResult(null);
     setBeforeProofUrl(null);
     resetCameraSession();
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => {
-      setStep('capture');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setStep('capture');
   };
 
   if (step === 'result' && mockResult) {
@@ -578,10 +577,10 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     const coinsAward = mockResult.calculatedEcoCoins ?? challenge.ecoCoinReward;
 
     return (
-      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
-        <OverlayScaffold title="Result Page" subtitle="Verification Result" onBack={handleClose}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+        <OverlayScaffold title="Result Page" subtitle="Verification Result" onBack={returnToDetails}>
           <ScrollView contentContainerStyle={[styles.overlayScroll, { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, alignItems: 'center' }]}>
-            <Animated.View style={{ opacity: fadeAnim, width: '100%', alignItems: 'center' }}>
+            <View style={{ width: '100%', alignItems: 'center' }}>
               {/* Header Title with horizontal decorative lines */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20, gap: 12 }}>
                 <View style={{ width: 28, height: 3, backgroundColor: theme.colors.primary, borderRadius: 2 }} />
@@ -1007,26 +1006,23 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   </TouchableOpacity>
                 </View>
               )}
-            </Animated.View>
+            </View>
           </ScrollView>
         </OverlayScaffold>
-      </Animated.View>
+      </View>
     );
   }
 
   if (step === 'capture' || step === 'capture_after') {
     return (
-      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
         <OverlayScaffold
           title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"}
           subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"}
-          onBack={() => {
-            resetCameraSession();
-            setStep('details');
-          }}
+          onBack={returnToDetails}
         >
-          <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24, alignItems: 'center' }]}>
-            <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
+          <View style={{ flex: 1, padding: 24, alignItems: 'center' }}>
+            <View style={{ flex: 1, width: '100%' }}>
               {step === 'capture' && (
                 <View style={{
                   flexDirection: 'row',
@@ -1077,7 +1073,21 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               )}
 
-              <View style={{ width: '100%', aspectRatio: 1, backgroundColor: '#E8F0EA', borderRadius: 24, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
+              <View
+                collapsable={false}
+                renderToHardwareTextureAndroid
+                style={{
+                  flex: 1,
+                  minHeight: 220,
+                  width: '100%',
+                  backgroundColor: '#101915',
+                  borderRadius: 24,
+                  overflow: Platform.OS === 'android' ? 'visible' : 'hidden',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 24,
+                }}
+              >
                 {capturedImage ? (
                   <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                 ) : permission?.granted ? (
@@ -1085,8 +1095,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     <>
                       <CameraView
                         key={`cam-${step}-${cameraSessionId}`}
-                        style={{ width: '100%', height: '100%' }}
+                        style={StyleSheet.absoluteFill}
                         facing="back"
+                        mode="picture"
                         ref={cameraRef}
                         onCameraReady={() => setIsCameraReady(true)}
                         onMountError={handleCameraMountError}
@@ -1145,19 +1156,19 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   </TouchableOpacity>
                 </View>
               )}
-            </Animated.View>
-          </ScrollView>
+            </View>
+          </View>
         </OverlayScaffold>
-      </Animated.View>
+      </View>
     );
   }
 
   // Details step (Default)
   return (
-    <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }, { opacity: entryFadeAnim }]}>
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
       <OverlayScaffold title="AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
         <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
-          <Animated.View style={{ opacity: fadeAnim }}>
+          <View>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027', marginBottom: 16 }}>{challenge.title}</Text>
 
             {/* Mission Description Card */}
@@ -1366,8 +1377,9 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
             {isPreliminaryApproved ? (
               !submission?.afterProofUrl ? (
                 <PrimaryButton label="Take After Photo" onPress={() => {
+                  const operationId = ++activeOperationRef.current;
                   void ensureCameraPermission().then((granted) => {
-                    if (!granted) return;
+                    if (!granted || activeOperationRef.current !== operationId) return;
                     resetCameraSession();
                     setStep('capture_after');
                   });
@@ -1401,10 +1413,10 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 style={cooldownRemainingSec > 0 ? { opacity: 0.6, backgroundColor: isDark ? '#4B5563' : '#9CA3AF' } : undefined}
               />
             )}
-          </Animated.View>
+          </View>
         </ScrollView>
       </OverlayScaffold>
-    </Animated.View>
+    </View>
   );
 }
 
