@@ -8,6 +8,7 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.anonymous.ecobudmobile",
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",

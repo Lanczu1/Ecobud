@@ -61,3 +61,7 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+apps/mobile/google-services.json
+apps/mobile/android/app/google-services.json
+apps/mobile/ecobud-project-firebase-adminsdk-*.json

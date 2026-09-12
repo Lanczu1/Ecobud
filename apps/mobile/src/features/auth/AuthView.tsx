@@ -27,6 +27,7 @@ import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { CoachMarksOverlay } from '../../app/components/CoachMarksOverlay';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
+import { LegalDocumentModal, LegalDocumentType } from '../../shared/ui/LegalDocumentModal';
 
 type AuthModeType = 'signin' | 'signup' | 'verify';
 type FieldName = 'username' | 'email' | 'password' | 'verificationCode' | 'city';
@@ -356,6 +357,8 @@ export function AuthView({
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false);
+  const [legalDocument, setLegalDocument] = useState<LegalDocumentType | null>(null);
   const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({});
   const [usernameCheckState, setUsernameCheckState] = useState<UsernameCheckState>('idle');
   const [usernameCheckMessage, setUsernameCheckMessage] = useState<string | null>(null);
@@ -617,6 +620,11 @@ export function AuthView({
     }
 
     if (mode === 'signup') {
+      if (!hasAcceptedLegal) {
+        setLocalError('Please agree to the Terms & Conditions and acknowledge the Privacy Policy to continue.');
+        return;
+      }
+
       if (usernameCheckState === 'taken') {
         setLocalError('That username is already taken. Please choose another one.');
         return;
@@ -639,7 +647,7 @@ export function AuthView({
     }
 
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
-  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode]);
+  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal]);
 
   const bannerMessage = localError || authError;
   const verifySubtitle =
@@ -876,6 +884,34 @@ export function AuthView({
                     onTrailingPress={() => setShowPassword((current) => !current)}
                     placeholder="Enter your password"
                   />
+
+                  {mode === 'signup' ? (
+                    <View style={styles.legalConsentRow}>
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: hasAcceptedLegal }}
+                        accessibilityLabel="Agree to the Terms and Conditions and acknowledge the Privacy Policy"
+                        hitSlop={6}
+                        onPress={() => {
+                          setHasAcceptedLegal(current => !current);
+                          setLocalError(null);
+                        }}
+                        style={[
+                          styles.legalCheckbox,
+                          isDark && { borderColor: theme.colors.inputBorder, backgroundColor: theme.colors.inputBackground },
+                          hasAcceptedLegal && { borderColor: isDark ? theme.colors.primary : palette.primary, backgroundColor: isDark ? theme.colors.primary : palette.primary },
+                        ]}
+                      >
+                        {hasAcceptedLegal ? <Ionicons name="checkmark" size={16} color={isDark ? '#0E1512' : '#FFFFFF'} /> : null}
+                      </Pressable>
+                      <Text style={[styles.legalConsentText, isDark && { color: theme.colors.textMuted }]}>
+                        I agree to the{' '}
+                        <Text onPress={() => setLegalDocument('terms')} style={[styles.legalLink, isDark && { color: theme.colors.primary }]}>Terms & Conditions</Text>
+                        {' '}and acknowledge the{' '}
+                        <Text onPress={() => setLegalDocument('privacy')} style={[styles.legalLink, isDark && { color: theme.colors.primary }]}>Privacy Policy</Text>.
+                      </Text>
+                    </View>
+                  ) : null}
                 </>
               )}
 
@@ -1122,6 +1158,8 @@ export function AuthView({
           />
         </SafeAreaView>
       </Modal>
+
+      <LegalDocumentModal document={legalDocument} onClose={() => setLegalDocument(null)} />
 
     </View>
   );
@@ -1880,6 +1918,34 @@ const styles = StyleSheet.create({
     color: palette.textMuted,
     marginTop: -2,
     marginBottom: 8,
+  },
+  legalConsentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  legalCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: palette.borderStrong,
+    backgroundColor: palette.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legalConsentText: {
+    flex: 1,
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(19),
+    color: palette.textMuted,
+  },
+  legalLink: {
+    color: palette.primary,
+    fontWeight: '800',
+    textDecorationLine: 'underline',
   },
   buttonWrap: {
     width: '100%',
