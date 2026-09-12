@@ -228,9 +228,6 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
   const [layoutMode, setLayoutMode] = useLearnLayoutPreference();
   const gridColumnCount = width >= 900 ? 3 : 2;
   const gridGap = scale(width < 360 ? 8 : 12);
-  const learnContentWidth = Math.max(0, width - scale(48));
-  const gridCardWidth = (learnContentWidth - gridGap * (gridColumnCount - 1)) / gridColumnCount;
-  const gridItemStyle = { width: layoutMode === 'grid' ? gridCardWidth : '100%' as const };
 
   const [cardsLoading, setCardsLoading] = React.useState(model.lessons.length === 0);
 
@@ -522,13 +519,22 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
             <LearnLayoutToggle value={layoutMode} onChange={setLayoutMode} />
           </View>
           {isCardsLoading ? (
-            <View style={layoutMode === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: gridGap } : {}}>
-              {[1, 2, 3].map((item) => (
-                <View key={item} style={gridItemStyle}>
-                  <LearnLessonSkeleton />
-                </View>
-              ))}
-            </View>
+            layoutMode === 'grid' ? (
+              <View style={{ gap: gridGap }}>
+                {Array.from({ length: Math.ceil(3 / gridColumnCount) }).map((_, rowIndex) => (
+                  <View key={`skeleton-row-${rowIndex}`} style={{ flexDirection: 'row', gap: gridGap }}>
+                    {Array.from({ length: gridColumnCount }).map((__, columnIndex) => {
+                      const itemIndex = rowIndex * gridColumnCount + columnIndex;
+                      return itemIndex < 3
+                        ? <View key={`skeleton-${itemIndex}`} style={{ flex: 1 }}><LearnLessonSkeleton /></View>
+                        : <View key={`skeleton-spacer-${itemIndex}`} style={{ flex: 1 }} />;
+                    })}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View>{[1, 2, 3].map((item) => <LearnLessonSkeleton key={item} />)}</View>
+            )
           ) : model.filteredLessons.length === 0 ? (
             <SurfaceCard style={{ padding: moderateScale(24), borderRadius: moderateScale(22), alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
               <Ionicons name="library-outline" size={scale(36)} color={isDark ? theme.colors.primary : '#126027'} style={{ marginBottom: verticalScale(8) }} />
@@ -536,41 +542,46 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
               <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13), color: theme.colors.textMuted }]}>Check back soon for new content.</Text>
             </SurfaceCard>
           ) : (
-            <View style={layoutMode === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: gridGap } : {}}>
-              {model.filteredLessons.map((lesson, index) => {
-                if (index === 0) {
-                  return (
-                    <View key={lesson.id} style={gridItemStyle}>
-                      <CoachMarkTarget
-                        name="firstLearnLesson"
-                        borderRadius={moderateScale(22)}
-                        active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
-                        onMeasure={(rect) => {
-                          model.setSpotlightTargetRect?.(rect);
-                        }}
-                        style={{ marginBottom: verticalScale(14) }}
-                      >
-                        <LearnLessonCard
-                          lesson={lesson}
-                          compact={layoutMode === 'grid'}
-                          style={{ marginBottom: 0 }}
-                          onPress={() => void model.openLesson(lesson.id)}
-                        />
-                      </CoachMarkTarget>
-                    </View>
-                  );
-                }
+            <View style={{ gap: layoutMode === 'grid' ? gridGap : 0 }}>
+              {(layoutMode === 'grid'
+                ? Array.from({ length: Math.ceil(model.filteredLessons.length / gridColumnCount) }, (_, rowIndex) =>
+                    model.filteredLessons.slice(rowIndex * gridColumnCount, (rowIndex + 1) * gridColumnCount)
+                  )
+                : model.filteredLessons.map((lesson) => [lesson])
+              ).map((lessonRow, rowIndex) => (
+                <View key={`lesson-row-${rowIndex}`} style={{ flexDirection: 'row', gap: layoutMode === 'grid' ? gridGap : 0 }}>
+                  {lessonRow.map((lesson, columnIndex) => {
+                    const lessonIndex = layoutMode === 'grid' ? rowIndex * gridColumnCount + columnIndex : rowIndex;
+                    const card = (
+                      <LearnLessonCard
+                        lesson={lesson}
+                        compact={layoutMode === 'grid'}
+                        style={{ marginBottom: layoutMode === 'grid' ? 0 : verticalScale(14) }}
+                        onPress={() => void model.openLesson(lesson.id)}
+                      />
+                    );
 
-                return (
-                  <View key={lesson.id} style={gridItemStyle}>
-                    <LearnLessonCard
-                      lesson={lesson}
-                      compact={layoutMode === 'grid'}
-                      onPress={() => void model.openLesson(lesson.id)}
-                    />
-                  </View>
-                );
-              })}
+                    return (
+                      <View key={lesson.id} style={{ flex: 1 }}>
+                        {lessonIndex === 0 ? (
+                          <CoachMarkTarget
+                            name="firstLearnLesson"
+                            borderRadius={moderateScale(22)}
+                            active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
+                            onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}
+                          >
+                            {card}
+                          </CoachMarkTarget>
+                        ) : card}
+                      </View>
+                    );
+                  })}
+                  {layoutMode === 'grid' && lessonRow.length < gridColumnCount &&
+                    Array.from({ length: gridColumnCount - lessonRow.length }).map((_, spacerIndex) => (
+                      <View key={`lesson-spacer-${spacerIndex}`} style={{ flex: 1 }} />
+                    ))}
+                </View>
+              ))}
             </View>
           )}
         </View>
