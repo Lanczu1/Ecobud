@@ -1933,6 +1933,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         const reply = await homeService.sendAssistantMessage(activeSession.token, outgoingText, history);
 
+        // [TEMPORARY DEBUG] Log raw response received by frontend to diagnose rendering issues
+        if (__DEV__) {
+          console.log('\n[EcoGuide Debug] Frontend received raw response:');
+          console.log(reply.reply);
+          console.log('---------------------------------------------------\n');
+        }
+
         setAssistantMessages((current) => [
           ...current,
           {
