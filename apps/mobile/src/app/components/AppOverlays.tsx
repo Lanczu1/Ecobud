@@ -27,6 +27,7 @@ import {
   RefreshControl,
   useWindowDimensions,
   AppState,
+  Linking,
 } from 'react-native';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -124,82 +125,117 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const COOLDOWN_DURATION_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
   const [attemptsLeft, setAttemptsLeft] = React.useState<number>(MAX_AI_ATTEMPTS);
   const [cooldownRemainingSec, setCooldownRemainingSec] = React.useState<number>(0);
+  const [attemptsLoaded, setAttemptsLoaded] = React.useState(false);
   const [beforeProofUrl, setBeforeProofUrl] = React.useState<string | null>(submission?.proofUrl || null);
+  const attemptsChallengeIdRef = React.useRef<string | null>(challenge?.id || null);
 
   const entryFadeAnim = React.useRef(new Animated.Value(0)).current;
   const processFadeAnim = React.useRef(new Animated.Value(0)).current;
 
-  // Load per-challenge AI attempts & 15-minute cooldown from mobileStorage
+  const getAttemptsStorageKey = React.useCallback((challengeId: string) => {
+    const userId = model.session?.user.id || 'anonymous';
+    return `ai_attempts_${userId}_${challengeId}`;
+  }, [model.session?.user.id]);
+
+  // Load the persisted attempt window for this account and challenge card.
   const loadChallengeAttempts = React.useCallback(async (challengeId: string) => {
     try {
-      const storageKey = `ai_attempts_${challengeId}`;
-      const raw = await mobileStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const { attemptsUsed = 0, resetAt = 0 } = parsed;
-        const now = Date.now();
+      const storageKey = getAttemptsStorageKey(challengeId);
+      const legacyStorageKey = `ai_attempts_${challengeId}`;
+      const token = model.session?.token;
 
-        // If cooldown resetAt exists and has passed, clear storage and restore full attempts
-        if (resetAt && now >= resetAt) {
-          await mobileStorage.removeItem(storageKey).catch(() => {});
-          setAttemptsLeft(MAX_AI_ATTEMPTS);
-          setCooldownRemainingSec(0);
-        } else if (resetAt && now < resetAt && attemptsUsed >= MAX_AI_ATTEMPTS) {
-          // All 3 attempts exhausted and cooldown is still active
-          setAttemptsLeft(0);
-          setCooldownRemainingSec(Math.ceil((resetAt - now) / 1000));
-        } else {
-          // Attempts used are saved (e.g. 1 or 2 attempts consumed), user still has remaining attempts!
-          const remaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
-          setAttemptsLeft(remaining);
-          setCooldownRemainingSec(0);
+      if (token) {
+        try {
+          const serverState = await ecobudApi.challengeAiAttempts(token, challengeId);
+          if (attemptsChallengeIdRef.current !== challengeId) return;
+          if (serverState.resetAt) {
+            const persistedValue = JSON.stringify({
+              attemptsUsed: MAX_AI_ATTEMPTS - serverState.attemptsLeft,
+              resetAt: new Date(serverState.resetAt).getTime(),
+            });
+            mobileStorage.setItemSync(storageKey, persistedValue);
+            await mobileStorage.setItem(storageKey, persistedValue);
+          } else {
+            await mobileStorage.removeItem(storageKey);
+          }
+          setAttemptsLeft(serverState.attemptsLeft);
+          setCooldownRemainingSec(serverState.cooldownRemainingSec);
+          return;
+        } catch {
+          // Offline/server unavailable: use the durable device cache below.
         }
-      } else {
+      }
+
+      let raw = await mobileStorage.getItem(storageKey);
+
+      if (!raw) {
+        raw = await mobileStorage.getItem(legacyStorageKey);
+        if (raw) {
+          mobileStorage.setItemSync(storageKey, raw);
+          await mobileStorage.setItem(storageKey, raw);
+          await mobileStorage.removeItem(legacyStorageKey);
+        }
+      }
+
+      if (attemptsChallengeIdRef.current !== challengeId) return;
+      if (!raw) {
         setAttemptsLeft(MAX_AI_ATTEMPTS);
         setCooldownRemainingSec(0);
+        return;
       }
-    } catch {
-      setAttemptsLeft(MAX_AI_ATTEMPTS);
-      setCooldownRemainingSec(0);
-    }
-  }, []);
 
-  // Save per-challenge AI attempt to mobileStorage
-  const recordFailedAttempt = React.useCallback(async (challengeId: string) => {
-    try {
-      const storageKey = `ai_attempts_${challengeId}`;
-      const raw = await mobileStorage.getItem(storageKey);
+      const parsed = JSON.parse(raw);
+      const attemptsUsed = Math.min(MAX_AI_ATTEMPTS, Math.max(0, Number(parsed.attemptsUsed) || 0));
+      const resetAt = Number(parsed.resetAt) || 0;
       const now = Date.now();
-      let attemptsUsed = 1;
-      let resetAt = 0;
 
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // If a previous cooldown expired, restart from 1
-        if (parsed.resetAt && now >= parsed.resetAt) {
-          attemptsUsed = 1;
-        } else {
-          attemptsUsed = (parsed.attemptsUsed || 0) + 1;
-        }
-      }
-
-      // ONLY trigger the 15-minute cooldown when all 3 attempts have been exhausted!
-      if (attemptsUsed >= MAX_AI_ATTEMPTS) {
-        resetAt = now + COOLDOWN_DURATION_MS;
-      }
-
-      await mobileStorage.setItem(storageKey, JSON.stringify({ attemptsUsed, resetAt }));
-      const newRemaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
-      setAttemptsLeft(newRemaining);
-      if (newRemaining <= 0 && resetAt > 0) {
-        setCooldownRemainingSec(Math.ceil((resetAt - now) / 1000));
-      } else {
+      if (!resetAt || now >= resetAt) {
+        await mobileStorage.removeItem(storageKey).catch(() => {});
+        if (attemptsChallengeIdRef.current !== challengeId) return;
+        setAttemptsLeft(MAX_AI_ATTEMPTS);
         setCooldownRemainingSec(0);
+        return;
       }
+
+      const remaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
+      setAttemptsLeft(remaining);
+      setCooldownRemainingSec(remaining === 0 ? Math.ceil((resetAt - now) / 1000) : 0);
     } catch {
-      setAttemptsLeft(prev => Math.max(0, prev - 1));
+      // Do not grant fresh attempts when persisted state is temporarily unreadable.
+      if (attemptsChallengeIdRef.current === challengeId) {
+        setAttemptsLeft(0);
+        setCooldownRemainingSec(1);
+      }
+    } finally {
+      if (attemptsChallengeIdRef.current === challengeId) setAttemptsLoaded(true);
     }
-  }, []);
+  }, [getAttemptsStorageKey, model.session?.token]);
+
+  // Consume and durably persist one AI scan before starting the network request.
+  const consumeAiAttempt = React.useCallback(async (challengeId: string) => {
+    const storageKey = getAttemptsStorageKey(challengeId);
+    const raw = await mobileStorage.getItem(storageKey);
+    const now = Date.now();
+    const parsed = raw ? JSON.parse(raw) : null;
+    const activeWindow = parsed && Number(parsed.resetAt) > now;
+    const previousUsed = activeWindow ? Math.max(0, Number(parsed.attemptsUsed) || 0) : 0;
+    if (previousUsed >= MAX_AI_ATTEMPTS) {
+      throw new Error('AI attempt limit is still in cooldown.');
+    }
+    const attemptsUsed = Math.min(MAX_AI_ATTEMPTS, previousUsed + 1);
+    const resetAt = activeWindow ? Number(parsed.resetAt) : now + COOLDOWN_DURATION_MS;
+    const persistedValue = JSON.stringify({ attemptsUsed, resetAt });
+
+    // The synchronous SQLite write protects the count from immediate back presses or crashes.
+    mobileStorage.setItemSync(storageKey, persistedValue);
+    await mobileStorage.setItem(storageKey, persistedValue);
+
+    if (attemptsChallengeIdRef.current === challengeId) {
+      const remaining = MAX_AI_ATTEMPTS - attemptsUsed;
+      setAttemptsLeft(remaining);
+      setCooldownRemainingSec(remaining === 0 ? Math.ceil((resetAt - now) / 1000) : 0);
+    }
+  }, [getAttemptsStorageKey]);
 
   // Live countdown timer for cooldown
   React.useEffect(() => {
@@ -222,6 +258,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => {
     setCapturedImage(null);
     setMockResult(null);
+    setAttemptsLoaded(false);
+    attemptsChallengeIdRef.current = challenge?.id || null;
     if (challenge?.id) {
       void loadChallengeAttempts(challenge.id);
     }
@@ -256,6 +294,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
   const [cameraSessionId, setCameraSessionId] = React.useState(0);
   const [isCameraReady, setIsCameraReady] = React.useState(false);
+  const [isRequestingCameraPermission, setIsRequestingCameraPermission] = React.useState(false);
+  const cameraPermissionRequestRef = React.useRef<Promise<boolean> | null>(null);
 
   const [isCameraMountAllowed, setIsCameraMountAllowed] = React.useState(true);
 
@@ -273,27 +313,49 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => {
     if (step !== 'capture' && step !== 'capture_after') {
       setIsCameraReady(false);
-    } else {
-      // Safety timeout: Ensure camera is marked ready even if native onCameraReady delays
-      const timer = setTimeout(() => {
-        setIsCameraReady(true);
-      }, 1200);
-      return () => clearTimeout(timer);
     }
-  }, [step, cameraSessionId]);
+  }, [step]);
 
-  // Automatically request camera permission when entering a camera step if not granted yet
-  React.useEffect(() => {
-    if ((step === 'capture' || step === 'capture_after') && !permission?.granted) {
-      void requestPermission();
-    }
-  }, [step, permission?.granted]);
+  const ensureCameraPermission = React.useCallback(async () => {
+    if (permission?.granted) return true;
+    if (cameraPermissionRequestRef.current) return cameraPermissionRequestRef.current;
+
+    const pendingRequest = (async () => {
+      setIsRequestingCameraPermission(true);
+      try {
+        const result = await requestPermission();
+        if (result.granted) return true;
+
+        if (!result.canAskAgain) {
+          Alert.alert(
+            'Camera Permission Required',
+            'Enable Camera for ECO-BUD in Settings, then choose “Allow only while using the app”.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+            ]
+          );
+        }
+        return false;
+      } finally {
+        setIsRequestingCameraPermission(false);
+        cameraPermissionRequestRef.current = null;
+      }
+    })();
+
+    cameraPermissionRequestRef.current = pendingRequest;
+    return pendingRequest;
+  }, [permission?.granted, requestPermission]);
 
   if (!challenge) {
     return null;
   }
 
   const handleStartRecognition = async () => {
+    if (!attemptsLoaded) {
+      Alert.alert('Please Wait', 'Restoring this challenge’s saved AI attempts.');
+      return;
+    }
     if (attemptsLeft <= 0 && cooldownRemainingSec > 0) {
       const minutes = Math.floor(cooldownRemainingSec / 60);
       const seconds = cooldownRemainingSec % 60;
@@ -304,13 +366,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       return;
     }
 
-    if (!permission?.granted) {
-      const result = await requestPermission();
-      if (!result.granted) {
-        Alert.alert('Permission Required', 'We need camera permission to scan items.');
-        return;
-      }
-    }
+    if (!(await ensureCameraPermission())) return;
 
     resetCameraSession();
     setMockResult(null);
@@ -333,6 +389,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setCapturedImage(uri);
     setProcessing(true);
     try {
+      await consumeAiAttempt(challenge.id);
+
       // Client-side image downscaling & compression to optimize Gemini token usage and upload speed
       let processedUri = uri;
       try {
@@ -349,6 +407,17 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       }
 
       const result = await model.analyzeChallengeImage(challenge.id, processedUri);
+      if (typeof result.attemptsLeft === 'number') {
+        const resetAt = result.resetAt ? new Date(result.resetAt).getTime() : 0;
+        const persistedValue = JSON.stringify({
+          attemptsUsed: MAX_AI_ATTEMPTS - result.attemptsLeft,
+          resetAt,
+        });
+        mobileStorage.setItemSync(getAttemptsStorageKey(challenge.id), persistedValue);
+        await mobileStorage.setItem(getAttemptsStorageKey(challenge.id), persistedValue);
+        setAttemptsLeft(result.attemptsLeft);
+        setCooldownRemainingSec(result.cooldownRemainingSec || 0);
+      }
       const enrichedResult = {
         ...result,
         imageUri: processedUri,
@@ -356,17 +425,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       if (result.passed && result.proofUrl) {
         setBeforeProofUrl(result.proofUrl);
         setMockResult(enrichedResult);
-        // Clear cooldown/attempt counter for this challenge on success
-        void mobileStorage.removeItem(`ai_attempts_${challenge.id}`).catch(() => {});
-        setAttemptsLeft(MAX_AI_ATTEMPTS);
-        setCooldownRemainingSec(0);
       } else {
         setMockResult(enrichedResult);
-        void recordFailedAttempt(challenge.id);
       }
     } catch (err: any) {
       setMockResult({ passed: false, object: 'Error', confidence: 0, reason: err.message || 'Failed to analyze image', imageUri: uri });
-      void recordFailedAttempt(challenge.id);
+      await loadChallengeAttempts(challenge.id);
     } finally {
       setProcessing(false);
       setStep('result');
@@ -385,11 +449,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       });
       const detectedQty = mockResult.detectedCount || 1;
       await model.handleSubmitChallengeProof(challenge.id, beforeProofUrl, undefined, detectedQty, mockResult.analysisToken, proofMetadata);
-      Alert.alert(
-        'Before Photo Submitted!',
-        `Your mission proof has been submitted. The admin will review it shortly.`,
-        [{ text: 'OK', onPress: handleClose }]
-      );
+      handleClose();
     } catch (err: any) {
       Alert.alert('Submission Error', err.message || 'Failed to submit challenge proof.');
     } finally {
@@ -403,11 +463,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     try {
       const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
       await model.handleSubmitChallengeAfterPhoto(challenge.id, uploadResult.proofUrl, challenge.progress?.submissionId);
-      Alert.alert(
-        'After Photo Submitted!',
-        'Your After photo was uploaded successfully and is now sent to the Admin for final verification. Once approved, you can claim your rewards!',
-        [{ text: 'OK', onPress: handleClose }]
-      );
+      handleClose();
     } catch (err: any) {
       console.error('Failed to submit after proof', err);
       Alert.alert('Submission Error', err.message || 'Failed to submit proof. Please try again.');
@@ -418,6 +474,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const handleCapture = async () => {
+    if (!(await ensureCameraPermission())) return;
     if (!isCameraReady) {
       Alert.alert('Camera Not Ready', 'Please wait a moment for the camera to initialize.');
       return;
@@ -435,8 +492,16 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         console.error('Camera error', err);
         Alert.alert('Camera Error', err.message || 'Failed to open camera');
       }
+    } else {
+      Alert.alert('Camera Not Ready', 'The camera is still starting. Please try again in a moment.');
     }
   };
+
+  const handleCameraMountError = React.useCallback((event: { message?: string }) => {
+    setIsCameraReady(false);
+    console.error('Camera mount error', event?.message);
+    Alert.alert('Camera Error', event?.message || 'The camera could not start. Close other apps using the camera and try again.');
+  }, []);
 
   const handleGallery = async () => {
     try {
@@ -1024,6 +1089,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                         facing="back"
                         ref={cameraRef}
                         onCameraReady={() => setIsCameraReady(true)}
+                        onMountError={handleCameraMountError}
                       />
                       {!isCameraReady && (
                         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
@@ -1042,6 +1108,17 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   <>
                     <Ionicons name="camera" size={64} color="#C8D8CE" />
                     <Text style={{ marginTop: 16, color: '#6B7A75', fontSize: 16 }}>No camera access</Text>
+                    <TouchableOpacity
+                      disabled={isRequestingCameraPermission}
+                      onPress={() => void ensureCameraPermission()}
+                      style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: '#10B981' }}
+                    >
+                      {isRequestingCameraPermission ? (
+                        <ActivityIndicator color="#FFF" />
+                      ) : (
+                        <Text style={{ color: '#FFF', fontWeight: '800' }}>Allow Camera Access</Text>
+                      )}
+                    </TouchableOpacity>
                   </>
                 )}
 
@@ -1288,7 +1365,13 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
             {isPreliminaryApproved ? (
               !submission?.afterProofUrl ? (
-                <PrimaryButton label="Take After Photo" onPress={() => setStep('capture_after')} />
+                <PrimaryButton label="Take After Photo" onPress={() => {
+                  void ensureCameraPermission().then((granted) => {
+                    if (!granted) return;
+                    resetCameraSession();
+                    setStep('capture_after');
+                  });
+                }} />
               ) : (
                 <View style={{
                   backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',

@@ -1927,9 +1927,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
       setSendingMessage(true);
 
       try {
-        // Build conversation history for the AI (last 10 messages, converted to {role, content})
-        const currentMessages = [...assistantMessages, userMessage];
-        const history = currentMessages.slice(-10).map((m) => ({
+        // Send only turns that occurred before the current message. The API
+        // appends outgoingText as the current user turn after this history.
+        const history = assistantMessages.slice(-10).map((m) => ({
           role: m.role as 'user' | 'assistant',
           content: m.text,
         }));

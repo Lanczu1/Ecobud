@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { classifyEcoGuideScope, getEcoGuideReply, type EcoGuideScope } from './ecoGuideService';
+import {
+  classifyEcoGuideScope,
+  getEcoGuideReply,
+  validateEcoGuideResponse,
+  type EcoGuideScope,
+} from './ecoGuideService';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,7 +74,7 @@ describe('getEcoGuideReply', () => {
   // -------------------------------------------------------------------------
   it('returns the Mistral response when the API call succeeds', async () => {
     const mockContent = 'Rinse your containers before recycling them!';
-    vi.spyOn(globalThis, 'fetch')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(scopeResponse('IN_SCOPE', 'recycling'))
       .mockResolvedValueOnce(mistralSuccessResponse(mockContent));
 
@@ -79,6 +84,90 @@ describe('getEcoGuideReply', () => {
     expect(result.quickReplies).toBeDefined();
     expect(result.quickReplies.length).toBeGreaterThan(0);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+
+    const mainRequest = fetchSpy.mock.calls[1][1] as RequestInit;
+    const mainBody = JSON.parse(mainRequest.body as string);
+    expect(mainBody.messages).toHaveLength(2);
+    expect(mainBody.messages[0].role).toBe('system');
+    expect(mainBody.messages[1]).toEqual({ role: 'user', content: 'How do I recycle?' });
+  });
+
+  it('preserves previous context and appends a follow-up question exactly once', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(scopeResponse('IN_SCOPE', 'recycling'))
+      .mockResolvedValueOnce(mistralSuccessResponse('Plastic bottles are often recyclable.'));
+    const history = [
+      { role: 'user' as const, content: 'What goes in recycling?' },
+      { role: 'assistant' as const, content: 'Clean paper, cans, glass, and accepted plastics.' },
+    ];
+
+    await getEcoGuideReply('What about bottles?', history);
+
+    const mainRequest = fetchSpy.mock.calls[1][1] as RequestInit;
+    const mainBody = JSON.parse(mainRequest.body as string);
+    expect(mainBody.messages.slice(1)).toEqual([
+      ...history,
+      { role: 'user', content: 'What about bottles?' },
+    ]);
+    expect(mainBody.messages.filter(
+      (message: { role: string; content: string }) =>
+        message.role === 'user' && message.content === 'What about bottles?',
+    )).toHaveLength(1);
+  });
+
+  it('keeps ten prior messages chronological and appends the current turn once', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(scopeResponse('IN_SCOPE', 'recycling'))
+      .mockResolvedValueOnce(mistralSuccessResponse('Here is the next answer.'));
+    const history = Array.from({ length: 10 }, (_, index) => ({
+      role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+      content: `Previous message ${index + 1}`,
+    }));
+
+    await getEcoGuideReply('Current recycling question', history);
+
+    const mainRequest = fetchSpy.mock.calls[1][1] as RequestInit;
+    const mainBody = JSON.parse(mainRequest.body as string);
+    expect(mainBody.messages.slice(1, -1)).toEqual(history);
+    expect(mainBody.messages.at(-1)).toEqual({
+      role: 'user',
+      content: 'Current recycling question',
+    });
+    expect(mainBody.messages.filter(
+      (message: { role: string; content: string }) =>
+        message.role === 'user' && message.content === 'Current recycling question',
+    )).toHaveLength(1);
+  });
+
+  it.each(['', ' ', '\n', 'La'])('replaces invalid model output with the reliability fallback: %j', async (content) => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(scopeResponse('IN_SCOPE', 'recycling'))
+      .mockResolvedValueOnce(mistralSuccessResponse(content));
+
+    const result = await getEcoGuideReply('What goes in recycling?');
+
+    expect(result.reply).toContain("couldn't generate a reliable response");
+    expect(result.reply).not.toBe(content);
+  });
+
+  it('logs safe rejection metadata without user or generated content', async () => {
+    const warningSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(scopeResponse('IN_SCOPE', 'recycling'))
+      .mockResolvedValueOnce(mistralSuccessResponse('La'));
+
+    await getEcoGuideReply('What goes in recycling?');
+
+    const rejectionLog = warningSpy.mock.calls
+      .map(([entry]) => String(entry))
+      .find((entry) => entry.includes('eco_guide_output_rejected'));
+    expect(rejectionLog).toBeDefined();
+    expect(JSON.parse(rejectionLog!)).toMatchObject({
+      event: 'eco_guide_output_rejected',
+      reason: 'too_short',
+      responseLength: 2,
+    });
+    expect(rejectionLog).not.toContain('What goes in recycling?');
   });
 
   // -------------------------------------------------------------------------
@@ -147,6 +236,50 @@ describe('getEcoGuideReply', () => {
     // Should get a fallback reply
     expect(result.reply).toBeTruthy();
     expect(result.reply).toContain('composting');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Main-response validator tests
+// ---------------------------------------------------------------------------
+
+describe('validateEcoGuideResponse', () => {
+  it.each(['', ' ', '\n'])('rejects empty output: %j', (content) => {
+    expect(validateEcoGuideResponse(content)).toEqual({ valid: false, reason: 'empty' });
+  });
+
+  it.each(['La', 'D', 'ay'])('rejects unusable letter fragments: %s', (content) => {
+    expect(validateEcoGuideResponse(content)).toEqual({ valid: false, reason: 'too_short' });
+  });
+
+  it.each([
+    '\u0000broken',
+    'Damaged \uFFFD response',
+    '--------',
+    'aaaaaaaa',
+  ])('rejects obviously malformed output: %j', (content) => {
+    expect(validateEcoGuideResponse(content)).toEqual({ valid: false, reason: 'malformed' });
+  });
+
+  it('rejects an unmistakably off-topic answer', () => {
+    expect(validateEcoGuideResponse('The capital of France is Paris.')).toEqual({
+      valid: false,
+      reason: 'scope_failure',
+    });
+  });
+
+  it.each([
+    'Yes, plastic bottles can be recycled.',
+    'Try separating biodegradable and non-biodegradable waste.',
+    'Reduce, reuse, and recycle! 🌱',
+    'Oo, maaaring i-recycle ang malinis na plastic bottle.',
+    '- Rinse containers\n- Flatten cardboard\n- Check local rules',
+    '**Composting** turns food scraps into useful soil amendment.',
+    'Great work! 🌱♻️',
+    'Separate wet waste first.\nThen place recyclables in the correct bin.',
+    'No.',
+  ])('accepts legitimate concise, multilingual, Markdown, emoji, or multiline output: %j', (content) => {
+    expect(validateEcoGuideResponse(content)).toEqual({ valid: true });
   });
 });
 

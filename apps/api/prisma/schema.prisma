@@ -9,49 +9,50 @@ datasource db {
 }
 
 model User {
-  notificationEvents NotificationEvent[]
-  notificationDevices NotificationDevice[]
-  verifiedAt DateTime? @map("verified_at")
-  id                           String                @id @default(cuid())
+  notificationEvents           NotificationEvent[]
+  notificationDevices          NotificationDevice[]
+  verifiedAt                   DateTime?                 @map("verified_at")
+  id                           String                    @id @default(cuid())
   name                         String
-  email                        String                @unique
-  passwordHash                 String                @map("password")
-  sessionVersion               Int                   @default(0)
-  googleIdentityId             String?               @unique
-  role                         UserRole              @default(user)
-  status                       UserStatus            @default(pending)
-  points                       Int                   @default(0)
-  currentStreak                Int                   @default(0) @map("streak_count")
-  lastActionDate               DateTime?             @map("last_action_date")
-  createdAt                    DateTime              @default(now()) @map("created_at")
-  updatedAt                    DateTime              @updatedAt @map("updated_at")
-  reviewedChallengeSubmissions ChallengeSubmission[] @relation("ModeratedChallengeSubmissions")
-  challengeSubmissions         ChallengeSubmission[] @relation("SubmittedChallengeProofs")
-  managedEvents                Event[]               @relation("ManagedEvents")
+  email                        String                    @unique
+  passwordHash                 String                    @map("password")
+  sessionVersion               Int                       @default(0)
+  googleIdentityId             String?                   @unique
+  role                         UserRole                  @default(user)
+  status                       UserStatus                @default(pending)
+  points                       Int                       @default(0)
+  currentStreak                Int                       @default(0) @map("streak_count")
+  lastActionDate               DateTime?                 @map("last_action_date")
+  createdAt                    DateTime                  @default(now()) @map("created_at")
+  updatedAt                    DateTime                  @updatedAt @map("updated_at")
+  reviewedChallengeSubmissions ChallengeSubmission[]     @relation("ModeratedChallengeSubmissions")
+  challengeSubmissions         ChallengeSubmission[]     @relation("SubmittedChallengeProofs")
+  managedEvents                Event[]                   @relation("ManagedEvents")
   eventRegistrations           EventRegistration[]
   habitCheckIns                HabitCheckIn[]
   profile                      Profile?
-  updatedSettings              SystemSetting[]       @relation("SystemSettingUpdates")
+  updatedSettings              SystemSetting[]           @relation("SystemSettingUpdates")
   transparencyLogs             TransparencyLog[]
   badges                       UserBadge[]
   challengeProgress            UserChallenge[]
   auditLogs                    AuditLog[]
   lessonProgress               UserLessonProgress[]
-  authoredLessons              Lesson[]              @relation("LessonAuthor")
+  authoredLessons              Lesson[]                  @relation("LessonAuthor")
   presenceSessions             PresenceSession[]
   stats                        UserStats?
   weeklyGoal                   UserWeeklyGoal?
   eventSubmissions             EventSubmission[]
   rewardTransactions           RewardTransaction[]
   notifications                Notification[]
+  challengeAiAttemptLimits     ChallengeAiAttemptLimit[]
   giveAndGetItems              GiveAndGetItem[]
   swapListings                 SwapListing[]
-  swapRequestsSent            SwapRequest[] @relation("SwapRequestFrom")
-  swapRequestsReceived        SwapRequest[] @relation("SwapRequestTo")
+  swapRequestsSent             SwapRequest[]             @relation("SwapRequestFrom")
+  swapRequestsReceived         SwapRequest[]             @relation("SwapRequestTo")
 
-  @@map("users")
   @@index([role, createdAt], map: "users_role_created_at_idx")
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
+  @@map("users")
 }
 
 model Profile {
@@ -175,7 +176,7 @@ model UserWeeklyGoal {
 }
 
 model Challenge {
-  id                      String                @id @default(cuid())
+  id                      String                    @id @default(cuid())
   title                   String
   description             String
   difficulty              String
@@ -184,24 +185,25 @@ model Challenge {
   endDate                 DateTime?
   imageUrl                String?
   badgeLabel              String?
-  active                  Boolean               @default(true)
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  ecoCoinReward           Int                   @default(0)
-  expReward               Int                   @default(0)
+  active                  Boolean                   @default(true)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  ecoCoinReward           Int                       @default(0)
+  expReward               Int                       @default(0)
   aiDetectionTargets      String[]
-  aiMinimumConfidence     Int?                  @default(80)
-  type                    String                @default("GENERAL")
-  isFeatured              Boolean               @default(false)
-  availableQuantity       Int                   @default(50) @map("available_quantity")
-  weeklyIncrementQuantity Int                   @default(50) @map("weekly_increment_quantity")
-  quantityUnit            String                @default("bottles") @map("quantity_unit")
-  lastCycleKey            String?               @map("last_cycle_key")
-  collectionPointName     String?               @default("Municipal Waste Collection Center") @map("collection_point_name")
-  collectionPointLat      Float?                @map("collection_point_lat")
-  collectionPointLng      Float?                @map("collection_point_lng")
-  requireLocation         Boolean               @default(false) @map("require_location")
+  aiMinimumConfidence     Int?                      @default(80)
+  type                    String                    @default("GENERAL")
+  isFeatured              Boolean                   @default(false)
+  availableQuantity       Int                       @default(50) @map("available_quantity")
+  weeklyIncrementQuantity Int                       @default(50) @map("weekly_increment_quantity")
+  quantityUnit            String                    @default("bottles") @map("quantity_unit")
+  lastCycleKey            String?                   @map("last_cycle_key")
+  collectionPointName     String?                   @default("Municipal Waste Collection Center") @map("collection_point_name")
+  collectionPointLat      Float?                    @map("collection_point_lat")
+  collectionPointLng      Float?                    @map("collection_point_lng")
+  requireLocation         Boolean                   @default(false) @map("require_location")
   instances               ChallengeInstance[]
+  aiAttemptLimits         ChallengeAiAttemptLimit[]
 
   @@index([active, startDate, endDate])
   @@index([active, isFeatured])
@@ -209,20 +211,36 @@ model Challenge {
 }
 
 model ChallengeInstance {
-  id                  String                @id @default(cuid())
-  challengeId         String
-  startDate           DateTime
-  endDate             DateTime
-  status              String                @default("UPCOMING") // UPCOMING, OPEN, CLOSED
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  challenge           Challenge             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  userChallenges      UserChallenge[]
-  submissions         ChallengeSubmission[]
+  id             String                @id @default(cuid())
+  challengeId    String
+  startDate      DateTime
+  endDate        DateTime
+  status         String                @default("UPCOMING") // UPCOMING, OPEN, CLOSED
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  challenge      Challenge             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userChallenges UserChallenge[]
+  submissions    ChallengeSubmission[]
 
   @@unique([challengeId, startDate, endDate])
   @@index([challengeId, status])
   @@index([startDate, endDate])
+}
+
+model ChallengeAiAttemptLimit {
+  userId       String    @map("user_id")
+  challengeId  String    @map("challenge_id")
+  attemptsUsed Int       @default(0) @map("attempts_used")
+  resetAt      DateTime  @map("reset_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, challengeId])
+  @@index([challengeId])
+  @@index([resetAt])
+  @@map("challenge_ai_attempt_limits")
 }
 
 model UserChallenge {
@@ -332,28 +350,28 @@ model UserBadge {
 }
 
 model Event {
-  isPublished Boolean @default(true) @map("is_published")
-  id              String              @id @default(cuid())
-  title           String
-  description     String
-  location        String
-  startDatetime   DateTime            @map("start_datetime")
-  endDatetime     DateTime            @map("end_datetime")
-  capacity        Int
-  ecoCoinsReward  Int                 @default(0) @map("eco_coins_reward")
-  expReward       Int                 @default(0) @map("exp_reward")
-  managedById     String              @map("managed_by_id")
-  imageUrl        String?
-  latitude        Float?
-  longitude       Float?
-  isFeatured      Boolean             @default(false) @map("is_featured")
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  managedBy       User                @relation("ManagedEvents", fields: [managedById], references: [id], onDelete: Cascade)
-  registrations   EventRegistration[]
-  qrCodes         EventQrCode[]
-  submissions     EventSubmission[]
-  rewards         RewardTransaction[]
+  isPublished    Boolean             @default(true) @map("is_published")
+  id             String              @id @default(cuid())
+  title          String
+  description    String
+  location       String
+  startDatetime  DateTime            @map("start_datetime")
+  endDatetime    DateTime            @map("end_datetime")
+  capacity       Int
+  ecoCoinsReward Int                 @default(0) @map("eco_coins_reward")
+  expReward      Int                 @default(0) @map("exp_reward")
+  managedById    String              @map("managed_by_id")
+  imageUrl       String?
+  latitude       Float?
+  longitude      Float?
+  isFeatured     Boolean             @default(false) @map("is_featured")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  managedBy      User                @relation("ManagedEvents", fields: [managedById], references: [id], onDelete: Cascade)
+  registrations  EventRegistration[]
+  qrCodes        EventQrCode[]
+  submissions    EventSubmission[]
+  rewards        RewardTransaction[]
 
   @@index([startDatetime, endDatetime])
   @@index([isFeatured])
@@ -376,28 +394,28 @@ model EventRegistration {
 }
 
 model EventQrCode {
-  id          String   @id @default(cuid())
-  eventId     String   @map("event_id")
-  qrData      String   @map("qr_data")
-  expiresAt   DateTime @map("expires_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  eventId   String   @map("event_id")
+  qrData    String   @map("qr_data")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@map("event_qr_codes")
 }
 
 model EventSubmission {
-  id                   String                  @id @default(cuid())
-  userId               String                  @map("user_id")
-  eventId              String                  @map("event_id")
-  attendanceImageUrl   String                  @map("attendance_image_url")
-  qrVerified           Boolean                 @default(false) @map("qr_verified")
-  status               EventSubmissionStatus   @default(pending)
-  rejectionReason      String?                 @map("rejection_reason")
-  submittedAt          DateTime                @default(now()) @map("submitted_at")
-  reviewedAt           DateTime?               @map("reviewed_at")
-  event                Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user                 User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String                @id @default(cuid())
+  userId             String                @map("user_id")
+  eventId            String                @map("event_id")
+  attendanceImageUrl String                @map("attendance_image_url")
+  qrVerified         Boolean               @default(false) @map("qr_verified")
+  status             EventSubmissionStatus @default(pending)
+  rejectionReason    String?               @map("rejection_reason")
+  submittedAt        DateTime              @default(now()) @map("submitted_at")
+  reviewedAt         DateTime?             @map("reviewed_at")
+  event              Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
   @@index([userId, status])
@@ -406,14 +424,14 @@ model EventSubmission {
 }
 
 model RewardTransaction {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  eventId     String?  @map("event_id")
-  type        RewardType
-  amount      Int
-  createdAt   DateTime @default(now()) @map("created_at")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event       Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  eventId   String?    @map("event_id")
+  type      RewardType
+  amount    Int
+  createdAt DateTime   @default(now()) @map("created_at")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     Event?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([eventId])
@@ -421,23 +439,23 @@ model RewardTransaction {
 }
 
 model Notification {
-  deliveries NotificationDelivery[]
-  type String @default("system")
-  priority String @default("low")
-  relatedId String? @map("related_id")
-  relatedType String? @map("related_type")
-  notificationKey String? @map("notification_key")
-  readAt DateTime? @map("read_at")
+  deliveries      NotificationDelivery[]
+  type            String                 @default("system")
+  priority        String                 @default("low")
+  relatedId       String?                @map("related_id")
+  relatedType     String?                @map("related_type")
+  notificationKey String?                @map("notification_key")
+  readAt          DateTime?              @map("read_at")
+  id              String                 @id @default(cuid())
+  userId          String                 @map("user_id")
+  title           String
+  message         String
+  isRead          Boolean                @default(false) @map("is_read")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, notificationKey], map: "notifications_user_key")
   @@index([userId, createdAt(sort: Desc)], map: "notifications_user_created")
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  title       String
-  message     String
-  isRead      Boolean  @default(false) @map("is_read")
-  createdAt   DateTime @default(now()) @map("created_at")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId, isRead])
   @@index([createdAt])
   @@map("notifications")
@@ -604,32 +622,32 @@ model RedeemItem {
 }
 
 model SwapListing {
-  id             String   @id @default(cuid())
-  userId         String   @map("user_id")
+  id             String             @id @default(cuid())
+  userId         String             @map("user_id")
   title          String
   category       String
   quantity       String
   condition      String
-  description    String  @default("")
-  lookingFor     String   @map("looking_for")
-  images         Json     @default("[]")
-  meetupMethod   String   @map("meetup_method")
-  meetupLocation String?  @map("meetup_location")
-  meetupLandmark String?  @map("meetup_landmark")
-  meetupNotes    String?  @map("meetup_notes")
+  description    String             @default("")
+  lookingFor     String             @map("looking_for")
+  images         Json               @default("[]")
+  meetupMethod   String             @map("meetup_method")
+  meetupLocation String?            @map("meetup_location")
+  meetupLandmark String?            @map("meetup_landmark")
+  meetupNotes    String?            @map("meetup_notes")
   city           String?
   province       String?
   latitude       Float?
   longitude      Float?
-  distanceKm     Float?   @map("distance_km")
-  isActive       Boolean  @default(true) @map("is_active")
-  approvalStatus String   @default("pending") @map("approval_status")
-  reportCount    Int      @default(0) @map("report_count")
-  isReported     Boolean  @default(false) @map("is_reported")
-  reportReason   String?  @map("report_reason")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  distanceKm     Float?             @map("distance_km")
+  isActive       Boolean            @default(true) @map("is_active")
+  approvalStatus String             @default("pending") @map("approval_status")
+  reportCount    Int                @default(0) @map("report_count")
+  isReported     Boolean            @default(false) @map("is_reported")
+  reportReason   String?            @map("report_reason")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   requests       SwapRequest[]
   conversations  SwapConversation[]
 
@@ -641,17 +659,17 @@ model SwapListing {
 }
 
 model SwapRequest {
-  id          String   @id @default(cuid())
-  listingId   String   @map("listing_id")
-  fromUserId  String   @map("from_user_id")
-  toUserId    String   @map("to_user_id")
-  status      String   @default("pending")
-  message     String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  listing     SwapListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  fromUser    User     @relation("SwapRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUser      User     @relation("SwapRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  id           String            @id @default(cuid())
+  listingId    String            @map("listing_id")
+  fromUserId   String            @map("from_user_id")
+  toUserId     String            @map("to_user_id")
+  status       String            @default("pending")
+  message      String?
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  listing      SwapListing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  fromUser     User              @relation("SwapRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser       User              @relation("SwapRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
   conversation SwapConversation?
 
   @@index([fromUserId])
@@ -661,18 +679,18 @@ model SwapRequest {
 }
 
 model SwapConversation {
-  id              String   @id @default(cuid())
-  swapRequestId   String   @unique @map("swap_request_id")
-  listingId       String   @map("listing_id")
-  user1Id         String   @map("user1_id")
-  user2Id         String   @map("user2_id")
-  status          String   @default("pending")
-  unreadCount     Int      @default(0) @map("unread_count")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  swapRequest     SwapRequest @relation(fields: [swapRequestId], references: [id], onDelete: Cascade)
-  listing         SwapListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  messages        SwapMessage[]
+  id            String        @id @default(cuid())
+  swapRequestId String        @unique @map("swap_request_id")
+  listingId     String        @map("listing_id")
+  user1Id       String        @map("user1_id")
+  user2Id       String        @map("user2_id")
+  status        String        @default("pending")
+  unreadCount   Int           @default(0) @map("unread_count")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  swapRequest   SwapRequest   @relation(fields: [swapRequestId], references: [id], onDelete: Cascade)
+  listing       SwapListing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  messages      SwapMessage[]
 
   @@index([user1Id])
   @@index([user2Id])
@@ -680,15 +698,15 @@ model SwapConversation {
 }
 
 model SwapMessage {
-  id              String   @id @default(cuid())
-  swapRequestId   String   @map("swap_request_id")
-  senderId        String   @map("sender_id")
-  text            String   @default("")
-  imageUrl        String?  @map("image_url")
-  timestamp       DateTime @default(now())
-  read            Boolean  @default(false)
-  delivered       Boolean  @default(true)
-  conversation    SwapConversation @relation(fields: [swapRequestId], references: [id], onDelete: Cascade)
+  id            String           @id @default(cuid())
+  swapRequestId String           @map("swap_request_id")
+  senderId      String           @map("sender_id")
+  text          String           @default("")
+  imageUrl      String?          @map("image_url")
+  timestamp     DateTime         @default(now())
+  read          Boolean          @default(false)
+  delivered     Boolean          @default(true)
+  conversation  SwapConversation @relation(fields: [swapRequestId], references: [id], onDelete: Cascade)
 
   @@index([swapRequestId])
   @@index([senderId])
@@ -696,64 +714,108 @@ model SwapMessage {
 }
 
 model RedeemRequest {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  itemId      String   @map("item_id")
-  coinCost    Int      @map("coin_cost")
-  status      String   @default("pending") // pending | approved | rejected | ready_to_claim | claimed
-  rejectReason String? @map("reject_reason")
-  userName    String   @default("") @map("user_name")
-  itemTitle   String   @default("") @map("item_title")
-  itemImage   String?  @map("item_image")
-  claimCode       String?  @map("claim_code")
-  claimLocation   String?  @map("claim_location")
-  claimUntil      DateTime? @map("claim_until")
-  claimInstructions String? @map("claim_instructions")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  itemId            String    @map("item_id")
+  coinCost          Int       @map("coin_cost")
+  status            String    @default("pending") // pending | approved | rejected | ready_to_claim | claimed
+  rejectReason      String?   @map("reject_reason")
+  userName          String    @default("") @map("user_name")
+  itemTitle         String    @default("") @map("item_title")
+  itemImage         String?   @map("item_image")
+  claimCode         String?   @map("claim_code")
+  claimLocation     String?   @map("claim_location")
+  claimUntil        DateTime? @map("claim_until")
+  claimInstructions String?   @map("claim_instructions")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([status])
   @@map("redeem_requests")
 }
 
-
-
 model NotificationEvent {
-  key String @id
-  type String
-  relatedId String @map("related_id")
-  title String
-  message String
-  userId String? @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  key         String   @id
+  type        String
+  relatedId   String   @map("related_id")
+  title       String
+  message     String
+  userId      String?  @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
   availableAt DateTime @default(now()) @map("available_at")
-  cursor String?
-  completed Boolean @default(false)
-  user User? @relation(fields:[userId], references:[id], onDelete:Cascade, onUpdate:NoAction)
+  cursor      String?
+  completed   Boolean  @default(false)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
   @@map("notification_events")
 }
+
 model NotificationDevice {
-  token String @id
-  userId String @map("user_id")
-  sessionVersion Int @map("session_version")
-  updatedAt DateTime @default(now()) @map("updated_at")
-  user User @relation(fields:[userId], references:[id], onDelete:Cascade, onUpdate:NoAction)
-  @@index([userId],map:"notification_devices_user")
+  token          String   @id
+  userId         String   @map("user_id")
+  sessionVersion Int      @map("session_version")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "notification_devices_user")
   @@map("notification_devices")
 }
+
 model NotificationDelivery {
-  id String @id
-  notificationId String @map("notification_id")
-  channel String
-  destination String
-  state String @default("pending")
-  attempts Int @default(0)
-  nextAt DateTime @default(now()) @map("next_at")
-  receipt String?
-  notification Notification @relation(fields:[notificationId],references:[id],onDelete:Cascade,onUpdate:NoAction)
-  @@unique([notificationId,channel,destination],map:"notification_deliveries_notification_id_channel_destination_key")
-  @@index([state,nextAt],map:"notification_delivery_pending")
+  id             String       @id
+  notificationId String       @map("notification_id")
+  channel        String
+  destination    String
+  state          String       @default("pending")
+  attempts       Int          @default(0)
+  nextAt         DateTime     @default(now()) @map("next_at")
+  receipt        String?
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([notificationId, channel, destination], map: "notification_deliveries_notification_id_channel_destination_key")
+  @@index([state, nextAt], map: "notification_delivery_pending")
   @@map("notification_deliveries")
 }
 
+model KnowledgeDocument {
+  id         String           @id @default(cuid())
+  title      String
+  category   String
+  sourceType String           @map("source_type")
+  sourceId   String?          @map("source_id")
+  language   String           @default("en-PH")
+  audience   String           @default("user")
+  version    Int              @default(1)
+  isActive   Boolean          @default(true) @map("is_active")
+  metadata   Json?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  chunks     KnowledgeChunk[]
+
+  @@index([category], map: "knowledge_documents_category_idx")
+  @@index([sourceType], map: "knowledge_documents_source_type_idx")
+  @@index([sourceId], map: "knowledge_documents_source_id_idx")
+  @@index([isActive], map: "knowledge_documents_is_active_idx")
+  @@index([language], map: "knowledge_documents_language_idx")
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  id             String                 @id @default(cuid())
+  documentId     String                 @map("document_id")
+  content        String
+  chunkIndex     Int                    @map("chunk_index")
+  embedding      Unsupported("vector")?
+  tokenCount     Int?                   @map("token_count")
+  characterCount Int?                   @map("character_count")
+  metadata       Json?
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  document       KnowledgeDocument      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex], map: "knowledge_chunks_document_chunk_key")
+  @@index([documentId], map: "knowledge_chunks_document_id_idx")
+  @@index([chunkIndex], map: "knowledge_chunks_chunk_index_idx")
+  @@map("knowledge_chunks")
+}

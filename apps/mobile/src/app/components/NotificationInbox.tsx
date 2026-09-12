@@ -11,6 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ecobudApi } from '../../shared/api/ecobudApi';
 import type { AppNotification, NotificationType } from '../types/notifications';
 import type { EcoBudMobileModel } from '../types/home';
@@ -22,6 +23,7 @@ import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
 const categories = [
   ['all', 'All'],
   ['unread', 'Unread'],
+  ['learning', 'Learn'],
   ['challenge', 'Challenges'],
   ['event', 'Events'],
 ] as const;
@@ -31,7 +33,6 @@ const moreCategories = [
   ['swap', 'Swap / GGH'],
   ['chat', 'Chat'],
   ['reward', 'Reward'],
-  ['learning', 'Learning'],
   ['streak', 'Streak'],
   ['leaderboard', 'Leaderboard'],
   ['system', 'System'],
@@ -216,6 +217,7 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   };
 
   const hasUnread = items.some((item) => !item.isRead);
+  const unreadCount = items.filter((item) => !item.isRead).length;
 
   return (
     <ScrollView
@@ -223,13 +225,24 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void load()} tintColor={c.primary} />}
     >
-      {/* Header Row */}
+      <LinearGradient colors={['#0F6B3A', '#16A34A', '#34D399']} style={inboxStyles.hero}>
+        <View style={inboxStyles.heroIcon}>
+          <Ionicons name="notifications" size={24} color="#FFFFFF" />
+          {hasUnread && <View style={inboxStyles.heroDot} />}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={inboxStyles.heroEyebrow}>ECOBUD UPDATES</Text>
+          <Text style={inboxStyles.heroTitle}>
+            {hasUnread ? `${unreadCount} new ${unreadCount === 1 ? 'update' : 'updates'}` : 'You’re all caught up'}
+          </Text>
+          <Text style={inboxStyles.heroSubtitle}>Fresh lessons, challenges, and community events—all in one place.</Text>
+        </View>
+      </LinearGradient>
+
       <View style={inboxStyles.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={[inboxStyles.headerTitle, { color: c.textPrimary }]}>Notifications</Text>
-          <Text style={[inboxStyles.headerSubtitle, { color: c.textSecondary }]}>
-            Stay updated on challenges, rewards, and eco events
-          </Text>
+          <Text style={[inboxStyles.headerTitle, { color: c.textPrimary }]}>Your activity</Text>
+          <Text style={[inboxStyles.headerSubtitle, { color: c.textSecondary }]}>Tap an update to jump straight to its content.</Text>
         </View>
         {hasUnread && (
           <TouchableOpacity
@@ -460,6 +473,42 @@ const inboxStyles = StyleSheet.create({
     paddingTop: verticalScale(16),
     paddingBottom: verticalScale(100),
   },
+  hero: {
+    minHeight: verticalScale(126),
+    borderRadius: moderateScale(24),
+    padding: moderateScale(18),
+    marginBottom: verticalScale(20),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(14),
+    shadowColor: '#15803D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  heroIcon: {
+    width: scale(50),
+    height: scale(50),
+    borderRadius: scale(25),
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroDot: {
+    position: 'absolute',
+    right: 5,
+    top: 5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FDE047',
+    borderWidth: 2,
+    borderColor: '#16A34A',
+  },
+  heroEyebrow: { color: 'rgba(255,255,255,0.76)', fontSize: responsiveFontSize(10), fontWeight: '800', letterSpacing: 1.2 },
+  heroTitle: { color: '#FFFFFF', fontSize: responsiveFontSize(22), fontWeight: '900', marginTop: 2 },
+  heroSubtitle: { color: 'rgba(255,255,255,0.88)', fontSize: responsiveFontSize(12), lineHeight: 17, marginTop: 4 },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

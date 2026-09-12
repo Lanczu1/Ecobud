@@ -72,6 +72,16 @@ export interface EcoGuideScopeClassification {
   confidence: number;
 }
 
+export type EcoGuideOutputRejectionReason =
+  | 'empty'
+  | 'too_short'
+  | 'malformed'
+  | 'scope_failure';
+
+export type EcoGuideOutputValidation =
+  | { valid: true }
+  | { valid: false; reason: EcoGuideOutputRejectionReason };
+
 interface EcoGuideReply {
   reply: string;
   quickReplies: string[];
@@ -141,6 +151,9 @@ const OUT_OF_SCOPE_REPLY =
 
 const UNCLEAR_SCOPE_REPLY =
   'Could you clarify how your request relates to ECOBUD, recycling, waste management, composting, or sustainability? 🌱';
+
+const RELIABILITY_FALLBACK_REPLY =
+  "Sorry, I couldn't generate a reliable response. Please try asking your ECOBUD question again. 🌱";
 
 const VALID_SCOPES = new Set<EcoGuideScope>(['IN_SCOPE', 'OUT_OF_SCOPE', 'UNCLEAR']);
 const VALID_INTENTS = new Set<EcoGuideIntent>([
@@ -232,6 +245,55 @@ function generateQuickReplies(replyText: string): string[] {
   }
 
   return matched.slice(0, 4);
+}
+
+// ---------------------------------------------------------------------------
+// Main-response validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies deliberately narrow, deterministic checks to the generated answer.
+ * The pre-call scope gate remains responsible for classifying user intent.
+ */
+export function validateEcoGuideResponse(content: string): EcoGuideOutputValidation {
+  const trimmed = content.trim();
+
+  if (!trimmed) {
+    return { valid: false, reason: 'empty' };
+  }
+
+  // Reject only bare one/two-letter fragments, while allowing concise answers
+  // such as "No." and normal short sentences.
+  if (/^\p{L}{1,2}$/u.test(trimmed)) {
+    return { valid: false, reason: 'too_short' };
+  }
+
+  const hasInvalidControlCharacter =
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(trimmed);
+  const hasReplacementCharacter = trimmed.includes('\uFFFD');
+  const hasMeaningfulContent = /[\p{L}\p{N}\p{Extended_Pictographic}]/u.test(trimmed);
+  const isRepeatedCharacterGarbage = /^(.)\1{7,}$/su.test(trimmed);
+
+  if (
+    hasInvalidControlCharacter ||
+    hasReplacementCharacter ||
+    !hasMeaningfulContent ||
+    isRepeatedCharacterGarbage
+  ) {
+    return { valid: false, reason: 'malformed' };
+  }
+
+  // High-precision examples of an unmistakably unrelated generated answer.
+  // Avoid broad keyword requirements so contextual, multilingual, Markdown,
+  // and concise environmental answers continue to pass.
+  const obviousOffTopicAnswer =
+    /^(?:the capital of [\p{L}\s]+ is\b|(?:michael jordan|lebron james) (?:is|was)\b|here(?:'s| is) (?:a )?(?:love|romantic) poem\b|roses are red\b|(?:as|i am) an unrestricted ai\b)/iu;
+
+  if (obviousOffTopicAnswer.test(trimmed)) {
+    return { valid: false, reason: 'scope_failure' };
+  }
+
+  return { valid: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +401,7 @@ async function callMistral(
     const data = (await response.json()) as MistralChatResponse;
     const content = data.choices?.[0]?.message?.content;
 
-    if (!content) {
+    if (typeof content !== 'string') {
       throw new Error('Empty response from Mistral');
     }
 
@@ -457,7 +519,7 @@ export async function getEcoGuideReply(
   userId?: string,
 ): Promise<EcoGuideReply> {
   const startTime = Date.now();
-  let source: 'mistral' | 'fallback' | 'scope_gate' = 'mistral';
+  let source: 'mistral' | 'fallback' | 'scope_gate' | 'output_fallback' = 'mistral';
   let tokenCount: number | null = null;
 
   const classification = await classifyEcoGuideScope(userMessage);
@@ -511,8 +573,22 @@ export async function getEcoGuideReply(
 
   try {
     const result = await callMistral(messages);
-    replyText = result.content;
     tokenCount = result.usage?.total_tokens ?? null;
+
+    const validation = validateEcoGuideResponse(result.content);
+    if (validation.valid) {
+      replyText = result.content;
+    } else {
+      replyText = RELIABILITY_FALLBACK_REPLY;
+      source = 'output_fallback';
+
+      console.warn(JSON.stringify({
+        event: 'eco_guide_output_rejected',
+        timestamp: new Date().toISOString(),
+        reason: validation.reason,
+        responseLength: result.content.length,
+      }));
+    }
   } catch (error) {
     // Log for server-side observability, but NEVER expose to the user
     console.error('[EcoGuide] Mistral call failed, using fallback:', error);

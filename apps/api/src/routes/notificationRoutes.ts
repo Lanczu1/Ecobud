@@ -22,7 +22,7 @@ notificationRoutes.patch('/:id/read', errorBoundary(async (req: AuthenticatedReq
         throw new HttpError(404, 'Notification not found.');
     res.json({ success: true });
 }));
-const device = z.object({ token: z.string().max(250).regex(/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/) });
+const device = z.object({ token: z.string().trim().min(20).max(4096).regex(/^[A-Za-z0-9_:\-.]+$/) });
 notificationRoutes.post('/devices', errorBoundary(async (req: AuthenticatedRequest, res) => {
     const { token } = device.parse(req.body);
     const u = req.auth!;

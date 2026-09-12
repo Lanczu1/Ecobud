@@ -8,8 +8,8 @@ Review the live database baseline, role privileges and existing notifications RL
 
 1. With the existing migration baseline reconciled, run `npm run db:migrate:deploy` and `npm run db:generate` in apps/api.
 2. Configure the existing GMAIL_USER and GMAIL_PASS. Set ECOBUD_WELCOME_URL to your HTTPS onboarding URL or `ecobud://`. SMTP credentials and the verification-code template are reused/preserved, respectively; the welcome template is separate.
-3. Configure EXPO_PUBLIC_EAS_PROJECT_ID in the mobile build (or the existing extra.eas.projectId). Configure FCM v1 credentials for Android and APNs credentials for iOS in the owning Expo project. Set EXPO_ACCESS_TOKEN on the API if enhanced push security is enabled for the Expo project.
-4. Rebuild the native app with expo-notifications. For a checked-in native Android project, sync the plugin configuration using the project's normal prebuild/native configuration process; review generated native diffs. Expo Go and web still support the in-app inbox but do not register remote push tokens.
+3. Configure the API with `FIREBASE_PROJECT_ID` and one server-only credential source: `FIREBASE_SERVICE_ACCOUNT_PATH` (recommended), `FIREBASE_SERVICE_ACCOUNT_JSON`, or `FIREBASE_SERVICE_ACCOUNT_BASE64`. Never bundle an Admin service account in the mobile app or commit it.
+4. Keep the Android Firebase client configuration at `apps/mobile/google-services.json`, then rebuild the native app with `expo-notifications`. Native Android registers its FCM device token directly; Expo Go and web still support the in-app inbox but do not register remote push tokens.
 5. Restart the API. Its notification worker runs every ten seconds. Keep at least one API instance running. Multiple workers claim disjoint jobs using PostgreSQL row locks.
 6. Run the staging acceptance checks below before enabling production traffic.
 
@@ -25,9 +25,9 @@ The mobile inbox supports all ten categories, compact filters, read state, times
 
 ## Delivery guarantees and operations
 
-Database notification creation is idempotent. Gmail SMTP and Expo do not provide an end-to-end exactly-once delivery guarantee. The worker retries explicit throttling, safe SMTP pre-acceptance failures and receipt queries. After ambiguous network failures or a process crash during sending, it marks delivery `uncertain` instead of risking a duplicate. A stable SMTP Message-ID is included, but is not claimed to guarantee recipient deduplication. This means an ambiguous delivery may require operator investigation and cannot be advertised as guaranteed delivery.
+Database notification creation is idempotent. Gmail SMTP and Firebase Cloud Messaging do not provide an end-to-end exactly-once delivery guarantee. The worker retries explicit Firebase throttling/server failures and safe SMTP pre-acceptance failures. After ambiguous network failures or a process crash during sending, it marks delivery `uncertain` instead of risking a duplicate. A stable SMTP Message-ID is included, but is not claimed to guarantee recipient deduplication. This means an ambiguous delivery may require operator investigation and cannot be advertised as guaranteed delivery.
 
-Expo tickets are saved and receipts polled without resending accepted pushes. DeviceNotRegistered removes the token. Permanent rejections are logged as failed. In-app records remain available regardless of email/push delivery state. Realtime notices reuse the existing user channel; foreground polling recovers missed realtime events.
+Firebase message IDs are saved after accepted sends. Invalid or unregistered FCM tokens are removed, transient Firebase quota/server failures are retried, and permanent rejections are logged as failed. In-app records remain available regardless of push delivery state. Realtime notices reuse the existing user channel; foreground polling recovers missed realtime events.
 
 Monitor `notification_worker_failed`, `notification_delivery_failed` and `notification_delivery_rejected`. Inspect counts grouped by state in notification_deliveries and incomplete notification_events. Jobs stop automatic retry after 20 attempts; investigate those alongside failed/uncertain jobs. Never reset uncertain push/email jobs to pending without reconciling provider evidence, since the first attempt may have succeeded. The worker logs delivery IDs and error classifications, not credentials, email addresses or device tokens.
 
@@ -42,6 +42,6 @@ Required live staging acceptance remains:
 - Save drafts and publish Learn, Challenge and Eco Event content. Confirm one record per eligible user, actual device push receipt, inbox update and exact navigation. Repeat publish requests and edit content; confirm no duplicates.
 - Exercise two member accounts for list/get/read/read-all isolation, and a non-admin account for denied publishing. Verify direct Supabase table access against the actual deployed policies.
 - Disable push permission, revoke a session and use an invalid token. Confirm publishing still succeeds, records remain, and invalid tokens are removed.
-- Confirm background, terminated and foreground push taps on physical Android/iOS devices, including cold login and deleted content destinations.
+- Confirm background, terminated and foreground push taps on a physical Android device, including cold login and deleted content destinations. Add Firebase Messaging native integration before enabling direct FCM registration on iOS.
 
-References: Expo push delivery and receipts: https://docs.expo.dev/push-notifications/sending-notifications/ ; native setup: https://docs.expo.dev/push-notifications/push-notifications-setup/ .
+References: Firebase Admin FCM delivery: https://firebase.google.com/docs/cloud-messaging/send/admin-sdk ; Expo native device tokens: https://docs.expo.dev/push-notifications/sending-notifications-custom/ .

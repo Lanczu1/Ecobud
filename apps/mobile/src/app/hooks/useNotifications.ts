@@ -7,7 +7,9 @@ import { ecobudApi } from '../../shared/api/ecobudApi';
 
 // Remote push notification token listeners & Expo push tokens are no longer supported in Expo Go (SDK 53+)
 const isExpoGo = isRunningInExpoGo() || Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-const nativePush = Platform.OS !== 'web' && !isExpoGo;
+// Direct FCM registration is currently configured for the checked-in Android app.
+// iOS needs a Firebase Messaging native integration before enabling this path.
+const nativePush = Platform.OS === 'android' && !isExpoGo;
 
 if (nativePush) {
   try {
@@ -52,9 +54,9 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
           if (deviceToken) await ecobudApi.unregisterPush(token, deviceToken);
           return;
         }
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
-        if (!projectId) return;
-        deviceToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        // Android returns an FCM registration token, which the API sends through
+        // Firebase Admin directly. This avoids routing device pushes through Expo.
+        deviceToken = String((await Notifications.getDevicePushTokenAsync()).data);
         if (alive) {
           await ecobudApi.registerPush(token, deviceToken);
           if (!alive) await ecobudApi.unregisterPush(token, deviceToken);

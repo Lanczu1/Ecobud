@@ -15,6 +15,7 @@
         "backgroundColor": "#126027"
       },
       "permissions": [
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
@@ -34,7 +35,13 @@
       "expo-image",
       "expo-secure-store",
       "expo-sqlite",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ECO-BUD to use your camera while you complete challenges."
+        }
+      ]
     ],
     "extra": {
       "eas": {

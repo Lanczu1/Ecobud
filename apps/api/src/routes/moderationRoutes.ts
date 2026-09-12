@@ -280,14 +280,7 @@ moderationRoutes.post(
       },
     );
 
-    await supabaseRealtimeService.publishUserNotice(item.userId, {
-      level: 'success',
-      message: `Your proof for "${item.challengeInstance?.challenge.title}" has been approved.`,
-      scope: 'moderation',
-      title: 'Challenge approved',
-    });
-
-    void sendDirectNotification({
+    await sendDirectNotification({
       userId: item.userId,
       type: 'challenge',
       title: 'Challenge approved',
@@ -328,14 +321,7 @@ moderationRoutes.post(
       },
     );
 
-    await supabaseRealtimeService.publishUserNotice(item.userId, {
-      level: 'warning',
-      message: `Your proof for "${item.challengeInstance?.challenge.title}" was rejected.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
-      scope: 'moderation',
-      title: 'Challenge review update',
-    });
-
-    void sendDirectNotification({
+    await sendDirectNotification({
       userId: item.userId,
       type: 'challenge',
       title: 'Challenge review update',
@@ -377,14 +363,7 @@ moderationRoutes.post(
       },
     );
 
-    await supabaseRealtimeService.publishUserNotice(item.userId, {
-      level: 'warning',
-      message: `Your proof for "${item.challengeInstance?.challenge.title}" needs attention.${payload.moderatorNotes ? ` Notes: ${payload.moderatorNotes}` : ''}`,
-      scope: 'moderation',
-      title: 'Challenge flagged',
-    });
-
-    void sendDirectNotification({
+    await sendDirectNotification({
       userId: item.userId,
       type: 'challenge',
       title: 'Challenge flagged',

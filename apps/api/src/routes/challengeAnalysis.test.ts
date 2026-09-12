@@ -6,7 +6,7 @@ import { errorResponder, HttpError } from '../http/errorResponder';
 import { detectionSettingsHash, signChallengeAnalysis } from '../security/challengeAnalysisToken';
 
 const { db, recognize, upload } = vi.hoisted(() => ({
-  db: { challengeInstance: { findUnique: vi.fn() }, challenge: { findUnique: vi.fn() }, challengeSubmission: { findFirst: vi.fn(), create: vi.fn() }, userChallenge: { upsert: vi.fn() }, $transaction: vi.fn() },
+  db: { challengeInstance: { findUnique: vi.fn() }, challenge: { findUnique: vi.fn() }, challengeSubmission: { findFirst: vi.fn(), create: vi.fn() }, userChallenge: { upsert: vi.fn() }, $transaction: vi.fn(), $queryRaw: vi.fn() },
   recognize: vi.fn(), upload: vi.fn(),
 }));
 vi.mock('../prismaClient', () => ({ prisma: db }));
@@ -34,6 +34,7 @@ beforeEach(() => {
   db.challengeSubmission.findFirst.mockResolvedValue(null);
   db.challengeSubmission.create.mockImplementation(async ({ data }) => ({ id: 'submission', ...data }));
   db.$transaction.mockImplementation(async (run) => run(db));
+  db.$queryRaw.mockResolvedValue([{ attempts_used: 1, reset_at: new Date(Date.now() + 15 * 60 * 1000) }]);
   recognize.mockResolvedValue({ passed: true, object: 'Plastic Wrapper', confidence: 95, detectedCount: 2, mimeType: 'image/png' });
   upload.mockResolvedValue(proofUrl);
 });
@@ -59,6 +60,20 @@ describe('AI analysis workflow security', () => {
     recognize.mockRejectedValueOnce(new HttpError(503, 'Image recognition is temporarily unavailable.'));
     await request(app).post('/week/analyze').set('Authorization', 'Bearer test').attach('image', png, 'photo.png').expect(503);
     expect(upload).not.toHaveBeenCalled();
+  });
+  it('enforces the persisted per-user, per-challenge attempt limit', async () => {
+    db.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ attempts_used: 3, reset_at: new Date(Date.now() + 10 * 60 * 1000) }]);
+    const result = await request(app).post('/week/analyze').set('Authorization', 'Bearer test').attach('image', png, 'photo.png').expect(429);
+    expect(result.body.message).toContain('AI attempt limit reached');
+    expect(recognize).not.toHaveBeenCalled();
+  });
+  it('returns the shared attempt state used by another device', async () => {
+    db.$queryRaw.mockResolvedValueOnce([{ attempts_used: 2, reset_at: new Date(Date.now() + 5 * 60 * 1000) }]);
+    const result = await request(app).get('/week/ai-attempts').set('Authorization', 'Bearer test').expect(200);
+    expect(result.body).toMatchObject({ attemptsLeft: 1, cooldownRemainingSec: 0 });
+    expect(result.body.resetAt).toBeTruthy();
   });
   it('rejects direct submissions without successful AI analysis', async () => {
     await request(app).post('/week/submissions').set('Authorization', 'Bearer test').send({ proofUrl }).expect(400);
