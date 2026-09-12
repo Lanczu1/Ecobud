@@ -1174,13 +1174,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   {collectionPointName}
                 </Text>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 8 }}>AI Recognition Attempts:</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="sparkles" size={16} color={theme.colors.primary} />
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.primary }}>Max {MAX_AI_ATTEMPTS} Tries</Text>
-                </View>
-              </View>
+
             </View>
 
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.textPrimary, marginBottom: 16 }}>Sample Images</Text>
@@ -2948,6 +2942,15 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     player.loop = false;
     player.timeUpdateEventInterval = 1;
   });
+  const [videoPlaying, setVideoPlaying] = React.useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = React.useState(0);
+  const [videoDuration, setVideoDuration] = React.useState(0);
+
+  const formatVideoTime = React.useCallback((seconds: number) => {
+    const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    const minutes = Math.floor(safeSeconds / 60);
+    return `${minutes}:${String(safeSeconds % 60).padStart(2, '0')}`;
+  }, []);
 
   // ── Crash-safe local progress state ──────────────────────────────────────────
   // localRestoredRef holds the timestamp/progress loaded from mobileStorage
@@ -2969,6 +2972,24 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       // Catch native bridge call errors when player is unmounted/destroyed
     }
     return false;
+  }, [player]);
+
+  const rewindVideo = React.useCallback(() => {
+    try {
+      const currentTime = player?.currentTime ?? 0;
+      safeSeekPlayer(Math.max(0, currentTime - 10));
+    } catch {
+      // The player may already be leaving the screen.
+    }
+  }, [player, safeSeekPlayer]);
+
+  const toggleVideoPlayback = React.useCallback(() => {
+    try {
+      if (player?.playing) player.pause();
+      else player?.play();
+    } catch {
+      // Ignore native player teardown races.
+    }
   }, [player]);
 
   // Load local storage on lesson open
@@ -3155,12 +3176,14 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   }, [doSave, model.selectedLesson?.videoUrl]);
 
   useEventListener(player, 'playingChange', ({ isPlaying }: { isPlaying: boolean }) => {
+    setVideoPlaying(isPlaying);
     if (!isPlaying) {
       doSave();
     }
   });
 
   useEventListener(player, 'playToEnd', () => {
+    setVideoPlaying(false);
     let pDur = 0;
     try { pDur = player?.duration ?? 0; } catch {}
     const duration = getVideoDurationForProgress(
@@ -3177,7 +3200,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   });
 
   useEventListener(player, 'sourceLoad', ({ duration }: { duration: number }) => {
-    if (duration > 0) cachedDurationRef.current = duration;
+    if (duration > 0) {
+      cachedDurationRef.current = duration;
+      setVideoDuration(duration);
+    }
   });
 
   useEventListener(player, 'statusChange', ({ status }: { status: string }) => {
@@ -3263,7 +3289,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           let playRate = 1;
           try { playRate = player.playbackRate || 1; } catch {}
 
-          if (curTime > maxWatchedTimeRef.current + Math.max(15, playRate * 5)) {
+          if (curTime > maxWatchedTimeRef.current + Math.max(2.5, playRate * 1.5)) {
             safeSeekPlayer(maxWatchedTimeRef.current);
             return;
           }
@@ -3328,13 +3354,15 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
       cachedDurationRef.current = curDuration;
 
-      // Prevent fast-forwarding ahead, with a reasonable buffer for JS thread pauses
-      if (curTime > maxWatchedTimeRef.current + Math.max(15, playRate * 5)) {
+      // Reject forward seeks immediately, while still allowing unrestricted rewind.
+      if (curTime > maxWatchedTimeRef.current + Math.max(2.5, playRate * 1.5)) {
         safeSeekPlayer(maxWatchedTimeRef.current);
         return;
       }
 
       lastKnownPlayerTimeRef.current = curTime;
+      setVideoCurrentTime(curTime);
+      setVideoDuration(curDuration);
 
       if (curTime > maxWatchedTimeRef.current) {
         maxWatchedTimeRef.current = curTime;
@@ -3481,8 +3509,42 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                   <VideoView
                     player={player as any}
                     style={{ width: '100%', height: 220, borderRadius: 16 }}
-                    {...({ allowsFullscreen: true, allowsPictureInPicture: true } as any)}
+                    {...({ nativeControls: false, allowsFullscreen: false, allowsPictureInPicture: false } as any)}
                   />
+                  <View style={{ backgroundColor: '#0B110E', paddingHorizontal: 14, paddingVertical: 10, gap: 8 }}>
+                    <View style={{ height: 4, borderRadius: 2, backgroundColor: '#314039', overflow: 'hidden' }}>
+                      <View
+                        style={{
+                          height: '100%',
+                          width: `${videoDuration > 0 ? Math.min(100, (videoCurrentTime / videoDuration) * 100) : 0}%`,
+                          backgroundColor: theme.colors.primary,
+                        }}
+                      />
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          accessibilityLabel="Go back 10 seconds"
+                          onPress={rewindVideo}
+                          style={{ width: 42, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1B2822' }}
+                        >
+                          <Ionicons name="play-back" size={21} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          accessibilityLabel={videoPlaying ? 'Pause video' : 'Play video'}
+                          onPress={toggleVideoPlayback}
+                          style={{ width: 42, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary }}
+                        >
+                          <Ionicons name={videoPlaying ? 'pause' : 'play'} size={21} color={isDark ? '#0E1512' : '#FFFFFF'} />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={{ color: '#D5DED9', fontSize: responsiveFontSize(12), fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                        {formatVideoTime(videoCurrentTime)} / {formatVideoTime(videoDuration)}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               ) : null}
               {/* Pages - only unlocked after video completes */}
