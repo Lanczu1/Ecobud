@@ -54,6 +54,7 @@ import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard, DiscoverChallengeSkeleton } from './DiscoverChallengeCard';
+import { LearnLessonCard } from './LearnLessonCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
@@ -65,6 +66,65 @@ import { triggerSelectionHaptic } from '../utils/haptics';
 const getValidImageUrl = (url: string | null | undefined) => {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
 };
+
+type ContentLayoutMode = 'grid' | 'list';
+
+function useContentLayoutPreference(storageKey: string, initialMode: ContentLayoutMode = 'list') {
+  const [layoutMode, setLayoutModeState] = useState<ContentLayoutMode>(() => {
+    const savedMode = mobileStorage.getItemSync(storageKey);
+    return savedMode === 'grid' || savedMode === 'list' ? savedMode : initialMode;
+  });
+
+  const setLayoutMode = (nextMode: ContentLayoutMode) => {
+    setLayoutModeState(nextMode);
+    mobileStorage.setItemSync(storageKey, nextMode);
+    void mobileStorage.setItem(storageKey, nextMode).catch((error) => {
+      console.warn(`Failed to save ${storageKey}:`, error);
+    });
+  };
+
+  return [layoutMode, setLayoutMode] as const;
+}
+
+function ContentLayoutToggle({ value, onChange, label }: {
+  value: ContentLayoutMode;
+  onChange: (mode: ContentLayoutMode) => void;
+  label: string;
+}) {
+  const { theme, isDark } = useTheme();
+
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={`${label} layout`}
+      style={[localStyles.layoutToggle, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}
+    >
+      {(['grid', 'list'] as const).map((mode) => {
+        const selected = value === mode;
+        return (
+          <TouchableOpacity
+            key={mode}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`Show ${label} as a ${mode}`}
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerSelectionHaptic();
+              onChange(mode);
+            }}
+            style={[localStyles.layoutToggleButton, selected && { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
+          >
+            <Ionicons
+              name={mode === 'grid' ? 'grid-outline' : 'list-outline'}
+              size={17}
+              color={selected ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted}
+            />
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
 
 // Local components used in Views
 export function BootView({ onFinish }: { onFinish?: () => void }) {
@@ -539,8 +599,15 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function LearnView({ model }: { model: EcoBudMobileModel }) {
+  const { theme } = useTheme();
+  const { width } = useWindowDimensions();
   const featuredLesson = model.lessons[0];
-  const activeLessons = model.lessons.slice(1, 3);
+  const availableLessons = model.lessons.slice(1);
+  const [layoutMode, setLayoutMode] = useContentLayoutPreference('ecobud_learn_layout');
+  const contentWidth = Math.max(0, width - scale(48));
+  const gridColumnCount = width >= 900 ? 3 : 2;
+  const gridGap = scale(width < 360 ? 8 : 12);
+  const gridCardWidth = (contentWidth - gridGap * (gridColumnCount - 1)) / gridColumnCount;
 
   return (
     <>
@@ -613,69 +680,27 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
 
-        <View style={[styles.rowBetween, { marginTop: 24 }]}>
+        <View style={[styles.rowBetween, { marginTop: 24, gap: scale(12) }]}>
           <View>
-            <Text style={styles.sectionHeadline}>Browse Categories</Text>
-            <Text style={styles.pageSubtitle}>Structured knowledge for a greener future</Text>
+            <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Explore Lessons</Text>
+            <Text style={[styles.pageSubtitle, { color: theme.colors.textMuted }]}>Structured knowledge for a greener future</Text>
           </View>
-          <TouchableOpacity><Text style={styles.taskMetaValueDark}>View All →</Text></TouchableOpacity>
+          <ContentLayoutToggle value={layoutMode} onChange={setLayoutMode} label="lessons" />
         </View>
 
-        <ImageBackground source={{ uri: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?q=80&w=800&auto=format&fit=crop' }} style={styles.categoryLargeCard} imageStyle={{ borderRadius: 24 }}>
-          <View style={styles.categoryLargeOverlay} />
-          <View style={styles.featuredProgramContent}>
-            <Text style={styles.categoryLargeTitle}>Waste Management Basics</Text>
-            <Text style={styles.categoryLargeDesc}>Master sorting, recycling, and composting like a pro.</Text>
-            <View style={{ flexDirection: 'row', gap: 16 }}>
-              <View style={styles.rowMeta}><Ionicons name="document-text" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> 12 Lessons</Text></View>
-              <View style={styles.rowMeta}><Ionicons name="time" size={14} color="#FFF" /><Text style={styles.metaTextWhite}> 4.5 Hours</Text></View>
-            </View>
-          </View>
-        </ImageBackground>
-
-        <View style={styles.categoryMediumCard}>
-          <View style={styles.badgeCircleLightGreen}><Ionicons name="leaf" size={18} color="#FFF" /></View>
-          <Text style={styles.categoryMediumTitle}>Sustainable Living 101</Text>
-          <Text style={styles.categoryMediumDesc}>Fundamental habits for an eco-conscious lifestyle.</Text>
-          <TouchableOpacity style={styles.categoryOutlineBtn}><Text style={styles.categoryOutlineBtnText}>Start Learning</Text></TouchableOpacity>
+        <View style={{ flexDirection: layoutMode === 'grid' ? 'row' : 'column', flexWrap: layoutMode === 'grid' ? 'wrap' : 'nowrap', gap: layoutMode === 'grid' ? gridGap : verticalScale(14), marginTop: verticalScale(16) }}>
+          {availableLessons.map((lesson) => (
+            <LearnLessonCard
+              key={lesson.id}
+              lesson={lesson}
+              onPress={() => void model.openLesson(lesson.id)}
+              style={{ width: layoutMode === 'grid' ? gridCardWidth : '100%', marginBottom: 0 }}
+            />
+          ))}
         </View>
 
-        <View style={styles.categorySmallCard}>
-          <Ionicons name="water" size={18} color="#126027" />
-          <Text style={styles.cardTitle}>Water Conservation</Text>
-          <Text style={styles.metaTextSmallDark}>Reducing domestic water usage and footprint.</Text>
-        </View>
-
-        <View style={styles.categorySmallCard}>
-          <Ionicons name="flash" size={18} color="#126027" />
-          <Text style={styles.cardTitle}>Renewable Energy</Text>
-          <Text style={styles.metaTextSmallDark}>Understanding solar, wind, and smart grids.</Text>
-        </View>
-
-        <View style={styles.categorySmallCard}>
-          <Ionicons name="basket" size={18} color="#126027" />
-          <Text style={styles.cardTitle}>Ethical Consumerism</Text>
-          <Text style={styles.metaTextSmallDark}>How to shop with impact and transparency.</Text>
-        </View>
-
-        <Text style={[styles.sectionHeadline, { marginTop: 24, marginBottom: 16 }]}>Active Courses</Text>
-
-        {activeLessons.map(lesson => (
-          <TouchableOpacity key={lesson.id} onPress={() => void model.openLesson(lesson.id)} style={styles.activeCourseRow}>
-            <Image source={{ uri: lesson.imageUrl ? `${ecobudApiOrigin}${lesson.imageUrl}` : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=200&auto=format&fit=crop' }} style={styles.courseThumb} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{lesson.title}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ flex: 1 }}><ProgressBar progress={lesson.progress || 0} /></View>
-                <Text style={styles.coursePercentText}>{lesson.progress || 0}% VIEWED</Text>
-              </View>
-            </View>
-            <Ionicons name="play-circle" size={32} color="#126027" />
-          </TouchableOpacity>
-        ))}
-
-        {activeLessons.length === 0 && (
-          <Text style={styles.metaTextSmall}>No active courses at the moment.</Text>
+        {availableLessons.length === 0 && (
+          <Text style={[styles.metaTextSmall, { color: theme.colors.textMuted, marginTop: verticalScale(16) }]}>No additional lessons are available at the moment.</Text>
         )}
 
         <View style={{ height: 100 }} />
@@ -820,13 +845,12 @@ export function GroupedChallengeSkeleton() {
 export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
-  const isTablet = width >= 600;
-
   const isCardsLoading = (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [contentLayout, setContentLayout] = useContentLayoutPreference('ecobud_challenges_layout');
   const viewMode = model.challengesViewMode;
   const setViewMode = model.setChallengesViewMode;
 
@@ -1027,6 +1051,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   }
 
   const currentActiveList = viewMode === 'Discover' ? discoverChallenges : [];
+  const challengeColumnCount = width >= 900 ? 3 : 2;
+  const challengeGridGap = scale(width < 360 ? 8 : 14);
+  const challengeContentWidth = Math.max(0, width - scale(48));
+  const challengeGridCardWidth = (challengeContentWidth - challengeGridGap * (challengeColumnCount - 1)) / challengeColumnCount;
 
   return (
     <>
@@ -1204,8 +1232,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
 
         {/* Headings */}
         {((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedGroups.length > 0)) && (
-          <View style={localStyles.challengeListHeading}>
-            <View>
+          <View style={[localStyles.challengeListHeading, { gap: scale(10) }]}>
+            <View style={{ flex: 1 }}>
               <Text style={[localStyles.challengeListTitle, { color: theme.colors.textPrimary }]}>
                 {isFiltering 
                   ? 'Search results' 
@@ -1219,9 +1247,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               {viewMode === 'My Tasks' && !isFiltering && <Text style={[localStyles.challengeListSubtitle, { color: theme.colors.textMuted }]}>Tap any mission card to expand or collapse active submissions.</Text>}
               {viewMode === 'History' && !isFiltering && <Text style={[localStyles.challengeListSubtitle, { color: theme.colors.textMuted }]}>Tap any completed mission card to view past completed submissions.</Text>}
             </View>
-            <Text style={[localStyles.challengeListCount, isDark && { backgroundColor: theme.colors.surfaceMuted, color: theme.colors.primary }]}>
-              {viewMode === 'Discover' ? currentActiveList.length : viewMode === 'My Tasks' ? inProgressGroups.length : completedGroups.length}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+              <Text style={[localStyles.challengeListCount, isDark && { backgroundColor: theme.colors.surfaceMuted, color: theme.colors.primary }]}>
+                {viewMode === 'Discover' ? currentActiveList.length : viewMode === 'My Tasks' ? inProgressGroups.length : completedGroups.length}
+              </Text>
+              {viewMode === 'Discover' && <ContentLayoutToggle value={contentLayout} onChange={setContentLayout} label="challenges" />}
+            </View>
           </View>
         )}
 
@@ -1262,19 +1293,19 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         {/* === VIEW MODE 1: DISCOVER TAB (ALL AVAILABLE CHALLENGES) === */}
         {viewMode === 'Discover' && (
           isCardsLoading ? (
-            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(14) } : {}}>
+            <View style={contentLayout === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: challengeGridGap } : {}}>
               {Array.from({ length: Math.max(3, currentActiveList.length || 0) }).map((_, idx) => (
-                <View key={`skel-${idx}`} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                <View key={`skel-${idx}`} style={{ width: contentLayout === 'grid' ? challengeGridCardWidth : '100%' }}>
                   <DiscoverChallengeSkeleton />
                 </View>
               ))}
             </View>
           ) : (
-            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(14) } : {}}>
+            <View style={contentLayout === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: challengeGridGap } : {}}>
               {currentActiveList.map((challenge, index) => {
               if (index === 0) {
                 return (
-                  <View key={challenge.uniqueId || challenge.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                  <View key={challenge.uniqueId || challenge.id} style={{ width: contentLayout === 'grid' ? challengeGridCardWidth : '100%' }}>
                     <CoachMarkTarget
                       name="featuredChallenge"
                       borderRadius={moderateScale(22)}
@@ -1286,7 +1317,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                     >
                       <DiscoverChallengeCard
                         challenge={challenge}
-                        isTablet={false}
+                        isTablet={contentLayout === 'grid'}
                         style={{ marginBottom: 0, width: '100%' }}
                         onPress={() => {
                           model.openChallengeMission(challenge);
@@ -1298,10 +1329,10 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
               }
 
               return (
-                <View key={challenge.uniqueId || challenge.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                <View key={challenge.uniqueId || challenge.id} style={{ width: contentLayout === 'grid' ? challengeGridCardWidth : '100%' }}>
                   <DiscoverChallengeCard
                     challenge={challenge}
-                    isTablet={false}
+                    isTablet={contentLayout === 'grid'}
                     style={{ width: '100%' }}
                     onPress={() => {
                       model.openChallengeMission(challenge);
@@ -3147,6 +3178,13 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 }
 
 const localStyles = StyleSheet.create({
+  layoutToggle: {
+    flexDirection: 'row', alignItems: 'center', padding: 3, borderRadius: 12, borderWidth: 1,
+  },
+  layoutToggleButton: {
+    width: 36, minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 9,
+    borderWidth: 1, borderColor: 'transparent',
+  },
   headerEyebrow: { color: '#4B8A5C', fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginBottom: 6 },
   headerTitle: { fontSize: 30, fontWeight: '900', color: '#153B22', letterSpacing: -0.7, lineHeight: 36 },
   headerSubtitle: { fontSize: 15, color: '#5F7367', marginTop: 7, lineHeight: 22 },

@@ -51,7 +51,7 @@ export function DiscoverChallengeCard({
       ]}
       onPress={onPress}
     >
-      <View style={cardStyles.discoverImageWrap}>
+      <View style={[cardStyles.discoverImageWrap, isTablet && cardStyles.discoverImageWrapCompact]}>
         {imageUrl ? (
           <FastImage source={{ uri: imageUrl }} style={cardStyles.discoverImage} contentFit="cover" />
         ) : (
@@ -76,7 +76,7 @@ export function DiscoverChallengeCard({
         )}
       </View>
 
-      <View style={cardStyles.discoverBody}>
+      <View style={[cardStyles.discoverBody, isTablet && cardStyles.discoverBodyCompact]}>
         <View style={cardStyles.discoverMetaRow}>
           <View style={[cardStyles.discoverCategoryBadge, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
             <Text style={[cardStyles.discoverCategoryText, { color: isDark ? theme.colors.primary : '#126027' }]}>{category}</Text>
@@ -88,14 +88,14 @@ export function DiscoverChallengeCard({
           )}
         </View>
 
-        <Text style={[cardStyles.discoverTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+        <Text style={[cardStyles.discoverTitle, isTablet && cardStyles.discoverTitleCompact, { color: theme.colors.textPrimary }]} numberOfLines={2}>
           {challenge.title}
         </Text>
-        <Text style={[cardStyles.discoverDescription, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+        <Text style={[cardStyles.discoverDescription, { color: theme.colors.textSecondary }]} numberOfLines={isTablet ? 1 : 2}>
           {challenge.description}
         </Text>
 
-        <View style={[cardStyles.discoverFooter, { borderTopColor: isDark ? theme.colors.border : '#F0FDF4' }]}>
+        <View style={[cardStyles.discoverFooter, isTablet && cardStyles.discoverFooterCompact, { borderTopColor: isDark ? theme.colors.border : '#F0FDF4' }]}>
           <View style={cardStyles.rewardSection}>
             <Text style={[cardStyles.discoverRewardLabel, { color: theme.colors.textMuted }]}>REWARD</Text>
             <View style={cardStyles.discoverRewardRow}>
@@ -114,7 +114,7 @@ export function DiscoverChallengeCard({
           </View>
 
           <View style={cardStyles.footerRight}>
-            <View style={[cardStyles.discoverStartButton, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}>
+            <View style={[cardStyles.discoverStartButton, isTablet && cardStyles.discoverStartButtonCompact, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}>
               <Text style={[cardStyles.discoverStartText, { color: isDark ? '#0E1512' : '#FFFFFF' }]}>
                 {isImageMission ? 'OPEN' : 'START'}
               </Text>
@@ -149,6 +149,9 @@ const cardStyles = StyleSheet.create({
     height: verticalScale(144),
     backgroundColor: '#DCFCE7',
     position: 'relative',
+  },
+  discoverImageWrapCompact: {
+    height: verticalScale(108),
   },
   discoverImage: {
     width: '100%',
@@ -209,6 +212,10 @@ const cardStyles = StyleSheet.create({
     padding: scale(16),
     paddingTop: verticalScale(14),
   },
+  discoverBodyCompact: {
+    padding: scale(11),
+    paddingTop: verticalScale(10),
+  },
   discoverMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -263,6 +270,10 @@ const cardStyles = StyleSheet.create({
     lineHeight: responsiveFontSize(24),
     letterSpacing: -0.25,
   },
+  discoverTitleCompact: {
+    fontSize: responsiveFontSize(15),
+    lineHeight: responsiveFontSize(19),
+  },
   discoverDescription: {
     color: '#65736C',
     fontSize: responsiveFontSize(13),
@@ -275,6 +286,12 @@ const cardStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: verticalScale(16),
     gap: scale(10),
+  },
+  discoverFooterCompact: {
+    alignItems: 'stretch',
+    flexDirection: 'column',
+    gap: verticalScale(9),
+    marginTop: verticalScale(10),
   },
   rewardSection: {
     flex: 1,
@@ -352,6 +369,10 @@ const cardStyles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 4,
     elevation: 2,
+  },
+  discoverStartButtonCompact: {
+    alignSelf: 'stretch',
+    minHeight: verticalScale(38),
   },
   discoverStartText: {
     color: '#FFFFFF',

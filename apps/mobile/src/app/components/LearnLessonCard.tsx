@@ -17,6 +17,7 @@ interface LearnLessonCardProps {
   lesson: LessonWithProgress;
   onPress: () => void;
   style?: any;
+  compact?: boolean;
 }
 
 const getActionLabel = (status: LessonWithProgress['status']) => {
@@ -43,7 +44,7 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
   return 'Not Started';
 };
 
-export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps) {
+export function LearnLessonCard({ lesson, onPress, style, compact = false }: LearnLessonCardProps) {
   const { theme, isDark } = useTheme();
   const { isSmall } = useResponsive();
   const [imgError, setImgError] = React.useState(false);
@@ -75,8 +76,8 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
   const starIconSize = isSmall ? clampFontSize(9.5, 8, 10) : clampFontSize(11, 10, 12);
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
-      <View style={styles.imageWrapper}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, compact && styles.cardCompact, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
+      <View style={[styles.imageWrapper, compact && styles.imageWrapperCompact]}>
         {resolvedImageUrl && !imgError ? (
           <FastImage 
             source={{ uri: resolvedImageUrl }}
@@ -109,17 +110,17 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
         )}
       </View>
 
-      <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{lesson.title}</Text>
+      <Text style={[styles.title, compact && styles.titleCompact, { color: theme.colors.textPrimary }]} numberOfLines={compact ? 2 : undefined}>{lesson.title}</Text>
       
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: verticalScale(10), gap: scale(6) }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: compact ? verticalScale(7) : verticalScale(10), gap: compact ? scale(4) : scale(6) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
           <Ionicons name={getCategoryDetails(lesson.category || 'General', false).iconName} size={scale(12)} color={theme.colors.textMuted} />
-          <Text style={{ fontSize: responsiveFontSize(12), color: theme.colors.textMuted, fontWeight: '700' }}>
+          <Text style={{ fontSize: responsiveFontSize(compact ? 10 : 12), color: theme.colors.textMuted, fontWeight: '700' }} numberOfLines={1}>
             {lesson.category || 'General'}
           </Text>
         </View>
-        <Text style={{ color: theme.colors.textMuted }}>•</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+        {!compact && <Text style={{ color: theme.colors.textMuted }}>•</Text>}
+        {!compact && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
           <Ionicons
             name="shield-checkmark"
             size={scale(11)}
@@ -128,13 +129,13 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
           <Text style={{ fontSize: responsiveFontSize(12), color: theme.colors.textMuted, fontWeight: '700' }}>
             {lesson.difficulty || 'Beginner'}
           </Text>
-        </View>
+        </View>}
         {lesson.durationMinutes && lesson.durationMinutes > 0 ? (
           <>
-            <Text style={{ color: theme.colors.textMuted }}>•</Text>
+            {!compact && <Text style={{ color: theme.colors.textMuted }}>•</Text>}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
               <Ionicons name="time-outline" size={scale(12)} color={theme.colors.textMuted} />
-              <Text style={{ fontSize: responsiveFontSize(12), color: theme.colors.textMuted, fontWeight: '700' }}>
+              <Text style={{ fontSize: responsiveFontSize(compact ? 10 : 12), color: theme.colors.textMuted, fontWeight: '700' }}>
                 {lesson.durationMinutes} min
               </Text>
             </View>
@@ -142,30 +143,30 @@ export function LearnLessonCard({ lesson, onPress, style }: LearnLessonCardProps
         ) : null}
       </View>
 
-      <Text style={[styles.description, { color: theme.colors.textSecondary, marginBottom: verticalScale(14), lineHeight: responsiveFontSize(20) }]} numberOfLines={3}>
+      <Text style={[styles.description, compact && styles.descriptionCompact, { color: theme.colors.textSecondary, marginBottom: compact ? verticalScale(9) : verticalScale(14), lineHeight: responsiveFontSize(compact ? 15 : 20) }]} numberOfLines={compact ? 2 : 3}>
         {lesson.description}
       </Text>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(16) }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E6F4EC', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: moderateScale(8), gap: scale(4) }}>
-          <Ionicons name="leaf" size={scale(13)} color={isDark ? theme.colors.primary : '#126027'} />
-          <Text style={{ fontSize: responsiveFontSize(13), color: isDark ? theme.colors.primary : '#126027', fontWeight: '900' }}>
-            +{lesson.pointsReward || 10} Eco points
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: compact ? verticalScale(8) : verticalScale(16) }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E6F4EC', paddingHorizontal: scale(compact ? 7 : 10), paddingVertical: verticalScale(compact ? 4 : 5), borderRadius: moderateScale(8), gap: scale(4), maxWidth: '100%' }}>
+          <Ionicons name="leaf" size={scale(compact ? 11 : 13)} color={isDark ? theme.colors.primary : '#126027'} />
+          <Text style={{ fontSize: responsiveFontSize(compact ? 10 : 13), color: isDark ? theme.colors.primary : '#126027', fontWeight: '900' }} numberOfLines={1}>
+            +{lesson.pointsReward || 10} {compact ? 'points' : 'Eco points'}
           </Text>
         </View>
       </View>
 
       <View style={{ 
-        marginTop: verticalScale(4), 
-        paddingTop: verticalScale(12), 
-        paddingBottom: verticalScale(12),
+        marginTop: compact ? 0 : verticalScale(4),
+        paddingTop: verticalScale(compact ? 8 : 12),
+        paddingBottom: verticalScale(compact ? 8 : 12),
         borderTopWidth: 1, 
         borderTopColor: isDark ? theme.colors.border : '#F0F5F2', 
         alignItems: 'center', 
         justifyContent: 'center' 
       }}>
-        <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(15), fontWeight: '800' }}>
-          {getActionLabel(lesson.status)}
+        <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(compact ? 11 : 15), fontWeight: '800' }} numberOfLines={1}>
+          {compact ? (lesson.status === 'seen' ? 'Continue' : lesson.status === 'completed' ? 'Review' : 'Start') : getActionLabel(lesson.status)}
         </Text>
       </View>
 
@@ -197,6 +198,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     overflow: 'hidden',
   },
+  cardCompact: {
+    padding: moderateScale(10),
+    borderRadius: moderateScale(17),
+  },
   imageWrapper: {
     position: 'relative',
     width: '100%',
@@ -204,6 +209,11 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(16),
     marginBottom: verticalScale(14),
     overflow: 'hidden',
+  },
+  imageWrapperCompact: {
+    height: verticalScale(92),
+    borderRadius: moderateScale(12),
+    marginBottom: verticalScale(9),
   },
   cardImage: {
     width: '100%',
@@ -286,11 +296,21 @@ const styles = StyleSheet.create({
     color: '#1A211D',
     marginBottom: verticalScale(6),
   },
+  titleCompact: {
+    minHeight: responsiveFontSize(38),
+    fontSize: responsiveFontSize(14),
+    lineHeight: responsiveFontSize(18),
+    marginBottom: verticalScale(5),
+  },
   description: {
     fontSize: responsiveFontSize(13),
     lineHeight: responsiveFontSize(20),
     color: '#6B7A75',
     marginBottom: verticalScale(14),
+  },
+  descriptionCompact: {
+    minHeight: responsiveFontSize(30),
+    fontSize: responsiveFontSize(11),
   },
   metaRow: {
     flexDirection: 'row',

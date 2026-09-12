@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Text, View, TextInput, ScrollView, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
+import { Text, View, TextInput, ScrollView, TouchableOpacity, Image, useWindowDimensions, StyleSheet } from 'react-native';
 import { styles } from '../styles/appStyles';
 import { type EcoBudMobileModel } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
@@ -20,8 +20,84 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../util
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
 import { HomeViewSkeleton, HomeCardsSkeleton, LearnViewSkeleton } from '../../shared/ui/SkeletonLoaders';
 import { useTheme } from '../../shared/theme/ecoTheme';
+import { mobileStorage } from '../../shared/storage/mobileStorage';
+import { triggerSelectionHaptic } from '../utils/haptics';
 
 export { getCategoryDetails };
+
+type LearnLayoutMode = 'grid' | 'list';
+
+function useLearnLayoutPreference() {
+  const [layoutMode, setLayoutModeState] = React.useState<LearnLayoutMode>(() => {
+    const savedMode = mobileStorage.getItemSync('ecobud_learn_layout');
+    return savedMode === 'grid' || savedMode === 'list' ? savedMode : 'list';
+  });
+
+  const setLayoutMode = (nextMode: LearnLayoutMode) => {
+    setLayoutModeState(nextMode);
+    mobileStorage.setItemSync('ecobud_learn_layout', nextMode);
+    void mobileStorage.setItem('ecobud_learn_layout', nextMode).catch((error) => {
+      console.warn('Failed to save Learn layout:', error);
+    });
+  };
+
+  return [layoutMode, setLayoutMode] as const;
+}
+
+function LearnLayoutToggle({ value, onChange }: { value: LearnLayoutMode; onChange: (mode: LearnLayoutMode) => void }) {
+  const { theme, isDark } = useTheme();
+
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel="Lessons layout"
+      style={[learnLayoutStyles.toggle, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}
+    >
+      {(['grid', 'list'] as const).map((mode) => {
+        const selected = value === mode;
+        return (
+          <TouchableOpacity
+            key={mode}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`Show lessons as a ${mode}`}
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerSelectionHaptic();
+              onChange(mode);
+            }}
+            style={[learnLayoutStyles.button, selected && { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
+          >
+            <Ionicons
+              name={mode === 'grid' ? 'grid-outline' : 'list-outline'}
+              size={17}
+              color={selected ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted}
+            />
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+const learnLayoutStyles = StyleSheet.create({
+  toggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  button: {
+    width: 36,
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+});
 
 const getGreetingInfo = (): { text: string; icon: keyof typeof Ionicons.glyphMap; iconColor: string } => {
   try {
@@ -149,7 +225,12 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 export function LearnView({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
-  const isTablet = width >= 600;
+  const [layoutMode, setLayoutMode] = useLearnLayoutPreference();
+  const gridColumnCount = width >= 900 ? 3 : 2;
+  const gridGap = scale(width < 360 ? 8 : 12);
+  const learnContentWidth = Math.max(0, width - scale(48));
+  const gridCardWidth = (learnContentWidth - gridGap * (gridColumnCount - 1)) / gridColumnCount;
+  const gridItemStyle = { width: layoutMode === 'grid' ? gridCardWidth : '100%' as const };
 
   const [cardsLoading, setCardsLoading] = React.useState(model.lessons.length === 0);
 
@@ -431,10 +512,19 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
         </ScrollView>
 
         <View style={{ marginTop: verticalScale(20) }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: scale(12), marginBottom: verticalScale(12) }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.colors.textPrimary, fontSize: responsiveFontSize(18), fontWeight: '900' }}>Lessons</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: responsiveFontSize(12), marginTop: 2 }}>
+                {model.filteredLessons.length} result{model.filteredLessons.length === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <LearnLayoutToggle value={layoutMode} onChange={setLayoutMode} />
+          </View>
           {isCardsLoading ? (
-            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) } : {}}>
+            <View style={layoutMode === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: gridGap } : {}}>
               {[1, 2, 3].map((item) => (
-                <View key={item} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                <View key={item} style={gridItemStyle}>
                   <LearnLessonSkeleton />
                 </View>
               ))}
@@ -446,11 +536,11 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
               <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13), color: theme.colors.textMuted }]}>Check back soon for new content.</Text>
             </SurfaceCard>
           ) : (
-            <View style={isTablet ? { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) } : {}}>
+            <View style={layoutMode === 'grid' ? { flexDirection: 'row', flexWrap: 'wrap', gap: gridGap } : {}}>
               {model.filteredLessons.map((lesson, index) => {
                 if (index === 0) {
                   return (
-                    <View key={lesson.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                    <View key={lesson.id} style={gridItemStyle}>
                       <CoachMarkTarget
                         name="firstLearnLesson"
                         borderRadius={moderateScale(22)}
@@ -462,6 +552,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
                       >
                         <LearnLessonCard
                           lesson={lesson}
+                          compact={layoutMode === 'grid'}
                           style={{ marginBottom: 0 }}
                           onPress={() => void model.openLesson(lesson.id)}
                         />
@@ -471,9 +562,10 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
                 }
 
                 return (
-                  <View key={lesson.id} style={isTablet ? { width: '48.5%' } : { width: '100%' }}>
+                  <View key={lesson.id} style={gridItemStyle}>
                     <LearnLessonCard
                       lesson={lesson}
+                      compact={layoutMode === 'grid'}
                       onPress={() => void model.openLesson(lesson.id)}
                     />
                   </View>
