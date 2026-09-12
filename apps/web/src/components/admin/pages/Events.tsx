@@ -540,6 +540,9 @@ export function Events() {
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
   const [selectedImage, setSelectedImage] = useState<{ url: string; title: string } | null>(null);
+  const [reviewModal, setReviewModal] = useState<{ submission: EventSubmission; action: 'approved' | 'rejected' } | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [reviewNotice, setReviewNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadSubmissions = async () => {
     setSubmissionsLoading(true);
@@ -554,30 +557,25 @@ export function Events() {
     }
   };
 
-  const handleApproveSubmission = async (id: string) => {
-    if (!confirm('Are you sure you want to approve this attendance proof?')) return;
-    setProcessingSubId(id);
-    try {
-      await adminPost(`/admin/submissions/${id}/review`, { status: 'approved' });
-      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
-      load(); // Refresh event attendees count
-    } catch (err: any) {
-      alert(err.message || 'Failed to approve submission.');
-    } finally {
-      setProcessingSubId(null);
-    }
+  const openReviewModal = (submission: EventSubmission, action: 'approved' | 'rejected') => {
+    setReviewNotes(action === 'rejected' ? submission.moderatorNotes || '' : '');
+    setReviewModal({ submission, action });
   };
 
-  const handleRejectSubmission = async (id: string) => {
-    const notes = window.prompt('Enter reason for rejection (optional):');
-    if (notes === null) return;
-    setProcessingSubId(id);
+  const handleReviewSubmission = async () => {
+    if (!reviewModal) return;
+    const { submission, action } = reviewModal;
+    setProcessingSubId(submission.id);
+    setReviewNotice(null);
     try {
-      await adminPost(`/admin/submissions/${id}/review`, { status: 'rejected', notes });
-      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'rejected', moderatorNotes: notes } : s));
+      await adminPost(`/admin/submissions/${submission.id}/review`, { status: action, ...(action === 'rejected' ? { notes: reviewNotes.trim() } : {}) });
+      setSubmissions(prev => prev.map(s => s.id === submission.id ? { ...s, status: action, moderatorNotes: action === 'rejected' ? reviewNotes.trim() : null } : s));
+      setReviewModal(null);
+      setReviewNotes('');
+      setReviewNotice({ type: 'success', message: action === 'approved' ? 'Attendance proof approved successfully.' : 'Attendance proof rejected successfully.' });
       load(); // Refresh event attendees count
     } catch (err: any) {
-      alert(err.message || 'Failed to reject submission.');
+      setReviewNotice({ type: 'error', message: err.message || `Failed to ${action === 'approved' ? 'approve' : 'reject'} submission.` });
     } finally {
       setProcessingSubId(null);
     }
@@ -1379,7 +1377,7 @@ export function Events() {
                               {sub.status === 'pending' ? (
                                 <>
                                   <button
-                                    onClick={() => handleApproveSubmission(sub.id)}
+                                    onClick={() => openReviewModal(sub, 'approved')}
                                     disabled={processingSubId === sub.id}
                                     title="Approve Event Attendance"
                                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-xl transition-all shadow-xs active:scale-95 disabled:opacity-50"
@@ -1392,7 +1390,7 @@ export function Events() {
                                     Approve
                                   </button>
                                   <button
-                                    onClick={() => handleRejectSubmission(sub.id)}
+                                    onClick={() => openReviewModal(sub, 'rejected')}
                                     disabled={processingSubId === sub.id}
                                     title="Reject Event Attendance"
                                     className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-xl transition-all active:scale-95 disabled:opacity-50"
@@ -1411,7 +1409,7 @@ export function Events() {
                                     <CheckCircle2 className="w-4 h-4" /> Approved
                                   </span>
                                   <button
-                                    onClick={() => handleRejectSubmission(sub.id)}
+                                    onClick={() => openReviewModal(sub, 'rejected')}
                                     disabled={processingSubId === sub.id}
                                     title="Change status to Rejected"
                                     className="text-[11px] text-gray-400 hover:text-red-600 underline ml-1"
@@ -1425,7 +1423,7 @@ export function Events() {
                                     <XCircle className="w-4 h-4" /> Rejected
                                   </span>
                                   <button
-                                    onClick={() => handleApproveSubmission(sub.id)}
+                                    onClick={() => openReviewModal(sub, 'approved')}
                                     disabled={processingSubId === sub.id}
                                     title="Change status to Approved"
                                     className="text-[11px] text-gray-400 hover:text-green-600 underline ml-1"
@@ -1711,6 +1709,35 @@ export function Events() {
         </div>
       )}
 
+      {reviewNotice && (
+        <div className={`fixed right-6 top-6 z-9999 flex max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl ${reviewNotice.type === 'success' ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200' : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200'}`} role="status">
+          {reviewNotice.type === 'success' ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" /> : <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />}
+          <p className="flex-1 text-sm font-semibold">{reviewNotice.message}</p>
+          <button onClick={() => setReviewNotice(null)} className="rounded-md p-0.5 opacity-60 transition-opacity hover:opacity-100" aria-label="Dismiss notification"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {reviewModal && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onClick={() => !processingSubId && setReviewModal(null)}>
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="review-dialog-title" onClick={e => e.stopPropagation()}>
+            <div className={`flex items-center gap-3 px-6 py-5 ${reviewModal.action === 'approved' ? 'bg-green-50 dark:bg-green-950/40' : 'bg-red-50 dark:bg-red-950/40'}`}>
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white ${reviewModal.action === 'approved' ? 'bg-green-600' : 'bg-red-600'}`}>
+                {reviewModal.action === 'approved' ? <CheckCircle2 className="h-6 w-6" /> : <XCircle className="h-6 w-6" />}
+              </div>
+              <div><h3 id="review-dialog-title" className="text-lg font-bold text-gray-900 dark:text-white">{reviewModal.action === 'approved' ? 'Approve attendance?' : 'Reject attendance?'}</h3><p className="text-sm text-gray-500 dark:text-gray-400">Review this decision before submitting.</p></div>
+            </div>
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60"><p className="font-semibold text-gray-900 dark:text-white">{reviewModal.submission.user.profile?.displayName || reviewModal.submission.user.name}</p><p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{reviewModal.submission.challenge?.title || 'Event attendance submission'}</p></div>
+              {reviewModal.action === 'approved' ? <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">This confirms the attendance proof and makes the event reward available to the participant.</p> : <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200">Reason <span className="font-normal text-gray-400">(optional)</span></span><textarea autoFocus value={reviewNotes} onChange={e => setReviewNotes(e.target.value)} rows={4} maxLength={500} placeholder="Add a helpful reason for the participant…" className="w-full resize-none rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:ring-red-900/30" /><span className="mt-1 block text-right text-xs text-gray-400">{reviewNotes.length}/500</span></label>}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+              <button onClick={() => setReviewModal(null)} disabled={!!processingSubId} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-200 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800">Cancel</button>
+              <button onClick={handleReviewSubmission} disabled={!!processingSubId} className={`flex min-w-32 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition active:scale-95 disabled:opacity-60 ${reviewModal.action === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>{processingSubId && <Loader2 className="h-4 w-4 animate-spin" />}{processingSubId ? 'Submitting…' : reviewModal.action === 'approved' ? 'Approve attendance' : 'Reject attendance'}</button>
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
       {/* Photo Proof Zoom Modal */}
       {selectedImage && createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
@@ -1739,4 +1766,3 @@ export function Events() {
     </div>
   );
 }
-

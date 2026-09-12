@@ -2129,6 +2129,34 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [ensureSession]);
 
+  const showChallengeMessage = useCallback((message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.LONG);
+    } else {
+      console.warn(`[Challenges] ${message}`);
+    }
+  }, []);
+
+  const reconcileChallengeMutation = useCallback(async (
+    token: string,
+    challengeId: string,
+    isCommitted: (challenge: ChallengeWithProgress) => boolean,
+  ) => {
+    try {
+      const fresh = await homeService.getChallenges(token);
+      setChallenges(fresh.items);
+      const challenge = fresh.items.find((item: ChallengeWithProgress) =>
+        item.id === challengeId || item.cycle?.instanceId === challengeId || (item as any).instanceId === challengeId
+      );
+      return Boolean(challenge && isCommitted(challenge));
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const isUncertainChallengeFailure = (error: unknown) =>
+    ['timeout', 'offline', 'server'].includes(String((error as any)?.code || ''));
+
   const handleSubmitChallengeProof = useCallback(async (challengeId: string, proofUrl: string, afterProofUrl?: string, detectedQuantity?: number, analysisToken?: string, proofText?: string) => {
     await runWithActionLoader('Submitting before photo...', async () => {
       try {
@@ -2166,13 +2194,26 @@ export function useHomeDashboard(): EcoBudMobileModel {
         );
         await hydrateApp(activeSession, true);
       } catch (error) {
-        Alert.alert('Submission failed', error instanceof Error ? error.message : 'Please try again.');
+        const activeSession = ensureSession();
+        const committed = isUncertainChallengeFailure(error) && await reconcileChallengeMutation(
+          activeSession.token,
+          challengeId,
+          (challenge) => Boolean(
+            challenge.progress?.submission?.proofUrl === proofUrl ||
+            challenge.progress?.submissions?.some((submission: any) => submission.proofUrl === proofUrl)
+          ),
+        );
+        if (committed) {
+          showChallengeMessage('Before photo submitted successfully.');
+          return;
+        }
+        showChallengeMessage(error instanceof Error ? error.message : 'Before photo was not submitted. Please try again.');
         throw error;
       } finally {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, hydrateApp, runWithActionLoader]);
+  }, [ensureSession, hydrateApp, reconcileChallengeMutation, runWithActionLoader, showChallengeMessage]);
 
   const handleVerifyChallengeQr = useCallback(async (challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) => {
     await runWithActionLoader('Verifying Barangay QR code...', async () => {
@@ -2198,13 +2239,26 @@ export function useHomeDashboard(): EcoBudMobileModel {
         await homeService.submitChallengeAfterPhoto(activeSession.token, challengeId, afterProofUrl, submissionId);
         await hydrateApp(activeSession, true);
       } catch (error) {
-        Alert.alert('After photo submission failed', error instanceof Error ? error.message : 'Please try again.');
+        const activeSession = ensureSession();
+        const committed = isUncertainChallengeFailure(error) && await reconcileChallengeMutation(
+          activeSession.token,
+          challengeId,
+          (challenge) => Boolean(
+            challenge.progress?.submission?.afterProofUrl === afterProofUrl ||
+            challenge.progress?.submissions?.some((submission: any) => submission.afterProofUrl === afterProofUrl)
+          ),
+        );
+        if (committed) {
+          showChallengeMessage('After photo submitted. Awaiting review.');
+          return;
+        }
+        showChallengeMessage(error instanceof Error ? error.message : 'After photo was not submitted. Please try again.');
         throw error;
       } finally {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, hydrateApp, runWithActionLoader]);
+  }, [ensureSession, hydrateApp, reconcileChallengeMutation, runWithActionLoader, showChallengeMessage]);
 
   const triggerTestReward = useCallback((origin?: { x: number; y: number }) => {
     setClaimRewardData({ points: 10, coins: 10, origin });
@@ -2235,8 +2289,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
 
-      // Only celebrate and update the optimistic state after the reward transaction
-      // has committed. This prevents a failed History claim from looking successful.
       if (origin) {
         setClaimRewardData({ points: totalExp, coins: totalCoins, origin });
       }
@@ -2272,11 +2324,57 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       await hydrateApp(activeSession, true);
     } catch (error) {
-      Alert.alert('Claim failed', error instanceof Error ? error.message : 'Please try again.');
+      const errMsg = error instanceof Error ? error.message : '';
+      const activeSession = ensureSession();
+      const committed = isUncertainChallengeFailure(error) && await reconcileChallengeMutation(
+        activeSession.token,
+        challengeId,
+        (freshChallenge) => {
+          const submissions = freshChallenge.progress?.submissions || [];
+          const submission = submissionId
+            ? submissions.find((item: any) => item.id === submissionId)
+            : freshChallenge.progress?.submission;
+          return Boolean(submission?.rewardAwarded || freshChallenge.progress?.status === 'completed');
+        },
+      );
+      if (committed || errMsg.toLowerCase().includes('already claimed')) {
+        setChallenges((prev) =>
+          prev.map((c) =>
+            c.id === challengeId || c.cycle?.instanceId === challengeId || (c as any).instanceId === challengeId
+              ? {
+                  ...c,
+                  progress: c.progress
+                    ? {
+                        ...c.progress,
+                        status: 'completed',
+                        submission: c.progress.submission
+                          ? { ...c.progress.submission, status: 'completed', rewardAwarded: true }
+                          : c.progress.submission,
+                        submissions: c.progress.submissions?.map((s: any) =>
+                          !submissionId || s.id === submissionId
+                            ? { ...s, status: 'completed', rewardAwarded: true }
+                            : s
+                        ),
+                      }
+                    : c.progress,
+                }
+              : c
+          )
+        );
+        try {
+          const activeSession = ensureSession();
+          await hydrateApp(activeSession, true);
+        } catch {
+          // ignore
+        }
+        showChallengeMessage('Reward claimed successfully.');
+      } else {
+        showChallengeMessage(errMsg || 'Reward was not claimed. Please try again.');
+      }
     } finally {
       setRefreshing(false);
     }
-  }, [challenges, ensureSession, hydrateApp]);
+  }, [challenges, ensureSession, hydrateApp, reconcileChallengeMutation, showChallengeMessage]);
 
   const handleUpdateProfileImage = useCallback(async (uri: string) => {
     await runWithActionLoader('Uploading image...', async () => {
@@ -2310,7 +2408,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       try {
         const activeSession = ensureSession();
         const res = await homeService.updateProfile(activeSession.token, payload);
-        
+
         const updatedSession = {
           ...activeSession,
           token: res.token || activeSession.token,
@@ -2354,6 +2452,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       try {
         const activeSession = ensureSession();
         const result = await homeService.updateSecuritySettings(activeSession.token, payload);
+
         {
           // Persist the replacement token after old sessions are revoked.
           const updatedSession = {

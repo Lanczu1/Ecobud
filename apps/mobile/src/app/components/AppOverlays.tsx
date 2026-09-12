@@ -145,9 +145,57 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       const legacyStorageKey = `ai_attempts_${challengeId}`;
       const token = model.session?.token;
 
+      // 1. Instant optimistic local load from SQLite / device cache (0ms)
+      let raw = mobileStorage.getItemSync(storageKey) ?? (await mobileStorage.getItem(storageKey));
+      if (!raw) {
+        raw = mobileStorage.getItemSync(legacyStorageKey) ?? (await mobileStorage.getItem(legacyStorageKey));
+        if (raw) {
+          mobileStorage.setItemSync(storageKey, raw);
+          void mobileStorage.setItem(storageKey, raw);
+          void mobileStorage.removeItem(legacyStorageKey);
+        }
+      }
+
+      if (raw && attemptsChallengeIdRef.current === challengeId) {
+        try {
+          const parsed = JSON.parse(raw);
+          const attemptsUsed = Math.min(MAX_AI_ATTEMPTS, Math.max(0, Number(parsed.attemptsUsed) || 0));
+          const resetAt = Number(parsed.resetAt) || 0;
+          const now = Date.now();
+
+          if (!resetAt || now >= resetAt) {
+            void mobileStorage.removeItem(storageKey).catch(() => {});
+            setAttemptsLeft(MAX_AI_ATTEMPTS);
+            setCooldownRemainingSec(0);
+          } else {
+            const remaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
+            setAttemptsLeft(remaining);
+            setCooldownRemainingSec(remaining === 0 ? Math.ceil((resetAt - now) / 1000) : 0);
+          }
+        } catch {
+          // ignore corrupted local format
+        }
+      } else if (attemptsChallengeIdRef.current === challengeId) {
+        setAttemptsLeft(MAX_AI_ATTEMPTS);
+        setCooldownRemainingSec(0);
+      }
+
+      // Mark loaded immediately so user is never blocked by a popup
+      if (attemptsChallengeIdRef.current === challengeId) {
+        setAttemptsLoaded(true);
+      }
+
+      // 2. Background server sync with a fast 3-second timeout fallback
       if (token) {
         try {
-          const serverState = await ecobudApi.challengeAiAttempts(token, challengeId);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          const serverState = await Promise.race([
+            ecobudApi.challengeAiAttempts(token, challengeId),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+          ]);
+          clearTimeout(timeoutId);
+
           if (attemptsChallengeIdRef.current !== challengeId) return;
           if (serverState.resetAt) {
             const persistedValue = JSON.stringify({
@@ -155,60 +203,22 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               resetAt: new Date(serverState.resetAt).getTime(),
             });
             mobileStorage.setItemSync(storageKey, persistedValue);
-            await mobileStorage.setItem(storageKey, persistedValue);
+            void mobileStorage.setItem(storageKey, persistedValue);
           } else {
-            await mobileStorage.removeItem(storageKey);
+            void mobileStorage.removeItem(storageKey);
           }
           setAttemptsLeft(serverState.attemptsLeft);
           setCooldownRemainingSec(serverState.cooldownRemainingSec);
-          return;
         } catch {
-          // Offline/server unavailable: use the durable device cache below.
+          // Offline/server timeout: keep using the instant cache state without error.
         }
       }
-
-      let raw = await mobileStorage.getItem(storageKey);
-
-      if (!raw) {
-        raw = await mobileStorage.getItem(legacyStorageKey);
-        if (raw) {
-          mobileStorage.setItemSync(storageKey, raw);
-          await mobileStorage.setItem(storageKey, raw);
-          await mobileStorage.removeItem(legacyStorageKey);
-        }
-      }
-
-      if (attemptsChallengeIdRef.current !== challengeId) return;
-      if (!raw) {
-        setAttemptsLeft(MAX_AI_ATTEMPTS);
-        setCooldownRemainingSec(0);
-        return;
-      }
-
-      const parsed = JSON.parse(raw);
-      const attemptsUsed = Math.min(MAX_AI_ATTEMPTS, Math.max(0, Number(parsed.attemptsUsed) || 0));
-      const resetAt = Number(parsed.resetAt) || 0;
-      const now = Date.now();
-
-      if (!resetAt || now >= resetAt) {
-        await mobileStorage.removeItem(storageKey).catch(() => {});
-        if (attemptsChallengeIdRef.current !== challengeId) return;
-        setAttemptsLeft(MAX_AI_ATTEMPTS);
-        setCooldownRemainingSec(0);
-        return;
-      }
-
-      const remaining = Math.max(0, MAX_AI_ATTEMPTS - attemptsUsed);
-      setAttemptsLeft(remaining);
-      setCooldownRemainingSec(remaining === 0 ? Math.ceil((resetAt - now) / 1000) : 0);
     } catch {
-      // Do not grant fresh attempts when persisted state is temporarily unreadable.
       if (attemptsChallengeIdRef.current === challengeId) {
-        setAttemptsLeft(0);
-        setCooldownRemainingSec(1);
+        setAttemptsLeft(MAX_AI_ATTEMPTS);
+        setCooldownRemainingSec(0);
+        setAttemptsLoaded(true);
       }
-    } finally {
-      if (attemptsChallengeIdRef.current === challengeId) setAttemptsLoaded(true);
     }
   }, [getAttemptsStorageKey, model.session?.token]);
 
@@ -352,10 +362,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   }
 
   const handleStartRecognition = async () => {
-    if (!attemptsLoaded) {
-      Alert.alert('Please Wait', 'Restoring this challenge’s saved AI attempts.');
-      return;
-    }
     if (attemptsLeft <= 0 && cooldownRemainingSec > 0) {
       const minutes = Math.floor(cooldownRemainingSec / 60);
       const seconds = cooldownRemainingSec % 60;
@@ -450,7 +456,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       handleClose();
     } catch (err: any) {
       if (activeOperationRef.current !== operationId) return;
-      Alert.alert('Submission Error', err.message || 'Failed to submit challenge proof.');
+      console.error('Failed to submit challenge proof', err);
     } finally {
       if (activeOperationRef.current === operationId) setProcessing(false);
     }
@@ -469,7 +475,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     } catch (err: any) {
       if (activeOperationRef.current !== operationId) return;
       console.error('Failed to submit after proof', err);
-      Alert.alert('Submission Error', err.message || 'Failed to submit proof. Please try again.');
       setCapturedImage(null);
     } finally {
       if (activeOperationRef.current === operationId) setProcessing(false);
@@ -4314,7 +4319,7 @@ function FloatingEmber({ ember }: { ember: EmberProps }) {
 
 
 
-function ExpCounter({ targetPoints }: { targetPoints: number }) {
+function ExpCounter({ targetPoints, compact = false }: { targetPoints: number; compact?: boolean }) {
   const countAnim = React.useRef(new Animated.Value(0)).current;
   const scaleAnim = React.useRef(new Animated.Value(0.5)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
@@ -4391,21 +4396,23 @@ function ExpCounter({ targetPoints }: { targetPoints: number }) {
   return (
     <Animated.View
       style={{
+        flexDirection: compact ? 'row' : 'column',
         alignItems: 'center',
+        gap: compact ? scale(10) : 0,
         opacity: opacityAnim,
         transform: [{ scale: scaleAnim }],
       }}
     >
-      <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+      <View style={{ width: compact ? scale(58) : 110, height: compact ? scale(58) : 110, justifyContent: 'center', alignItems: 'center', marginBottom: compact ? 0 : 20 }}>
         {/* Glowing Medallion */}
         <Animated.View
           style={{
             position: 'absolute',
-            top: 5,
-            left: 5,
-            width: 100,
-            height: 100,
-            borderRadius: 50,
+            top: compact ? scale(3) : 5,
+            left: compact ? scale(3) : 5,
+            width: compact ? scale(52) : 100,
+            height: compact ? scale(52) : 100,
+            borderRadius: compact ? scale(26) : 50,
             backgroundColor: '#10b981',
             transform: [
               {
@@ -4419,13 +4426,13 @@ function ExpCounter({ targetPoints }: { targetPoints: number }) {
         >
           <LinearGradient
             colors={['#34d399', '#059669']}
-            style={{ flex: 1, borderRadius: 50 }}
+            style={{ flex: 1, borderRadius: compact ? scale(26) : 50 }}
           />
         </Animated.View>
 
         {/* Static Leaf Icon perfectly centered */}
-        <View style={{ position: 'absolute', width: 110, height: 110, justifyContent: 'center', alignItems: 'center' }} pointerEvents="none">
-          <Ionicons name="leaf" size={44} color="#FFFFFF" />
+        <View style={{ position: 'absolute', width: compact ? scale(58) : 110, height: compact ? scale(58) : 110, justifyContent: 'center', alignItems: 'center' }} pointerEvents="none">
+          <Ionicons name="leaf" size={compact ? scale(25) : 44} color="#FFFFFF" />
         </View>
 
         {/* Sparkle 1 */}
@@ -4438,7 +4445,7 @@ function ExpCounter({ targetPoints }: { targetPoints: number }) {
             zIndex: 10,
           }}
         >
-          <Ionicons name="sparkles" size={18} color="#6EE7B7" />
+          <Ionicons name="sparkles" size={compact ? scale(10) : 18} color="#6EE7B7" />
         </Animated.View>
 
         {/* Sparkle 2 */}
@@ -4451,43 +4458,16 @@ function ExpCounter({ targetPoints }: { targetPoints: number }) {
             zIndex: 10,
           }}
         >
-          <Ionicons name="star" size={12} color="#34D399" />
+          <Ionicons name="star" size={compact ? scale(8) : 12} color="#34D399" />
         </Animated.View>
       </View>
 
-      <Animated.Text
-        style={{
-          fontSize: 52,
-          fontWeight: '900',
-          color: '#FFFFFF',
-          textShadowColor: 'rgba(16, 185, 129, 0.5)',
-          textShadowOffset: { width: 0, height: 4 },
-          textShadowRadius: 10,
-          marginBottom: 4,
-        }}
-      >
-        +{displayCount}
-      </Animated.Text>
-      <Text style={{ fontSize: 13, fontWeight: '800', color: '#A2C2B5', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-        ECO Points Earned
-      </Text>
-
-      {/* Streak Active Tag */}
-      <View style={{
-        marginTop: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(74, 222, 128, 0.12)',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(74, 222, 128, 0.2)',
-      }}>
-        <Ionicons name="flame" size={14} color="#FF6B6B" />
-        <Text style={{ fontSize: 11, fontWeight: '800', color: '#4ade80', letterSpacing: 0.5 }}>
-          STREAK MULTIPLIER ACTIVE
+      <View>
+        <Animated.Text style={{ fontSize: compact ? responsiveFontSize(30) : 52, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(16, 185, 129, 0.5)', textShadowOffset: { width: 0, height: compact ? 3 : 4 }, textShadowRadius: compact ? 8 : 10, marginBottom: compact ? 0 : 4 }}>
+          +{displayCount}
+        </Animated.Text>
+        <Text style={{ fontSize: compact ? responsiveFontSize(9) : 13, fontWeight: '800', color: '#A2C2B5', letterSpacing: compact ? 1 : 1.5, textTransform: 'uppercase' }}>
+          {compact ? 'ECO Points' : 'ECO Points Earned'}
         </Text>
       </View>
     </Animated.View>
@@ -5379,24 +5359,26 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
             </Text>
 
             {model.earnedCoins > 0 ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(20) }}>
-                <ExpCounter targetPoints={model.earnedPoints} />
-                <View style={{ alignItems: 'center' }}>
-                  <View style={{ width: scale(96), height: scale(96), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(16) }}>
-                    <View style={{ position: 'absolute', top: 5, left: 5, width: scale(86), height: scale(86), borderRadius: scale(43), backgroundColor: '#FBBF24' }}>
-                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: scale(43) }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(24) }}>
+                <ExpCounter targetPoints={model.earnedPoints} compact />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>
+                  <View style={{ width: scale(58), height: scale(58), justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ position: 'absolute', top: scale(3), left: scale(3), width: scale(52), height: scale(52), borderRadius: scale(26), backgroundColor: '#FBBF24' }}>
+                      <LinearGradient colors={['#FDE68A', '#F59E0B']} style={{ flex: 1, borderRadius: scale(26) }} />
                     </View>
                     <Image
                       source={require('../../../assets/coin.png')}
-                      style={{ width: scale(46), height: scale(46), resizeMode: 'contain' }}
+                      style={{ width: scale(30), height: scale(30), resizeMode: 'contain' }}
                     />
                   </View>
-                  <Text style={{ fontSize: responsiveFontSize(44), fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 10, marginBottom: verticalScale(4) }}>+{model.earnedCoins}</Text>
-                  <Text style={{ fontSize: responsiveFontSize(12), fontWeight: '800', color: '#FDE68A', letterSpacing: 1.5, textTransform: 'uppercase' }}>Coins Earned</Text>
+                  <View>
+                    <Text style={{ fontSize: responsiveFontSize(30), fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(245, 158, 11, 0.5)', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 8 }}>+{model.earnedCoins}</Text>
+                    <Text style={{ fontSize: responsiveFontSize(9), fontWeight: '800', color: '#FDE68A', letterSpacing: 1, textTransform: 'uppercase' }}>Coins</Text>
+                  </View>
                 </View>
               </View>
             ) : (
-              <ExpCounter targetPoints={model.earnedPoints} />
+              <ExpCounter targetPoints={model.earnedPoints} compact />
             )}
           </View>
         </Animated.View>

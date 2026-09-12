@@ -21,6 +21,7 @@ vi.mock('../services/challengeImageService', () => ({ recognizeChallengeImage: r
 vi.mock('../services/supabaseStorageService', () => ({ supabaseStorageService: { uploadFile: upload } }));
 vi.mock('../services/cycleManagerService', () => ({ getOrCreateActiveInstance: vi.fn() }));
 vi.mock('../services/GamificationService', () => ({ GamificationService: class {} }));
+vi.mock('../services/notificationService', () => ({ sendDirectNotification: vi.fn().mockResolvedValue(null) }));
 import { challengeRoutes } from './challengeRoutes';
 
 const app = express(); app.use(express.json(), challengeRoutes, errorResponder);
@@ -87,6 +88,19 @@ describe('AI analysis workflow security', () => {
   it('rejects reuse of an analyzed photo', async () => {
     db.challengeSubmission.findFirst.mockResolvedValue({ id: 'existing' });
     await request(app).post('/week/submissions').set('Authorization', 'Bearer test').send({ proofUrl, analysisToken: token() }).expect(409);
+    expect(db.challengeSubmission.create).not.toHaveBeenCalled();
+  });
+  it('returns the original submission when an idempotency key is retried', async () => {
+    db.challengeSubmission.findFirst.mockResolvedValueOnce({
+      id: 'existing', proofUrl, detectedQuantity: 2, submissionRequestKey: 'before:retry',
+    });
+    const result = await request(app)
+      .post('/week/submissions')
+      .set('Authorization', 'Bearer test')
+      .set('Idempotency-Key', 'before:retry')
+      .send({ proofUrl, analysisToken: token() })
+      .expect(201);
+    expect(result.body.id).toBe('existing');
     expect(db.challengeSubmission.create).not.toHaveBeenCalled();
   });
   it('blocks generic progress as an AI detection bypass', async () => {

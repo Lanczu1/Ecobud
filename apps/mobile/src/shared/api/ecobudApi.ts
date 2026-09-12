@@ -375,9 +375,30 @@ export interface ProfileData {
 
 interface RequestOptions {
   body?: unknown;
+  idempotencyKey?: string;
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   token?: string;
+  timeoutMs?: number;
 }
+
+export type ApiFailureCode = 'timeout' | 'offline' | 'server' | 'validation';
+
+export class EcoBudApiError extends Error {
+  constructor(message: string, public readonly code: ApiFailureCode, public readonly status?: number) {
+    super(message);
+    this.name = 'EcoBudApiError';
+  }
+}
+
+const mutationKey = (operation: string, ...parts: Array<string | undefined>) => {
+  const source = parts.filter(Boolean).join('|');
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${operation}:${(hash >>> 0).toString(36)}`;
+};
 
 const parseJsonSafely = async (response: Response) => {
   const rawBody = await response.text();
@@ -427,6 +448,9 @@ const executeRequest = async <T>(path: string, options: RequestOptions = {}): Pr
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
   }
+  if (options.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
 
   let response: Response;
 
@@ -434,7 +458,8 @@ const executeRequest = async <T>(path: string, options: RequestOptions = {}): Pr
     const cacheBuster = path.includes('?') ? `&_cb=${Date.now()}` : `?_cb=${Date.now()}`;
     const url = `${API_BASE}${path}${cacheBuster}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second network timeout safeguard
+    const timeoutMs = options.timeoutMs ?? 15000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       response = await fetch(url, {
@@ -449,20 +474,25 @@ const executeRequest = async <T>(path: string, options: RequestOptions = {}): Pr
     }
   } catch (error: any) {
     if (error?.name === 'AbortError') {
-      throw new Error('Request timed out after 3 seconds. Please check your network connection.');
+      throw new EcoBudApiError(
+        'The request is taking longer than expected. ECOBUD will verify whether it was saved.',
+        'timeout',
+      );
     }
-    throw new Error(
-      `Unable to reach the ECOBUD API at ${apiOrigin}. Start apps/api first. If you are using Expo Go on a phone, set EXPO_PUBLIC_API_BASE_URL to http://YOUR_COMPUTER_IP:3000/api before starting Metro.`,
+    throw new EcoBudApiError(
+      'ECOBUD could not connect right now. Check your internet connection and try again.',
+      'offline',
     );
   }
 
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const error = new Error(
-      typeof data?.message === 'string' ? data.message : 'Unexpected ECOBUD API error.',
+    const error = new EcoBudApiError(
+      typeof data?.message === 'string' ? data.message : 'ECOBUD could not complete the request.',
+      response.status >= 500 ? 'server' : 'validation',
+      response.status,
     );
-    (error as any).status = response.status;
     throw error;
   }
 
@@ -689,6 +719,8 @@ export const ecobudApi = {
     request(`/challenges/${challengeId}/submissions`, {
       method: 'POST',
       token,
+      idempotencyKey: mutationKey('challenge-before', challengeId, proofUrl),
+      timeoutMs: 40000,
       body: {
         proofUrl,
         afterProofUrl,
@@ -707,12 +739,16 @@ export const ecobudApi = {
     request<{ message: string; submission: any }>(`/challenges/${challengeId}/after-photo`, {
       method: 'POST',
       token,
+      idempotencyKey: mutationKey('challenge-after', challengeId, submissionId, afterProofUrl),
+      timeoutMs: 40000,
       body: { afterProofUrl, submissionId },
     }),
   claimChallengeReward: (token: string, challengeId: string, submissionId?: string) =>
     request<{ message: string; awardedBadges?: EcoBadge[] }>(`/challenges/${challengeId}/claim`, {
       method: 'POST',
       token,
+      idempotencyKey: mutationKey('challenge-claim', challengeId, submissionId),
+      timeoutMs: 40000,
       body: { submissionId },
     }),
   updateChallengeProgress: (token: string, challengeId: string, progressPercentage: number) =>
