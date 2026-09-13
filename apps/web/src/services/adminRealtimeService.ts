@@ -5,6 +5,7 @@ export interface PresenceData {
 export interface AdminRealtimeHandlers {
   onUsersRefresh?: () => void;
   onStatsRefresh?: () => void;
+  onRedeemRefresh?: () => void;
   onPresenceChange?: (presence: PresenceData) => void;
 }
 
@@ -74,6 +75,7 @@ class AdminRealtimeService {
         try {
           sub.onUsersRefresh?.();
           sub.onStatsRefresh?.();
+          sub.onRedeemRefresh?.();
         } catch (err) {
           console.error('AdminRealtimeService subscriber notification error:', err);
         }

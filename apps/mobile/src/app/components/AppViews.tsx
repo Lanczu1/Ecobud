@@ -725,6 +725,12 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
     if (isPending || isCompleted) {
       return;
     }
+    const originX = e?.nativeEvent?.pageX;
+    const originY = e?.nativeEvent?.pageY;
+    const origin = (typeof originX === 'number' && typeof originY === 'number' && originX > 0 && originY > 0)
+      ? { x: originX, y: originY }
+      : undefined;
+
     setIsPressing(true);
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 0.85, duration: 100, useNativeDriver: true }),
@@ -733,7 +739,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
     ]).start(() => {
       setIsPressing(false);
       if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
-        void model.handleClaimChallengeReward(challenge.id, { x: e?.nativeEvent?.pageX || 0, y: e?.nativeEvent?.pageY || 0 }, challenge.progress?.submissionId);
+        void model.handleClaimChallengeReward(challenge.id, origin, challenge.progress?.submissionId);
       } else {
         model.openChallengeMission(challenge);
       }
@@ -1817,7 +1823,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                                   onPress={(e) => {
                                     // Claims in History may belong to an older cycle. Use that
                                     // concrete instance so the API never resolves it to a newer cycle.
-                                    void model.handleClaimChallengeReward(challenge.cycle?.instanceId ?? challenge.id, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }, item.sub?.id);
+                                    const originX = e?.nativeEvent?.pageX;
+                                    const originY = e?.nativeEvent?.pageY;
+                                    const origin = (typeof originX === 'number' && typeof originY === 'number' && originX > 0 && originY > 0)
+                                      ? { x: originX, y: originY }
+                                      : undefined;
+                                    void model.handleClaimChallengeReward(challenge.cycle?.instanceId ?? challenge.id, origin, item.sub?.id);
                                   }}
                                 >
                                   <Ionicons name="gift" size={14} color="#FFFFFF" />
