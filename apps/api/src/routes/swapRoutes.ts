@@ -103,6 +103,21 @@ router.post('/requests', authenticateRequest, async (req: AuthenticatedRequest, 
         listingId,
         swapRequestId: request.id,
       }).catch(() => {});
+      const requester = await prisma.user.findUnique({
+        where: { id: req.auth!.userId },
+        select: { name: true, profile: { select: { displayName: true } } },
+      });
+      const requesterName = requester?.profile?.displayName || requester?.name || 'Someone';
+      void sendDirectNotification({
+        userId: listing.user.id,
+        type: 'swap',
+        title: 'New Give & Get request',
+        message: `${requesterName} wants to request “${listing.title}”.`,
+        relatedId: request.id,
+        relatedType: 'swap_request',
+        priority: 'high',
+        notificationKey: `swap_request_created:${request.id}`,
+      });
     }
     res.status(201).json(request);
   } catch (error: any) {
@@ -128,6 +143,30 @@ router.patch('/requests/:id/status', authenticateRequest, async (req: Authentica
           eventType: 'status',
           swapRequestId: req.params.id,
         }).catch(() => {});
+        const actor = await prisma.user.findUnique({
+          where: { id: req.auth!.userId },
+          select: { name: true, profile: { select: { displayName: true } } },
+        });
+        const actorName = actor?.profile?.displayName || actor?.name || 'The other member';
+        const statusCopy: Record<string, { title: string; message: string }> = {
+          accepted: { title: 'Swap request accepted', message: `${actorName} accepted your Give & Get request.` },
+          declined: { title: 'Swap request declined', message: `${actorName} declined your Give & Get request.` },
+          completed: { title: 'Exchange completed', message: `${actorName} marked your Give & Get exchange as complete.` },
+          cancelled: { title: 'Swap request cancelled', message: `${actorName} cancelled the Give & Get request.` },
+        };
+        const copy = statusCopy[status];
+        if (copy) {
+          void sendDirectNotification({
+            userId: targetUserId,
+            type: 'swap',
+            title: copy.title,
+            message: copy.message,
+            relatedId: req.params.id,
+            relatedType: 'swap_request',
+            priority: 'high',
+            notificationKey: `swap_request_status:${req.params.id}:${status}`,
+          });
+        }
       }
     }
     res.json({ success: true });

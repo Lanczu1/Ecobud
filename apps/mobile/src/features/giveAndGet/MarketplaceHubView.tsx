@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert, BackHandler } from 'react-native';
+import { View, StyleSheet, BackHandler } from 'react-native';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import type { EcoBudMobileModel } from '../../app/types/home';
 import { TopNavbar } from '../../app/components/CommonComponents';
@@ -14,6 +14,8 @@ import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import type { SwapListing, SwapConversation } from './types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { ScreenTransition } from '../../shared/ui/ScreenTransition';
+import { ConfirmDialog } from '../../shared/ui/ConfirmDialog';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 type HubScreen = 'feed' | 'create' | 'detail' | 'chat';
 type FeedTab = 'browse' | 'chats' | 'mylistings';
@@ -26,6 +28,7 @@ export function MarketplaceHubView({
   onScreenStateChange?: (isSubScreen: boolean) => void;
 }) {
   const { theme } = useTheme();
+  const { showNotification } = useInAppNotification();
   const [screen, setScreen] = useState<HubScreen>('feed');
   const [feedTab, setFeedTab] = useState<FeedTab>('browse');
   const [selectedListing, setSelectedListing] = useState<SwapListing | null>(null);
@@ -33,6 +36,7 @@ export function MarketplaceHubView({
   const [showSwapDialog, setShowSwapDialog] = useState(false);
   const [showAcceptedDialog, setShowAcceptedDialog] = useState(false);
   const [conversations, setConversations] = useState<SwapConversation[]>([]);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   useEffect(() => {
     const target = model.notificationDestination;
@@ -51,7 +55,7 @@ export function MarketplaceHubView({
         const listing = await swapService.fetchListingById(target.id);
         if (alive && listing) { setSelectedListing(listing); setScreen('detail'); }
       }
-    })().catch(() => { if (alive) Alert.alert('Content unavailable', 'This item may no longer be available.'); }).finally(() => { if (alive) model.setNotificationDestination(null); });
+    })().catch(() => { if (alive) showNotification({ title: 'Content unavailable', message: 'This item may no longer be available.', tone: 'warning' }); }).finally(() => { if (alive) model.setNotificationDestination(null); });
     return () => { alive = false; };
   }, [model.notificationDestination, model.session?.token]);
 
@@ -186,7 +190,7 @@ export function MarketplaceHubView({
       }
     } catch (err: any) {
       const msg = err?.message || 'Failed to send swap request';
-      Alert.alert('Error', msg);
+      showNotification({ title: 'Request not sent', message: msg, tone: 'error' });
     }
   };
 
@@ -198,7 +202,7 @@ export function MarketplaceHubView({
       await loadConversations();
     } catch (err: any) {
       console.error('Failed to accept swap:', err);
-      Alert.alert('Error', err?.message || 'Failed to accept swap');
+      showNotification({ title: 'Could not accept', message: err?.message || 'Failed to accept swap', tone: 'error' });
     }
   };
 
@@ -207,9 +211,10 @@ export function MarketplaceHubView({
     try {
       await swapService.updateSwapRequestStatus(selectedConversation.swapRequestId, 'declined');
       await loadConversations();
+      showNotification({ title: 'Request declined', message: 'The requester has been notified.', tone: 'info' });
     } catch (err: any) {
       console.error('Failed to decline swap:', err);
-      Alert.alert('Error', err?.message || 'Failed to decline swap');
+      showNotification({ title: 'Could not decline', message: err?.message || 'Failed to decline swap', tone: 'error' });
     }
   };
 
@@ -218,9 +223,10 @@ export function MarketplaceHubView({
     try {
       await swapService.updateSwapRequestStatus(selectedConversation.swapRequestId, 'completed');
       await loadConversations();
+      showNotification({ title: 'Exchange completed', message: 'The Give & Get exchange is now marked complete.', tone: 'success' });
     } catch (err: any) {
       console.error('Failed to mark as completed:', err);
-      Alert.alert('Error', err?.message || 'Failed to mark as completed');
+      showNotification({ title: 'Could not complete exchange', message: err?.message || 'Failed to mark as completed', tone: 'error' });
     }
   };
 
@@ -231,26 +237,25 @@ export function MarketplaceHubView({
 
   const handleReportListing = () => {
     if (!selectedListing) return;
-    Alert.alert(
-      'Report Listing',
-      `Are you sure you want to report "${selectedListing.title}" for review by community moderators?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Report',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Report Submitted', 'Thank you for keeping our community safe. Our moderation team will review this listing.');
-          },
-        },
-      ]
-    );
+    setShowReportDialog(true);
   };
 
   const isRootScreen = screen === 'feed';
 
   return (
     <View style={[localStyles.container, { backgroundColor: theme.colors.background }]}>
+      <ConfirmDialog
+        visible={showReportDialog}
+        title="Report listing?"
+        message={`This will send “${selectedListing?.title ?? 'this listing'}” to community moderators for review.`}
+        confirmLabel="Report"
+        destructive
+        onCancel={() => setShowReportDialog(false)}
+        onConfirm={() => {
+          setShowReportDialog(false);
+          showNotification({ title: 'Report submitted', message: 'Thank you. Our moderation team will review this listing.', tone: 'success' });
+        }}
+      />
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (

@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
   Modal,
   Keyboard,
 } from 'react-native';
@@ -23,6 +22,7 @@ import type { SwapChatMessage, SwapConversation, SwapRequestStatus } from './typ
 import { MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { resolveMediaUrl } from '../../app/utils/appUtils';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
@@ -160,6 +160,7 @@ export function SwapChatView({
   onMarkCompleted: () => void;
 }) {
   const { theme, isDark } = useTheme();
+  const { showNotification } = useInAppNotification();
   const [messages, setMessages] = useState<SwapChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -242,7 +243,7 @@ export function SwapChatView({
       setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? realMsg : m)));
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
-      Alert.alert('Error', 'Failed to send message');
+      showNotification({ title: 'Message not sent', message: 'Check your connection and try again.', tone: 'error' });
     } finally {
       setSending(false);
     }

@@ -83,7 +83,6 @@ export function Header({
   const indicatorSize = 11;
   const iconSize = isSmallDevice ? 22 : isTablet ? 26 : 24;
   const actionGap = isSmallDevice ? 10 : isTablet ? 20 : 14;
-  const logoSize = isSmallDevice ? scale(42) : isTablet ? scale(52) : scale(46);
   const actionIconColor = isDark ? theme.colors.primary : '#126027';
 
   return (
@@ -133,14 +132,6 @@ export function Header({
               />
             </TouchableOpacity>
           )}
-        </View>
-
-        <View style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-          <FastImage
-            source={require('../../../assets/ecobud_logo_circle.png')}
-            style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2 }}
-            contentFit="contain"
-          />
         </View>
 
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: actionGap }}>
@@ -282,4 +273,3 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
 });
-

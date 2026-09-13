@@ -25,6 +25,7 @@ import { swapService } from './swapService';
 import type { SwapCategory, ItemCondition, MeetupMethod } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -51,6 +52,7 @@ export function CreateSwapListing({
   onCreated: () => void;
 }) {
   const { theme, isDark } = useTheme();
+  const { showNotification } = useInAppNotification();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<SwapCategory | null>(null);
   const [quantity, setQuantity] = useState('');
@@ -94,7 +96,7 @@ export function CreateSwapListing({
 
   const pickImages = async () => {
     if (images.length >= 5) {
-      Alert.alert('Maximum 5 photos allowed');
+      showNotification({ title: 'Photo limit reached', message: 'A listing can have up to 5 photos.', tone: 'info' });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -111,7 +113,7 @@ export function CreateSwapListing({
 
   const takePicture = async () => {
     if (images.length >= 5) {
-      Alert.alert('Maximum 5 photos allowed');
+      showNotification({ title: 'Photo limit reached', message: 'A listing can have up to 5 photos.', tone: 'info' });
       return;
     }
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -174,8 +176,9 @@ export function CreateSwapListing({
         userId,
       });
       onCreated();
+      showNotification({ title: 'Listing submitted', message: 'We’ll notify you when moderators finish reviewing it.', tone: 'success' });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to create listing');
+      showNotification({ title: 'Listing not created', message: err.message || 'Please check your connection and try again.', tone: 'error' });
     } finally {
       setSubmitting(false);
     }
