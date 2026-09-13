@@ -1,7 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useState, useCallback } from 'react';
 import {
-  Alert,
   BackHandler,
   RefreshControl,
   ScrollView,
@@ -52,6 +51,7 @@ import { HomeView, LearnView } from './components/HomeLearnViews';
 import { styles } from './styles/appStyles';
 import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
+import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 
 /**
  * EcoBud App - Main Shell
@@ -61,15 +61,20 @@ import { ScreenTransition } from '../shared/ui/ScreenTransition';
  * Components are extracted into the components/ directory.
  */
 export default function App() {
-  const model = useHomeDashboard();
-
   return (
     <SafeAreaProvider style={{ flex: 1 }}>
       <ThemeProvider>
-        <MobileShell model={model} />
+        <InAppNotificationProvider>
+          <AppWithModel />
+        </InAppNotificationProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
+}
+
+function AppWithModel() {
+  const model = useHomeDashboard();
+  return <MobileShell model={model} />;
 }
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {

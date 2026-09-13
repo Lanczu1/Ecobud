@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
@@ -688,71 +689,97 @@ export function Redeem() {
       )}
 
       {/* ═══ CREATE/EDIT MODAL ═══ */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => { setShowCreateModal(false); resetForm(); }}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-modal border border-gray-100 dark:border-gray-800" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-4">{editItem ? 'Edit Item' : 'Add New Item'}</h3>
-            <div className="space-y-3">
+      {showCreateModal && createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => { setShowCreateModal(false); resetForm(); }}>
+          <div
+            className="relative z-10 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-modal border border-gray-100 dark:border-gray-800"
+            style={{ maxHeight: 'calc(100vh - 100px)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-lg font-serif font-bold text-gray-900 dark:text-white">{editItem ? 'Edit Item' : 'Add New Item'}</h2>
+              <button
+                type="button"
+                onClick={() => { setShowCreateModal(false); resetForm(); }}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                aria-label="Close item modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              id="redeem-item-form"
+              onSubmit={e => { e.preventDefault(); handleSave(); }}
+              className="flex-1 overflow-y-auto p-6 space-y-4"
+            >
               <div>
-                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Title *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
                 <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="e.g. Eco Water Bottle"
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
               </div>
               <div>
-                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Description</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
                 <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} placeholder="Describe the item..."
-                  className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 resize-none h-20 transition-all" />
+                  rows={3} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 resize-none transition-all" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Coin Cost *</label>
-                  <input type="number" value={formCoinCost} onChange={e => setFormCoinCost(e.target.value)} placeholder="100"
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Coin Cost *</label>
+                  <input type="number" min="1" value={formCoinCost} onChange={e => setFormCoinCost(e.target.value)} placeholder="100"
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Stock (-1 = unlimited)</label>
-                  <input type="number" value={formStock} onChange={e => setFormStock(e.target.value)} placeholder="-1"
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stock (-1 = unlimited)</label>
+                  <input type="number" min="-1" value={formStock} onChange={e => setFormStock(e.target.value)} placeholder="-1"
                     className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Image</label>
-                {formImagePreview ? (
-                  <div className="relative w-full h-32 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800">
-                    <img src={formImagePreview} alt="Preview" className="w-full h-full object-contain" />
-                    <button onClick={handleRemoveImage} className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 active:scale-95 transition-all">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => fileInputRef.current?.click()} type="button"
-                    className="w-full h-32 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex flex-col items-center justify-center gap-2 hover:border-green-400 hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-all cursor-pointer">
-                    <Upload className="w-8 h-8 text-gray-400" /><span className="text-sm text-gray-500 dark:text-gray-400">Click to upload image</span><span className="text-xs text-gray-400 dark:text-gray-500">JPG, PNG up to 5MB</span>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Image</label>
+                <div className="flex items-center gap-4">
+                  {formImagePreview && (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0 bg-gray-50 dark:bg-gray-800">
+                      <img src={formImagePreview} alt="Item preview" className="w-full h-full object-cover" />
+                      <button type="button" onClick={handleRemoveImage} className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 active:scale-95 transition-all" aria-label="Remove image">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    type="button"
+                    className="flex-1 flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/10 cursor-pointer transition-colors text-gray-500 dark:text-gray-400"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>{formImagePreview ? 'Choose a different image...' : 'Choose an image...'}</span>
                   </button>
-                )}
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">JPG or PNG, up to 5MB.</p>
               </div>
               <div>
-                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Category</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
                 <select value={formCategory} onChange={e => setFormCategory(e.target.value)}
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400">
                   {categoryOptions.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
                 </select>
               </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => { setShowCreateModal(false); resetForm(); }}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all duration-200">Cancel</button>
-              <button onClick={handleSave} disabled={!formTitle.trim() || !formCoinCost || uploadingImage}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+            </form>
+
+            <div className="shrink-0 p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex justify-end gap-3">
+              <button type="button" onClick={() => { setShowCreateModal(false); resetForm(); }}
+                className="px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+              <button form="redeem-item-form" type="submit" disabled={!formTitle.trim() || !formCoinCost || uploadingImage}
+                className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                 {uploadingImage && <Loader2 className="w-4 h-4 animate-spin" />}
-                {editItem ? 'Save Changes' : 'Create Item'}
+                {uploadingImage ? 'Saving…' : editItem ? 'Save Changes' : 'Create Item'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
-

@@ -28,6 +28,7 @@ import {
   useWindowDimensions,
   AppState,
   Linking,
+  Modal,
 } from 'react-native';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7220,6 +7221,7 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
 
 export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [displayCoins, setDisplayCoins] = React.useState(model.dashboard?.ecoCoins ?? 0);
   const token = model.session?.token || '';
   const [items, setItems] = React.useState<any[]>([]);
@@ -7228,6 +7230,22 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [refreshing, setRefreshing] = React.useState(false);
   const [redeeming, setRedeeming] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<'shop' | 'requests'>('shop');
+  const [confirmation, setConfirmation] = React.useState<
+    | { type: 'redeem'; item: any }
+    | { type: 'claim'; request: any }
+    | null
+  >(null);
+  const [feedback, setFeedback] = React.useState<{
+    type: 'success' | 'error';
+    title: string;
+    message: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (!feedback) return;
+    const timeout = setTimeout(() => setFeedback(null), 4500);
+    return () => clearTimeout(timeout);
+  }, [feedback]);
 
   const loadItems = React.useCallback(async (silent = false) => {
     try {
@@ -7297,58 +7315,50 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   }, [loadItems]);
 
   const handleRedeem = (item: any) => {
-    if (displayCoins < item.coinCost) {
-      Alert.alert('Not Enough Coins', `You need ${item.coinCost} coins but only have ${displayCoins}.`);
-      return;
-    }
-    Alert.alert(
-      'Redeem Item',
-      `Request "${item.title}" for ${item.coinCost} coins?\n\nCoins will be deducted now. Admin will review your request.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Submit Request',
-          onPress: async () => {
-            try {
-              setRedeeming(item.id);
-              await ecobudApi.redeemItem(token, item.id);
-              // Deduct coins locally for instant UI update
-              setDisplayCoins(prev => prev - item.coinCost);
-              DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
-              Alert.alert('Request Submitted!', `${item.title} redemption request sent for approval.`);
-              loadItems();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to submit request');
-            } finally {
-              setRedeeming(null);
-            }
-          },
-        },
-      ]
-    );
+    if (displayCoins < item.coinCost) return;
+    setConfirmation({ type: 'redeem', item });
   };
 
   const handleClaim = (request: any) => {
-    Alert.alert(
-      'Claim Item',
-      `Confirm you have picked up "${request.itemTitle}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm Claim',
-          onPress: async () => {
-            try {
-              await ecobudApi.claimRedeemRequest(token, request.id);
-              DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
-              Alert.alert('Claimed!', 'Item marked as claimed.');
-              loadItems();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to claim');
-            }
-          },
-        },
-      ]
-    );
+    setConfirmation({ type: 'claim', request });
+  };
+
+  const confirmAction = async () => {
+    if (!confirmation) return;
+    const current = confirmation;
+    const id = current.type === 'redeem' ? current.item.id : current.request.id;
+    setConfirmation(null);
+    setRedeeming(id);
+
+    try {
+      if (current.type === 'redeem') {
+        await ecobudApi.redeemItem(token, current.item.id);
+        setDisplayCoins(prev => prev - current.item.coinCost);
+        DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
+        setFeedback({
+          type: 'success',
+          title: 'Request submitted',
+          message: `${current.item.title} is now waiting for admin approval.`,
+        });
+      } else {
+        await ecobudApi.claimRedeemRequest(token, current.request.id);
+        DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
+        setFeedback({
+          type: 'success',
+          title: 'Item claimed',
+          message: `${current.request.itemTitle} has been marked as claimed.`,
+        });
+      }
+      loadItems();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        title: current.type === 'redeem' ? 'Request not submitted' : 'Item not claimed',
+        message: err.message || (current.type === 'redeem' ? 'Please try submitting your request again.' : 'Please try confirming your claim again.'),
+      });
+    } finally {
+      setRedeeming(null);
+    }
   };
 
   const statusColor = (s: string) => {
@@ -7376,6 +7386,36 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
+      {feedback && (
+        <View
+          accessibilityRole="alert"
+          style={{
+            position: 'absolute',
+            top: 76,
+            left: 16,
+            right: 16,
+            zIndex: 20,
+            elevation: 10,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 12,
+            padding: 14,
+            borderRadius: 16,
+            backgroundColor: feedback.type === 'success' ? (isDark ? '#163A2A' : '#ECFDF5') : (isDark ? '#451A1A' : '#FEF2F2'),
+            borderWidth: 1,
+            borderColor: feedback.type === 'success' ? '#10B981' : '#EF4444',
+          }}
+        >
+          <Ionicons name={feedback.type === 'success' ? 'checkmark-circle' : 'alert-circle'} size={22} color={feedback.type === 'success' ? '#10B981' : '#EF4444'} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontWeight: '800', fontSize: 14 }}>{feedback.title}</Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 2 }}>{feedback.message}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setFeedback(null)} accessibilityLabel="Dismiss message" hitSlop={10}>
+            <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
       <ScrollView
         style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
@@ -7513,9 +7553,16 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                         {isRedeeming ? (
                           <ActivityIndicator size="small" color={isDark ? '#0E1512' : '#FFF'} />
                         ) : (
-                          <Text style={{ color: canAfford ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted, fontWeight: '700', fontSize: 14 }}>
-                            {canAfford ? 'Redeem' : 'Not Enough Coins'}
-                          </Text>
+                          <View style={{ alignItems: 'center' }}>
+                            <Text style={{ color: canAfford ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted, fontWeight: '700', fontSize: 14 }}>
+                              {canAfford ? 'Redeem' : 'Not Enough Coins'}
+                            </Text>
+                            {!canAfford && (
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginTop: 2 }}>
+                                Earn {item.coinCost - displayCoins} more coins
+                              </Text>
+                            )}
+                          </View>
                         )}
                       </TouchableOpacity>
                     </View>
@@ -7610,9 +7657,14 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                       {req.status === 'ready_to_claim' && (
                         <TouchableOpacity
                           onPress={() => handleClaim(req)}
+                          disabled={redeeming === req.id}
                           style={{ backgroundColor: isDark ? theme.colors.primary : '#126027', borderRadius: 20, paddingVertical: 12, alignItems: 'center', marginTop: 12 }}
                         >
-                          <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontWeight: '700', fontSize: 14 }}>Claim Now</Text>
+                          {redeeming === req.id ? (
+                            <ActivityIndicator size="small" color={isDark ? '#0E1512' : '#FFF'} />
+                          ) : (
+                            <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontWeight: '700', fontSize: 14 }}>Claim Now</Text>
+                          )}
                         </TouchableOpacity>
                       )}
                     </View>
@@ -7636,6 +7688,56 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
         )}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <Modal
+        visible={confirmation !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setConfirmation(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(3, 12, 8, 0.62)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setConfirmation(null)} accessibilityLabel="Close confirmation" />
+          <View style={{ backgroundColor: theme.colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Math.max(28, insets.bottom + 18), borderWidth: 1, borderColor: theme.colors.cardBorder }}>
+            <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: 'center', marginBottom: 20 }} />
+            <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: isDark ? '#163A2A' : '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Ionicons name={confirmation?.type === 'claim' ? 'checkmark-done' : 'gift'} size={26} color={isDark ? theme.colors.primary : '#059669'} />
+            </View>
+            <Text style={{ color: theme.colors.textPrimary, fontSize: 21, fontWeight: '900' }}>
+              {confirmation?.type === 'claim' ? 'Confirm pickup' : 'Redeem this item?'}
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 14, lineHeight: 21, marginTop: 8 }}>
+              {confirmation?.type === 'claim'
+                ? `Confirm that you have received “${confirmation.request.itemTitle}”. This action cannot be undone.`
+                : `Your request for “${confirmation?.item.title}” will be sent to the admin for approval.`}
+            </Text>
+
+            {confirmation?.type === 'redeem' && (
+              <View style={{ backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAF9', borderRadius: 16, padding: 14, marginTop: 18, gap: 10 }}>
+                <View style={styles.rowBetween}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Item cost</Text>
+                  <Text style={{ color: isDark ? '#FBBF24' : '#D97706', fontSize: 14, fontWeight: '800' }}>{confirmation.item.coinCost} coins</Text>
+                </View>
+                <View style={styles.rowBetween}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Balance after redemption</Text>
+                  <Text style={{ color: theme.colors.textPrimary, fontSize: 14, fontWeight: '800' }}>{displayCoins - confirmation.item.coinCost} coins</Text>
+                </View>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
+              <TouchableOpacity onPress={() => setConfirmation(null)} style={{ flex: 1, paddingVertical: 14, borderRadius: 22, alignItems: 'center', backgroundColor: isDark ? theme.colors.surfaceMuted : '#F3F4F6' }}>
+                <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmAction} style={{ flex: 1.4, paddingVertical: 14, borderRadius: 22, alignItems: 'center', backgroundColor: isDark ? theme.colors.primary : '#126027' }}>
+                <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontWeight: '800' }}>
+                  {confirmation?.type === 'claim' ? 'Yes, I received it' : 'Submit Request'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
