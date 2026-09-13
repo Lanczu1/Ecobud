@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +14,7 @@ import { EcoBudMobileModel } from '../types/home';
 import { TopNavbar, PrimaryButton } from './CommonComponents';
 import { useTheme, type ThemeColors } from '../../shared/theme/ecoTheme';
 import { homeService } from '../services/homeService';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 interface EventAttendanceOverlayProps {
   eventId: string;
@@ -24,6 +24,7 @@ interface EventAttendanceOverlayProps {
 
 export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttendanceOverlayProps) {
   const { theme } = useTheme();
+  const { showNotification } = useInAppNotification();
   const styles = React.useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<'select_image' | 'image_preview' | 'qr' | 'uploading' | 'success'>('select_image');
@@ -49,7 +50,12 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
     if (!permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
-        Alert.alert('Permission Denied', 'Camera access is required to take photos.');
+        showNotification({
+          title: 'Camera permission needed',
+          message: 'Allow camera access in your device settings to take an attendance photo.',
+          tone: 'warning',
+          durationMs: 6000,
+        });
         return;
       }
     }
@@ -68,7 +74,11 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (mode !== 'qr') return;
     if (!capturedImage) {
-      Alert.alert('Error', 'Missing image proof. Please restart.');
+      showNotification({
+        title: 'Photo proof is missing',
+        message: 'Choose or take a photo before scanning the event QR code.',
+        tone: 'warning',
+      });
       setMode('select_image');
       return;
     }
@@ -90,7 +100,11 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       setMode('success');
       model.refreshEverything(); // Refresh to update userStatus
     } catch (err: any) {
-      Alert.alert('Submission Error', err.message || 'Invalid or expired QR code.');
+      showNotification({
+        title: 'Attendance not submitted',
+        message: err.message || 'The QR code is invalid or expired. Please scan again.',
+        tone: 'error',
+      });
       setMode('qr');
     }
   };

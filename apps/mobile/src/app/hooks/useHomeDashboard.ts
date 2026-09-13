@@ -33,6 +33,7 @@ import { realtimeService } from '../../shared/supabase/realtimeService';
 import { type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 
@@ -74,6 +75,7 @@ const getPhMonthKey = (date: Date = new Date()): string => getPhDateKey(date).sl
 // --- Hook ---
 
 export function useHomeDashboard(): EcoBudMobileModel {
+  const { showNotification } = useInAppNotification();
   const [initializing, setInitializing] = useState(true);
   const [booting, setBooting] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
@@ -441,12 +443,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
       options?.applyOptimisticUpdate?.();
 
       if (options?.alertMessage) {
-        Alert.alert(options.alertTitle ?? 'Saved offline', options.alertMessage);
+        showNotification({
+          title: options.alertTitle ?? 'Saved offline',
+          message: options.alertMessage,
+          tone: 'warning',
+        });
       }
 
       return 'queued' as const;
     },
-    [],
+    [showNotification],
   );
 
   const runMutationWithOfflineFallback = useCallback(
@@ -1851,16 +1857,24 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
           if (mutationMode === 'online') {
             await hydrateApp(activeSession, true);
-            Alert.alert('You are in', 'Your event slot is reserved. Show up to earn your verified reward.');
+            showNotification({
+              title: 'You are in!',
+              message: 'Your event slot is reserved. Show up to earn your verified reward.',
+              tone: 'success',
+            });
           }
         } catch (error) {
-          Alert.alert('Unable to join event', error instanceof Error ? error.message : 'Please try again.');
+          showNotification({
+            title: 'Unable to join event',
+            message: error instanceof Error ? error.message : 'Please try again.',
+            tone: 'error',
+          });
         } finally {
           setRefreshing(false);
         }
       });
     },
-    [ensureSession, hydrateApp, runMutationWithOfflineFallback, runWithActionLoader],
+    [ensureSession, hydrateApp, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
   );
 
   const handleClaimEventReward = useCallback(
@@ -1891,13 +1905,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
           setEarnedCoins(coinsAwarded);
           setActiveOverlayState('eventApproved');
         } catch (error: any) {
-          Alert.alert('Error', error.message || 'Failed to claim reward.');
+          showNotification({
+            title: 'Reward not claimed',
+            message: error.message || 'Failed to claim reward.',
+            tone: 'error',
+          });
         } finally {
           setRefreshing(false);
         }
       });
     },
-    [events, ensureSession, runWithActionLoader, hydrateApp]
+    [events, ensureSession, runWithActionLoader, hydrateApp, showNotification]
   );
 
   const handleAssistantSend = useCallback(
