@@ -8,7 +8,6 @@ import {
   Image,
   StyleSheet,
   Dimensions,
-  Alert,
   Modal,
   ActivityIndicator,
   Animated,
@@ -29,6 +28,8 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../a
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { resolveMediaUrl } from '../../app/utils/appUtils';
+import { ConfirmDialog } from '../../shared/ui/ConfirmDialog';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
@@ -72,12 +73,16 @@ export function SwapListingDetail({
   onUpdated?: (updated: SwapListing) => void;
 }) {
   const { theme, isDark } = useTheme();
+  const { showNotification } = useInAppNotification();
   const [listing, setListing] = useState<SwapListing>(initialListing);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showActions, setShowActions] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Edit form states
   const [editTitle, setEditTitle] = useState(listing.title);
@@ -138,9 +143,10 @@ export function SwapListingDetail({
 
   const handleSaveEdit = async () => {
     if (!editTitle.trim() || !editQuantity.trim()) {
-      Alert.alert('Validation Error', 'Please enter a title and quantity');
+      setEditError('Please enter both a title and quantity.');
       return;
     }
+    setEditError(null);
     try {
       setSavingEdit(true);
       await swapService.updateListing(listing.id, {
@@ -165,38 +171,44 @@ export function SwapListingDetail({
       setListing(updatedListing);
       onUpdated?.(updatedListing);
       setShowEditModal(false);
-      Alert.alert('Success', 'Listing details updated successfully!');
+      showNotification({ title: 'Listing updated', message: 'Your changes were saved successfully.', tone: 'success' });
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update listing');
+      setEditError(err?.message || 'Failed to update listing. Please try again.');
     } finally {
       setSavingEdit(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Listing',
-      'Are you sure you want to delete this listing?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await swapService.deleteListing(listing.id);
-              onDelete?.();
-            } catch {
-              Alert.alert('Error', 'Failed to delete listing');
-            }
-          },
-        },
-      ]
-    );
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      setDeleting(true);
+      await swapService.deleteListing(listing.id);
+      setShowDeleteDialog(false);
+      onDelete?.();
+      showNotification({ title: 'Listing deleted', message: 'The listing is no longer visible in Give & Get.', tone: 'success' });
+    } catch {
+      showNotification({ title: 'Could not delete listing', message: 'Please check your connection and try again.', tone: 'error' });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
     <Animated.View style={[localStyles.container, { transform: [{ translateX: slideAnim }], backgroundColor: theme.colors.background }]}>
+      <ConfirmDialog
+        visible={showDeleteDialog}
+        title="Delete listing?"
+        message="This listing will be removed from Give & Get and cannot be restored."
+        confirmLabel="Delete"
+        destructive
+        busy={deleting}
+        onCancel={() => setShowDeleteDialog(false)}
+        onConfirm={confirmDelete}
+      />
       <SafeAreaView style={[localStyles.safeArea, { backgroundColor: isDark ? theme.colors.background : '#0D5B2A' }]} edges={['top']}>
         {/* Header Bar */}
         <View style={[localStyles.header, isDark && { backgroundColor: theme.colors.card, borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
@@ -653,6 +665,8 @@ export function SwapListingDetail({
                   placeholder="Listing title"
                   placeholderTextColor={theme.colors.textMuted}
                 />
+
+                {editError ? <Text accessibilityRole="alert" style={[localStyles.editError, { color: theme.colors.error }]}>{editError}</Text> : null}
 
                 <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Quantity *</Text>
                 <TextInput
@@ -1309,6 +1323,7 @@ const localStyles = StyleSheet.create({
     fontWeight: '900',
     color: '#1A211D',
   },
+  editError: { fontSize: 13, lineHeight: 18, marginTop: 8 },
   editModalClose: {
     width: scale(32),
     height: scale(32),

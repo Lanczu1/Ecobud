@@ -59,10 +59,27 @@ Thumbs.db
 # Prisma temp
 .prisma/client/query_engine-*.tmp*
 
+# Local databases and development data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Local tool configuration
+.mcp.json
+
 # TypeScript
 *.tsbuildinfo
 
+# Firebase client configuration
+apps/api/google-services.json
 apps/mobile/google-services.json
 apps/mobile/android/app/google-services.json
 apps/mobile/ecobud-project-firebase-adminsdk-*.json
 apps/api/ecobud-project-firebase-adminsdk-*.json
+
+# OAuth client configuration
+**/client_secret_*.json
+
+# Local Android signing keys
+**/debug.keystore
