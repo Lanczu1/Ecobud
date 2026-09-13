@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 
 interface RedeemItem {
   id: string;
@@ -101,9 +102,9 @@ export function Redeem() {
 
   // ─── Items ──────────────────────────────────────────────────────────────
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [itemsData, statsData] = await Promise.all([
         adminGet<RedeemItem[]>('/redeem'),
         adminGet<RedeemStats>('/redeem/stats'),
@@ -112,13 +113,17 @@ export function Redeem() {
       setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch redeem items', error);
-      alert(`Failed to fetch redeem items: ${error.message || error}`);
+      if (!silent) alert(`Failed to fetch redeem items: ${error.message || error}`);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchItems(); }, []);
+  // Track main tab and filter via refs for realtime events
+  const mainTabRef = useRef(mainTab);
+  mainTabRef.current = mainTab;
+  const requestFilterRef = useRef(requestFilter);
+  requestFilterRef.current = requestFilter;
 
   const resetForm = () => {
     setFormTitle('');
@@ -227,23 +232,60 @@ export function Redeem() {
 
   // ─── Requests ───────────────────────────────────────────────────────────
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async (silent = false) => {
     try {
-      setRequestsLoading(true);
+      if (!silent) setRequestsLoading(true);
       const [reqsData, statsData] = await Promise.all([
-        adminGet<RedeemRequest[]>(`/redeem/requests${requestFilter !== 'all' ? `?status=${requestFilter}` : ''}`),
+        adminGet<RedeemRequest[]>(`/redeem/requests${requestFilterRef.current !== 'all' ? `?status=${requestFilterRef.current}` : ''}`),
         adminGet<RequestStats>('/redeem/requests/stats'),
       ]);
       setRequests(reqsData);
       setRequestStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch requests', error);
-      alert(`Failed to fetch requests: ${error.message || error}`);
+      if (!silent) alert(`Failed to fetch requests: ${error.message || error}`);
+    } finally {
+      if (!silent) setRequestsLoading(false);
     }
-    finally { setRequestsLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { if (mainTab === 'requests') fetchRequests(); }, [mainTab, requestFilter]);
+  // Initial fetch and filter change
+  useEffect(() => {
+    fetchItems();
+    if (mainTab === 'requests') {
+      fetchRequests();
+    }
+  }, [mainTab, requestFilter, fetchItems, fetchRequests]);
+
+  // Real-time synchronization & automatic periodic background refresh
+  useEffect(() => {
+    // 1. Subscribe to adminRealtimeService
+    const unsubscribe = adminRealtimeService.connect({
+      onRedeemRefresh: () => {
+        fetchItems(true);
+        fetchRequests(true);
+      },
+      onStatsRefresh: () => {
+        fetchItems(true);
+        if (mainTabRef.current === 'requests') {
+          fetchRequests(true);
+        }
+      },
+    });
+
+    // 2. High-responsiveness polling interval (every 5 seconds) to ensure immediate sync of approvals and postings
+    const interval = setInterval(() => {
+      fetchItems(true);
+      if (mainTabRef.current === 'requests') {
+        fetchRequests(true);
+      }
+    }, 5000);
+
+    return () => {
+      unsubscribe.then(unsub => unsub?.());
+      clearInterval(interval);
+    };
+  }, [fetchItems, fetchRequests]);
 
   const openApproveModal = (id: string) => {
     setApproveLocation('Barangay San Isidro Hall');
@@ -308,13 +350,27 @@ export function Redeem() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">Redeem</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage reward catalog and redemption requests</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage reward catalog and redemption requests (Auto-syncing live)</p>
         </div>
-        {mainTab === 'items' && (
-          <button onClick={openCreateModal} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 active:scale-95 transition-all duration-200 shadow-sm">
-            <Plus className="w-4 h-4" /> Add Item
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => {
+              fetchItems();
+              if (mainTab === 'requests') fetchRequests();
+            }}
+            disabled={loading || requestsLoading}
+            title="Refresh Data"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 text-gray-500 dark:text-gray-400 ${(loading || requestsLoading) ? 'animate-spin text-emerald-500' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
-        )}
+          {mainTab === 'items' && (
+            <button onClick={openCreateModal} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 active:scale-95 transition-all duration-200 shadow-sm">
+              <Plus className="w-4 h-4" /> Add Item
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Tabs */}
@@ -484,7 +540,7 @@ export function Redeem() {
                   {f.icon}{f.label}
                 </button>
               ))}
-              <button onClick={fetchRequests} title="Refresh requests" className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all duration-200">
+              <button onClick={() => fetchRequests()} title="Refresh requests" className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all duration-200">
                 <RefreshCw className={`w-4 h-4 ${requestsLoading ? 'animate-spin' : ''}`} />
               </button>
             </div>

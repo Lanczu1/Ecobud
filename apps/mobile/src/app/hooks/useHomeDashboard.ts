@@ -1174,6 +1174,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               throw new Error('Administrators and moderators cannot log in via the mobile app.');
             }
 
+
             setSession(nextSession);
             await persistSession(nextSession);
             await hydrateApp(nextSession);
@@ -1212,7 +1213,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       const errorMsg = error instanceof Error ? error.message : 'Google Sign-In failed.';
       setAuthError(errorMsg);
     }
-  }, [hydrateApp, persistSession, runWithActionLoader]);
+  }, [ensureSession, hydrateApp, persistSession, runWithActionLoader]);
 
   const handleSignUpArgs = useCallback(async (username: string, email: string, pass: string, city: string, otpCode?: string) => {
     await runWithActionLoader('Creating your account...', async () => {
@@ -1344,6 +1345,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
           DeviceEventEmitter.emit('notificationsChanged');
           DeviceEventEmitter.emit('notificationsInboxRefresh');
+          DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
           if (notice.scope !== 'notifications') Alert.alert(notice.title, notice.message);
           queueRealtimeRefresh(`notice:${notice.scope}`);
         },
@@ -1352,6 +1354,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             return;
           }
 
+          DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
           queueRealtimeRefresh(`${signal.channel}:${signal.reason}`);
         },
       })
@@ -1371,7 +1374,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
     };
   }, [presence.shouldMaintainRealtimeConnection, queueRealtimeRefresh, session]);
 
-
   React.useEffect(() => {
     const sub = DeviceEventEmitter.addListener('ECO_POINTS_DROP_ANIMATION', () => {
       const activeSession = session;
@@ -1381,8 +1383,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
     return () => sub.remove();
   }, [session, hydrateApp]);
-
-
 
   const openLesson = useCallback(async (lessonId: string) => {
     await runWithActionLoader('Opening lesson...', async () => {
@@ -1467,7 +1467,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setRefreshing(true);
         let unlockedBadges: EcoBadge[] = [];
         let earnedPts = selectedLesson?.pointsReward ?? 10;
-        let earnedCns = 0; // Default or maybe 5 if we want offline fallback, but we'll get from online
+        let earnedCns = 0;
 
         const mutationMode = await runMutationWithOfflineFallback({
           mutation: {
@@ -1516,6 +1516,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     runMutationWithOfflineFallback,
     runWithActionLoader,
     selectedLessonId,
+    selectedLesson,
   ]);
 
   const pendingVideoProgressSaves = useRef(new Map<string, {
@@ -2289,9 +2290,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
 
-      if (origin) {
-        setClaimRewardData({ points: totalExp, coins: totalCoins, origin });
-      }
+      const validOrigin = origin && origin.x > 0 && origin.y > 0 ? origin : undefined;
+      setClaimRewardData({ points: totalExp, coins: totalCoins, origin: validOrigin });
       setCompletionCelebrationType('claim');
       setActiveOverlayState('claimParticles');
       setChallenges((prev) =>

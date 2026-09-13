@@ -1438,8 +1438,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const insets = useSafeAreaInsets();
   const isTablet = width >= 600;
 
-  // Use real measured layout from LevelCard's progress bar (via onProgressBarMeasured -> model.progressBarLayout)
-  // Falls back to a best-guess estimate if the layout hasn't been captured yet
+  // Use real measured layout from LevelCard's progress bar (mirrors EventApprovedOverlay)
   const layout = model.progressBarLayout;
   const topSafeArea = insets.top || 44;
   const fallbackY =
@@ -1450,32 +1449,18 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     verticalScale(68) +
     verticalScale(114) +
     verticalScale(218);
-  const targetProgressBarX = layout ? layout.x + layout.width * 0.5 - 15 : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
+  const targetProgressBarX = layout
+    ? layout.x + layout.width * 0.5 - 15
+    : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
   const targetProgressBarY = layout ? layout.y + layout.height * 0.5 - 15 : fallbackY - 15;
 
-  // Calculate how many of each particle type to spawn
-  const hasCoins = model.claimRewardData ? model.claimRewardData.coins > 0 : true;
-  const hasPoints = model.claimRewardData ? model.claimRewardData.points > 0 : true;
-  // Total particles to spawn
-  const numParticles = hasCoins && hasPoints ? 24 : 16;
+  // Centered origin for challenges claim particles overlay
+  const originX = width / 2 - 15;
+  const originY = height / 2 - 40;
 
-  // Determine particle type array
-  const particleTypes: ('coin' | 'leaf')[] = [];
-  for (let i = 0; i < numParticles; i++) {
-    if (hasCoins && hasPoints) {
-      particleTypes.push(i % 2 === 0 ? 'leaf' : 'coin');
-    } else if (hasCoins) {
-      particleTypes.push('coin');
-    } else if (hasPoints) {
-      particleTypes.push('leaf');
-    }
-  }
-
-  const originX = model.claimRewardData?.origin?.x ?? (width / 2 - 15);
-  const originY = model.claimRewardData?.origin?.y ?? (height / 2 - 80);
-
+  const numParticles = 32;
   const particleAnims = React.useRef(
-    Array.from({ length: particleTypes.length }, () => ({
+    Array.from({ length: numParticles }, () => ({
       pos: new Animated.ValueXY({ x: originX, y: originY }),
       scale: new Animated.Value(0),
       opacity: new Animated.Value(0),
@@ -1483,32 +1468,30 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   ).current;
 
   React.useEffect(() => {
-    if (particleTypes.length === 0) {
-      // If no particles to show, just close overlay immediately
-      setActiveOverlay(null);
-      return;
-    }
-
-    const animations = particleAnims.map((particle, index) => {
-      const type = particleTypes[index];
-      // Separate rewards into clear, responsive lanes: leaves burst to the left
-      // while coins burst to the right. Clamp the destinations to the viewport so
-      // neither type is cropped on compact phones or wide tablets.
-      const horizontalRange = Math.min(width * (isTablet ? 0.23 : 0.31), scale(150));
-      const verticalRange = Math.min(height * 0.14, verticalScale(110));
-      const direction = type === 'leaf' ? -1 : 1;
-      const burstX = Math.max(
-        scale(12),
-        Math.min(width - scale(46), originX + direction * (horizontalRange * (0.55 + Math.random() * 0.45))),
-      );
-      const burstY = Math.max(
-        topSafeArea + verticalScale(8),
-        Math.min(height - insets.bottom - verticalScale(46), originY + (Math.random() - 0.5) * verticalRange * 2),
-      );
-
+    particleAnims.forEach((particle) => {
       particle.pos.setValue({ x: originX, y: originY });
       particle.scale.setValue(0);
       particle.opacity.setValue(0);
+    });
+
+    const animations = particleAnims.map((particle, index) => {
+      const isCoin = index % 2 !== 0;
+      const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
+      const radius = 70 + Math.random() * 50;
+      const burstX = originX + Math.cos(angle) * radius;
+      const burstY = originY + Math.sin(angle) * radius;
+
+      // Target positions:
+      // Leaves fly all the way to the far left edge (dulo ng left: off-screen or far left)
+      // Coins fly all the way to the far right edge (dulo ng right: off-screen or far right)
+      const targetLeft = {
+        x: -50,
+        y: targetProgressBarY + (Math.random() * 80 - 40),
+      };
+      const targetRight = {
+        x: width + 50,
+        y: targetProgressBarY + (Math.random() * 80 - 40),
+      };
 
       const delay = index * 60;
 
@@ -1535,10 +1518,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
         Animated.delay(120),
         Animated.parallel([
           Animated.timing(particle.pos, {
-            toValue: {
-              x: targetProgressBarX + (Math.random() * scale(60) - scale(30)),
-              y: targetProgressBarY + (Math.random() * verticalScale(12) - verticalScale(6)),
-            }, // Target directly the green LevelCard Progress to Eco Leader bar line
+            toValue: isCoin ? targetRight : targetLeft,
             duration: 650,
             easing: Easing.bezier(0.25, 1, 0.5, 1),
             useNativeDriver: true,
@@ -1560,70 +1540,68 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
       ]);
     });
 
+    const timers = [
+      setTimeout(() => playPopSound(), 100),
+      setTimeout(() => playPopSound(), 350),
+      setTimeout(() => playPopSound(), 600),
+      setTimeout(() => playPopSound(), 850),
+      setTimeout(() => playPopSound(), 1100),
+    ];
+
     Animated.parallel(animations).start(() => {
       setActiveOverlay(null);
+      DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
     });
-
-    const timers = [
-      setTimeout(() => playPopSound(), 50),
-      setTimeout(() => playPopSound(), 250),
-      setTimeout(() => playPopSound(), 450),
-      setTimeout(() => playPopSound(), 650),
-      setTimeout(() => playPopSound(), 850),
-    ];
 
     return () => {
       timers.forEach((t) => clearTimeout(t));
     };
-  }, [height, insets.bottom, numParticles, originX, originY, particleAnims, setActiveOverlay, targetProgressBarX, targetProgressBarY, topSafeArea, width]);
+  }, [originX, originY, particleAnims, setActiveOverlay, targetProgressBarX, targetProgressBarY, width]);
 
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent', zIndex: 10000 }]} pointerEvents="none">
-      {particleAnims.map((particle, index) => {
-        const type = particleTypes[index];
-        return (
-          <Animated.View
-            key={index}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              transform: [
-                { translateX: particle.pos.x },
-                { translateY: particle.pos.y },
-                { scale: particle.scale },
-              ],
-              opacity: particle.opacity,
-              zIndex: 9999,
-              shadowColor: type === 'leaf' ? '#10b981' : '#F59E0B',
-              shadowRadius: 10,
-              shadowOpacity: 0.8,
-              shadowOffset: { width: 0, height: 0 },
-              elevation: 10,
-            }}
-          >
-            <View style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              backgroundColor: type === 'coin' ? 'transparent' : '#10b981',
-              justifyContent: 'center',
-              alignItems: 'center',
-              borderWidth: type === 'coin' ? 0 : 2,
-              borderColor: '#FFF',
-            }}>
-              {type === 'coin' ? (
-                <Image
-                  source={require('../../../assets/coin.png')}
-                  style={{ width: 34, height: 34, resizeMode: 'contain' }}
-                />
-              ) : (
-                <Ionicons name="leaf" size={16} color="#FFF" />
-              )}
-            </View>
-          </Animated.View>
-        );
-      })}
+      {particleAnims.map((particle, index) => (
+        <Animated.View
+          key={index}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: [
+              { translateX: particle.pos.x },
+              { translateY: particle.pos.y },
+              { scale: particle.scale },
+            ],
+            opacity: particle.opacity,
+            zIndex: 9999,
+            shadowColor: '#F59E0B',
+            shadowRadius: 10,
+            shadowOpacity: 0.8,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 10,
+          }}
+        >
+          <View style={{
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            backgroundColor: index % 2 === 0 ? '#10b981' : 'transparent',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: index % 2 === 0 ? 2 : 0,
+            borderColor: '#FFF',
+          }}>
+            {index % 2 === 0 ? (
+              <Ionicons name="leaf" size={16} color="#FFF" />
+            ) : (
+              <Image
+                source={require('../../../assets/coin.png')}
+                style={{ width: 34, height: 34, resizeMode: 'contain' }}
+              />
+            )}
+          </View>
+        </Animated.View>
+      ))}
     </View>
   );
 }
@@ -1632,6 +1610,7 @@ export function NotificationsOverlay({ model }: { model: EcoBudMobileModel }) {
  const {theme}=useTheme();
  return <View style={[styles.fullscreenOverlay,{backgroundColor:theme.colors.background}]}><TopNavbar model={model} showBack={true}/><NotificationInbox model={model}/></View>;
 }
+
 export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
   switch (model.activeOverlay) {
     case 'coinsHistory':
@@ -7005,22 +6984,22 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
           </SurfaceCard>
 
           <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Change Password</Text>
-          <SurfaceCard style={{ padding: 16 }}>
+          <SurfaceCard style={{ padding: 16, gap: 12 }}>
             <TextInput
-              style={[localStyles.formInput, { marginBottom: 16, backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
+              style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
+              placeholder="New password (min. 8 characters)"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
               value={newPassword}
               onChangeText={setNewPassword}
-              secureTextEntry
-              placeholder="New Password"
-              placeholderTextColor={theme.colors.textMuted}
             />
             <TextInput
               style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
+              placeholder="Confirm new password"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry
-              placeholder="Confirm New Password"
-              placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
 
@@ -7246,12 +7225,13 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [items, setItems] = React.useState<any[]>([]);
   const [myRequests, setMyRequests] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [redeeming, setRedeeming] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<'shop' | 'requests'>('shop');
 
-  const loadItems = React.useCallback(async () => {
+  const loadItems = React.useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [itemsData, requestsData, dashboardData] = await Promise.all([
         ecobudApi.fetchRedeemItems(token),
         ecobudApi.fetchMyRedeemRequests(token),
@@ -7265,14 +7245,56 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
       }
     } catch (err) {
       console.error('Failed to load redeem data:', err);
-      setItems([]);
-      setMyRequests([]);
+      if (!silent) {
+        setItems([]);
+        setMyRequests([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      setRefreshing(false);
     }
   }, [token]);
 
   React.useEffect(() => { loadItems(); }, [loadItems]);
+
+  // Real-time synchronization:
+  // 1. Listen for notification & redeem refresh events
+  // 2. Poll every 6 seconds to automatically catch new catalog items, approvals, and status changes
+  // 3. Auto-refresh when app comes to foreground
+  React.useEffect(() => {
+    const subNotice = DeviceEventEmitter.addListener('notificationsInboxRefresh', () => {
+      loadItems(true);
+    });
+    const subNoticesChanged = DeviceEventEmitter.addListener('notificationsChanged', () => {
+      loadItems(true);
+    });
+    const subRedeem = DeviceEventEmitter.addListener('ECO_REDEEM_SYNC', () => {
+      loadItems(true);
+    });
+
+    const interval = setInterval(() => {
+      loadItems(true);
+    }, 6000);
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        loadItems(true);
+      }
+    });
+
+    return () => {
+      subNotice.remove();
+      subNoticesChanged.remove();
+      subRedeem.remove();
+      clearInterval(interval);
+      appStateSub.remove();
+    };
+  }, [loadItems]);
+
+  const onPullRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    loadItems(false);
+  }, [loadItems]);
 
   const handleRedeem = (item: any) => {
     if (displayCoins < item.coinCost) {

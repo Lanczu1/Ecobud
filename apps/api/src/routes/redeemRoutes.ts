@@ -90,6 +90,13 @@ router.post('/redeem', authenticateRequest, requireUserAccess, async (req: Authe
 
     const request = await redeemWithRetry(userId, itemId);
 
+    // Notify admin in real-time
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'new-redeem-request',
+      actorUserId: userId,
+      entityId: request.id,
+    });
+
     res.status(201).json({ success: true, request, message: 'Redemption request submitted. Awaiting admin approval.' });
   } catch (error) {
     if (error instanceof RedemptionError) return res.status(error.status).json({ message: error.message });
@@ -265,6 +272,17 @@ router.patch('/requests/:id/approve', authenticateRequest, requireModeratorAcces
       notificationKey: `redeem_approved:${id}`,
     });
 
+    // Notify admin dashboard and user tracker/rewards
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-approved',
+      actorUserId: (req as AuthenticatedRequest).auth?.userId,
+      entityId: id,
+    });
+    void supabaseRealtimeService.publishUserSectionRefresh(request.userId, 'tracker', {
+      reason: 'redeem-status-updated',
+      entityId: id,
+    });
+
     res.json(updated);
   } catch (error) {
     console.error('Error approving redeem request:', error);
@@ -333,6 +351,17 @@ router.patch('/requests/:id/reject', authenticateRequest, requireModeratorAccess
       notificationKey: `redeem_rejected:${id}`,
     });
 
+    // Notify admin dashboard and user tracker/rewards
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-rejected',
+      actorUserId: (req as AuthenticatedRequest).auth?.userId,
+      entityId: id,
+    });
+    void supabaseRealtimeService.publishUserSectionRefresh(request.userId, 'tracker', {
+      reason: 'redeem-status-updated',
+      entityId: id,
+    });
+
     res.json({ success: true, message: 'Request rejected and coins refunded' });
   } catch (error) {
     console.error('Error rejecting redeem request:', error);
@@ -357,6 +386,13 @@ router.patch('/requests/:id/claim', authenticateRequest, requireUserAccess, asyn
       where: { id },
       data: { status: 'claimed' },
     });
+
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-claimed',
+      actorUserId: req.auth!.userId,
+      entityId: id,
+    });
+
     res.json(updated);
   } catch (error) {
     console.error('Error claiming redeem request:', error);
@@ -382,6 +418,12 @@ router.post('/', authenticateRequest, requireModeratorAccess, async (req, res) =
       },
     });
     apiCache.delete('active_redeem_items');
+
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-item-created',
+      entityId: item.id,
+    });
+
     res.status(201).json(item);
   } catch (error) {
     console.error('Error creating redeem item:', error);
@@ -404,6 +446,12 @@ router.patch('/:id', authenticateRequest, requireModeratorAccess, async (req, re
 
     const item = await prisma.redeemItem.update({ where: { id }, data });
     apiCache.delete('active_redeem_items');
+
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-item-updated',
+      entityId: item.id,
+    });
+
     res.json(item);
   } catch (error) {
     console.error('Error updating redeem item:', error);
@@ -419,6 +467,12 @@ router.patch('/:id/toggle', authenticateRequest, requireModeratorAccess, async (
     if (!item) return res.status(404).json({ message: 'Item not found' });
     const updated = await prisma.redeemItem.update({ where: { id }, data: { isActive: !item.isActive } });
     apiCache.delete('active_redeem_items');
+
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-item-toggled',
+      entityId: updated.id,
+    });
+
     res.json(updated);
   } catch (error) {
     console.error('Error toggling redeem item:', error);
@@ -436,6 +490,12 @@ router.delete('/requests/:id', authenticateRequest, requireModeratorAccess, asyn
     if (deleted.count === 0) {
       return res.status(409).json({ message: 'Only rejected or claimed requests can be removed. Reject pending requests first to refund coins and restore stock.' });
     }
+
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-request-deleted',
+      entityId: req.params.id,
+    });
+
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting redeem request:', error);
@@ -448,6 +508,12 @@ router.delete('/:id', authenticateRequest, requireModeratorAccess, async (req, r
   try {
     await prisma.redeemItem.delete({ where: { id: req.params.id } });
     apiCache.delete('active_redeem_items');
+
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      reason: 'redeem-item-deleted',
+      entityId: req.params.id,
+    });
+
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting redeem item:', error);
