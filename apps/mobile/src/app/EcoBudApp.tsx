@@ -52,6 +52,7 @@ import { styles } from './styles/appStyles';
 import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
+import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
 
 /**
  * EcoBud App - Main Shell
@@ -64,9 +65,11 @@ export default function App() {
   return (
     <SafeAreaProvider style={{ flex: 1 }}>
       <ThemeProvider>
-        <InAppNotificationProvider>
-          <AppWithModel />
-        </InAppNotificationProvider>
+        <UpdateRequiredGate>
+          <InAppNotificationProvider>
+            <AppWithModel />
+          </InAppNotificationProvider>
+        </UpdateRequiredGate>
       </ThemeProvider>
     </SafeAreaProvider>
   );

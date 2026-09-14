@@ -89,11 +89,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const isPreliminaryApproved = !isRejectedSubmission && !isSubmissionCompleted && (challenge?.progress?.status === 'approved_collection' || submission?.status === 'approved_collection' || submission?.adminPreliminaryApproved);
   const isFinalApproved = !isRejectedSubmission && !isSubmissionCompleted && (challenge?.progress?.status === 'approved' || submission?.status === 'approved' || submission?.adminFinalApproved);
 
-  // Dynamic user barangay collection point
+  // Prefer the challenge-specific point configured by an admin, with the user's barangay as fallback.
   const userBarangay = model.profile?.profile?.city?.trim();
-  const collectionPointName = userBarangay
-    ? `Barangay ${userBarangay} Collection Point`
-    : (challenge?.collectionPointName || 'Barangay Collection Point');
+  const collectionPointName = challenge?.collectionPointName?.trim()
+    || (userBarangay ? `Barangay ${userBarangay} Collection Point` : 'Barangay Collection Point');
+  const requirementType = challenge?.requirementType || 'quantity';
+  const requirementTarget = challenge?.requirementTarget || '1';
+  const requirementUnit = challenge?.requirementUnit || challenge?.quantityUnit || 'piece';
+  const requirementLabel = `${requirementTarget} ${requirementUnit}`.trim();
 
   const isReadyForAfterPhoto = !isRejectedSubmission && !isSubmissionCompleted && Boolean(submission?.proofUrl) && isPreliminaryApproved;
 
@@ -1197,11 +1200,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </Text>
             </View>
 
-            {/* Mission Requirements & Guidelines Card */}
+            {/* Dynamic Mission Requirements Card */}
             <View style={{
               backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
               borderRadius: 16,
-              padding: 16,
+              padding: 18,
               marginBottom: 20,
               borderWidth: 1,
               borderColor: theme.colors.cardBorder,
@@ -1211,30 +1214,49 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               shadowRadius: 4,
               elevation: 2,
             }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.primary} />
-                <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: 0.2 }}>
-                  Mission Requirements
-                </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1 }}>
+                  <Ionicons name="shield-checkmark-outline" size={19} color={theme.colors.primary} />
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: 0.2 }}>
+                    Mission Requirements
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#DCFCE7', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#6EE7B7' : '#166534', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {requirementType}
+                  </Text>
+                </View>
               </View>
 
-              <View style={{ gap: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+              <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: isDark ? 'rgba(16,185,129,0.08)' : '#F0FDF4', borderRadius: 13, padding: 13 }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : '#DCFCE7', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={requirementType === 'weight' ? 'scale-outline' : 'cube-outline'} size={20} color={theme.colors.primary} />
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Cleanliness & Preparation:</Text>
-                    <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
-                      Ensure items are clean, emptied of liquids, and clearly separated for camera recognition.
-                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textMuted, marginBottom: 2 }}>TARGET TO COMPLETE</Text>
+                    <Text style={{ fontSize: 20, fontWeight: '900', color: theme.colors.textPrimary }}>{requirementLabel}</Text>
                   </View>
                 </View>
 
+                {!!challenge.additionalInstructions?.trim() && (
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9 }}>
+                    <Ionicons name="information-circle" size={18} color={theme.colors.primary} style={{ marginTop: 1 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Instructions</Text>
+                      <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 2, lineHeight: 19 }}>
+                        {challenge.additionalInstructions}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                  <Ionicons name="location" size={17} color={theme.colors.primary} style={{ marginTop: 2 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary }}>Drop-off Point:</Text>
                     <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 1 }}>
-                      Bring items to {collectionPointName}.
+                      {collectionPointName}
                     </Text>
                   </View>
                 </View>

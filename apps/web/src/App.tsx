@@ -49,11 +49,15 @@ function SectionFallback() {
   );
 }
 
-function renderSection(section: AdminSection) {
+function renderSection(section: AdminSection, role?: string) {
+  const accessibleSection = role === 'moderator' && section === 'Learning Content'
+    ? 'Challenges'
+    : section;
+
   return (
     <Suspense fallback={<SectionFallback />}>
       {(() => {
-        switch (section) {
+        switch (accessibleSection) {
           case 'Dashboard':        return <Dashboard />;
           case 'Users':            return <ManageUsers />;
           case 'Learning Content': return <LearningContent />;
@@ -88,6 +92,13 @@ export default function App() {
     }
     return 'Dashboard';
   });
+  const adminUserRole = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null')?.role as string | undefined;
+    } catch {
+      return undefined;
+    }
+  })();
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('ecobud_dark_mode') === 'true';
   });
@@ -223,7 +234,7 @@ export default function App() {
         isDark={isDark}
         onToggleDark={toggleDarkMode}
       >
-        {renderSection(activeSection)}
+        {renderSection(activeSection, adminUserRole)}
       </AdminLayout>
     );
   }

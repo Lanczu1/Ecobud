@@ -403,6 +403,10 @@ export class AdminService {
     availableQuantity?: number;
     weeklyIncrementQuantity?: number;
     quantityUnit?: string;
+    requirementType?: string;
+    requirementTarget?: string;
+    requirementUnit?: string;
+    additionalInstructions?: string;
     collectionPointName?: string;
     collectionPointLat?: number;
     collectionPointLng?: number;
@@ -428,6 +432,10 @@ export class AdminService {
         availableQuantity: data.availableQuantity ?? 50,
         weeklyIncrementQuantity: data.weeklyIncrementQuantity ?? 50,
         quantityUnit: data.quantityUnit || "bottles",
+        requirementType: data.requirementType || "quantity",
+        requirementTarget: data.requirementTarget || "1",
+        requirementUnit: data.requirementUnit || "piece",
+        additionalInstructions: data.additionalInstructions?.trim() || null,
         collectionPointName: data.collectionPointName || "Municipal Waste Collection Center",
         collectionPointLat: data.collectionPointLat ?? null,
         collectionPointLng: data.collectionPointLng ?? null,

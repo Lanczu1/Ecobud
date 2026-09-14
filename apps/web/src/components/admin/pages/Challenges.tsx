@@ -29,6 +29,10 @@ interface Challenge {
   availableQuantity: number;
   weeklyIncrementQuantity: number;
   quantityUnit: string;
+  requirementType?: 'quantity' | 'weight' | 'item';
+  requirementTarget?: string;
+  requirementUnit?: string;
+  additionalInstructions?: string | null;
   collectionPointName?: string;
   createdAt: string;
   updatedAt: string;
@@ -212,10 +216,14 @@ interface FormData {
   aiDetectionTargets: string[];
   aiMinimumConfidence: number;
   isFeatured: boolean;
+  requirementType: 'quantity' | 'weight' | 'item';
+  requirementTarget: string;
+  requirementUnit: string;
+  additionalInstructions: string;
   collectionPointName: string;
 }
 
-const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', startDate: null, endDate: null, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80, isFeatured: false, collectionPointName: 'Barangay Collection Point' };
+const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', startDate: null, endDate: null, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80, isFeatured: false, requirementType: 'quantity', requirementTarget: '1', requirementUnit: 'piece', additionalInstructions: '', collectionPointName: 'Barangay Collection Point' };
 
 interface ModalProps {
   onClose: () => void;
@@ -226,7 +234,7 @@ interface ModalProps {
 function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const [form, setForm] = useState<FormData>(
     initial
-      ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', startDate: initial.startDate || null, endDate: initial.endDate || null, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false, collectionPointName: initial.collectionPointName || 'Barangay Collection Point' }
+      ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', startDate: initial.startDate || null, endDate: initial.endDate || null, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false, requirementType: initial.requirementType || 'quantity', requirementTarget: initial.requirementTarget || '1', requirementUnit: initial.requirementUnit || 'piece', additionalInstructions: initial.additionalInstructions || '', collectionPointName: initial.collectionPointName || 'Barangay Collection Point' }
       : emptyForm
   );
   const [saving, setSaving] = useState(false);
@@ -263,6 +271,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.description) { setErr('Title and description are required.'); return; }
+    if (!form.requirementTarget.trim() || !form.requirementUnit.trim()) { setErr('Requirement target and unit are required.'); return; }
     setSaving(true); setErr('');
     try { await onSave({ ...form, startDate: null, endDate: null }); handleClose(); }
     catch (e: any) { setErr(e.message || 'Failed to save.'); }
@@ -363,9 +372,37 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Collection Point Name</label>
-              <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" placeholder="e.g. Barangay Collection Point" />
+            <div className="bg-green-50/60 rounded-xl border border-green-100 p-5 shadow-sm">
+              <h3 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
+                <CheckSquare className="w-4 h-4 text-green-600" /> Mission Requirements
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">Shown to users on the mobile challenge details screen.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Requirement Type</label>
+                  <select value={form.requirementType} onChange={e => setForm(f => ({ ...f, requirementType: e.target.value as FormData['requirementType'] }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white capitalize">
+                    <option value="quantity">Quantity</option>
+                    <option value="weight">Weight</option>
+                    <option value="item">Item</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Value</label>
+                  <input value={form.requirementTarget} onChange={e => setForm(f => ({ ...f, requirementTarget: e.target.value }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white" placeholder="e.g. 20 or 1-5" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                  <input value={form.requirementUnit} onChange={e => setForm(f => ({ ...f, requirementUnit: e.target.value }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white" placeholder="bottles, kg, pieces" />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Instructions</label>
+                <textarea value={form.additionalInstructions} onChange={e => setForm(f => ({ ...f, additionalInstructions: e.target.value }))} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white resize-none" placeholder="e.g. Wash, dry, and remove bottle caps before drop-off." />
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Collection Point</label>
+                <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white" placeholder="e.g. Barangay Yukos Collection Point" />
+              </div>
             </div>
             
             <div className="h-2 w-full shrink-0" />
@@ -547,7 +584,18 @@ function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: Chall
               <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               Mission Requirements & Parameters
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Completion Requirement */}
+              <div className="p-3.5 rounded-xl border border-emerald-100 dark:border-[#0e4028] bg-emerald-50/60 dark:bg-[#0b2d1d]/50 space-y-1">
+                <span className="text-xs font-semibold text-gray-500 dark:text-[#88a293] block capitalize">{challenge.requirementType || 'quantity'} Requirement</span>
+                <p className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+                  {challenge.requirementTarget || '1'} {challenge.requirementUnit || 'piece'}
+                </p>
+                {challenge.additionalInstructions && (
+                  <p className="text-xs text-gray-600 dark:text-[#b8cec0] whitespace-pre-line leading-relaxed pt-1">{challenge.additionalInstructions}</p>
+                )}
+              </div>
+
               {/* AI Detection Confidence */}
               <div className="p-3.5 rounded-xl border border-gray-100 dark:border-[#1a2e24] bg-white dark:bg-[#090f0c] space-y-1">
                 <span className="text-xs font-semibold text-gray-500 dark:text-[#88a293] block">AI Minimum Confidence</span>

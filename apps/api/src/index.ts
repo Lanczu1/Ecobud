@@ -36,6 +36,7 @@ import {
   startLessonPublishScheduler,
   stopLessonPublishScheduler,
 } from './services/lessonPublishScheduler';
+import { appVersionRoutes } from './routes/appVersionRoutes';
 
 const app = express();
 const production = process.env.NODE_ENV === 'production';
@@ -131,6 +132,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+app.use('/api/app/version', appVersionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/home', homeRoutes);

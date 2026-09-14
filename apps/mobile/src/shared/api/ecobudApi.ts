@@ -217,6 +217,10 @@ export interface ChallengeWithProgress {
   availableQuantity?: number;
   weeklyIncrementQuantity?: number;
   quantityUnit?: string;
+  requirementType?: 'quantity' | 'weight' | 'item';
+  requirementTarget?: string;
+  requirementUnit?: string;
+  additionalInstructions?: string | null;
   collectionPointName?: string;
   createdAt: string;
   updatedAt: string;
@@ -379,6 +383,12 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   token?: string;
   timeoutMs?: number;
+}
+
+export interface AppVersionPayload {
+  latestVersion: string;
+  minimumVersion: string;
+  updateUrl: string;
 }
 
 export type ApiFailureCode = 'timeout' | 'offline' | 'server' | 'validation';
@@ -594,6 +604,7 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
 };
 
 export const ecobudApi = {
+  fetchAppVersion: () => request<AppVersionPayload>('/app/version', { timeoutMs: 5000 }),
   notification: (token:string,id:string) => request<import('../../app/types/notifications').AppNotification>('/notifications/'+encodeURIComponent(id),{token}),
   notifications: (token:string, query='') => request<NotificationPage>('/notifications'+query,{token}),
   readNotification: (token:string,id:string) => request('/notifications/'+encodeURIComponent(id)+'/read',{token,method:'PATCH'}),
