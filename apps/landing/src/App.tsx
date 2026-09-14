@@ -79,7 +79,9 @@ export default function App() {
             </a>
             <a
               href={apkDownloadUrl}
-              download
+              target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
+              rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+              download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
               className="btn-primary"
               style={{ padding: '10px 20px', fontSize: '0.95rem' }}
             >
@@ -147,7 +149,9 @@ export default function App() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
                   <a
                     href={apkDownloadUrl}
-                    download
+                    target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
+                    rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                    download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
                     className="btn-primary"
                     style={{ padding: '16px 36px', fontSize: '1.1rem' }}
                   >
