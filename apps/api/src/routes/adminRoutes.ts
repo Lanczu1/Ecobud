@@ -18,14 +18,14 @@ adminRoutes.post("/upload", challengeUploadMiddleware.single('image'), AdminCont
 adminRoutes.post("/upload/delete", AdminController.deleteImage);
 
 // Lessons Management
-adminRoutes.get("/lessons", AdminController.getLessons);
-adminRoutes.get("/lessons/:id", AdminController.getLessonById);
+adminRoutes.get("/lessons", requireAdminAccess, AdminController.getLessons);
+adminRoutes.get("/lessons/:id", requireAdminAccess, AdminController.getLessonById);
 adminRoutes.post("/lessons", requireAdminAccess, uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.createLesson);
 adminRoutes.put("/lessons/:id", requireAdminAccess, uploadMiddleware.fields([{ name: 'video', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), AdminController.updateLesson);
-adminRoutes.delete("/lessons/:id", AdminController.deleteLesson);
+adminRoutes.delete("/lessons/:id", requireAdminAccess, AdminController.deleteLesson);
 adminRoutes.patch("/lessons/:id/publish", requireAdminAccess, AdminController.patchPublish);
-adminRoutes.patch("/lessons/:id/feature", AdminController.patchFeature);
-adminRoutes.post("/transcribe", uploadMiddleware.single('video'), AdminController.transcribeVideo);
+adminRoutes.patch("/lessons/:id/feature", requireAdminAccess, AdminController.patchFeature);
+adminRoutes.post("/transcribe", requireAdminAccess, uploadMiddleware.single('video'), AdminController.transcribeVideo);
 
 // User Management
 adminRoutes.get("/users", requireAdminAccess, AdminController.getUsers);

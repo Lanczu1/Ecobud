@@ -398,12 +398,18 @@ export class AdminController {
 
   static async createChallenge(req: AuthenticatedRequest, res: Response) {
     try {
+      const requirementType = String(req.body.requirementType || 'quantity').trim().toLowerCase();
+      const requirementTarget = String(req.body.requirementTarget || '').trim();
+      const requirementUnit = String(req.body.requirementUnit || '').trim();
+      if (!['quantity', 'weight', 'item'].includes(requirementType) || !requirementTarget || !requirementUnit) {
+        return res.status(400).json({ message: 'Select a valid requirement type and provide its target value and unit.' });
+      }
       const settings = detectionSettingsSchema.safeParse({
         aiDetectionTargets: req.body.aiDetectionTargets,
         aiMinimumConfidence: req.body.aiMinimumConfidence ?? 80,
       });
       if (!settings.success) return res.status(400).json({ message: 'Select one to three supported detection classes and a confidence from 1 to 100.' });
-      const item = await AdminService.createChallenge({ ...req.body, ...settings.data });
+      const item = await AdminService.createChallenge({ ...req.body, requirementType, requirementTarget, requirementUnit, ...settings.data });
       return res.status(201).json(item);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to create challenge." });
@@ -414,12 +420,18 @@ export class AdminController {
     try {
       const existing = await prisma.challenge.findUnique({ where: { id: req.params.id } });
       if (!existing) return res.status(404).json({ message: 'Challenge not found.' });
+      const requirementType = String(req.body.requirementType ?? existing.requirementType).trim().toLowerCase();
+      const requirementTarget = String(req.body.requirementTarget ?? existing.requirementTarget).trim();
+      const requirementUnit = String(req.body.requirementUnit ?? existing.requirementUnit).trim();
+      if (!['quantity', 'weight', 'item'].includes(requirementType) || !requirementTarget || !requirementUnit) {
+        return res.status(400).json({ message: 'Select a valid requirement type and provide its target value and unit.' });
+      }
       const settings = detectionSettingsSchema.safeParse({
         aiDetectionTargets: req.body.aiDetectionTargets ?? existing.aiDetectionTargets,
         aiMinimumConfidence: req.body.aiMinimumConfidence ?? existing.aiMinimumConfidence,
       });
       if (!settings.success) return res.status(400).json({ message: 'Select one to three supported detection classes and a confidence from 1 to 100.' });
-      const item = await AdminService.updateChallenge(req.params.id, { ...req.body, ...settings.data });
+      const item = await AdminService.updateChallenge(req.params.id, { ...req.body, requirementType, requirementTarget, requirementUnit, ...settings.data });
       return res.status(200).json(item);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to update challenge." });
