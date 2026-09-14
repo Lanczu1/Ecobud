@@ -204,6 +204,33 @@ h1, h2, h3, h4, .font-display {
   }
 }
 
+.nav-badge-beta {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  font-weight: 700;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .nav-badge-beta {
+    display: none;
+  }
+}
+
+.nav-btn-desktop {
+  display: inline-flex;
+}
+
+@media (max-width: 600px) {
+  .nav-btn-desktop {
+    display: none !important;
+  }
+}
+
 .nav-mobile-toggle {
   display: flex;
   align-items: center;
