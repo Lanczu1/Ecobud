@@ -161,6 +161,113 @@ h1, h2, h3, h4, .font-display {
   z-index: 10;
 }
 
+/* Enhanced Responsive Navigation */
+.nav-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(7, 21, 17, 0.82);
+  border-bottom: 1px solid rgba(45, 106, 79, 0.32);
+  transition: all 0.3s ease;
+}
+
+.nav-link {
+  color: #94a3b8;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-link:hover {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.nav-desktop-links {
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (min-width: 860px) {
+  .nav-desktop-links {
+    display: flex;
+  }
+}
+
+.nav-mobile-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f0fdf4;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-mobile-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+@media (min-width: 860px) {
+  .nav-mobile-toggle {
+    display: none;
+  }
+}
+
+.mobile-menu-drawer {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, padding 0.3s ease;
+  background: rgba(10, 28, 23, 0.96);
+  border-bottom: 1px solid rgba(45, 106, 79, 0.4);
+}
+
+.mobile-menu-drawer.open {
+  max-height: 380px;
+  opacity: 1;
+  padding: 20px 24px 28px;
+}
+
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: #cbd5e1;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.02);
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+}
+
+.mobile-nav-link:hover, .mobile-nav-link:active {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(52, 211, 153, 0.3);
+  color: #34d399;
+  transform: translateX(4px);
+}
+
 /* Animations */
 @keyframes pulse-gentle {
   0%, 100% { opacity: 0.8; transform: scale(1); }

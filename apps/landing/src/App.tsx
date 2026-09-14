@@ -12,12 +12,15 @@ import {
   QrCode as QrIcon,
   Copy,
   Check,
-  Zap
+  Zap,
+  Menu,
+  X
 } from 'lucide-react';
 import logoImg from '../../logo/logo.png';
 
 export default function App() {
   const [copied, setCopied] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Download URL fallback
   const apkDownloadUrl = import.meta.env.VITE_APK_DOWNLOAD_URL || '/downloads/ecobud-beta.apk';
@@ -34,6 +37,8 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const closeMenu = () => setMobileMenuOpen(false);
+
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>
       {/* Background ambient lighting */}
@@ -41,52 +46,121 @@ export default function App() {
       <div className="ambient-glow-2" />
 
       {/* Top Navigation */}
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          backdropFilter: 'blur(20px)',
-          background: 'rgba(7, 21, 17, 0.78)',
-          borderBottom: '1px solid rgba(45, 106, 79, 0.3)',
-          padding: '16px 0'
-        }}
-      >
-        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <header className="nav-header">
+        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px' }}>
+          {/* Brand Wordmark & Mascot */}
+          <a
+            href="#"
+            style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}
+            onClick={closeMenu}
+          >
             <img
               src={logoImg}
               alt="EcoBud Logo"
-              style={{ width: 44, height: 44, objectFit: 'contain', filter: 'drop-shadow(0 4px 10px rgba(16,185,129,0.3))' }}
+              style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 4px 10px rgba(16,185,129,0.35))' }}
             />
-            <div>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, letterSpacing: '0.04em', color: '#f0fdf4', fontFamily: 'var(--font-display)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '1.35rem', fontWeight: 900, letterSpacing: '0.04em', color: '#f0fdf4', fontFamily: 'var(--font-display)' }}>
                 ECOBUD
               </span>
-              <span style={{ marginLeft: 8, fontSize: '0.75rem', padding: '2px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.15)', color: '#34d399', fontWeight: 700 }}>
+              <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.15)', color: '#34d399', fontWeight: 700, border: '1px solid rgba(52,211,153,0.25)' }}>
                 BETA TEST
               </span>
             </div>
-          </div>
+          </a>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <a
-              href="#install-guide"
-              className="btn-secondary"
-              style={{ fontSize: '0.9rem', padding: '8px 18px', display: 'none', '@media (min-width: 640px)': { display: 'inline-flex' } } as any}
-            >
-              How to Install
+          {/* Desktop Navigation Links */}
+          <nav className="nav-desktop-links" aria-label="Desktop Navigation">
+            <a href="#install-guide" className="nav-link">
+              <Smartphone size={16} />
+              <span>Install Guide</span>
             </a>
+            <a href="#features" className="nav-link">
+              <Zap size={16} />
+              <span>What to Test</span>
+            </a>
+            <a
+              href={feedbackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="nav-link"
+            >
+              <ExternalLink size={16} />
+              <span>Send Feedback</span>
+            </a>
+          </nav>
+
+          {/* Right Action: Download Button & Mobile Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <a
               href={apkDownloadUrl}
               target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
               rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
               download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
               className="btn-primary"
-              style={{ padding: '10px 20px', fontSize: '0.95rem' }}
+              style={{ padding: '9px 18px', fontSize: '0.9rem', gap: 6 }}
+            >
+              <Download size={16} />
+              <span>Download APK</span>
+            </a>
+
+            {/* Mobile Hamburger Button */}
+            <button
+              type="button"
+              className="nav-mobile-toggle"
+              onClick={() => setMobileMenuOpen(prev => !prev)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open navigation menu'}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Dropdown Menu Drawer */}
+        <div className={`mobile-menu-drawer ${mobileMenuOpen ? 'open' : ''}`}>
+          <a href="#install-guide" className="mobile-nav-link" onClick={closeMenu}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Smartphone size={18} color="#34d399" />
+              Installation Guide
+            </span>
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>&rarr;</span>
+          </a>
+
+          <a href="#features" className="mobile-nav-link" onClick={closeMenu}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Zap size={18} color="#a3e635" />
+              What to Test
+            </span>
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>&rarr;</span>
+          </a>
+
+          <a
+            href={feedbackUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mobile-nav-link"
+            onClick={closeMenu}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ExternalLink size={18} color="#38bdf8" />
+              Tester Feedback
+            </span>
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>&rarr;</span>
+          </a>
+
+          <div style={{ marginTop: 16 }}>
+            <a
+              href={apkDownloadUrl}
+              target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
+              rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+              download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
+              className="btn-primary"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px 20px', fontSize: '1rem' }}
+              onClick={closeMenu}
             >
               <Download size={18} />
-              <span>Download APK</span>
+              <span>Download APK ({appVersion})</span>
             </a>
           </div>
         </div>
@@ -381,7 +455,7 @@ export default function App() {
         </section>
 
         {/* CORE FEATURES TESTING FOCUS */}
-        <section style={{ padding: '80px 0' }}>
+        <section id="features" style={{ padding: '80px 0' }}>
           <div className="container">
             <div style={{ textAlign: 'center', maxWidth: 680, margin: '0 auto 56px' }}>
               <div className="badge-eco" style={{ marginBottom: 14 }}>
