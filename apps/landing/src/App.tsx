@@ -47,23 +47,23 @@ export default function App() {
 
       {/* Top Navigation */}
       <header className="nav-header">
-        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px' }}>
+        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', gap: 12 }}>
           {/* Brand Wordmark & Mascot */}
           <a
             href="#"
-            style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', flexShrink: 0 }}
             onClick={closeMenu}
           >
             <img
               src={logoImg}
               alt="EcoBud Logo"
-              style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 4px 10px rgba(16,185,129,0.35))' }}
+              style={{ width: 38, height: 38, objectFit: 'contain', filter: 'drop-shadow(0 4px 10px rgba(16,185,129,0.35))' }}
             />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '1.35rem', fontWeight: 900, letterSpacing: '0.04em', color: '#f0fdf4', fontFamily: 'var(--font-display)' }}>
+              <span style={{ fontSize: '1.3rem', fontWeight: 900, letterSpacing: '0.04em', color: '#f0fdf4', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>
                 ECOBUD
               </span>
-              <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.15)', color: '#34d399', fontWeight: 700, border: '1px solid rgba(52,211,153,0.25)' }}>
+              <span className="nav-badge-beta">
                 BETA TEST
               </span>
             </div>
@@ -97,8 +97,8 @@ export default function App() {
               target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
               rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
               download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
-              className="btn-primary"
-              style={{ padding: '9px 18px', fontSize: '0.9rem', gap: 6 }}
+              className="btn-primary nav-btn-desktop"
+              style={{ padding: '8px 16px', fontSize: '0.9rem', gap: 6, whiteSpace: 'nowrap' }}
             >
               <Download size={16} />
               <span>Download APK</span>
