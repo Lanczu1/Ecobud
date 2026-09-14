@@ -372,36 +372,36 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
               </div>
             )}
 
-            <div className="bg-green-50/60 rounded-xl border border-green-100 p-5 shadow-sm">
-              <h3 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
-                <CheckSquare className="w-4 h-4 text-green-600" /> Mission Requirements
+            <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-5 shadow-sm dark:border-[#1a2e24] dark:bg-[#090f0c]">
+              <h3 className="mb-1 flex items-center gap-2 text-balance font-semibold text-gray-800 dark:text-[#e2f0e7]">
+                <CheckSquare className="size-4 text-green-600 dark:text-emerald-400" /> Mission Requirements
               </h3>
-              <p className="text-xs text-gray-500 mb-4">Shown to users on the mobile challenge details screen.</p>
+              <p className="mb-4 text-pretty text-xs text-gray-500 dark:text-[#88a293]">Shown to users on the mobile challenge details screen.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Requirement Type</label>
-                  <select value={form.requirementType} onChange={e => setForm(f => ({ ...f, requirementType: e.target.value as FormData['requirementType'] }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white capitalize">
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-[#b8cec0]">Requirement Type</label>
+                  <select value={form.requirementType} onChange={e => setForm(f => ({ ...f, requirementType: e.target.value as FormData['requirementType'] }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 capitalize focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-[#233d30] dark:bg-[#122019] dark:text-[#e2f0e7] dark:focus:border-emerald-500 dark:focus:ring-emerald-900/50">
                     <option value="quantity">Quantity</option>
                     <option value="weight">Weight</option>
                     <option value="item">Item</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Value</label>
-                  <input value={form.requirementTarget} onChange={e => setForm(f => ({ ...f, requirementTarget: e.target.value }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white" placeholder="e.g. 20 or 1-5" />
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-[#b8cec0]">Target Value</label>
+                  <input value={form.requirementTarget} onChange={e => setForm(f => ({ ...f, requirementTarget: e.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 tabular-nums placeholder:text-gray-400 focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-[#233d30] dark:bg-[#122019] dark:text-[#e2f0e7] dark:placeholder:text-[#5f7467] dark:focus:border-emerald-500 dark:focus:ring-emerald-900/50" placeholder="e.g. 20 or 1-5" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-                  <input value={form.requirementUnit} onChange={e => setForm(f => ({ ...f, requirementUnit: e.target.value }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white" placeholder="bottles, kg, pieces" />
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-[#b8cec0]">Unit</label>
+                  <input value={form.requirementUnit} onChange={e => setForm(f => ({ ...f, requirementUnit: e.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-[#233d30] dark:bg-[#122019] dark:text-[#e2f0e7] dark:placeholder:text-[#5f7467] dark:focus:border-emerald-500 dark:focus:ring-emerald-900/50" placeholder="bottles, kg, pieces" />
                 </div>
               </div>
               <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Instructions</label>
-                <textarea value={form.additionalInstructions} onChange={e => setForm(f => ({ ...f, additionalInstructions: e.target.value }))} rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white resize-none" placeholder="e.g. Wash, dry, and remove bottle caps before drop-off." />
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-[#b8cec0]">Additional Instructions</label>
+                <textarea value={form.additionalInstructions} onChange={e => setForm(f => ({ ...f, additionalInstructions: e.target.value }))} rows={3} className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-[#233d30] dark:bg-[#122019] dark:text-[#e2f0e7] dark:placeholder:text-[#5f7467] dark:focus:border-emerald-500 dark:focus:ring-emerald-900/50" placeholder="e.g. Wash, dry, and remove bottle caps before drop-off." />
               </div>
               <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Collection Point</label>
-                <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 bg-white" placeholder="e.g. Barangay Yukos Collection Point" />
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-[#b8cec0]">Collection Point</label>
+                <input value={form.collectionPointName} onChange={e => setForm(f => ({ ...f, collectionPointName: e.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-[#233d30] dark:bg-[#122019] dark:text-[#e2f0e7] dark:placeholder:text-[#5f7467] dark:focus:border-emerald-500 dark:focus:ring-emerald-900/50" placeholder="e.g. Barangay Yukos Collection Point" />
               </div>
             </div>
             
