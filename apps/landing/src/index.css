@@ -39,7 +39,11 @@ body {
 }
 
 /* Typography */
-h1, h2, h3, h4, .font-display {
+h1,
+h2,
+h3,
+h4,
+.font-display {
   font-family: var(--font-display);
 }
 
@@ -288,7 +292,8 @@ h1, h2, h3, h4, .font-display {
   border: 1px solid transparent;
 }
 
-.mobile-nav-link:hover, .mobile-nav-link:active {
+.mobile-nav-link:hover,
+.mobile-nav-link:active {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(52, 211, 153, 0.3);
   color: #34d399;
@@ -297,8 +302,17 @@ h1, h2, h3, h4, .font-display {
 
 /* Animations */
 @keyframes pulse-gentle {
-  0%, 100% { opacity: 0.8; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.03); }
+
+  0%,
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
 }
 
 .animate-pulse-glow {
@@ -309,13 +323,16 @@ h1, h2, h3, h4, .font-display {
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: #071511;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #1e3a31;
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #2d5a4c;
 }

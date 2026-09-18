@@ -3,6 +3,7 @@ import { API_HOST } from './utils/adminApi';
 import { WebAuthView } from './components/WebAuthView';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminSection } from './components/admin/AdminSidebar';
+import { ToastProvider } from './context/ToastContext';
 
 const WEB_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 const WEB_ABSOLUTE_TIMEOUT_MS = 12 * 60 * 60 * 1000;
@@ -227,24 +228,28 @@ export default function App() {
 
   if (isAuthenticated) {
     return (
-      <AdminLayout
-        onLogout={handleLogout}
-        activeSection={activeSection}
-        onNavigate={setActiveSection}
-        isDark={isDark}
-        onToggleDark={toggleDarkMode}
-      >
-        {renderSection(activeSection, adminUserRole)}
-      </AdminLayout>
+      <ToastProvider>
+        <AdminLayout
+          onLogout={handleLogout}
+          activeSection={activeSection}
+          onNavigate={setActiveSection}
+          isDark={isDark}
+          onToggleDark={toggleDarkMode}
+        >
+          {renderSection(activeSection, adminUserRole)}
+        </AdminLayout>
+      </ToastProvider>
     );
   }
 
   return (
-    <WebAuthView
-      onLogin={handleLogin}
-      authError={authError}
-      isDark={isDark}
-      onToggleDark={toggleDarkMode}
-    />
+    <ToastProvider>
+      <WebAuthView
+        onLogin={handleLogin}
+        authError={authError}
+        isDark={isDark}
+        onToggleDark={toggleDarkMode}
+      />
+    </ToastProvider>
   );
 }

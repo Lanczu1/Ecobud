@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
 import { adminGet, adminPost, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
+import { useToast } from '../../../context/ToastContext';
 
 interface AdminUser {
   id: string;
@@ -107,14 +108,17 @@ export function ManageUsers() {
     };
   }, []);
 
+  const toast = useToast();
+
   const handleBlock = async (userId: string) => {
     setProcessingId(userId);
     try {
       await adminPost(`/admin/users/${userId}/block`, {});
       // The realtime subscription will trigger a refresh, but we can optimistically update
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'suspended' } : u));
+      toast.success('User has been blocked.');
     } catch (err: any) {
-      alert(err.message || 'Failed to block user');
+      toast.error(err.message || 'Failed to block user');
     } finally {
       setProcessingId(null);
     }
@@ -126,8 +130,9 @@ export function ManageUsers() {
       await adminPost(`/admin/users/${userId}/unblock`, {});
       // Optimistic update
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: 'active' } : u));
+      toast.success('User has been unblocked.');
     } catch (err: any) {
-      alert(err.message || 'Failed to unblock user');
+      toast.error(err.message || 'Failed to unblock user');
     } finally {
       setProcessingId(null);
     }

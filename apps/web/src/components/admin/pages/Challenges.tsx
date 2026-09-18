@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
+import { useToast } from '../../../context/ToastContext';
 
 interface Challenge {
   id: string;
@@ -309,7 +310,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
                     <img src={form.imageUrl.startsWith('http') ? form.imageUrl : `${API_HOST}${form.imageUrl}`} alt="Challenge" className="w-full h-full object-cover" />
                     <button type="button" onClick={async () => {
                         if (form.imageUrl) {
-                          try { await adminPost('/admin/upload/delete', { url: form.imageUrl }); } catch (e: any) { console.error('Failed to delete image', e); alert(`Failed to delete image: ${e.message || e}`); }
+                          try { await adminPost('/admin/upload/delete', { url: form.imageUrl }); } catch (e: any) { console.error('Failed to delete image', e); }
                         }
                         setForm(f => ({ ...f, imageUrl: '' }));
                       }} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70">
@@ -669,6 +670,11 @@ export function Challenges() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; challenge: Challenge | null }>({
+    open: false,
+    challenge: null,
+  });
+  const toast = useToast();
 
   // ── Submissions tab state ────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>('challenges');
@@ -732,7 +738,10 @@ export function Challenges() {
       const data = await adminGet<ChallengeSubmission[]>('/admin/submissions');
       // Filter to only challenge submissions; event submissions belong in the Events page.
       setSubmissions(data.filter(isChallengeSubmission));
-    } catch (err: any) { console.error('Failed to load submissions', err); alert(`Failed to load submissions: ${err.message || err}`); }
+    } catch (err: any) { 
+      console.error('Failed to load submissions', err); 
+      toast.error(err.message || 'Failed to load submissions'); 
+    }
     finally { setSubmissionsLoading(false); }
   };
 
@@ -760,7 +769,10 @@ export function Challenges() {
     try {
       await adminPost(`/admin/submissions/${id}/review`, { status: 'approved_collection' });
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved_collection' } : s));
-    } catch (err: any) { alert(err.message || 'Failed to approve'); }
+      toast.success('Before photo approved.');
+    } catch (err: any) { 
+      toast.error(err.message || 'Failed to approve'); 
+    }
     finally { setProcessingSubId(null); }
   };
 
@@ -770,20 +782,64 @@ export function Challenges() {
     try {
       await adminPost(`/admin/submissions/${id}/review`, { status: 'approved' });
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
-    } catch (err: any) { alert(err.message || 'Failed to approve submission'); }
+      toast.success('Submission approved.');
+    } catch (err: any) { 
+      toast.error(err.message || 'Failed to approve submission'); 
+    }
     finally { setProcessingSubId(null); }
   };
 
 
-  const handleRejectSubmission = async (id: string) => {
-    const notes = window.prompt('Enter reason for rejection (optional):');
-    if (notes === null) return;
-    setProcessingSubId(id);
+  const [rejectModal, setRejectModal] = useState<{
+    open: boolean;
+    submissionId: string;
+    userName: string;
+    submissionNum?: number;
+    challengeTitle?: string;
+  }>({
+    open: false,
+    submissionId: '',
+    userName: '',
+  });
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState<string | null>(null);
+
+  const openRejectModal = (sub: ChallengeSubmission, submissionNumber?: number) => {
+    setRejectReason('');
+    setRejectError(null);
+    setRejectModal({
+      open: true,
+      submissionId: sub.id,
+      userName: sub.user?.name || sub.user?.profile?.displayName || 'EcoBud User',
+      submissionNum: submissionNumber,
+      challengeTitle: sub.challenge?.title || 'Challenge Mission',
+    });
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectModal.submissionId) return;
+    setProcessingSubId(rejectModal.submissionId);
+    setRejectError(null);
     try {
-      await adminPost(`/admin/submissions/${id}/review`, { status: 'rejected', notes });
-      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'rejected', moderatorNotes: notes } : s));
-    } catch (err: any) { alert(err.message || 'Failed to reject'); }
-    finally { setProcessingSubId(null); }
+      await adminPost(`/admin/submissions/${rejectModal.submissionId}/review`, {
+        status: 'rejected',
+        notes: rejectReason.trim() || undefined,
+      });
+      setSubmissions(prev =>
+        prev.map(s =>
+          s.id === rejectModal.submissionId
+            ? { ...s, status: 'rejected', moderatorNotes: rejectReason.trim() || null }
+            : s
+        )
+      );
+      setRejectModal({ open: false, submissionId: '', userName: '' });
+      setRejectReason('');
+    } catch (err: any) {
+      console.error('Failed to reject submission:', err);
+      setRejectError(err.message || 'Failed to reject submission. Please try again.');
+    } finally {
+      setProcessingSubId(null);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -1073,14 +1129,24 @@ export function Challenges() {
     setChallenges(prev => prev.map(c => c.id === updated.id ? updated : c));
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this challenge? This cannot be undone.')) return;
-    setDeleting(id);
+  const handleDelete = (challenge: Challenge) => {
+    setDeleteConfirmModal({ open: true, challenge });
+  };
+
+  const confirmDeleteChallenge = async () => {
+    if (!deleteConfirmModal.challenge) return;
+    const challenge = deleteConfirmModal.challenge;
+    setDeleting(challenge.id);
     try {
-      await adminDelete(`/admin/challenges/${id}`);
-      setChallenges(prev => prev.filter(c => c.id !== id));
-    } catch (err: any) { alert(err.message || 'Failed to delete.'); }
-    finally { setDeleting(null); }
+      await adminDelete(`/admin/challenges/${challenge.id}`);
+      setChallenges(prev => prev.filter(c => c.id !== challenge.id));
+      toast.success(`Challenge "${challenge.title}" deleted.`);
+      setDeleteConfirmModal({ open: false, challenge: null });
+    } catch (err: any) { 
+      toast.error(err.message || 'Failed to delete challenge.'); 
+    } finally { 
+      setDeleting(null); 
+    }
   };
 
   const handleToggleActive = async (challenge: Challenge) => {
@@ -1091,10 +1157,11 @@ export function Challenges() {
     try {
       const updated = await adminPut<Challenge>(`/admin/challenges/${challenge.id}`, { active: nextActive });
       setChallenges(prev => prev.map(c => c.id === updated.id ? updated : c));
+      toast.success(updated.active ? 'Challenge activated.' : 'Challenge deactivated.');
     } catch (err: any) {
       // Revert on failure
       setChallenges(prev => prev.map(c => c.id === challenge.id ? { ...c, active: challenge.active } : c));
-      alert(err.message || 'Failed to toggle status.');
+      toast.error(err.message || 'Failed to toggle status.');
     } finally {
       setToggling(null);
     }
@@ -1107,9 +1174,10 @@ export function Challenges() {
     try {
       const updated = await adminPut<Challenge>(`/admin/challenges/${challenge.id}`, { isFeatured: nextFeatured });
       setChallenges(prev => prev.map(c => c.id === updated.id ? updated : c));
+      toast.success(updated.isFeatured ? 'Challenge marked as featured.' : 'Challenge unfeatured.');
     } catch (err: any) {
       setChallenges(prev => prev.map(c => c.id === challenge.id ? { ...c, isFeatured: challenge.isFeatured } : c));
-      alert(err.message || 'Failed to toggle featured status.');
+      toast.error(err.message || 'Failed to toggle featured status.');
     } finally {
       setTogglingFeatured(null);
     }
@@ -1146,7 +1214,7 @@ export function Challenges() {
             )}
             {!isModerator && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
-                DILG Administrator — All 52 Barangays
+                Administrator — All 52 Barangays
               </span>
             )}
           </div>
@@ -1318,7 +1386,7 @@ export function Challenges() {
                         {toggling === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
                       </button>
                       <button onClick={() => { setEditing(c); setModal('edit'); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
-                      <button onClick={() => handleDelete(c.id)} disabled={deleting === c.id} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-60">
+                      <button onClick={() => handleDelete(c)} disabled={deleting === c.id} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-60" title="Delete Challenge">
                         {deleting === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
@@ -1837,7 +1905,7 @@ export function Challenges() {
                                                                 Approve Before
                                                               </button>
                                                               <button
-                                                                onClick={() => handleRejectSubmission(sub.id)}
+                                                                onClick={() => openRejectModal(sub, submissionNumber)}
                                                                 disabled={processingSubId === sub.id}
                                                                 title="Reject Submission"
                                                                 className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
@@ -1860,7 +1928,7 @@ export function Challenges() {
                                                                 Approve After Photo
                                                               </button>
                                                               <button
-                                                                onClick={() => handleRejectSubmission(sub.id)}
+                                                                onClick={() => openRejectModal(sub, submissionNumber)}
                                                                 disabled={processingSubId === sub.id}
                                                                 title="Reject Submission"
                                                                 className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 disabled:opacity-50 rounded-lg transition-colors"
@@ -1994,6 +2062,203 @@ export function Challenges() {
         </div>,
         document.body
       )}
+
+      {/* Custom Rejection Modal */}
+      {rejectModal.open && createPortal(
+        <div 
+          className="fixed inset-0 z-9999 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fadeIn"
+          onClick={() => {
+            if (processingSubId !== rejectModal.submissionId) {
+              setRejectModal({ open: false, submissionId: '', userName: '' });
+              setRejectReason('');
+              setRejectError(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-[#0f1713] w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    Reject Submission
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {rejectModal.challengeTitle}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (processingSubId !== rejectModal.submissionId) {
+                    setRejectModal({ open: false, submissionId: '', userName: '' });
+                    setRejectReason('');
+                    setRejectError(null);
+                  }
+                }}
+                disabled={processingSubId === rejectModal.submissionId}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Contributor:</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">{rejectModal.userName}</span>
+                </div>
+                {rejectModal.submissionNum !== undefined && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Submission:</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">#{rejectModal.submissionNum}</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Reason for Rejection <span className="font-normal text-gray-400">(Optional but recommended)</span>
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  placeholder="e.g. Photo is blurry, item does not match requirement, or collection proof is unclear..."
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800/80 dark:text-white rounded-xl focus:outline-hidden focus:ring-2 focus:ring-red-500/30 focus:border-red-500 transition-all resize-none placeholder:text-gray-400"
+                />
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  This explanation will be visible to the user as feedback in their challenge history.
+                </p>
+              </div>
+
+              {rejectError && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-600 dark:text-red-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{rejectError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectModal({ open: false, submissionId: '', userName: '' });
+                  setRejectReason('');
+                  setRejectError(null);
+                }}
+                disabled={processingSubId === rejectModal.submissionId}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={processingSubId === rejectModal.submissionId}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {processingSubId === rejectModal.submissionId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Rejecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Confirm Rejection</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Custom Delete Challenge Confirmation Modal */}
+      {deleteConfirmModal.open && deleteConfirmModal.challenge && createPortal(
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => !deleting && setDeleteConfirmModal({ open: false, challenge: null })}
+        >
+          <div
+            className="bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Challenge</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Irreversible action</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !deleting && setDeleteConfirmModal({ open: false, challenge: null })}
+                disabled={!!deleting}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Are you sure you want to delete <strong className="text-gray-900 dark:text-white">"{deleteConfirmModal.challenge.title}"</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300">
+                This challenge will be permanently removed along with its criteria and assignment history.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal({ open: false, challenge: null })}
+                disabled={!!deleting}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteChallenge}
+                disabled={!!deleting}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Challenge</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
+

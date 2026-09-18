@@ -29,6 +29,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { useToast } from '../../../context/ToastContext';
 
 interface SwapListingItem {
   id: string;
@@ -902,15 +903,18 @@ function ListingImagePreviewModal({
 
 // Reject Modal using createPortal
 function RejectListingModal({
+  listing,
   onClose,
   onConfirm,
 }: {
+  listing?: SwapListingItem | null;
   onClose: () => void;
   onConfirm: (reason: string) => Promise<void>;
 }) {
   const [reason, setReason] = useState('');
   const [isClosing, setIsClosing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const container = document.getElementById('admin-scroll-container');
@@ -927,15 +931,20 @@ function RejectListingModal({
   }, []);
 
   const handleClose = () => {
+    if (submitting) return;
     setIsClosing(true);
-    setTimeout(onClose, 280);
+    setTimeout(onClose, 250);
   };
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setError(null);
     try {
-      await onConfirm(reason);
+      await onConfirm(reason.trim());
       handleClose();
+    } catch (err: any) {
+      console.error('Failed to reject listing:', err);
+      setError(err?.message || 'Failed to reject listing. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -943,36 +952,105 @@ function RejectListingModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
       onClick={handleClose}
     >
       <div
-        className={`relative z-10 bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col ${
+        className={`relative z-10 bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden flex flex-col ${
           isClosing ? 'animate-modal-exit' : 'animate-modal'
         }`}
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-2">Reject Listing</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Provide a reason for rejecting this listing.</p>
-        <textarea
-          value={reason}
-          onChange={e => setReason(e.target.value)}
-          placeholder="e.g. Inappropriate content, spam, nonsense post..."
-          className="w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-200 dark:focus:ring-rose-900 focus:border-rose-400 resize-none h-24"
-        />
-        <div className="flex gap-3 mt-4">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-rose-50/50 dark:bg-rose-950/20">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+              <XCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Reject Swap Listing</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Remove from public exchange feed</p>
+            </div>
+          </div>
           <button
+            type="button"
             onClick={handleClose}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            disabled={submitting}
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          {listing && (
+            <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-xs space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Item Title:</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200 max-w-55 truncate">{listing.title}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Posted by:</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200">{listing.postedBy || 'Community Member'}</span>
+              </div>
+              {listing.category && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">Category:</span>
+                  <span className="capitalize text-gray-600 dark:text-gray-300">{listing.category}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              Reason for Rejection <span className="font-normal text-gray-400">(Optional but recommended)</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="e.g. Inappropriate item, prohibited product, low quality photos, or incomplete details..."
+              rows={3}
+              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800/80 dark:text-white rounded-xl focus:outline-hidden focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 transition-all resize-none placeholder:text-gray-400"
+            />
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+              This note will explain to the user why their listing was not accepted.
+            </p>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={submitting}
+            className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-rose-600 rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-60"
+            className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
           >
-            {submitting ? 'Rejecting...' : 'Reject'}
+            {submitting ? (
+              <span>Rejecting...</span>
+            ) : (
+              <>
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Confirm Rejection</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -1072,6 +1150,10 @@ export function GiveAndGetHub() {
   const [reportModal, setReportModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [detailsModalListing, setDetailsModalListing] = useState<SwapListingItem | null>(null);
 
+  const [deleteListingModal, setDeleteListingModal] = useState<{ open: boolean; listing: SwapListingItem | null }>({ open: false, listing: null });
+  const [deletingListing, setDeletingListing] = useState(false);
+  const toast = useToast();
+
   // Image Lightbox Modal State
   const [previewModal, setPreviewModal] = useState<{
     open: boolean;
@@ -1096,7 +1178,7 @@ export function GiveAndGetHub() {
       setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch swap listings', error);
-      alert(`Failed to fetch swap listings: ${error.message || error}`);
+      toast.error(error.message || 'Failed to fetch swap listings');
     } finally {
       setLoading(false);
     }
@@ -1111,9 +1193,10 @@ export function GiveAndGetHub() {
       await adminPatch(`/give-and-get/swap-listings/${id}/approve`, {});
       setListings(prev => prev.map(l => (l.id === id ? { ...l, approvalStatus: 'approved', isReported: false, reportCount: 0 } : l)));
       if (stats) setStats({ ...stats, pending: stats.pending - 1, approved: stats.approved + 1 });
+      toast.success('Listing approved.');
     } catch (error: any) {
       console.error('Failed to approve listing', error);
-      alert(`Failed to approve listing: ${error.message || error}`);
+      toast.error(error.message || 'Failed to approve listing');
     }
   };
 
@@ -1125,9 +1208,9 @@ export function GiveAndGetHub() {
         prev.map(l => (l.id === rejectModal.listingId ? { ...l, approvalStatus: 'rejected', isActive: false, reportReason: reason } : l))
       );
       if (stats) setStats({ ...stats, pending: stats.pending - 1, rejected: stats.rejected + 1 });
+      toast.success('Listing rejected.');
     } catch (error: any) {
-      console.error('Failed to reject listing', error);
-      alert(`Failed to reject listing: ${error.message || error}`);
+      toast.error(error.message || 'Failed to reject listing');
     }
   };
 
@@ -1139,22 +1222,33 @@ export function GiveAndGetHub() {
         prev.map(l => (l.id === reportModal.listingId ? { ...l, isReported: true, reportCount: l.reportCount + 1, reportReason: reason } : l))
       );
       if (stats) setStats({ ...stats, reported: stats.reported + 1 });
+      toast.success('Listing reported.');
     } catch (error: any) {
       console.error('Failed to report listing', error);
-      alert(`Failed to report listing: ${error.message || error}`);
+      toast.error(error.message || 'Failed to report listing');
     }
   };
 
-  const handleDeleteListing = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this listing?')) {
-      try {
-        await adminDelete(`/give-and-get/swap-listings/${id}`);
-        setListings(prev => prev.filter(l => l.id !== id));
-        if (stats) setStats({ ...stats, total: stats.total - 1 });
-      } catch (error: any) {
-        console.error('Failed to delete listing', error);
-        alert(`Failed to delete listing: ${error.message || error}`);
-      }
+  const handleDeleteListing = (id: string) => {
+    const found = listings.find(l => l.id === id) || null;
+    setDeleteListingModal({ open: true, listing: found || ({ id, title: 'this listing' } as SwapListingItem) });
+  };
+
+  const confirmDeleteListing = async () => {
+    if (!deleteListingModal.listing) return;
+    const listing = deleteListingModal.listing;
+    setDeletingListing(true);
+    try {
+      await adminDelete(`/give-and-get/swap-listings/${listing.id}`);
+      setListings(prev => prev.filter(l => l.id !== listing.id));
+      if (stats) setStats({ ...stats, total: stats.total - 1 });
+      toast.success(`Listing "${listing.title}" deleted.`);
+      setDeleteListingModal({ open: false, listing: null });
+    } catch (error: any) {
+      console.error('Failed to delete listing', error);
+      toast.error(error.message || 'Failed to delete listing');
+    } finally {
+      setDeletingListing(false);
     }
   };
 
@@ -1209,6 +1303,7 @@ export function GiveAndGetHub() {
       {/* Reject Modal via Portal */}
       {rejectModal.open && rejectModal.listingId && (
         <RejectListingModal
+          listing={listings.find(l => l.id === rejectModal.listingId)}
           onClose={() => setRejectModal({ open: false, listingId: null })}
           onConfirm={handleRejectConfirm}
         />
@@ -1312,6 +1407,78 @@ export function GiveAndGetHub() {
           <Shield className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" />
           <p className="text-gray-400 dark:text-gray-500">No listings found</p>
         </div>
+      )}
+
+      {/* Custom Delete Listing Confirmation Modal */}
+      {deleteListingModal.open && deleteListingModal.listing && createPortal(
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => !deletingListing && setDeleteListingModal({ open: false, listing: null })}
+        >
+          <div
+            className="bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Listing</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Irreversible community hub removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !deletingListing && setDeleteListingModal({ open: false, listing: null })}
+                disabled={deletingListing}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Are you sure you want to delete <strong className="text-gray-900 dark:text-white">"{deleteListingModal.listing.title}"</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300">
+                This listing and its communication threads will be deleted permanently.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteListingModal({ open: false, listing: null })}
+                disabled={deletingListing}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteListing}
+                disabled={deletingListing}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingListing ? (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Listing</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
