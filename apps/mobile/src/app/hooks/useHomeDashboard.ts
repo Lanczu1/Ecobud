@@ -126,6 +126,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const realtimeRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const offlineSyncInFlightRef = React.useRef(false);
   const isHydratingRef = React.useRef(false);
+  const resumeRefreshInFlightRef = React.useRef(false);
+  const previousAppStateRef = React.useRef(AppState.currentState);
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -1294,6 +1296,60 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
     await hydrateApp(session);
   }, [hydrateApp, session]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const previousState = previousAppStateRef.current;
+      previousAppStateRef.current = nextState;
+
+      const isReturningToForeground =
+        nextState === 'active' &&
+        (previousState === 'background' || previousState === 'inactive');
+
+      if (
+        !isReturningToForeground ||
+        !session ||
+        !presence.hasUsableInternet ||
+        resumeRefreshInFlightRef.current
+      ) {
+        return;
+      }
+
+      resumeRefreshInFlightRef.current = true;
+
+      void (async () => {
+        try {
+          let activeSession = session;
+
+          if (session.refreshToken) {
+            activeSession = await homeService.refreshSession(session.refreshToken);
+            setSession(activeSession);
+            await persistSession(activeSession);
+          }
+
+          await hydrateApp(activeSession, true);
+          await syncQueuedOfflineActions(activeSession);
+        } catch (error) {
+          const status = (error as { status?: number } | null)?.status;
+          if (status === 401 || status === 403) {
+            setSession(null);
+            clearAppData();
+            setActiveOverlayState(null);
+            setActiveTabState('home');
+            await persistSession(null);
+            Alert.alert('Session Expired', 'Your session is no longer valid. Please sign in again.');
+            return;
+          }
+
+          console.warn('[ECOBUD foreground refresh warning]:', error);
+        } finally {
+          resumeRefreshInFlightRef.current = false;
+        }
+      })();
+    });
+
+    return () => subscription.remove();
+  }, [clearAppData, hydrateApp, persistSession, presence.hasUsableInternet, session, syncQueuedOfflineActions]);
 
   const queueRealtimeRefresh = useCallback(
     (reason: string) => {
