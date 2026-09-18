@@ -12,6 +12,21 @@ import {
   type TransparencyFeed,
 } from '../types/home';
 
+const fallbackUnlessAuthError = async <T, F>(
+  request: Promise<T>,
+  fallback: F,
+): Promise<T | F> => {
+  try {
+    return await request;
+  } catch (error) {
+    const status = (error as { status?: number } | null)?.status;
+    if (status === 401 || status === 403) {
+      throw error;
+    }
+    return fallback;
+  }
+};
+
 export const homeService = {
   // ─── Auth ───────────────────────────────────────────────────────────────────────
 
@@ -144,11 +159,11 @@ export const homeService = {
       habitsToday,
       events,
     ] = await Promise.all([
-      this.getDashboard(token).catch(() => null),
-      this.getLessons(token).catch(() => []),
-      this.getChallenges(token).catch(() => ({ items: [], isCycleActive: true })),
-      this.getHabitsToday(token).catch(() => null),
-      this.getEvents(token).catch(() => []),
+      fallbackUnlessAuthError(this.getDashboard(token), null),
+      fallbackUnlessAuthError(this.getLessons(token), []),
+      fallbackUnlessAuthError(this.getChallenges(token), { items: [], isCycleActive: true }),
+      fallbackUnlessAuthError(this.getHabitsToday(token), null),
+      fallbackUnlessAuthError(this.getEvents(token), []),
     ]);
 
     return {
@@ -172,11 +187,11 @@ export const homeService = {
       leaderboard,
       transparency,
     ] = await Promise.all([
-      this.getTracker(token).catch(() => null),
-      this.getProfile(token).catch(() => null),
-      this.getRewards(token).catch(() => null),
-      this.getLeaderboard(token).catch(() => null),
-      this.getTransparency(token).catch(() => null),
+      fallbackUnlessAuthError(this.getTracker(token), null),
+      fallbackUnlessAuthError(this.getProfile(token), null),
+      fallbackUnlessAuthError(this.getRewards(token), null),
+      fallbackUnlessAuthError(this.getLeaderboard(token), null),
+      fallbackUnlessAuthError(this.getTransparency(token), null),
     ]);
 
     return {

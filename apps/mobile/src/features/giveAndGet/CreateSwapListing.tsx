@@ -540,42 +540,42 @@ export function CreateSwapListing({
               />
             </>
           )}
-        </ScrollView>
 
-        <View style={[localStyles.bottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
-          {step > 1 && (
-            <TouchableOpacity onPress={() => setStep(step - 1)} style={[localStyles.prevBtn, { borderColor: theme.colors.border }]}>
-              <Text style={[localStyles.prevBtnText, { color: theme.colors.textMuted }]}>Previous</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => {
-              if (step === 1 && images.length < 3) {
-                setShowImageError(true);
-                return;
-              }
-              if (step < totalSteps) {
-                setStep(step + 1);
-              } else {
-                handleSubmit();
-              }
-            }}
-            disabled={!canProceed() || submitting}
-            style={[
-              localStyles.nextBtn, 
-              isDark && { backgroundColor: theme.colors.primary },
-              (!canProceed() || submitting) && { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E2E8F0', shadowOpacity: 0, elevation: 0 }
-            ]}
-          >
-            {submitting ? (
-              <ActivityIndicator color={canProceed() ? (isDark ? "#0E1512" : "#FFF") : (isDark ? "#4B5563" : "#94A3B8")} />
-            ) : (
-              <Text style={[localStyles.nextBtnText, isDark && { color: '#0E1512' }, (!canProceed() || submitting) && { color: isDark ? '#4B5563' : '#94A3B8' }]}>
-                {step < totalSteps ? 'Continue' : 'Create Listing'}
-              </Text>
+          <View style={[localStyles.bottomBar, { borderTopColor: theme.colors.border }]}>
+            {step > 1 && (
+              <TouchableOpacity onPress={() => setStep(step - 1)} style={[localStyles.prevBtn, { borderColor: theme.colors.border }]}>
+                <Text style={[localStyles.prevBtnText, { color: theme.colors.textMuted }]}>Previous</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={() => {
+                if (step === 1 && images.length < 3) {
+                  setShowImageError(true);
+                  return;
+                }
+                if (step < totalSteps) {
+                  setStep(step + 1);
+                } else {
+                  handleSubmit();
+                }
+              }}
+              disabled={!canProceed() || submitting}
+              style={[
+                localStyles.nextBtn,
+                isDark && { backgroundColor: theme.colors.primary },
+                (!canProceed() || submitting) && { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E2E8F0', shadowOpacity: 0, elevation: 0 }
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator color={canProceed() ? (isDark ? "#0E1512" : "#FFF") : (isDark ? "#4B5563" : "#94A3B8")} />
+              ) : (
+                <Text style={[localStyles.nextBtnText, isDark && { color: '#0E1512' }, (!canProceed() || submitting) && { color: isDark ? '#4B5563' : '#94A3B8' }]}>
+                  {step < totalSteps ? 'Continue' : 'Create Listing'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
 
@@ -701,7 +701,7 @@ const localStyles = StyleSheet.create({
   },
   bodyContent: {
     padding: scale(16),
-    paddingBottom: verticalScale(100),
+    paddingBottom: verticalScale(24),
   },
   fieldLabel: {
     fontSize: responsiveFontSize(11),
@@ -925,11 +925,10 @@ const localStyles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     gap: scale(10),
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(12),
-    backgroundColor: '#FFFFFF',
+    paddingTop: verticalScale(20),
+    paddingBottom: verticalScale(8),
+    marginTop: verticalScale(12),
     borderTopWidth: 1,
-    borderTopColor: '#F0F5F2',
   },
   prevBtn: {
     flex: 1,

@@ -36,10 +36,12 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   onPress,
   onLongPress,
   size = 'medium',
+  position = 'bottom-right',
 }: {
   onPress: () => void;
   onLongPress?: () => void;
   size?: 'small' | 'medium' | 'large';
+  position?: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right';
 }) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -48,6 +50,9 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   // Responsive device classifications
   const isSmallDevice = screenWidth < 375 || screenHeight <= 680;
   const isLargeDevice = screenWidth >= 600 || screenHeight >= 900;
+  // Android devices vary widely in GPU capability, so keep this overlay on the
+  // inexpensive path for all Android builds instead of guessing from screen size.
+  const useLightweightBubble = Platform.OS === 'android';
   const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
   // Dynamic sizing derived directly from screen dimensions and user preference multiplier:
@@ -55,9 +60,37 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   const sizeMultiplier = size === 'small' ? 0.8 : size === 'large' ? 1.25 : 1.0;
   const mascotSize = Math.round(baseSize * sizeMultiplier);
 
-  // Dynamic bottom offset calculated from tab bar height (64) + safe area insets + responsive clearance
+  // Keep the mascot clear of the bottom tab bar when it uses a bottom position.
   const bottomBarHeight = verticalScale(64);
   const bottomOffset = insets.bottom + bottomBarHeight + verticalScale(12);
+  const horizontalOffset = scale(16);
+  const topOffset = insets.top + verticalScale(12);
+  const isLeftPosition = position.endsWith('left');
+  const isCenterPosition = position.startsWith('center');
+  const targetPosition = isCenterPosition
+    ? {
+        x: isLeftPosition ? horizontalOffset : screenWidth - mascotSize - horizontalOffset,
+        y: screenHeight / 2 - mascotSize / 2,
+      }
+    : position === 'top-left'
+      ? { x: horizontalOffset, y: topOffset }
+      : position === 'top-right'
+        ? { x: screenWidth - mascotSize - horizontalOffset, y: topOffset }
+        : position === 'bottom-left'
+          ? { x: horizontalOffset, y: screenHeight - mascotSize - bottomOffset }
+          : { x: screenWidth - mascotSize - horizontalOffset, y: screenHeight - mascotSize - bottomOffset };
+
+  // Animate the full-screen coordinate so changing tabs feels intentional rather than abrupt.
+  const animatedPosition = useRef(new Animated.ValueXY(targetPosition)).current;
+  useEffect(() => {
+    Animated.spring(animatedPosition, {
+      toValue: targetPosition,
+      damping: 18,
+      stiffness: 180,
+      mass: 0.8,
+      useNativeDriver: true,
+    }).start();
+  }, [animatedPosition, targetPosition.x, targetPosition.y]);
 
   // Max width of speech bubble dynamically bound to screen width (never overflows)
   const bubbleMaxWidth = Math.min(screenWidth * 0.58, scale(220));
@@ -122,16 +155,20 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       Animated.parallel([
         Animated.timing(bubbleOpacity, {
           toValue: 1,
-          duration: 350,
+          duration: useLightweightBubble ? 180 : 300,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
+          isInteraction: false,
         }),
-        Animated.timing(bubbleTranslateY, {
-          toValue: 0,
-          duration: 350,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
+        ...(useLightweightBubble ? [] : [
+          Animated.timing(bubbleTranslateY, {
+            toValue: 0,
+            duration: 300,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+            isInteraction: false,
+          }),
+        ]),
       ]).start();
 
       // Stay visible for 5 seconds, then animate OUT
@@ -141,16 +178,20 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
         Animated.parallel([
           Animated.timing(bubbleOpacity, {
             toValue: 0,
-            duration: 300,
+            duration: useLightweightBubble ? 160 : 240,
             easing: Easing.in(Easing.ease),
             useNativeDriver: true,
+            isInteraction: false,
           }),
-          Animated.timing(bubbleTranslateY, {
-            toValue: 6,
-            duration: 300,
-            easing: Easing.in(Easing.ease),
-            useNativeDriver: true,
-          }),
+          ...(useLightweightBubble ? [] : [
+            Animated.timing(bubbleTranslateY, {
+              toValue: 6,
+              duration: 240,
+              easing: Easing.in(Easing.ease),
+              useNativeDriver: true,
+              isInteraction: false,
+            }),
+          ]),
         ]).start(() => {
           // Stay hidden for 7 seconds before next reminder cycle (conserves low-end CPU)
           if (isMounted) {
@@ -168,7 +209,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       if (initialDelay) clearTimeout(initialDelay);
       if (timer) clearTimeout(timer);
     };
-  }, [bubbleOpacity, bubbleTranslateY]);
+  }, [bubbleOpacity, bubbleTranslateY, useLightweightBubble]);
 
   return (
     <Animated.View
@@ -177,11 +218,15 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       style={[
         styles.chatbotFabOuter,
         {
-          bottom: bottomOffset,
-          right: scale(16),
+          width: mascotSize,
+          height: mascotSize,
+          left: 0,
+          top: 0,
         },
         { 
           transform: [
+            { translateX: animatedPosition.x },
+            { translateY: animatedPosition.y },
             { translateX: pan.x },
             { translateY: pan.y }
           ] 
@@ -197,15 +242,17 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       {/* Speech Bubble: Responsively positioned strictly at the TOP-LEFT of the Mascot */}
       <Animated.View
         pointerEvents="none"
+        renderToHardwareTextureAndroid
+        shouldRasterizeIOS
         style={{
           position: 'absolute',
           bottom: mascotSize * 0.76,
-          right: mascotSize * 0.72,
+          ...(isLeftPosition
+            ? { left: mascotSize * 0.72 }
+            : { right: mascotSize * 0.72 }),
           width: bubbleMaxWidth,
           opacity: bubbleOpacity,
-          transform: [
-            { translateY: bubbleTranslateY },
-          ],
+          transform: useLightweightBubble ? undefined : [{ translateY: bubbleTranslateY }],
           zIndex: 10,
         }}
       >
@@ -219,11 +266,15 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
             paddingBottom: verticalScale(10),
             borderWidth: 1.5,
             borderColor: isDark ? 'rgba(74, 222, 128, 0.45)' : 'rgba(16, 185, 129, 0.28)',
-            shadowColor: '#0E5A35',
-            shadowOpacity: isDark ? 0.25 : 0.12,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 4,
+            ...(useLightweightBubble
+              ? { elevation: 0 }
+              : {
+                  shadowColor: '#0E5A35',
+                  shadowOpacity: isDark ? 0.25 : 0.12,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 4,
+                }),
           }}
         >
           {/* Top Pill / Badge row */}
@@ -260,32 +311,33 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
               </Text>
             </View>
 
-            {/* Online pulsing indicator */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
+            {!useLightweightBubble && (
               <View
                 style={{
-                  width: scale(6),
-                  height: scale(6),
-                  borderRadius: scale(3),
-                  backgroundColor: '#10B981',
-                }}
-              />
-              <Text
-                style={{
-                  fontSize: responsiveFontSize(isSmallDevice ? 9 : 10),
-                  fontWeight: '600',
-                  color: isDark ? '#6EE7B7' : '#059669',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                Online
-              </Text>
-            </View>
+                <View
+                  style={{
+                    width: scale(6),
+                    height: scale(6),
+                    borderRadius: scale(3),
+                    backgroundColor: '#10B981',
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: responsiveFontSize(10),
+                    fontWeight: '600',
+                    color: isDark ? '#6EE7B7' : '#059669',
+                  }}
+                >
+                  Online
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Main Conversational Text */}
