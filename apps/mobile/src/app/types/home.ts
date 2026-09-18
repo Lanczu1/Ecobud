@@ -276,13 +276,12 @@ export interface EcoBudMobileModel {
   /** Mascot size preference: 'small', 'medium', or 'large' */
   chatbotSize: 'small' | 'medium' | 'large';
   setChatbotSize: (size: 'small' | 'medium' | 'large') => Promise<void>;
+  /** Mascot position preference: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right' */
+  chatbotPosition: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right';
+  setChatbotPosition: (position: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right') => Promise<void>;
   /** Whether push notifications are enabled or disabled by the user */
   pushNotificationsEnabled: boolean;
   setPushNotificationsEnabled: (enabled: boolean) => Promise<void>;
   /** Hardware and gesture back button handler (Facebook-style tab history & overlay pop) */
   handleHardwareBackPress: () => boolean;
 }
-
-
-
-

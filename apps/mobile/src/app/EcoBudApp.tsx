@@ -87,17 +87,6 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const [onboardingAnimationPending, setOnboardingAnimationPending] = useState(false);
   const finishOnboardingAnimation = useCallback(() => setOnboardingAnimationPending(false), []);
 
-  // Place the assistant where it is least likely to cover the active tab's controls.
-  // Deliberately limited to the six requested edge positions; there is no middle position.
-  const chatbotPosition = {
-    home: 'top-left',
-    learn: 'top-right',
-    challenges: 'center-left',
-    tracker: 'center-right',
-    profile: 'bottom-left',
-    marketplace: 'bottom-right',
-  }[model.activeTab] as 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right';
-
   const handleCompleteOnboarding = useCallback(() => {
     setOnboardingAnimationPending(true);
     void model.completeOnboarding();
@@ -191,7 +180,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         ) && (
           <ChatbotFAB
             size={model.chatbotSize}
-            position={chatbotPosition}
+            position={model.chatbotPosition}
+            performanceMode={model.activeTab === 'marketplace' ? 'reduced' : 'default'}
+            onPositionChange={(pos) => void model.setChatbotPosition(pos)}
             onPress={() => model.setActiveOverlay('assistant')}
             onLongPress={() => void model.setChatbotEnabled(false)}
           />

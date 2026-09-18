@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -28,20 +28,23 @@ import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
 import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
-import { triggerSelectionHaptic, triggerWarningHaptic } from '../utils/haptics';
+import { triggerSelectionHaptic } from '../utils/haptics';
 import LottieView from 'lottie-react-native';
 import { Header } from './Header';
 
 export const ChatbotFAB = React.memo(function ChatbotFAB({
   onPress,
-  onLongPress,
+  onPositionChange,
   size = 'medium',
   position = 'bottom-right',
+  performanceMode = 'default',
 }: {
   onPress: () => void;
   onLongPress?: () => void;
+  onPositionChange?: (pos: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right') => void;
   size?: 'small' | 'medium' | 'large';
   position?: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right';
+  performanceMode?: 'default' | 'reduced';
 }) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -53,6 +56,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   // Android devices vary widely in GPU capability, so keep this overlay on the
   // inexpensive path for all Android builds instead of guessing from screen size.
   const useLightweightBubble = Platform.OS === 'android';
+  const reduceMascotMotion = performanceMode === 'reduced' || (Platform.OS === 'android' && isSmallDevice);
   const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
   // Dynamic sizing derived directly from screen dimensions and user preference multiplier:
@@ -65,24 +69,31 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   const bottomOffset = insets.bottom + bottomBarHeight + verticalScale(12);
   const horizontalOffset = scale(16);
   const topOffset = insets.top + verticalScale(12);
-  const isLeftPosition = position.endsWith('left');
-  const isCenterPosition = position.startsWith('center');
-  const targetPosition = isCenterPosition
-    ? {
-        x: isLeftPosition ? horizontalOffset : screenWidth - mascotSize - horizontalOffset,
-        y: screenHeight / 2 - mascotSize / 2,
-      }
-    : position === 'top-left'
-      ? { x: horizontalOffset, y: topOffset }
-      : position === 'top-right'
-        ? { x: screenWidth - mascotSize - horizontalOffset, y: topOffset }
-        : position === 'bottom-left'
-          ? { x: horizontalOffset, y: screenHeight - mascotSize - bottomOffset }
-          : { x: screenWidth - mascotSize - horizontalOffset, y: screenHeight - mascotSize - bottomOffset };
 
-  // Animate the full-screen coordinate so changing tabs feels intentional rather than abrupt.
+  const getPositionCoords = useCallback(
+    (pos: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right') => {
+      const isLeft = pos.endsWith('left');
+      const isCenter = pos.startsWith('center');
+      const isTop = pos.startsWith('top');
+      const x = isLeft ? horizontalOffset : screenWidth - mascotSize - horizontalOffset;
+      const y = isCenter
+        ? screenHeight / 2 - mascotSize / 2
+        : isTop
+          ? topOffset
+          : screenHeight - mascotSize - bottomOffset;
+      return { x, y };
+    },
+    [horizontalOffset, topOffset, screenWidth, screenHeight, mascotSize, bottomOffset]
+  );
+
+  const targetPosition = useMemo(() => getPositionCoords(position), [getPositionCoords, position]);
+  const isLeftPosition = position.endsWith('left');
+
+  const isDragging = useRef(false);
   const animatedPosition = useRef(new Animated.ValueXY(targetPosition)).current;
   useEffect(() => {
+    if (isDragging.current) return;
+
     Animated.spring(animatedPosition, {
       toValue: targetPosition,
       damping: 18,
@@ -99,52 +110,91 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   const bubbleOpacity = useRef(new Animated.Value(0)).current;
   const bubbleTranslateY = useRef(new Animated.Value(6)).current;
 
-  const pan = useRef(new Animated.ValueXY()).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 15 || Math.abs(gestureState.dy) > 15;
-      },
-      onPanResponderGrant: () => {
-        pan.setOffset({
-          x: (pan.x as any)._value,
-          y: (pan.y as any)._value
-        });
-      },
-      onPanResponderMove: (_, gestureState) => {
-        pan.setValue({ x: gestureState.dx, y: gestureState.dy });
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        pan.flattenOffset();
-        const threshold = scale(100);
-        if (Math.abs(gestureState.dx) > threshold || Math.abs(gestureState.dy) > threshold) {
-          triggerWarningHaptic();
-          Animated.timing(pan, {
-            toValue: {
-              x: gestureState.dx > 0 ? screenWidth : -screenWidth,
-              y: gestureState.dy > 0 ? screenHeight : -screenHeight
-            },
-            duration: 250,
-            useNativeDriver: true
-          }).start(() => {
-            if (onLongPress) {
-              onLongPress();
-            }
-          });
-        } else {
-          Animated.spring(pan, {
-            toValue: { x: 0, y: 0 },
-            friction: 5,
-            useNativeDriver: true
-          }).start();
+  const clampDragPosition = useCallback(
+    (fingerX: number, fingerY: number) => ({
+      x: Math.max(0, Math.min(screenWidth - mascotSize, fingerX - mascotSize / 2)),
+      y: Math.max(insets.top, Math.min(screenHeight - insets.bottom - mascotSize, fingerY - mascotSize / 2)),
+    }),
+    [insets.bottom, insets.top, mascotSize, screenHeight, screenWidth]
+  );
+
+  const snapToClosestPosition = useCallback(
+    (fingerX: number, fingerY: number) => {
+      const positions: Array<'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right'> = [
+        'top-left',
+        'top-right',
+        'center-left',
+        'center-right',
+        'bottom-left',
+        'bottom-right',
+      ];
+
+      let closestPosition = position;
+      let minDistanceSq = Number.MAX_VALUE;
+
+      for (const candidate of positions) {
+        const coords = getPositionCoords(candidate);
+        const dx = fingerX - (coords.x + mascotSize / 2);
+        const dy = fingerY - (coords.y + mascotSize / 2);
+        const distanceSq = dx * dx + dy * dy;
+
+        if (distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq;
+          closestPosition = candidate;
         }
       }
-    })
-  ).current;
+
+      isDragging.current = false;
+      triggerSelectionHaptic();
+      Animated.spring(animatedPosition, {
+        toValue: getPositionCoords(closestPosition),
+        damping: 18,
+        stiffness: 180,
+        mass: 0.8,
+        useNativeDriver: true,
+      }).start();
+      onPositionChange?.(closestPosition);
+    },
+    [animatedPosition, getPositionCoords, mascotSize, onPositionChange, position]
+  );
+
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10;
+      },
+      onPanResponderGrant: (_, gestureState) => {
+        isDragging.current = true;
+        animatedPosition.stopAnimation();
+        animatedPosition.setValue(clampDragPosition(gestureState.x0, gestureState.y0));
+      },
+      onPanResponderMove: (_, gestureState) => {
+        animatedPosition.setValue(clampDragPosition(gestureState.moveX, gestureState.moveY));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        snapToClosestPosition(gestureState.moveX, gestureState.moveY);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        snapToClosestPosition(
+          gestureState.moveX || gestureState.x0,
+          gestureState.moveY || gestureState.y0
+        );
+      },
+    }),
+    [animatedPosition, clampDragPosition, snapToClosestPosition]
+  );
 
   // Gentle periodic bubble appearance without compounding continuous CPU render loops
   useEffect(() => {
+    if (reduceMascotMotion) {
+      bubbleOpacity.stopAnimation();
+      bubbleTranslateY.stopAnimation();
+      bubbleOpacity.setValue(0);
+      bubbleTranslateY.setValue(6);
+      return;
+    }
+
     let isMounted = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -209,7 +259,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       if (initialDelay) clearTimeout(initialDelay);
       if (timer) clearTimeout(timer);
     };
-  }, [bubbleOpacity, bubbleTranslateY, useLightweightBubble]);
+  }, [bubbleOpacity, bubbleTranslateY, reduceMascotMotion, useLightweightBubble]);
 
   return (
     <Animated.View
@@ -222,13 +272,13 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           height: mascotSize,
           left: 0,
           top: 0,
+          right: undefined,
+          bottom: undefined,
         },
         { 
           transform: [
             { translateX: animatedPosition.x },
             { translateY: animatedPosition.y },
-            { translateX: pan.x },
-            { translateY: pan.y }
           ] 
         },
       ]}
@@ -239,14 +289,16 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           transform: [{ scale: pressScale }]
         }}
       >
-      {/* Speech Bubble: Responsively positioned strictly at the TOP-LEFT of the Mascot */}
+      {/* Speech Bubble: Responsively positioned according to Mascot placement */}
       <Animated.View
         pointerEvents="none"
         renderToHardwareTextureAndroid
         shouldRasterizeIOS
         style={{
           position: 'absolute',
-          bottom: mascotSize * 0.76,
+          ...(position.startsWith('top')
+            ? { top: mascotSize * 0.85 }
+            : { bottom: mascotSize * 0.76 }),
           ...(isLeftPosition
             ? { left: mascotSize * 0.72 }
             : { right: mascotSize * 0.72 }),
@@ -386,13 +438,14 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         style={styles.chatbotFab}
-        accessibilityLabel="Chat with EcoBud AI. Swipe to remove mascot."
+        accessibilityLabel="Chat with EcoBud AI. Drag to reposition mascot."
         accessibilityRole="button"
       >
         <LottieView
           source={require('../../../assets/Ecobud Mascot/New Lottie files/Wave.lottie')}
-          autoPlay
-          loop
+          autoPlay={!reduceMascotMotion}
+          loop={!reduceMascotMotion}
+          progress={reduceMascotMotion ? 0 : undefined}
           renderMode="AUTOMATIC"
           cacheComposition={true}
           hardwareAccelerationAndroid={Platform.OS === 'android'}

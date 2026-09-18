@@ -6,7 +6,6 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   DeviceEventEmitter,
   StyleSheet,
 } from 'react-native';
@@ -19,6 +18,7 @@ import { useTheme } from '../../shared/theme/ecoTheme';
 import { homeService } from '../services/homeService';
 import { scale, verticalScale, moderateScale, responsiveFontSize } from '../utils/responsive';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 const categories = [
   ['all', 'All'],
@@ -82,6 +82,7 @@ export function notificationTime(date: string) {
 
 export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   const { theme } = useTheme();
+  const { showNotification } = useInAppNotification();
   const c = theme.colors;
   const token = model.session?.token;
 
@@ -160,7 +161,11 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
           if (refreshed) {
             model.openChallengeMission(refreshed);
           } else {
-            Alert.alert('Content unavailable', 'This challenge is no longer available.');
+            showNotification({
+              title: 'Content unavailable',
+              message: 'This challenge is no longer available.',
+              tone: 'warning',
+            });
           }
         }
       } else if (n.type === 'event' && id) {
@@ -183,10 +188,19 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
         model.setActiveOverlay(null);
         model.setActiveTab('marketplace');
       } else {
-        Alert.alert(n.title, n.message);
+        showNotification({
+          title: n.title,
+          message: n.message,
+          tone: 'info',
+          durationMs: 7000,
+        });
       }
     } catch {
-      Alert.alert('Unable to open notification', 'Please check your connection and try again.');
+      showNotification({
+        title: 'Unable to open notification',
+        message: 'Please check your connection and try again.',
+        tone: 'error',
+      });
     }
   };
 
@@ -364,6 +378,19 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
         <View style={[inboxStyles.errorBanner, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
           <Ionicons name="alert-circle" size={18} color="#EF4444" />
           <Text style={inboxStyles.errorText}>{error}</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading notifications"
+            disabled={busy}
+            onPress={() => void load()}
+            style={[inboxStyles.retryButton, { borderColor: c.error }]}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color={c.error} />
+            ) : (
+              <Text style={[inboxStyles.retryButtonText, { color: c.error }]}>Retry</Text>
+            )}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -584,6 +611,19 @@ const inboxStyles = StyleSheet.create({
     fontSize: responsiveFontSize(13),
     flex: 1,
     fontWeight: '600',
+  },
+  retryButton: {
+    minWidth: scale(58),
+    minHeight: verticalScale(44),
+    borderWidth: 1,
+    borderRadius: moderateScale(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: scale(10),
+  },
+  retryButtonText: {
+    fontSize: responsiveFontSize(12),
+    fontWeight: '800',
   },
   emptyStateContainer: {
     alignItems: 'center',

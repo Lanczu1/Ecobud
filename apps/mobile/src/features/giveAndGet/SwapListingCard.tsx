@@ -124,6 +124,8 @@ function SwapListingCardComponent({
             source={{ uri: images[activeCardImage] || mainImage }}
             style={localStyles.cardImage}
             resizeMode="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={`${listing.id}-${activeCardImage}`}
           />
           {images.length > 1 && (
             <View style={localStyles.cardImageCounter}>
@@ -157,7 +159,13 @@ function SwapListingCardComponent({
                         isActive && localStyles.cardThumbItemActive,
                       ]}
                     >
-                      <Image source={{ uri: imgUri }} style={localStyles.cardThumbImage} resizeMode="cover" />
+                      <Image
+                        source={{ uri: imgUri }}
+                        style={localStyles.cardThumbImage}
+                        resizeMode="cover"
+                        cachePolicy="memory-disk"
+                        recyclingKey={`${listing.id}-thumb-${idx}`}
+                      />
                     </TouchableOpacity>
                   );
                 })}
@@ -237,6 +245,8 @@ function SwapListingCardComponent({
                 <Image
                   source={{ uri: getValidImageUrl(user.avatarUrl) }}
                   style={localStyles.userAvatarImage}
+                  cachePolicy="memory-disk"
+                  recyclingKey={`${listing.id}-avatar`}
                 />
               ) : (
                 <Text style={localStyles.userAvatarText}>{getInitials(user.displayName)}</Text>
@@ -632,12 +642,6 @@ const localStyles = StyleSheet.create({
 export const SwapListingCard = memo(
   SwapListingCardComponent,
   (prevProps, nextProps) =>
-    prevProps.listing.id === nextProps.listing.id &&
-    prevProps.listing.title === nextProps.listing.title &&
-    prevProps.listing.isActive === nextProps.listing.isActive &&
-    prevProps.listing.approvalStatus === nextProps.listing.approvalStatus &&
-    prevProps.isOwnListing === nextProps.isOwnListing &&
-    prevProps.onPress === nextProps.onPress &&
-    prevProps.onSwap === nextProps.onSwap
+    prevProps.listing === nextProps.listing &&
+    prevProps.isOwnListing === nextProps.isOwnListing
 );
-

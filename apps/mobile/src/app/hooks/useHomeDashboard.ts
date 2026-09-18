@@ -199,6 +199,42 @@ export function useHomeDashboard(): EcoBudMobileModel {
     return 'medium';
   });
 
+  const [chatbotPosition, setChatbotPositionState] = useState<
+    'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right'
+  >(() => {
+    try {
+      const syncVal = mobileStorage.getItemSync('ecobud.mobile.chatbotPosition');
+      if (
+        syncVal === 'top-left' ||
+        syncVal === 'top-right' ||
+        syncVal === 'center-left' ||
+        syncVal === 'center-right' ||
+        syncVal === 'bottom-left' ||
+        syncVal === 'bottom-right'
+      ) {
+        return syncVal;
+      }
+    } catch { }
+    return 'bottom-right';
+  });
+
+  const setChatbotPosition = useCallback(
+    async (
+      pos: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right'
+    ) => {
+      setChatbotPositionState(pos);
+      try {
+        mobileStorage.setItemSync('ecobud.mobile.chatbotPosition', pos);
+      } catch { }
+      try {
+        await mobileStorage.setItem('ecobud.mobile.chatbotPosition', pos);
+      } catch (e) {
+        console.warn('Failed to persist chatbot position preference', e);
+      }
+    },
+    []
+  );
+
   const setPushNotificationsEnabled = useCallback(async (enabled: boolean) => {
     setPushNotificationsEnabledState(enabled);
     try {
@@ -1408,7 +1444,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
           DeviceEventEmitter.emit('notificationsChanged');
           DeviceEventEmitter.emit('notificationsInboxRefresh');
           DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
-          if (notice.scope !== 'notifications') Alert.alert(notice.title, notice.message);
+          if (notice.scope !== 'notifications') {
+            showNotification({
+              title: notice.title,
+              message: notice.message,
+              tone: notice.level ?? 'info',
+            });
+          }
           queueRealtimeRefresh(`notice:${notice.scope}`);
         },
         onSignal: (signal) => {
@@ -2617,7 +2659,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
     userDisplayName,
     hasUsableInternet: presence.hasUsableInternet,
     isUserOnline,
-    notificationCount, notificationDestination, setNotificationDestination, focusedEventId, setFocusedEventId, pendingNotificationId, setPendingNotificationId,
+    notificationCount,
+    notificationDestination,
+    setNotificationDestination,
+    focusedEventId,
+    setFocusedEventId,
+    pendingNotificationId,
+    setPendingNotificationId,
     challengesViewMode,
     setChallengesViewMode,
     setActiveTab,
@@ -2680,12 +2728,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setChatbotEnabled,
     chatbotSize,
     setChatbotSize,
+    chatbotPosition,
+    setChatbotPosition,
     pushNotificationsEnabled,
     setPushNotificationsEnabled,
     handleHardwareBackPress,
   };
 
 }
-
-
-
