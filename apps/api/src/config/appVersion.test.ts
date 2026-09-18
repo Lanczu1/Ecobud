@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { readAppVersionConfig } from './appVersion';
 
 describe('readAppVersionConfig', () => {
-  it('requires users below 1.0.1 to update by default', () => {
+  it('requires users below 1.0.2 to update by default', () => {
     expect(readAppVersionConfig({})).toMatchObject({
-      latestVersion: '1.0.1',
-      minimumVersion: '1.0.1',
+      latestVersion: '1.0.2',
+      minimumVersion: '1.0.2',
     });
   });
 

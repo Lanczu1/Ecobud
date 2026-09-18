@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -171,6 +172,8 @@ export function MarketplaceFeed({
       style={[localStyles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={{ paddingBottom: verticalScale(96), backgroundColor: theme.colors.background }}
       stickyHeaderIndices={[1]}
+      removeClippedSubviews={Platform.OS === 'android'}
+      scrollEventThrottle={32}
       showsVerticalScrollIndicator={false}
       refreshControl={
         activeTab === 'browse' ? (
