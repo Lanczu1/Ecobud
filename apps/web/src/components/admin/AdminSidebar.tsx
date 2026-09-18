@@ -9,8 +9,8 @@ import {
   LogOut,
   Gift
 } from 'lucide-react';
+import { Mascot } from 'page-mascot';
 
-import logoImg from '../../assets/logo.png';
 import wordmarkImg from '../../assets/ecobud_wordmark.png';
 import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
 
@@ -25,9 +25,7 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Users', icon: Users },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },
-
   { name: 'Events', icon: Calendar },
-
   { name: 'Give and Get Hub', icon: ArrowLeftRight },
   { name: 'Redeem', icon: Gift },
   { name: 'Reports', icon: FileText },
@@ -48,11 +46,14 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   return (
     <div className="w-64 bg-white border-r border-gray-100 flex flex-col h-full shadow-sm">
       <div className="p-6 flex items-center gap-3 select-none">
-        <img 
-          src={logoImg} 
-          alt="EcoBud Logo" 
-          className="w-12 h-12 object-contain rounded-full transition-transform duration-500 hover:scale-110 hover:rotate-12 cursor-pointer filter drop-shadow-sm" 
-        />
+        <div className="relative flex items-center justify-center transition-transform duration-300 hover:scale-105">
+          <Mascot
+            directions="/mascots/ecobud-directions.png"
+            reactions="/mascots/ecobud-reactions.png"
+            size={48}
+            label="Ecobud mascot"
+          />
+        </div>
         <div className="flex flex-col items-start justify-center">
           <img
             src={wordmarkImg}
