@@ -257,31 +257,31 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={handleClose}>
-      <div className={`relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 100px)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-lg font-serif font-bold text-gray-900">{initial ? 'Edit Event' : 'Create Event'}</h2>
-          <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs" onClick={handleClose}>
+      <div className={`relative z-10 bg-white dark:bg-[#0f1713] text-gray-900 dark:text-white rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-xl flex flex-col overflow-hidden ${isClosing ? 'animate-modal-exit' : 'animate-modal'}`} style={{ maxHeight: 'calc(100vh - 100px)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-lg font-serif font-bold text-gray-900 dark:text-white">{initial ? 'Edit Event' : 'Create Event'}</h2>
+          <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
         <form id="event-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-          {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
+          {err && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl px-4 py-3">{err}</p>}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" placeholder="Event title" />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" placeholder="Event title" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 resize-none" />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description *</label>
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 resize-none transition-colors" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
-            <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" placeholder="e.g. Bondi Beach, Sydney" />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location *</label>
+            <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" placeholder="e.g. Bondi Beach, Sydney" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Event Image</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event Image</label>
             <div className="flex items-center gap-4">
               {imagePreview && (
-                <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0">
                   <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                 </div>
               )}
@@ -301,7 +301,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                 />
                 <label 
                   htmlFor="event-image-upload" 
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm border-2 border-dashed border-gray-300 rounded-xl hover:border-green-400 hover:bg-green-50 cursor-pointer transition-colors text-gray-500"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl hover:border-green-400 dark:hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 cursor-pointer transition-colors text-gray-500 dark:text-gray-400"
                 >
                   <ImageIcon className="w-4 h-4" />
                   <span>Choose an image...</span>
@@ -311,7 +311,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
           </div>
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-700">Map Pin (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Map Pin (Optional)</label>
               <button 
                 type="button"
                 onClick={() => {
@@ -356,11 +356,11 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                         // Fallback to low accuracy
                         navigator.geolocation.getCurrentPosition(
                           handleSuccess,
-                          (err2) => alert('Unable to fetch location: ' + err2.message),
+                          (err2) => setErr('Unable to fetch location: ' + err2.message),
                           { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
                         );
                       } else {
-                        alert('Unable to fetch location: ' + err.message);
+                        setErr('Unable to fetch location: ' + err.message);
                       }
                     };
                     navigator.geolocation.getCurrentPosition(
@@ -369,15 +369,15 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                       { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
                     );
                   } else {
-                    alert('Geolocation is not supported by this browser.');
+                    setErr('Geolocation is not supported by this browser.');
                   }
                 }}
-                className="text-xs text-green-600 hover:text-green-700 font-semibold flex items-center gap-1"
+                className="text-xs text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 font-semibold flex items-center gap-1"
               >
                 <MapPin className="w-3 h-3" /> Use My Location
               </button>
             </div>
-            <div className="h-48 rounded-xl overflow-hidden border border-gray-200 relative z-0">
+            <div className="h-48 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 relative z-0">
               <MapContainer 
                 center={form.latitude && form.longitude ? [form.latitude, form.longitude] : [14.5995, 120.9842]}
                 zoom={11} 
@@ -425,43 +425,66 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                 />
               </MapContainer>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Tap on the map to pin the exact coordinates for the mobile app.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tap on the map to pin the exact coordinates for the mobile app.</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date &amp; Time *</label>
-              <input type="datetime-local" value={form.startDatetime} onChange={e => setForm(f => ({ ...f, startDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date &amp; Time *</label>
+              <input type="datetime-local" value={form.startDatetime} onChange={e => setForm(f => ({ ...f, startDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date &amp; Time *</label>
-              <input type="datetime-local" value={form.endDatetime} onChange={e => setForm(f => ({ ...f, endDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date &amp; Time *</label>
+              <input type="datetime-local" value={form.endDatetime} onChange={e => setForm(f => ({ ...f, endDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
             </div>
           </div>
 
-          <div className="bg-[#0a0a0a] rounded-xl overflow-hidden text-white border border-gray-800 my-4">
-            <div className="p-4 border-b border-gray-800">
-              <h3 className="font-semibold text-sm">Automatic status</h3>
+          {/* Automatic Status Preview */}
+          <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/60 transition-colors my-4">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800/80 flex items-center justify-between bg-white/60 dark:bg-gray-800/40">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="font-semibold text-xs tracking-wide uppercase text-gray-700 dark:text-gray-200">Automatic Status Schedule</h3>
+              </div>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Auto-transitions by time</span>
             </div>
-            <div className="p-4 overflow-x-auto">
-              <table className="w-full text-sm text-left">
+            <div className="p-3.5 overflow-x-auto">
+              <table className="w-full text-xs text-left">
                 <thead>
-                  <tr className="border-b border-gray-800 text-gray-400">
-                    <th className="pb-3 font-medium">Current Time</th>
-                    <th className="pb-3 font-medium">Status</th>
+                  <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
+                    <th className="pb-2.5 font-semibold">Time Window</th>
+                    <th className="pb-2.5 font-semibold text-right">Preview Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-800">
-                  <tr>
-                    <td className="py-3">Before {form.startDatetime ? new Date(form.startDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[Start Time]'}</td>
-                    <td className="py-3">Upcoming</td>
+                <tbody className="divide-y divide-gray-200/70 dark:divide-gray-800/70">
+                  <tr className="hover:bg-black/2 dark:hover:bg-white/2 transition-colors">
+                    <td className="py-2.5 pr-3 text-gray-700 dark:text-gray-300 font-medium">
+                      Before {form.startDatetime ? new Date(form.startDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[Start Time]'}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900/60">
+                        Upcoming
+                      </span>
+                    </td>
                   </tr>
-                  <tr>
-                    <td className="py-3">{form.startDatetime ? new Date(form.startDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[Start Time]'} – {form.endDatetime ? new Date(form.endDatetime).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' }) : '[End Time]'}</td>
-                    <td className="py-3">Ongoing</td>
+                  <tr className="hover:bg-black/2 dark:hover:bg-white/2 transition-colors">
+                    <td className="py-2.5 pr-3 text-gray-700 dark:text-gray-300 font-medium">
+                      {form.startDatetime ? new Date(form.startDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[Start Time]'} – {form.endDatetime ? new Date(form.endDatetime).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' }) : '[End Time]'}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-900/60">
+                        Ongoing
+                      </span>
+                    </td>
                   </tr>
-                  <tr>
-                    <td className="py-3">After {form.endDatetime ? new Date(form.endDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[End Time]'}</td>
-                    <td className="py-3">Ended</td>
+                  <tr className="hover:bg-black/2 dark:hover:bg-white/2 transition-colors">
+                    <td className="py-2.5 pr-3 text-gray-700 dark:text-gray-300 font-medium">
+                      After {form.endDatetime ? new Date(form.endDatetime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '[End Time]'}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                        Ended
+                      </span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -469,43 +492,46 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-              <input type="number" min={1} value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity</label>
+              <input type="number" min={1} value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
             </div>
             <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"><Leaf className="w-3.5 h-3.5 text-green-500" /> Points Reward</label>
-              <input type="number" min={0} value={form.pointsReward} onChange={e => setForm(f => ({ ...f, pointsReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><Leaf className="w-3.5 h-3.5 text-green-500" /> Points Reward</label>
+              <input type="number" min={0} value={form.pointsReward} onChange={e => setForm(f => ({ ...f, pointsReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
             </div>
             <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1"><img src="/coin.png" alt="eco coin" className="w-3.5 h-3.5 object-contain" /> Coin Reward</label>
-              <input type="number" min={0} value={form.coinReward} onChange={e => setForm(f => ({ ...f, coinReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-200 focus:border-yellow-400" />
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><img src="/coin.png" alt="eco coin" className="w-3.5 h-3.5 object-contain" /> Coin Reward</label>
+              <input type="number" min={0} value={form.coinReward} onChange={e => setForm(f => ({ ...f, coinReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-200 dark:focus:ring-yellow-800 focus:border-yellow-400 transition-colors" />
             </div>
           </div>
 
           {/* Featured Event Switch */}
-          <div className="flex items-center justify-between p-3.5 bg-yellow-50/60 border border-yellow-100/80 rounded-xl">
+          <div className="flex items-center justify-between p-3.5 bg-yellow-50/60 dark:bg-yellow-950/20 border border-yellow-100/80 dark:border-yellow-900/40 rounded-xl transition-colors">
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${form.isFeatured ? 'bg-yellow-400 text-yellow-950 shadow-sm' : 'bg-gray-200 text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${form.isFeatured ? 'bg-yellow-400 text-yellow-950 shadow-sm' : 'bg-gray-200 dark:bg-gray-800 text-gray-400'}`}>
                 <Star className={`w-4 h-4 ${form.isFeatured ? 'fill-current' : ''}`} />
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-800">Feature this Event</p>
-                <p className="text-xs text-gray-500">Pin as the top highlight on user mobile dashboard</p>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Feature this Event</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Pin as the top highlight on user mobile dashboard</p>
               </div>
             </div>
             <div
-              className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${form.isFeatured ? 'bg-yellow-500' : 'bg-gray-300'}`}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${form.isFeatured ? 'bg-yellow-500' : 'bg-gray-300 dark:bg-gray-700'}`}
               onClick={() => setForm(f => ({ ...f, isFeatured: !f.isFeatured }))}
             >
               <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isFeatured ? 'translate-x-5' : ''}`} />
             </div>
           </div>
-          <label className="flex items-center gap-3 p-4 text-sm text-gray-700"><input type="checkbox" checked={form.isPublished} onChange={e=>setForm(f=>({...f,isPublished:e.target.checked}))}/>Published and visible to users (uncheck to save a draft)</label>
+          <label className="flex items-center gap-3 p-4 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={form.isPublished} onChange={e=>setForm(f=>({...f,isPublished:e.target.checked}))} className="rounded border-gray-300 dark:border-gray-700 text-green-600 focus:ring-green-500 w-4 h-4 cursor-pointer" />
+            Published and visible to users (uncheck to save a draft)
+          </label>
         </form>
         {/* Footer buttons */}
-        <div className="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3">
-          <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
-          <button form="event-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+        <div className="shrink-0 p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1713] flex justify-end gap-3">
+          <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+          <button form="event-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 active:scale-95 rounded-xl transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             {saving ? 'Saving…' : (form.isPublished ? (initial ? 'Update Event' : 'Publish Event') : 'Save Draft')}
           </button>
@@ -525,7 +551,8 @@ export function Events() {
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [editing, setEditing] = useState<AdminEvent | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean }>({ open: false, eventId: null, qrData: null, loading: false });
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; event: AdminEvent | null }>({ open: false, event: null });
+  const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
   const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>('events');
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
@@ -604,7 +631,7 @@ export function Events() {
       setEvents(prev => prev.map(e => e.id === updated.id ? updated : e));
     } catch (err: any) {
       setEvents(prev => prev.map(e => e.id === event.id ? { ...e, isFeatured: event.isFeatured } : e));
-      alert(err.message || 'Failed to toggle featured status.');
+      setReviewNotice({ type: 'error', message: err.message || 'Failed to toggle featured status.' });
     } finally {
       setTogglingFeatured(null);
     }
@@ -704,40 +731,45 @@ export function Events() {
     setEvents(prev => prev.map(e => e.id === updated.id ? updated : e));
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this event? All registrations will also be removed.')) return;
-    setDeleting(id);
+  const confirmDeleteEvent = async () => {
+    if (!deleteConfirmModal.event) return;
+    const eventId = deleteConfirmModal.event.id;
+    setDeleting(eventId);
     try {
-      await adminDelete(`/admin/events/${id}`);
-      setEvents(prev => prev.filter(e => e.id !== id));
-    } catch (err: any) { alert(err.message || 'Failed to delete.'); }
-    finally { setDeleting(null); }
+      await adminDelete(`/admin/events/${eventId}`);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      setDeleteConfirmModal({ open: false, event: null });
+      setReviewNotice({ type: 'success', message: 'Event deleted successfully.' });
+    } catch (err: any) {
+      setReviewNotice({ type: 'error', message: err.message || 'Failed to delete event.' });
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const handleOpenQr = async (eventId: string) => {
-    setQrModal({ open: true, eventId, qrData: null, loading: true });
+    setQrModal({ open: true, eventId, qrData: null, loading: true, error: null });
     try {
       const data = await adminGet<{ qrData: string }>(`/admin/events/${eventId}/qr`);
-      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false }));
+      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false, error: null }));
     } catch (err: any) {
       if (err.message && err.message.includes('No QR code generated yet')) {
-        setQrModal(prev => ({ ...prev, loading: false })); // No QR yet
+        setQrModal(prev => ({ ...prev, loading: false, error: null })); // No QR yet
       } else {
-        alert(err.message || 'Failed to fetch QR code.');
-        setQrModal({ open: false, eventId: null, qrData: null, loading: false });
+        setQrModal(prev => ({ ...prev, loading: false, error: err.message || 'Failed to fetch QR code.' }));
       }
     }
   };
 
   const handleGenerateQr = async () => {
     if (!qrModal.eventId) return;
-    setQrModal(prev => ({ ...prev, loading: true }));
+    setQrModal(prev => ({ ...prev, loading: true, error: null }));
     try {
       const data = await adminPost<{ qrData: string }>(`/admin/events/${qrModal.eventId}/qr`, {});
-      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false }));
+      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false, error: null }));
+      setReviewNotice({ type: 'success', message: 'QR Code generated successfully.' });
     } catch (err: any) {
-      alert(err.message || 'Failed to generate QR code.');
-      setQrModal(prev => ({ ...prev, loading: false }));
+      setQrModal(prev => ({ ...prev, loading: false, error: err.message || 'Failed to generate QR code.' }));
     }
   };
 
@@ -751,6 +783,7 @@ export function Events() {
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(pngUrl);
     }
   };
 
@@ -772,8 +805,9 @@ export function Events() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
+      setReviewNotice({ type: 'success', message: 'Report downloaded successfully.' });
     } catch (err: any) {
-      alert(err.message || 'Failed to download report.');
+      setReviewNotice({ type: 'error', message: err.message || 'Failed to download report.' });
     } finally {
       setReportLoading(null);
     }
@@ -830,6 +864,13 @@ export function Events() {
                   <QrCode className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                   <p className="text-gray-600 font-medium mb-1">No QR Code generated yet</p>
                   <p className="text-sm text-gray-500">Generate one so attendees can check in.</p>
+                </div>
+              )}
+
+              {qrModal.error && (
+                <div className="w-full mb-4 flex items-start gap-2 p-3.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{qrModal.error}</span>
                 </div>
               )}
               
@@ -1143,7 +1184,7 @@ export function Events() {
                   <button onClick={() => { setEditing(event); setModal('edit'); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
                     <Edit3 className="w-3 h-3" />Edit
                   </button>
-                  <button onClick={() => handleDelete(event.id)} disabled={deleting === event.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
+                  <button onClick={() => setDeleteConfirmModal({ open: true, event })} disabled={deleting === event.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60" title="Delete Event">
                     {deleting === event.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                   </button>
                 </div>
@@ -1763,6 +1804,82 @@ export function Events() {
         </div>,
         document.body
       )}
+      {/* Custom Delete Confirmation Modal */}
+      {deleteConfirmModal.open && deleteConfirmModal.event && createPortal(
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => !deleting && setDeleteConfirmModal({ open: false, event: null })}
+        >
+          <div
+            className="bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Event</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Irreversible community action</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !deleting && setDeleteConfirmModal({ open: false, event: null })}
+                disabled={!!deleting}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Are you sure you want to permanently delete <strong className="text-gray-900 dark:text-white">"{deleteConfirmModal.event.title}"</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  Warning:
+                </p>
+                <p>All participant registrations and attendance records associated with this event will be removed.</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal({ open: false, event: null })}
+                disabled={!!deleting}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteEvent}
+                disabled={!!deleting}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Event</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
+

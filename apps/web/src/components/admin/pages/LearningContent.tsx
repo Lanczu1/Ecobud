@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
 import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
+import { useToast } from '../../../context/ToastContext';
 
 interface Lesson {
   id: string;
@@ -202,7 +203,6 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
   };
 
   const handleRemovePage = (index: number) => {
-    if (!confirm('Are you sure you want to remove this page?')) return;
     setForm(f => {
       const p = [...f.pages];
       p.splice(index, 1);
@@ -233,14 +233,12 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
       if (form.scheduledAt) {
         formData.append('scheduledAt', new Date(form.scheduledAt).toISOString());
       } else {
-        formData.append('scheduledAt', ''); // Send empty to clear if needed
+        formData.append('scheduledAt', '');
       }
       formData.append('featured', String(form.featured));
       formData.append('quizPassingScore', enableQuiz ? String(form.quizPassingScore) : '0');
       formData.append('pointsReward', String(form.pointsReward));
-
       formData.append('durationMinutes', String(form.durationMinutes || 0));
-
       formData.append('quizQuestions', JSON.stringify(enableQuiz ? form.quizQuestions : []));
       formData.append('pages', JSON.stringify(form.pages));
       if (enableVideo && form.transcript) formData.append('transcript', form.transcript);
@@ -342,6 +340,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                   </p>
                 )}
               </div>
+
               <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-4 shadow-sm space-y-4 mb-4 mt-6">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableVideo ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setEnableVideo(!enableVideo)}>
@@ -368,80 +367,106 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                         </p>
                       )}
                     </div>
-                    {isTranscribing ? (
-                      <div className="flex items-center gap-2 text-sm text-green-600 font-medium bg-green-50 p-3 rounded-xl">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Generating transcript from video...
-                      </div>
-                    ) : (
-                      <div className="p-4 border border-gray-200 rounded-xl shadow-sm bg-white space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-sm font-bold text-gray-800">Transcript</label>
-                          {videoFile && (
-                            <button type="button" onClick={handleGenerateTranscript} className="text-xs px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 hover:text-green-700 hover:border-green-200 transition-colors shadow-sm flex items-center gap-2">
-                              {form.transcript ? 'Regenerate Transcript' : 'Generate Transcript'}
-                            </button>
-                          )}
-                        </div>
-                        {form.transcript ? (
-                          <OptimizedTextArea value={form.transcript} onChange={(val: string) => setForm(f => ({ ...f, transcript: val }))} rows={5} className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl font-mono text-gray-600 resize-none focus:outline-none focus:ring-2 focus:ring-green-200" placeholder="Transcript text..." />
-                        ) : (
-                          <div className="w-full px-4 py-6 text-sm text-center border border-dashed border-gray-200 rounded-xl text-gray-500 bg-gray-50/50 flex flex-col items-center justify-center gap-2">
-                            <p>{videoFile ? 'Click the button above to extract text from the selected video.' : 'Select a video to generate a transcript or paste one manually.'}</p>
-                          </div>
-                        )}
+
+                    <div className="flex items-center justify-between pt-2">
+                      <button
+                        type="button"
+                        onClick={handleGenerateTranscript}
+                        disabled={isTranscribing || !videoFile}
+                        className="px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      >
+                        {isTranscribing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        {isTranscribing ? 'Generating Transcript...' : 'Auto-Generate Transcript from Video'}
+                      </button>
+                    </div>
+
+                    {form.transcript && (
+                      <div className="mt-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Generated Transcript</label>
+                        <textarea
+                          value={form.transcript}
+                          onChange={e => setForm(f => ({ ...f, transcript: e.target.value }))}
+                          rows={3}
+                          className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 font-mono resize-none"
+                          placeholder="Transcript text..."
+                        />
                       </div>
                     )}
                   </div>
                 )}
               </div>
-              <div className="h-2 w-full shrink-0" />
-            </div>
 
-            <div className="w-full md:w-100 flex flex-col gap-6 overflow-y-auto challenge-modal-scroll p-6 border-l border-gray-100">
-              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableQuiz ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => {
-                    if (enableQuiz && form.quizQuestions.length > 0) {
-                      if (!confirm('Disable quiz and remove all questions?')) return;
-                      setForm(f => ({ ...f, quizQuestions: [] }));
-                    }
-                    setEnableQuiz(!enableQuiz);
-                  }}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enableQuiz ? 'translate-x-4' : ''}`} />
-                  </div>
-                  <span className="text-sm font-semibold text-gray-800">Include Quiz Configuration</span>
-                </label>
+              <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-4 shadow-sm space-y-4 mb-4 mt-6">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableQuiz ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setEnableQuiz(!enableQuiz)}>
+                      <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enableQuiz ? 'translate-x-4' : ''}`} />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-700">Include Quiz in Lesson</span>
+                  </label>
+                  {enableQuiz && (
+                    <button type="button" onClick={handleAddQuestion} className="text-xs text-green-600 font-semibold hover:text-green-700 bg-green-50 px-3 py-1.5 rounded-lg transition-colors">
+                      + Add Question
+                    </button>
+                  )}
+                </div>
 
                 {enableQuiz && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-gray-800">Quiz Configuration</h3>
-                      <button type="button" onClick={handleAddQuestion} className="text-xs text-green-600 font-semibold hover:text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">+ Add Question</button>
+                  <div className="space-y-4 pt-3 border-t border-gray-200/60">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Passing Score (%)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={form.quizPassingScore}
+                        onChange={e => setForm(f => ({ ...f, quizPassingScore: parseInt(e.target.value) || 70 }))}
+                        className="w-32 px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200"
+                      />
                     </div>
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label>
-                      <OptimizedInput type="number" min="0" max="100" value={form.quizPassingScore} onChange={(val: string) => setForm(f => ({ ...f, quizPassingScore: parseInt(val) || 0 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
-                    </div>
-
                     <div className="space-y-4">
-                      {form.quizQuestions.map((q, i) => (
-                        <div key={i} className="p-4 border border-gray-200 rounded-xl bg-gray-50/50">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-semibold text-gray-500 uppercase">Question {i + 1}</span>
-                            <button type="button" onClick={() => handleRemoveQuestion(i)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                      {form.quizQuestions.map((q, qIndex) => (
+                        <div key={qIndex} className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Question {qIndex + 1}</span>
+                            <button type="button" onClick={() => handleRemoveQuestion(qIndex)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                          <OptimizedInput value={q.question} onChange={(val: string) => handleUpdateQuestion(i, 'question', val)} placeholder="Question text" className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                          <div className="grid grid-cols-2 gap-2 mb-2">
-                            <OptimizedInput value={q.optionA} onChange={(val: string) => handleUpdateQuestion(i, 'optionA', val)} placeholder="Option A" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                            <OptimizedInput value={q.optionB} onChange={(val: string) => handleUpdateQuestion(i, 'optionB', val)} placeholder="Option B" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                            <OptimizedInput value={q.optionC} onChange={(val: string) => handleUpdateQuestion(i, 'optionC', val)} placeholder="Option C" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
-                            <OptimizedInput value={q.optionD} onChange={(val: string) => handleUpdateQuestion(i, 'optionD', val)} placeholder="Option D" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200" />
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Question Text</label>
+                            <input
+                              type="text"
+                              value={q.question}
+                              onChange={e => handleUpdateQuestion(qIndex, 'question', e.target.value)}
+                              className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200"
+                              placeholder="Enter question"
+                            />
                           </div>
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-medium text-gray-700">Correct Answer:</label>
-                            <select value={q.correctAnswer} onChange={e => handleUpdateQuestion(i, 'correctAnswer', e.target.value)} className="px-2 py-1 text-sm border border-gray-200 rounded-lg">
-                              {['A', 'B', 'C', 'D'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          <div className="grid grid-cols-2 gap-2">
+                            {(['optionA', 'optionB', 'optionC', 'optionD'] as const).map(opt => (
+                              <div key={opt}>
+                                <label className="block text-[11px] font-medium text-gray-500 uppercase">{opt.replace('option', 'Option ')}</label>
+                                <input
+                                  type="text"
+                                  value={q[opt]}
+                                  onChange={e => handleUpdateQuestion(qIndex, opt, e.target.value)}
+                                  className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Correct Answer</label>
+                            <select
+                              value={q.correctAnswer}
+                              onChange={e => handleUpdateQuestion(qIndex, 'correctAnswer', e.target.value)}
+                              className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200 bg-white"
+                            >
+                              <option value="A">Option A</option>
+                              <option value="B">Option B</option>
+                              <option value="C">Option C</option>
+                              <option value="D">Option D</option>
                             </select>
                           </div>
                         </div>
@@ -456,7 +481,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Eco Points Reward</label>
                   <OptimizedInput type="number" min="0" value={form.pointsReward} onChange={(val: string) => setForm(f => ({ ...f, pointsReward: parseInt(val) || 0 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
                 </div>
-                
+
                 <div className="pt-2 border-t border-gray-100 flex flex-col gap-3">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${form.featured ? 'bg-indigo-500' : 'bg-gray-300'}`} onClick={() => setForm(f => ({ ...f, featured: !f.featured }))}>
@@ -552,14 +577,20 @@ export function LearningContent() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this lesson? This cannot be undone.')) return;
-    setDeleting(id);
+  const toast = useToast();
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; lesson: Lesson | null }>({ open: false, lesson: null });
+
+  const confirmDeleteLesson = async () => {
+    if (!deleteConfirmModal.lesson) return;
+    const lessonId = deleteConfirmModal.lesson.id;
+    setDeleting(lessonId);
     try {
-      await adminDelete(`/admin/lessons/${id}`);
-      setLessons(prev => prev.filter(l => l.id !== id));
+      await adminDelete(`/admin/lessons/${lessonId}`);
+      setLessons(prev => prev.filter(l => l.id !== lessonId));
+      setDeleteConfirmModal({ open: false, lesson: null });
+      toast.success('Lesson deleted successfully.');
     } catch (err: any) {
-      alert(err.message || 'Failed to delete lesson.');
+      toast.error(err.message || 'Failed to delete lesson.');
     } finally {
       setDeleting(null);
     }
@@ -570,8 +601,9 @@ export function LearningContent() {
     try {
       const updated = await adminPatch<Lesson>(`/admin/lessons/${lesson.id}/publish`, { is_published: !lesson.isPublished });
       setLessons(prev => prev.map(l => l.id === updated.id ? updated : l));
+      toast.success(updated.isPublished ? 'Lesson published.' : 'Lesson set to draft.');
     } catch (err: any) {
-      alert(err.message || 'Failed to toggle publish status.');
+      toast.error(err.message || 'Failed to toggle publish status.');
     } finally {
       setToggling(null);
     }
@@ -582,8 +614,9 @@ export function LearningContent() {
     try {
       const updated = await adminPatch<Lesson>(`/admin/lessons/${lesson.id}/feature`, { featured: !lesson.featured });
       setLessons(prev => prev.map(l => l.id === updated.id ? updated : l));
+      toast.success(updated.featured ? 'Lesson featured.' : 'Lesson unfeatured.');
     } catch (err: any) {
-      alert(err.message || 'Failed to toggle featured status.');
+      toast.error(err.message || 'Failed to toggle featured status.');
     } finally {
       setToggling(null);
     }
@@ -705,8 +738,8 @@ export function LearningContent() {
                   <button onClick={() => void openEdit(item.id)} disabled={openingLessonId === item.id} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-60">
                     {openingLessonId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Edit3 className="w-3 h-3" />}
                   </button>
-                  <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60">
-                    {deleting === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  <button onClick={() => setDeleteConfirmModal({ open: true, lesson: item })} disabled={deleting === item.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60" title="Delete Lesson">
+                    {deleting === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -719,6 +752,78 @@ export function LearningContent() {
           <BookOpen className="w-12 h-12 text-gray-200 mx-auto mb-3" />
           <p className="text-gray-400">{lessons.length === 0 ? 'No lessons yet. Create your first one!' : 'No content found matching your filters.'}</p>
         </div>
+      )}
+
+      {/* Custom Delete Confirmation Modal */}
+      {deleteConfirmModal.open && deleteConfirmModal.lesson && createPortal(
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => !deleting && setDeleteConfirmModal({ open: false, lesson: null })}
+        >
+          <div
+            className="bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Lesson</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Irreversible educational content removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !deleting && setDeleteConfirmModal({ open: false, lesson: null })}
+                disabled={!!deleting}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Are you sure you want to delete <strong className="text-gray-900 dark:text-white">"{deleteConfirmModal.lesson.title}"</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300">
+                This lesson and all its associated quiz configurations will be removed permanently.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal({ open: false, lesson: null })}
+                disabled={!!deleting}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteLesson}
+                disabled={!!deleting}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Lesson</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

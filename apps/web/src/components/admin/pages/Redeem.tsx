@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
+import { useToast } from '../../../context/ToastContext';
 
 interface RedeemItem {
   id: string;
@@ -95,11 +96,23 @@ export function Redeem() {
   const [requestStats, setRequestStats] = useState<RequestStats | null>(null);
   const [requestFilter, setRequestFilter] = useState('all');
   const [requestsLoading, setRequestsLoading] = useState(false);
-  const [rejectModal, setRejectModal] = useState<{ open: boolean; requestId: string }>({ open: false, requestId: '' });
+  const [rejectModal, setRejectModal] = useState<{
+    open: boolean;
+    requestId: string;
+    userName?: string;
+    itemTitle?: string;
+    coinCost?: number;
+  }>({ open: false, requestId: '' });
   const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const [approveModal, setApproveModal] = useState<{ open: boolean; requestId: string }>({ open: false, requestId: '' });
   const [approveLocation, setApproveLocation] = useState('Barangay San Isidro Hall');
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [deleteItemModal, setDeleteItemModal] = useState<{ open: boolean; item: RedeemItem | null }>({ open: false, item: null });
+  const [removeRequestModal, setRemoveRequestModal] = useState<{ open: boolean; request: RedeemRequest | null }>({ open: false, request: null });
+  const [deletingItem, setDeletingItem] = useState(false);
+  const [removingRequest, setRemovingRequest] = useState(false);
+  const toast = useToast();
 
   // ─── Items ──────────────────────────────────────────────────────────────
 
@@ -114,11 +127,11 @@ export function Redeem() {
       setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch redeem items', error);
-      if (!silent) alert(`Failed to fetch redeem items: ${error.message || error}`);
+      if (!silent) toast.error(error.message || 'Failed to fetch redeem items');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   // Track main tab and filter via refs for realtime events
   const mainTabRef = useRef(mainTab);
@@ -155,7 +168,10 @@ export function Redeem() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please select an image file'); return; }
+    if (!file.type.startsWith('image/')) { 
+      toast.warning('Please select an image file (JPG or PNG)'); 
+      return; 
+    }
     setFormImageFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setFormImagePreview(reader.result as string);
@@ -188,15 +204,17 @@ export function Redeem() {
       const body = { title: formTitle.trim(), description: formDescription.trim(), coinCost: Number(formCoinCost), imageUrl, category: formCategory, stock: Number(formStock) };
       if (editItem) {
         await adminPatch(`/redeem/${editItem.id}`, body);
+        toast.success('Redeem item updated.');
       } else {
         await adminPost<RedeemItem>('/redeem', body);
+        toast.success('New redeem item created.');
       }
       setShowCreateModal(false);
       resetForm();
       fetchItems();
     } catch (error: any) {
       console.error('Failed to save redeem item', error);
-      alert(`Failed to save redeem item: ${error.message || error}`);
+      toast.error(error.message || 'Failed to save redeem item');
     }
   };
 
@@ -205,22 +223,32 @@ export function Redeem() {
       const updated = await adminPatch<RedeemItem>(`/redeem/${id}/toggle`, {});
       setItems(prev => prev.map(i => i.id === id ? { ...i, isActive: updated.isActive } : i));
       if (stats) setStats({ ...stats, active: updated.isActive ? stats.active + 1 : stats.active - 1, inactive: updated.isActive ? stats.inactive - 1 : stats.inactive + 1 });
+      toast.success(updated.isActive ? 'Item activated.' : 'Item deactivated.');
     } catch (error: any) {
       console.error('Failed to toggle item', error);
-      alert(`Failed to toggle item: ${error.message || error}`);
+      toast.error(error.message || 'Failed to toggle item');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      try {
-        await adminDelete(`/redeem/${id}`);
-        setItems(prev => prev.filter(i => i.id !== id));
-        if (stats) setStats({ ...stats, total: stats.total - 1 });
-      } catch (error: any) {
-        console.error('Failed to delete item', error);
-        alert(`Failed to delete item: ${error.message || error}`);
-      }
+  const handleDelete = (item: RedeemItem) => {
+    setDeleteItemModal({ open: true, item });
+  };
+
+  const confirmDeleteItem = async () => {
+    if (!deleteItemModal.item) return;
+    const item = deleteItemModal.item;
+    setDeletingItem(true);
+    try {
+      await adminDelete(`/redeem/${item.id}`);
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      if (stats) setStats({ ...stats, total: stats.total - 1 });
+      toast.success(`Item "${item.title}" deleted.`);
+      setDeleteItemModal({ open: false, item: null });
+    } catch (error: any) {
+      console.error('Failed to delete item', error);
+      toast.error(error.message || 'Failed to delete item');
+    } finally {
+      setDeletingItem(false);
     }
   };
 
@@ -244,11 +272,11 @@ export function Redeem() {
       setRequestStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch requests', error);
-      if (!silent) alert(`Failed to fetch requests: ${error.message || error}`);
+      if (!silent) toast.error(error.message || 'Failed to fetch requests');
     } finally {
       if (!silent) setRequestsLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   // Initial fetch and filter change
   useEffect(() => {
@@ -298,41 +326,63 @@ export function Redeem() {
       setProcessingId(approveModal.requestId);
       await adminPatch(`/redeem/requests/${approveModal.requestId}/approve`, { claimLocation: approveLocation });
       setApproveModal({ open: false, requestId: '' });
+      toast.success('Redemption request approved.');
       fetchRequests();
     } catch (error: any) {
       console.error('Failed to approve', error);
-      alert(`Failed to approve: ${error.message || error}`);
+      toast.error(error.message || 'Failed to approve');
     }
     finally { setProcessingId(null); }
   };
 
-  const openRejectModal = (id: string) => {
+  const openRejectModal = (req: RedeemRequest) => {
     setRejectReason('');
-    setRejectModal({ open: true, requestId: id });
+    setRejectError(null);
+    setRejectModal({
+      open: true,
+      requestId: req.id,
+      userName: req.userName,
+      itemTitle: req.itemTitle,
+      coinCost: req.coinCost,
+    });
   };
 
   const handleReject = async () => {
+    if (!rejectModal.requestId) return;
     try {
       setProcessingId(rejectModal.requestId);
-      await adminPatch(`/redeem/requests/${rejectModal.requestId}/reject`, { reason: rejectReason });
+      setRejectError(null);
+      await adminPatch(`/redeem/requests/${rejectModal.requestId}/reject`, { reason: rejectReason.trim() || undefined });
       setRejectModal({ open: false, requestId: '' });
+      setRejectReason('');
+      toast.success('Redemption request rejected.');
       fetchRequests();
     } catch (error: any) {
-      console.error('Failed to reject', error);
-      alert(`Failed to reject: ${error.message || error}`);
+      console.error('Failed to reject redeem request', error);
+      setRejectError(error.message || 'Failed to reject request. Please try again.');
+    } finally {
+      setProcessingId(null);
     }
-    finally { setProcessingId(null); }
   };
 
-  const handleRemoveRequest = async (id: string) => {
-    if (window.confirm('Are you sure you want to remove this request?')) {
-      try {
-        await adminDelete(`/redeem/requests/${id}`);
-        fetchRequests();
-      } catch (error: any) {
-        console.error('Failed to remove request', error);
-        alert(`Failed to remove request: ${error.message || error}`);
-      }
+  const handleRemoveRequest = (req: RedeemRequest) => {
+    setRemoveRequestModal({ open: true, request: req });
+  };
+
+  const confirmRemoveRequest = async () => {
+    if (!removeRequestModal.request) return;
+    const req = removeRequestModal.request;
+    setRemovingRequest(true);
+    try {
+      await adminDelete(`/redeem/requests/${req.id}`);
+      toast.success('Request removed.');
+      setRemoveRequestModal({ open: false, request: null });
+      fetchRequests();
+    } catch (error: any) {
+      console.error('Failed to remove request', error);
+      toast.error(error.message || 'Failed to remove request');
+    } finally {
+      setRemovingRequest(false);
     }
   };
 
@@ -482,7 +532,7 @@ export function Redeem() {
                       <button onClick={() => openEditModal(item)} className="flex items-center justify-center px-3 py-2 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 text-xs font-semibold rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 active:scale-95 transition-all duration-200">
                         <Edit2 className="w-3 h-3" />
                       </button>
-                      <button onClick={() => handleDelete(item.id)} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs font-semibold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 active:scale-95 transition-all duration-200">
+                      <button onClick={() => handleDelete(item)} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs font-semibold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/50 active:scale-95 transition-all duration-200" title="Delete Item">
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
@@ -615,13 +665,13 @@ export function Redeem() {
                             {processingId === req.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                             Approve
                           </button>
-                          <button onClick={() => openRejectModal(req.id)} disabled={processingId === req.id}
+                          <button onClick={() => openRejectModal(req)} disabled={processingId === req.id}
                             className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-semibold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 active:scale-95 transition-all duration-200 disabled:opacity-50">
                             <XCircle className="w-3.5 h-3.5" /> Reject
                           </button>
                         </>
                       )}
-                      <button onClick={() => handleRemoveRequest(req.id)}
+                      <button onClick={() => handleRemoveRequest(req)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl active:scale-95 transition-all duration-200" title="Remove Request">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -634,25 +684,139 @@ export function Redeem() {
         </>
       )}
 
-      {/* ═══ REJECT MODAL ═══ */}
-      {rejectModal.open && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setRejectModal({ open: false, requestId: '' })}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-modal border border-gray-100 dark:border-gray-800" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-2">Reject Request</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Provide a reason (optional). Coins will be refunded to the user.</p>
-            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason for rejection..."
-              className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 resize-none h-20" />
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => setRejectModal({ open: false, requestId: '' })}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all duration-200">Cancel</button>
-              <button onClick={handleReject} disabled={processingId === rejectModal.requestId}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700 active:scale-95 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
-                {processingId === rejectModal.requestId ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Reject & Refund
+      {/* ═══ CUSTOM REJECT MODAL ═══ */}
+      {rejectModal.open && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn" 
+          onClick={() => {
+            if (processingId !== rejectModal.requestId) {
+              setRejectModal({ open: false, requestId: '' });
+              setRejectReason('');
+              setRejectError(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal" 
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Reject Redeem Request</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cancel request and return coins</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (processingId !== rejectModal.requestId) {
+                    setRejectModal({ open: false, requestId: '' });
+                    setRejectReason('');
+                    setRejectError(null);
+                  }
+                }}
+                disabled={processingId === rejectModal.requestId}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Context card */}
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-xs space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 dark:text-gray-400">User:</span>
+                  <span className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                    <User className="w-3 h-3 text-gray-400" />
+                    {rejectModal.userName || 'Member'}
+                  </span>
+                </div>
+                {rejectModal.itemTitle && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 dark:text-gray-400">Item Requested:</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">{rejectModal.itemTitle}</span>
+                  </div>
+                )}
+                {rejectModal.coinCost !== undefined && (
+                  <div className="flex justify-between items-center pt-1 border-t border-gray-200/50 dark:border-gray-700/50">
+                    <span className="text-gray-500 dark:text-gray-400">Coins to Refund:</span>
+                    <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Coins className="w-3.5 h-3.5" />
+                      +{rejectModal.coinCost} Coins
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Feedback reason input */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Reason for Rejection <span className="font-normal text-gray-400">(Optional)</span>
+                </label>
+                <textarea 
+                  value={rejectReason} 
+                  onChange={e => setRejectReason(e.target.value)} 
+                  placeholder="e.g. Out of stock, duplicate order, or user cancellation..."
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-hidden focus:ring-2 focus:ring-red-500/30 focus:border-red-500 transition-all resize-none placeholder:text-gray-400" 
+                />
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  The user will be notified of this reason and their coins will be refunded immediately.
+                </p>
+              </div>
+
+              {/* Inline error alert if API fails */}
+              {rejectError && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{rejectError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button 
+                type="button"
+                onClick={() => {
+                  setRejectModal({ open: false, requestId: '' });
+                  setRejectReason('');
+                  setRejectError(null);
+                }}
+                disabled={processingId === rejectModal.requestId}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleReject} 
+                disabled={processingId === rejectModal.requestId}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {processingId === rejectModal.requestId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Reject & Refund</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══ APPROVE MODAL ═══ */}
@@ -774,6 +938,150 @@ export function Redeem() {
                 className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                 {uploadingImage && <Loader2 className="w-4 h-4 animate-spin" />}
                 {uploadingImage ? 'Saving…' : editItem ? 'Save Changes' : 'Create Item'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Custom Delete Item Confirmation Modal */}
+      {deleteItemModal.open && deleteItemModal.item && createPortal(
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => !deletingItem && setDeleteItemModal({ open: false, item: null })}
+        >
+          <div
+            className="bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Redeem Item</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Irreversible catalog removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !deletingItem && setDeleteItemModal({ open: false, item: null })}
+                disabled={deletingItem}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Are you sure you want to delete <strong className="text-gray-900 dark:text-white">"{deleteItemModal.item.title}"</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300">
+                Users will no longer be able to spend EcoCoins on this reward item.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteItemModal({ open: false, item: null })}
+                disabled={deletingItem}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteItem}
+                disabled={deletingItem}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingItem ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Item</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Custom Remove Request Confirmation Modal */}
+      {removeRequestModal.open && removeRequestModal.request && createPortal(
+        <div
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+          onClick={() => !removingRequest && setRemoveRequestModal({ open: false, request: null })}
+        >
+          <div
+            className="bg-white dark:bg-[#0f1713] rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Remove Request</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Redemption log cleanup</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !removingRequest && setRemoveRequestModal({ open: false, request: null })}
+                disabled={removingRequest}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Are you sure you want to remove the redemption request for <strong className="text-gray-900 dark:text-white">"{removeRequestModal.request.itemTitle}"</strong> by <strong className="text-gray-900 dark:text-white">{removeRequestModal.request.userName}</strong>?
+              </p>
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400">
+                This request log will be deleted from your admin history view.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRemoveRequestModal({ open: false, request: null })}
+                disabled={removingRequest}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveRequest}
+                disabled={removingRequest}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-98 rounded-xl transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {removingRequest ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Removing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Request</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
