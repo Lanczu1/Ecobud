@@ -53,7 +53,13 @@ export function DiscoverChallengeCard({
     >
       <View style={[cardStyles.discoverImageWrap, isTablet && cardStyles.discoverImageWrapCompact]}>
         {imageUrl ? (
-          <FastImage source={{ uri: imageUrl }} style={cardStyles.discoverImage} contentFit="cover" />
+          <FastImage
+            source={{ uri: imageUrl }}
+            style={cardStyles.discoverImage}
+            contentFit="cover"
+            thumbnailWidth={500}
+            imageQuality={80}
+          />
         ) : (
           <View style={[cardStyles.discoverImage, cardStyles.discoverImageFallback, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }]}>
             <Ionicons

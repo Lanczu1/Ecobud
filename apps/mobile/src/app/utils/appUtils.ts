@@ -213,7 +213,25 @@ export function usePressScale(pressedScale = 0.97) {
  * 3. Relative paths (/uploads/...) are prefixed with ecobudApiOrigin.
  * 4. Empty/null/undefined returns null.
  */
-export function resolveMediaUrl(url?: string | null, apiOrigin?: string): string | null {
+export interface MediaUrlOptions {
+  width?: number;
+  height?: number;
+  quality?: number;
+}
+
+/**
+ * Resolves an image/media URL ensuring that:
+ * 1. Absolute URLs (http/https) are preserved.
+ * 2. localhost:3000 is replaced with current ecobudApiOrigin.
+ * 3. Relative paths (/uploads/...) are prefixed with ecobudApiOrigin.
+ * 4. Supabase Storage URLs automatically use render/image transformation for thumbnails to save bandwidth.
+ * 5. Empty/null/undefined returns null.
+ */
+export function resolveMediaUrl(
+  url?: string | null,
+  apiOrigin?: string,
+  options?: MediaUrlOptions,
+): string | null {
   if (!url || typeof url !== 'string') return null;
   const trimmed = url.trim();
   if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
@@ -221,6 +239,23 @@ export function resolveMediaUrl(url?: string | null, apiOrigin?: string): string
   let clean = trimmed.replace(/\\/g, '/');
   if (apiOrigin && clean.includes('localhost:3000')) {
     clean = clean.replace('http://localhost:3000', apiOrigin);
+  }
+
+  // Optimize Supabase Storage images if requested (e.g. render thumbnail instead of full-res)
+  if (options && (options.width || options.quality)) {
+    // If it's a Supabase storage object URL, e.g. /storage/v1/object/public/...
+    // Transform to /storage/v1/render/image/public/... with query params
+    if (clean.includes('/storage/v1/object/public/')) {
+      const transformedUrl = clean.replace(
+        '/storage/v1/object/public/',
+        '/storage/v1/render/image/public/'
+      );
+      const params = new URLSearchParams();
+      if (options.width) params.set('width', options.width.toString());
+      if (options.height) params.set('height', options.height.toString());
+      if (options.quality) params.set('quality', options.quality.toString());
+      clean = `${transformedUrl}?${params.toString()}`;
+    }
   }
 
   if (clean.startsWith('http://') || clean.startsWith('https://')) {

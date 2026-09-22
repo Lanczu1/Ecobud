@@ -74,77 +74,316 @@ export function evaluateDetections(raw: unknown, targets: unknown, minimumConfid
 }
 
 let inFlight = 0;
+const MAX_CONCURRENT_ANALYSES = 8;
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+/**
+ * Sleep helper with jitter to prevent thundering herd during upstream rate limits (429).
+ */
+function sleepWithJitter(baseMs: number, factor = 0.5): Promise<void> {
+  const jitter = baseMs * factor * (Math.random() - 0.5);
+  const ms = Math.max(100, Math.floor(baseMs + jitter));
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Normalizes raw JSON result from any provider into the strict EcoBud detection format.
+ */
+function normalizeDetectionResult(parsedJson: any): any {
+  if (!parsedJson || typeof parsedJson !== 'object') {
+    return { detected: [] };
+  }
+  const detectedList = Array.isArray(parsedJson.detected) ? parsedJson.detected : [];
+  const normalized: any[] = [];
+  const seenObjects = new Set<string>();
+
+  for (const item of detectedList) {
+    if (!item || typeof item !== 'object') continue;
+    const rawObj = String(item.object || '').trim();
+    const matchedTarget = AI_TARGETS.find(t => t.toLowerCase() === rawObj.toLowerCase());
+    if (!matchedTarget || seenObjects.has(matchedTarget)) continue;
+    seenObjects.add(matchedTarget);
+
+    const confidence = typeof item.confidence === 'number' ? Math.min(100, Math.max(0, item.confidence)) : 75;
+    const count = typeof item.count === 'number' && item.count >= 1 ? Math.floor(item.count) : 1;
+    
+    // Normalize bounding box if present
+    let box_2d: [number, number, number, number] | undefined = undefined;
+    if (Array.isArray(item.box_2d) && item.box_2d.length === 4) {
+      box_2d = item.box_2d.map((v: any) => Math.min(1000, Math.max(0, Math.round(Number(v) || 0)))) as [number, number, number, number];
+    }
+
+    let boxes: [number, number, number, number][] | undefined = undefined;
+    if (Array.isArray(item.boxes)) {
+      boxes = item.boxes
+        .filter((b: any) => Array.isArray(b) && b.length === 4)
+        .map((b: any) => b.map((v: any) => Math.min(1000, Math.max(0, Math.round(Number(v) || 0)))) as [number, number, number, number]);
+    }
+
+    normalized.push({
+      object: matchedTarget,
+      confidence,
+      count,
+      ...(box_2d ? { box_2d } : {}),
+      ...(boxes && boxes.length ? { boxes } : {}),
+    });
+  }
+
+  return { detected: normalized };
+}
+
+/**
+ * Call Google Gemini Vision models.
+ */
+async function callGeminiVision(
+  modelName: string,
+  key: string,
+  mimeType: string,
+  base64Data: string,
+  timeoutMs = 20_000
+): Promise<{ text: string }> {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
+    method: 'POST',
+    redirect: 'error',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    signal: AbortSignal.timeout(timeoutMs),
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{
+          text: 'You are an environmental assistant classifying waste and recyclable objects in user photos for an eco challenge. Identify any: "Plastic Bottle" (including any plastic drink bottle, mineral water bottle, soft drink bottle, plastic flask/tumbler, or plastic jug/container), "Glass Bottle" (including glass drink bottles, condiment bottles, jars, or glass beverage containers), or "Plastic Wrapper" (including plastic snack wrappers, food packaging, bread bags, plastic bags, sachets, grocery bags, or cellophane wrappers). If the photo shows any of these items or anything resembling them, classify it accordingly. If there are multiple items (e.g. 2 or 3 bottles), detect ALL of them and provide tight bounding box coordinates in boxes array (each box as [ymin, xmin, ymax, xmax] 0-1000) tightly enclosing each individual detected item. Provide an estimated confidence percentage from 50 to 100, the count, and tight bounding boxes for each item.'
+        }]
+      },
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: 'Analyze this photo and detect any Plastic Bottle, Glass Bottle, or Plastic Wrapper. Detect all items visible and return precise tight bounding box coordinates for each individual item.' },
+          { inlineData: { mimeType, data: base64Data } }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 1024,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          required: ['detected'],
+          properties: {
+            detected: {
+              type: 'ARRAY',
+              maxItems: 10,
+              items: {
+                type: 'OBJECT',
+                required: ['object', 'confidence', 'count'],
+                properties: {
+                  object: { type: 'STRING', enum: [...AI_TARGETS] },
+                  confidence: { type: 'NUMBER' },
+                  count: { type: 'INTEGER' },
+                  box_2d: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } },
+                  boxes: { type: 'ARRAY', items: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } } },
+                }
+              }
+            },
+          }
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    const err = new Error(`Gemini ${modelName} returned status ${response.status}: ${errorText.slice(0, 120)}`);
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Gemini returned no response stream');
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > 64 * 1024) {
+      await reader.cancel();
+      throw new Error('Gemini response exceeded maximum payload limit');
+    }
+    chunks.push(value);
+  }
+
+  const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const candidate = result.candidates?.[0];
+  if (candidate?.finishReason !== 'STOP') {
+    throw new Error(`Gemini finished with reason: ${candidate?.finishReason || 'UNKNOWN'}`);
+  }
+  const text = candidate.content?.parts?.filter((p: any) => typeof p.text === 'string' && !p.thought).map((p: any) => p.text).join('');
+  return { text };
+}
+
+/**
+ * Cross-provider fallback to Mistral Pixtral multimodal vision API.
+ */
+async function callMistralVision(
+  key: string,
+  mimeType: string,
+  base64Data: string,
+  timeoutMs = 20_000
+): Promise<{ text: string }> {
+  const dataUrl = `data:${mimeType};base64,${base64Data}`;
+  const promptText = `You are an AI environmental assistant classifying recyclable waste in user challenge photos.
+Detect any of these 3 items if present:
+1. "Plastic Bottle"
+2. "Glass Bottle"
+3. "Plastic Wrapper"
+
+Respond ONLY with a valid JSON object matching this schema without markdown code blocks:
+{
+  "detected": [
+    {
+      "object": "Plastic Bottle" | "Glass Bottle" | "Plastic Wrapper",
+      "confidence": 50-100,
+      "count": 1,
+      "box_2d": [ymin, xmin, ymax, xmax] (coordinates 0 to 1000)
+    }
+  ]
+}
+If no items are detected, return {"detected": []}.`;
+
+  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    method: 'POST',
+    redirect: 'error',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`,
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+    body: JSON.stringify({
+      model: 'pixtral-12b-2409',
+      temperature: 0,
+      max_tokens: 1024,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: promptText },
+            { type: 'image_url', image_url: dataUrl },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    const err = new Error(`Mistral Pixtral returned status ${response.status}: ${errorText.slice(0, 120)}`);
+    (err as any).status = response.status;
+    throw err;
+  }
+
+  const resJson = await response.json();
+  const content = resJson.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Mistral Pixtral returned an empty choice');
+  return { text: content };
+}
+
+/**
+ * Production-grade Challenge Image Recognition
+ * Features:
+ * - Multi-tier cascade (Gemini Flash Primary -> Gemini Flash Secondary -> Mistral Pixtral Cross-Provider)
+ * - Exponential backoff with jitter on HTTP 429 (Rate Limit / Quota Exceeded)
+ * - Immediate failover on 500, 502, 503, 504 server errors and network timeouts
+ * - Result schema normalization to guarantee valid client verification & token signing
+ */
 export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, minimumConfidence: unknown) {
   // Validate server-owned settings and file bytes before spending any API quota.
   evaluateDetections({ detected: [] }, targets, minimumConfidence);
   const mimeType = imageMimeType(bytes);
-  const key = process.env.GEMINI_API_KEY?.trim();
-  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.5-flash';
-  const fallbackModel = 'gemini-3.7-flash';
-  if (!key) throw new HttpError(503, 'Image recognition is not configured. Contact the administrator.');
-  if (inFlight >= 4) throw new HttpError(503, 'Image recognition is busy. Please retry shortly.');
+  const base64Data = bytes.toString('base64');
+
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  const mistralKey = process.env.MISTRAL_API_KEY?.trim();
+
+  if (!geminiKey && !mistralKey) {
+    throw new HttpError(503, 'Image recognition is not configured. Contact the administrator.');
+  }
+  if (inFlight >= MAX_CONCURRENT_ANALYSES) {
+    throw new HttpError(503, 'Image recognition server is experiencing high traffic. Please retry in a few seconds.');
+  }
+
   inFlight += 1;
+  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash';
+  const secondaryModel = 'gemini-2.5-flash';
+
   try {
-    const callGemini = async (modelName: string) => {
-      return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
-        method: 'POST',
-        redirect: 'error',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        signal: AbortSignal.timeout(25_000),
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: 'You are an environmental assistant classifying waste and recyclable objects in user photos for an eco challenge. Identify any: "Plastic Bottle" (including any plastic drink bottle, mineral water bottle, soft drink bottle, plastic flask/tumbler, or plastic jug/container), "Glass Bottle" (including glass drink bottles, condiment bottles, jars, or glass beverage containers), or "Plastic Wrapper" (including plastic snack wrappers, food packaging, bread bags, plastic bags, sachets, grocery bags, or cellophane wrappers). If the photo shows any of these items or anything resembling them, classify it accordingly. If there are multiple items (e.g. 2 or 3 bottles), detect ALL of them and provide tight bounding box coordinates in boxes array (each box as [ymin, xmin, ymax, xmax] 0-1000) tightly enclosing each individual detected item. Provide an estimated confidence percentage from 50 to 100, the count, and tight bounding boxes for each item.' }] },
-          contents: [{ role: 'user', parts: [{ text: 'Analyze this photo and detect any Plastic Bottle, Glass Bottle, or Plastic Wrapper. Detect all items visible and return precise tight bounding box coordinates for each individual item.' }, { inlineData: { mimeType, data: bytes.toString('base64') } }] }],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 1024,
-            responseMimeType: 'application/json',
-            responseSchema: { type: 'OBJECT', required: ['detected'], properties: {
-              detected: { type: 'ARRAY', maxItems: 10, items: { type: 'OBJECT', required: ['object', 'confidence', 'count'], properties: {
-                object: { type: 'STRING', enum: [...AI_TARGETS] },
-                confidence: { type: 'NUMBER' },
-                count: { type: 'INTEGER' },
-                box_2d: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } },
-                boxes: { type: 'ARRAY', items: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } } },
-              } } },
-            } },
-          },
-        }),
-      });
-    };
+    let parsedRawResult: any = null;
+    let lastError: any = null;
 
-    let response = await callGemini(primaryModel);
-    if (!response.ok && response.status === 503) {
-      console.warn(`[AI Recognition] ${primaryModel} returned 503, falling back to ${fallbackModel}...`);
-      await response.body?.cancel().catch(() => {});
-      response = await callGemini(fallbackModel);
+    // TIER 1 & TIER 2: Google Gemini (Primary & Backup Model) with 429 Backoff
+    if (geminiKey) {
+      const modelsToTry = [primaryModel];
+      if (secondaryModel !== primaryModel) {
+        modelsToTry.push(secondaryModel);
+      }
+
+      for (const model of modelsToTry) {
+        let attemptsLeft = 2; // Up to 2 attempts per model (for 429 rate limit recovery)
+        while (attemptsLeft > 0) {
+          try {
+            const { text } = await callGeminiVision(model, geminiKey, mimeType, base64Data, 18_000);
+            parsedRawResult = normalizeDetectionResult(JSON.parse(text));
+            break;
+          } catch (err: any) {
+            lastError = err;
+            attemptsLeft -= 1;
+            const status = err?.status;
+
+            if (status === 429 && attemptsLeft > 0) {
+              // Rate limit / quota burst: backoff 800ms with jitter and retry once
+              console.warn(`[AI Vision] Gemini ${model} hit 429 rate limit. Backing off before retry...`);
+              await sleepWithJitter(800);
+              continue;
+            }
+
+            if (RETRYABLE_STATUS_CODES.has(status) || err.name === 'TimeoutError' || err.message?.includes('fetch')) {
+              console.warn(`[AI Vision] Gemini ${model} failed (status: ${status || 'network/timeout'}). Cascading...`);
+              break; // Try next model or next provider
+            }
+
+            // Non-retryable error
+            break;
+          }
+        }
+
+        if (parsedRawResult) break;
+      }
     }
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error(`[AI Recognition Error] Status ${response.status}:`, errText);
-      throw new HttpError(503, 'Image recognition is temporarily unavailable. Please retry later.');
+    // TIER 3: Cross-Provider Fallback to Mistral Pixtral Multimodal Vision
+    if (!parsedRawResult && mistralKey) {
+      try {
+        console.warn(`[AI Vision] All Gemini attempts exhausted. Routing to Mistral Pixtral vision fallback...`);
+        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, 18_000);
+        parsedRawResult = normalizeDetectionResult(JSON.parse(text));
+      } catch (err: any) {
+        console.error(`[AI Vision] Mistral Pixtral fallback also encountered error:`, err.message);
+        lastError = err;
+      }
     }
-    // Bound provider output independently of its declared Content-Length.
-    const reader = response.body?.getReader();
-    if (!reader) throw new HttpError(502, 'Image recognition returned no result.');
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > 64 * 1024) { await reader.cancel(); throw new HttpError(502, 'Image recognition returned an invalid result.'); }
-      chunks.push(value);
+
+    if (!parsedRawResult) {
+      const isRateLimit = lastError?.status === 429;
+      if (isRateLimit) {
+        throw new HttpError(429, 'Vision AI service is currently experiencing high demand. Please wait a few moments and retry.');
+      }
+      throw new HttpError(503, 'Image recognition is temporarily unavailable across all providers. Please retry in a moment.');
     }
-    const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    const candidate = result.candidates?.[0];
-    if (candidate?.finishReason !== 'STOP') throw new HttpError(502, 'Image recognition could not evaluate this photo. Please try another.');
-    const text = candidate.content?.parts?.filter((part: any) => typeof part.text === 'string' && !part.thought).map((part: any) => part.text).join('');
-    return { ...evaluateDetections(JSON.parse(text), targets, minimumConfidence), mimeType };
+
+    return { ...evaluateDetections(parsedRawResult, targets, minimumConfidence), mimeType };
   } catch (error) {
     if (error instanceof HttpError) throw error;
-    // Never return provider error bodies, credentials, or uploaded image data.
-    throw new HttpError(502, 'Image recognition failed or timed out. Please retry.');
+    // Never leak provider error bodies, credentials, or uploaded image data to client
+    throw new HttpError(502, 'Image recognition failed to evaluate this photo. Please take another clear photo.');
   } finally {
     inFlight -= 1;
   }

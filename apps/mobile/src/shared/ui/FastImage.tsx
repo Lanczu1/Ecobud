@@ -11,6 +11,9 @@ export interface FastImageProps extends Omit<ExpoImageProps, 'source'> {
   resizeMode?: 'cover' | 'contain' | 'stretch' | 'center';
   fallback?: React.ReactNode;
   containerStyle?: StyleProp<ViewStyle>;
+  thumbnailWidth?: number;
+  thumbnailHeight?: number;
+  imageQuality?: number;
 }
 
 /**
@@ -27,10 +30,19 @@ export function FastImage({
   containerStyle,
   cachePolicy = 'memory-disk',
   transition = 150,
+  thumbnailWidth,
+  thumbnailHeight,
+  imageQuality,
   onError,
   ...props
 }: FastImageProps) {
   const [hasError, setHasError] = useState(false);
+
+  const thumbOptions = thumbnailWidth || imageQuality ? {
+    width: thumbnailWidth,
+    height: thumbnailHeight,
+    quality: imageQuality || 80,
+  } : undefined;
 
   let resolvedSource: any = null;
 
@@ -38,9 +50,9 @@ export function FastImage({
     // Local require(...) asset
     resolvedSource = source;
   } else if (typeof source === 'string') {
-    resolvedSource = { uri: resolveMediaUrl(source, ecobudApiOrigin) || source };
+    resolvedSource = { uri: resolveMediaUrl(source, ecobudApiOrigin, thumbOptions) || source };
   } else if (source && typeof source === 'object' && source.uri) {
-    resolvedSource = { uri: resolveMediaUrl(source.uri, ecobudApiOrigin) || source.uri };
+    resolvedSource = { uri: resolveMediaUrl(source.uri, ecobudApiOrigin, thumbOptions) || source.uri };
   }
 
   if (!resolvedSource || (typeof resolvedSource === 'object' && !resolvedSource.uri) || hasError) {
@@ -60,6 +72,10 @@ export function FastImage({
       contentFit={fit}
       cachePolicy={cachePolicy}
       transition={transition}
+      priority="high"
+      recyclingKey={typeof resolvedSource === 'object' ? resolvedSource.uri : undefined}
+      placeholder={props.placeholder || { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+      placeholderContentFit={fit}
       onError={(e: any) => {
         setHasError(true);
         if (onError) onError(e);
@@ -68,3 +84,17 @@ export function FastImage({
     />
   );
 }
+
+/**
+ * Prefetches an array of remote image URLs into disk memory so they display immediately with zero pop-in during scroll.
+ */
+FastImage.prefetch = (urls: string[]) => {
+  if (!urls || urls.length === 0) return Promise.resolve(false);
+  const validUrls = urls
+    .map(url => resolveMediaUrl(url, ecobudApiOrigin, { width: 500, quality: 80 }))
+    .filter((url): url is string => Boolean(url && (url.startsWith('http://') || url.startsWith('https://'))));
+
+  if (validUrls.length === 0) return Promise.resolve(false);
+  return ExpoImage.prefetch(validUrls);
+};
+

@@ -87,6 +87,8 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
             source={{ uri: getValidImageUrl(dailyChallenge.imageUrl) }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            thumbnailWidth={600}
+            imageQuality={80}
           />
         ) : (
           <LinearGradient

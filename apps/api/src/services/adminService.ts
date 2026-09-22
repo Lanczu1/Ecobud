@@ -377,9 +377,11 @@ export class AdminService {
 
   // Challenge Management
   static async getAllChallenges() {
-    return await prisma.challenge.findMany({
-      include: { instances: { orderBy: { startDate: 'desc' } } },
-      orderBy: { createdAt: 'desc' }
+    return apiCache.getOrSet('admin_challenges_list', 30, async () => {
+      return await prisma.challenge.findMany({
+        include: { instances: { orderBy: { startDate: 'desc' } } },
+        orderBy: { createdAt: 'desc' }
+      });
     });
   }
 
@@ -429,8 +431,6 @@ export class AdminService {
         aiDetectionTargets: data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle"],
         aiMinimumConfidence: data.aiMinimumConfidence || 80,
         isFeatured: data.isFeatured ?? false,
-        availableQuantity: data.availableQuantity ?? 50,
-        weeklyIncrementQuantity: data.weeklyIncrementQuantity ?? 50,
         quantityUnit: data.quantityUnit || "bottles",
         requirementType: data.requirementType || "quantity",
         requirementTarget: data.requirementTarget || "1",
@@ -442,6 +442,9 @@ export class AdminService {
         requireLocation: data.requireLocation ?? false,
       }
     });
+
+    apiCache.delete('admin_challenges_list');
+    apiCache.delete('global_active_challenges_with_instances');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('challenges', {
@@ -465,6 +468,9 @@ export class AdminService {
       data
     });
 
+    apiCache.delete('admin_challenges_list');
+    apiCache.delete('global_active_challenges_with_instances');
+
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('challenges', {
         actorRole: 'admin',
@@ -485,6 +491,9 @@ export class AdminService {
     const challenge = await prisma.challenge.delete({
       where: { id }
     });
+
+    apiCache.delete('admin_challenges_list');
+    apiCache.delete('global_active_challenges_with_instances');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('challenges', {
