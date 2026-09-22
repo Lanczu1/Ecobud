@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -370,6 +371,33 @@ export function AuthView({
     (authError.toLowerCase().includes('too many failed login attempts') ||
       authError.toLowerCase().includes('temporarily locked')),
   );
+  const scrollRef = useRef<ScrollView>(null);
+  const [keyboardSpace, setKeyboardSpace] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardSpace(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardSpace(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const scrollToField = useCallback((yOffset: number) => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: yOffset, animated: true });
+    }, 120);
+  }, []);
 
   const copy = AUTH_COPY[mode];
   const fieldErrors = useMemo(
@@ -687,14 +715,19 @@ export function AuthView({
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.safeArea}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
-          contentContainerStyle={[styles.authShell, isLegacyAndroid && styles.authShellLegacy]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets
-        >
+            ref={scrollRef}
+            contentContainerStyle={[
+              styles.authShell,
+              isLegacyAndroid && styles.authShellLegacy,
+              keyboardSpace > 0 && { paddingBottom: keyboardSpace + 40 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
           <View style={[styles.topNavbar, { justifyContent: 'center' }]}>
             <AnimatedThemeToggle isDark={isDark} onToggle={toggleTheme} />
 
@@ -764,6 +797,7 @@ export function AuthView({
                         markTouched('verificationCode');
                       }
                     }}
+                    onFocus={() => scrollToField(180)}
                     error={visibleFieldErrors.verificationCode}
                   />
 
@@ -810,6 +844,7 @@ export function AuthView({
                       labelIcon="person-outline"
                       value={username}
                       onChangeText={setUsername}
+                      onFocus={() => scrollToField(140)}
                       onBlur={() => markTouched('username')}
                       iconName="person-outline"
                       requirements={usernameRequirements}
@@ -839,6 +874,7 @@ export function AuthView({
                     labelIcon="leaf-outline"
                     value={email}
                     onChangeText={setEmail}
+                    onFocus={() => scrollToField(mode === 'signup' ? 220 : 160)}
                     onBlur={() => markTouched('email')}
                     iconName="mail-outline"
                     keyboardType="email-address"
@@ -887,6 +923,7 @@ export function AuthView({
                     labelIcon="lock-closed-outline"
                     value={password}
                     onChangeText={setPassword}
+                    onFocus={() => scrollToField(mode === 'signup' ? 340 : 250)}
                     onBlur={() => markTouched('password')}
                     iconName="lock-closed-outline"
                     secureTextEntry={!showPassword}
@@ -1228,6 +1265,7 @@ interface CustomInputFieldProps {
   labelIcon?: React.ComponentProps<typeof Ionicons>['name'];
   value: string;
   onChangeText: (value: string) => void;
+  onFocus?: () => void;
   onBlur: () => void;
   iconName: React.ComponentProps<typeof Ionicons>['name'];
   error?: string;
@@ -1302,10 +1340,12 @@ function RequirementChecklist({
 function SegmentedOtpInput({
   value,
   onChange,
+  onFocus,
   error,
 }: {
   value: string;
   onChange: (val: string) => void;
+  onFocus?: () => void;
   error?: string;
 }) {
   const { theme, isDark } = useTheme();
@@ -1346,7 +1386,10 @@ function SegmentedOtpInput({
         ref={inputRef}
         value={value}
         onChangeText={(text) => onChange(text.replace(/[^0-9]/g, '').slice(0, 6))}
-        onFocus={() => setIsFocused(true)}
+        onFocus={() => {
+          setIsFocused(true);
+          onFocus?.();
+        }}
         onBlur={() => setIsFocused(false)}
         keyboardType="number-pad"
         textContentType="oneTimeCode"
@@ -1387,6 +1430,7 @@ function CustomInputField({
   actionDisabled = false,
   requirements,
   showRequirementsAlways = false,
+  onFocus,
 }: CustomInputFieldProps) {
   const { theme, isDark } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
@@ -1477,7 +1521,10 @@ function CustomInputField({
             placeholderTextColor={isDark ? theme.colors.textMuted : '#9CA3AF'}
             selectionColor={isDark ? theme.colors.primary : palette.primary}
             underlineColorAndroid="transparent"
-            onFocus={() => setIsFocused(true)}
+            onFocus={() => {
+              setIsFocused(true);
+              onFocus?.();
+            }}
             onBlur={() => {
               setIsFocused(false);
               onBlur();

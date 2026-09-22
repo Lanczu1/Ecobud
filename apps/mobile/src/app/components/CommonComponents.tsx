@@ -766,6 +766,7 @@ export function OverlayScaffold({
   children: React.ReactNode;
 }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <View style={[styles.overlayShell, { backgroundColor: theme.colors.background }]}>
       {headerImage ? (
@@ -804,7 +805,7 @@ export function OverlayScaffold({
           </SafeAreaView>
         </LinearGradient>
       )}
-      <View style={[styles.overlayBody, { backgroundColor: theme.colors.background }]}>{children}</View>
+      <View style={[styles.overlayBody, { backgroundColor: theme.colors.background, paddingBottom: insets.bottom }]}>{children}</View>
     </View>
   );
 }
