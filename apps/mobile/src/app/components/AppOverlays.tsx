@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   BackHandler,
   TextInput,
@@ -1686,6 +1687,26 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const scrollViewRef = React.useRef<ScrollView>(null);
+
+  // Track keyboard height on Android. On Android with softwareKeyboardLayoutMode="resize",
+  // KeyboardAvoidingView behavior="height" fights the OS resize and fails to lift the composer.
+  // Listening to keyboard events directly and applying the height as paddingBottom is reliable.
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+  React.useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 60);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   React.useEffect(() => {
     if (model.sendingMessage) {
       const timer = setTimeout(() => {
@@ -1721,19 +1742,29 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
   const composerMinHeight = isSmall ? 44 : isTablet ? 54 : 48;
   const composerRadius = isSmall ? 22 : isTablet ? 27 : 24;
   const composerInputFontSize = responsive.fontSize(14);
+
+  // Base padding when no keyboard is shown: respect system navigation bar + comfortable touch margin
   const composerBottomPadding = Math.max(
     insets.bottom + (Platform.OS === 'android' ? 10 : 6),
     Platform.OS === 'android' ? (isSmall ? 16 : 20) : (isSmall ? 12 : 16)
   );
 
+  // On Android, when the keyboard is up, shift the whole overlay up by the keyboard height.
+  // On iOS, KeyboardAvoidingView padding behavior handles this correctly without a listener.
+  const androidKeyboardOffset = Platform.OS === 'android' ? keyboardHeight : 0;
+
   return (
-    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.fullscreenOverlay,
+        { backgroundColor: theme.colors.background, paddingBottom: androidKeyboardOffset },
+      ]}
+    >
       <View>
         <TopNavbar model={model} showBack={true} title="AI Assistant" />
       </View>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, width: '100%', alignItems: 'center' }}
       >
         <View style={{ flex: 1, width: '100%', maxWidth: maxContainerWidth }}>
