@@ -5929,6 +5929,7 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                 const leaderAvatar = leader.isCurrentUser
                   ? (leader.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
                   : leader.avatarUrl;
+                const isFirst = leader.rank === 1;
                 return (
                   <View key={leader.rank} style={[styles.lbTopCard, leader.cardStyle]}>
                     <View style={styles.lbAvatarWrap}>
@@ -5950,31 +5951,35 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                           styles.lbRankBadge,
                           {
                             backgroundColor: leader.badgeColor,
-                            borderColor: theme.colors.card,
-                            width: leader.rank === 1 ? 28 : 24,
-                            height: leader.rank === 1 ? 28 : 24,
-                            borderRadius: leader.rank === 1 ? 14 : 12,
+                            borderColor: isDark ? theme.colors.background : '#FFF',
+                            width: isFirst ? 28 : 24,
+                            height: isFirst ? 28 : 24,
+                            borderRadius: isFirst ? 14 : 12,
                           },
                         ]}
                       >
-                        <Text style={[styles.lbRankText, leader.rank === 1 ? { fontSize: 14 } : null]}>{leader.rank}</Text>
+                        <Text style={[styles.lbRankText, isFirst ? { fontSize: 13, fontWeight: '900' } : null]}>
+                          {leader.rank}
+                        </Text>
                       </View>
                     </View>
                     <Text
                       numberOfLines={1}
+                      ellipsizeMode="tail"
                       style={[
                         styles.lbTopName,
                         { color: theme.colors.textPrimary },
-                        leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
+                        isFirst ? { fontSize: 16, fontWeight: '900' } : null,
                       ]}
                     >
                       {leader.isCurrentUser ? 'You' : leader.displayName}
                     </Text>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.lbTopPoints,
                         { color: isDark ? theme.colors.primaryLight : '#126027' },
-                        leader.rank === 1 ? { fontWeight: 'bold' } : null,
+                        isFirst ? { fontWeight: '800' } : null,
                       ]}
                     >
                       {leader.points} pts
@@ -5985,7 +5990,11 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
           )}
 
-          <ScrollView style={{ flex: 1, marginTop: isPageOne ? 24 : 8, paddingHorizontal: 4 }}>
+          <ScrollView 
+            style={{ flex: 1, marginTop: isPageOne ? 18 : 8 }}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 100 }}
+            showsVerticalScrollIndicator={false}
+          >
             {remainingList.map(user => {
               const userAvatar = user.isCurrentUser
                 ? (user.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
@@ -5997,12 +6006,16 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                     styles.lbListRow,
                     {
                       backgroundColor: isDark ? theme.colors.surfaceMuted : '#FFF',
-                      borderWidth: isDark ? 1 : 0,
-                      borderColor: theme.colors.cardBorder,
+                      borderWidth: 1,
+                      borderColor: user.isCurrentUser 
+                        ? (isDark ? theme.colors.primary : '#126027') 
+                        : (isDark ? theme.colors.cardBorder : '#EBF2EE'),
                     },
                   ]}
                 >
-                  <Text style={[styles.lbListRank, { color: theme.colors.textMuted }]}>{user.rank}</Text>
+                  <Text style={[styles.lbListRank, { color: user.isCurrentUser ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }]}>
+                    {user.rank}
+                  </Text>
                   <AvatarBubble
                     label={user.isCurrentUser ? model.userDisplayName : user.displayName}
                     size={40}
@@ -6011,17 +6024,32 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                       {
                         backgroundColor: isDark ? theme.colors.card : '#ECFAEF',
                         borderColor: isDark ? theme.colors.border : '#E6F4EC',
+                        borderWidth: 1,
                       },
                     ]}
-                    textStyle={[styles.lbListAvatarText, { color: isDark ? theme.colors.primary : '#126027' }]}
+                    textStyle={[
+                      styles.lbListAvatarText,
+                      { color: isDark ? theme.colors.primaryLight : '#126027' }
+                    ]}
                     avatarUrl={userAvatar}
                   />
-                  <View style={{ flex: 1, marginLeft: 16 }}>
-                    <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  <View style={{ flex: 1, marginHorizontal: 12, justifyContent: 'center' }}>
+                    <Text 
+                      style={[
+                        styles.cardTitle, 
+                        { 
+                          fontSize: 15, 
+                          fontWeight: user.isCurrentUser ? '800' : '700',
+                          color: theme.colors.textPrimary 
+                        }
+                      ]} 
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       {user.isCurrentUser ? 'You' : user.displayName}
                     </Text>
                   </View>
-                  <Text style={[styles.lbListPoints, { color: isDark ? theme.colors.primary : '#126027' }]}>
+                  <Text style={[styles.lbListPoints, { color: isDark ? theme.colors.primaryLight : '#126027' }]}>
                     {user.points} pts
                   </Text>
                 </View>
@@ -6030,44 +6058,25 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
           </ScrollView>
         </Animated.View>
 
-        {/* Pagination Controls */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderColor: theme.colors.border, alignItems: 'center' }}>
-          <TouchableOpacity 
-            disabled={page === 1} 
-            onPress={() => setPage(page - 1)}
-            style={{ padding: 8, opacity: page === 1 ? 0.3 : 1 }}
-          >
-            <Ionicons name="chevron-back" size={24} color={isDark ? theme.colors.primary : '#126027'} />
-          </TouchableOpacity>
-          <Text style={{ fontWeight: '800', color: isDark ? theme.colors.primary : '#126027', fontSize: 14 }}>
-            Page {page} of {totalPages}
-          </Text>
-          <TouchableOpacity 
-            disabled={page >= totalPages} 
-            onPress={() => setPage(page + 1)}
-            style={{ padding: 8, opacity: page >= totalPages ? 0.3 : 1 }}
-          >
-            <Ionicons name="chevron-forward" size={24} color={isDark ? theme.colors.primary : '#126027'} />
-          </TouchableOpacity>
-        </View>
-
+        {/* Current User Floating Status Card */}
         {currentUser && (
           <View
             style={[
               styles.lbCurrentUserCard,
               {
                 backgroundColor: isDark ? theme.colors.surfaceMuted : '#126027',
-                borderColor: theme.colors.primary,
+                borderColor: isDark ? theme.colors.primary : '#126027',
                 borderWidth: isDark ? 1.5 : 0,
-                marginTop: 0,
-                marginBottom: 24,
-                borderRadius: 16,
                 marginHorizontal: 16,
+                marginBottom: 10,
+                borderRadius: 16,
                 shadowColor: isDark ? '#000' : '#126027',
               },
             ]}
           >
-            <Text style={[styles.lbListRank, { color: isDark ? theme.colors.primary : '#ECFAEF' }]}>{currentUser.rank}</Text>
+            <Text style={[styles.lbListRank, { color: isDark ? theme.colors.primaryLight : '#ECFAEF', fontWeight: '900' }]}>
+              {currentUser.rank}
+            </Text>
             <AvatarBubble
               label={model.userDisplayName}
               size={40}
@@ -6076,12 +6085,13 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                 styles.lbCurrentUserAvatar,
                 {
                   backgroundColor: isDark ? theme.colors.card : '#ECFAEF',
-                  borderColor: theme.colors.primary,
+                  borderColor: isDark ? theme.colors.primary : '#A7F3D0',
+                  borderWidth: 1.5,
                 },
               ]}
               textStyle={[
                 styles.lbCurrentUserAvatarText,
-                { color: isDark ? theme.colors.primary : '#126027' },
+                { color: isDark ? theme.colors.primaryLight : '#126027' },
               ]}
               avatarUrl={currentUser.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl}
             />

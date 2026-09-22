@@ -27,7 +27,7 @@ TextInput.defaultProps = TextInput.defaultProps || {};
 // @ts-expect-error
 TextInput.defaultProps.allowFontScaling = false;
 
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   type EcoBudMobileModel,
 } from './types/home';
@@ -82,6 +82,7 @@ function AppWithModel() {
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const scrollRef = React.useRef<ScrollView>(null);
   const [hideMarketplaceChrome, setHideMarketplaceChrome] = useState(false);
   const [onboardingAnimationPending, setOnboardingAnimationPending] = useState(false);
@@ -156,7 +157,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
                   colors={[theme.colors.primary, theme.colors.primaryLight]}
                 />
               }
-              contentContainerStyle={styles.mainScrollContent}
+              contentContainerStyle={[styles.mainScrollContent, { paddingBottom: (styles.mainScrollContent.paddingBottom as number) + insets.bottom }]}
             >
               {model.activeTab === 'home' && <HomeView model={model} />}
               {model.activeTab === 'learn' && <LearnView model={model} />}

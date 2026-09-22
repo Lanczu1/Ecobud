@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { SwapListingCard, SwapListingSkeleton } from './SwapListingCard';
 import { SwapChatList } from './SwapChatView';
@@ -53,6 +54,7 @@ export function MarketplaceFeed({
   model?: EcoBudMobileModel;
 }) {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [listings, setListings] = useState<SwapListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -170,7 +172,7 @@ export function MarketplaceFeed({
   return (
     <ScrollView 
       style={[localStyles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={{ paddingBottom: verticalScale(96), backgroundColor: theme.colors.background }}
+      contentContainerStyle={{ paddingBottom: verticalScale(96) + insets.bottom, backgroundColor: theme.colors.background }}
       stickyHeaderIndices={[1]}
       removeClippedSubviews={Platform.OS === 'android'}
       scrollEventThrottle={32}
