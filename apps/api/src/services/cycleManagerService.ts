@@ -108,13 +108,35 @@ export async function checkAndApplyWeeklyQuantityIncrement(challengeId: string) 
   });
 }
 
+// Cache for active challenge instances for current cycle: key -> instance
+const instanceCache = new Map<string, { instance: any; expiresAt: number }>();
+
+export function invalidateActiveInstanceCache(challengeId?: string) {
+  if (challengeId) {
+    for (const key of instanceCache.keys()) {
+      if (key.startsWith(`${challengeId}:`)) {
+        instanceCache.delete(key);
+      }
+    }
+  } else {
+    instanceCache.clear();
+  }
+}
+
 /**
  * Gets or creates the active challenge instance for a given challenge ID for the current week.
  * Also ensures weekly quantity increment is evaluated.
  */
 export async function getOrCreateActiveInstance(challengeId: string) {
   const { startDate, endDate } = getCurrentCycleDates();
-  
+  const cacheKey = `${challengeId}:${startDate.getTime()}:${endDate.getTime()}`;
+  const now = Date.now();
+
+  const cached = instanceCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.instance;
+  }
+
   // Ensure weekly quantity rollover addition has executed for this challenge
   await checkAndApplyWeeklyQuantityIncrement(challengeId);
 
@@ -148,7 +170,105 @@ export async function getOrCreateActiveInstance(challengeId: string) {
     }
   }
 
+  // Cache instance for 60 seconds
+  instanceCache.set(cacheKey, { instance, expiresAt: now + 60 * 1000 });
+
   return instance;
+}
+
+/**
+ * Optimized Batch Resolver:
+ * Resolves or creates active challenge instances for multiple challenges in 1-2 batch queries
+ * instead of looping through each challenge template with individual transactions.
+ */
+export async function getOrCreateActiveInstancesBatch(challenges: { id: string; lastCycleKey?: string | null; weeklyIncrementQuantity?: number }[]) {
+  if (!challenges || challenges.length === 0) return [];
+
+  const { startDate, endDate } = getCurrentCycleDates();
+  const currentKey = getCurrentCycleKey();
+  const now = Date.now();
+  const status = determineStatus(startDate, endDate);
+
+  // 1. Check in-memory cache first
+  const missingChallengeIds: string[] = [];
+  const results: { challengeId: string; instance: any }[] = [];
+
+  for (const c of challenges) {
+    const cacheKey = `${c.id}:${startDate.getTime()}:${endDate.getTime()}`;
+    const cached = instanceCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      results.push({ challengeId: c.id, instance: cached.instance });
+    } else {
+      missingChallengeIds.push(c.id);
+    }
+  }
+
+  if (missingChallengeIds.length === 0) {
+    return results;
+  }
+
+  // 2. Batch check weekly increment for challenges that haven't had rollover yet
+  const needsIncrement = challenges.filter(
+    c => missingChallengeIds.includes(c.id) && c.lastCycleKey !== currentKey
+  );
+
+  if (needsIncrement.length > 0) {
+    await prisma.$transaction(
+      needsIncrement.map(c =>
+        prisma.challenge.update({
+          where: { id: c.id },
+          data: {
+            availableQuantity: { increment: c.weeklyIncrementQuantity || 50 },
+            lastCycleKey: currentKey,
+          },
+        })
+      )
+    );
+  }
+
+  // 3. Find existing instances in a single batch query
+  const existingInstances = await prisma.challengeInstance.findMany({
+    where: {
+      challengeId: { in: missingChallengeIds },
+      startDate,
+      endDate,
+    },
+  });
+
+  const existingMap = new Map(existingInstances.map(inst => [inst.challengeId, inst]));
+  const toCreateIds = missingChallengeIds.filter(id => !existingMap.has(id));
+
+  // 4. If any instances need creation, create them
+  let createdInstances: any[] = [];
+  if (toCreateIds.length > 0) {
+    await prisma.challengeInstance.createMany({
+      data: toCreateIds.map(challengeId => ({
+        challengeId,
+        startDate,
+        endDate,
+        status,
+      })),
+      skipDuplicates: true,
+    });
+
+    createdInstances = await prisma.challengeInstance.findMany({
+      where: {
+        challengeId: { in: toCreateIds },
+        startDate,
+        endDate,
+      },
+    });
+  }
+
+  // 5. Combine and update in-memory cache
+  const allInstances = [...existingInstances, ...createdInstances];
+  for (const inst of allInstances) {
+    const cacheKey = `${inst.challengeId}:${startDate.getTime()}:${endDate.getTime()}`;
+    instanceCache.set(cacheKey, { instance: inst, expiresAt: now + 60 * 1000 });
+    results.push({ challengeId: inst.challengeId, instance: inst });
+  }
+
+  return results;
 }
 
 /**

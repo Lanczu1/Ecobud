@@ -34,6 +34,7 @@ import { type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { FastImage } from '../../shared/ui/FastImage';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 
@@ -612,8 +613,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
           } catch { /* Ignore invalid local records. */ }
         }
         setLessons(safeLessons);
-        setChallenges(Array.isArray(homeData?.challenges) ? homeData.challenges : []);
+        const safeChallenges = Array.isArray(homeData?.challenges) ? homeData.challenges : [];
+        setChallenges(safeChallenges);
         setIsCycleActive(homeData?.isCycleActive ?? true);
+
+        // Pre-warm disk cache for all challenge images immediately so scrolling is 60fps with zero pop-in delay
+        const challengeImageUrls = safeChallenges
+          .map((c: any) => c.imageUrl)
+          .filter((url: any): url is string => Boolean(url));
+        if (challengeImageUrls.length > 0) {
+          void FastImage.prefetch(challengeImageUrls);
+        }
         setHabitsToday(homeData?.habitsToday ?? null);
         setEvents(Array.isArray(homeData?.events) ? homeData.events : []);
         setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
@@ -671,7 +681,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const isAuthExpired = status === 401 || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized');
 
         if (isAuthExpired) {
-          // Token is expired or invalid - silently wipe invalid session so app resets cleanly
           setSession(null);
           clearAppData();
           setActiveOverlayState(null);
@@ -681,11 +690,26 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
 
         const message = error instanceof Error ? error.message : 'Unable to reach ECOBUD right now.';
+        
+        // Offline-First Fallback: If network fails and challenges/dashboard are empty, restore from offline disk cache
+        try {
+          const cachedJson = await mobileStorage.getItem(CACHED_HOME_DATA_STORAGE_KEY);
+          if (cachedJson) {
+            const cached = JSON.parse(cachedJson);
+            if (cached && typeof cached === 'object') {
+              setChallenges((curr) => (curr.length === 0 && Array.isArray(cached.challenges) ? cached.challenges : curr));
+              setDashboard((curr) => (!curr && cached.dashboard ? cached.dashboard : curr));
+              setLessons((curr) => (curr.length === 0 && Array.isArray(cached.lessons) ? cached.lessons : curr));
+              setHabitsToday((curr) => (!curr && cached.habitsToday ? cached.habitsToday : curr));
+              setEvents((curr) => (curr.length === 0 && Array.isArray(cached.events) ? cached.events : curr));
+            }
+          }
+        } catch { /* Ignore cache read errors */ }
+
         if (!silent) {
           console.warn('ECOBUD sync error:', message);
-          Alert.alert('Sync failed', message);
+          Alert.alert('Offline Mode', 'Unable to reach ECOBUD servers. Showing saved challenges and data from your last session.');
         } else {
-          // Silent background sync / bootstrap fallback: warn softly in dev without popping up RedBox/LogBox error banner
           console.warn('[ECOBUD hydrateApp (offline/unreachable)]:', message);
         }
       } finally {
@@ -945,8 +969,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
             setLessons(safeLessons);
           }
           if (challengesRes) {
-            setChallenges(Array.isArray(challengesRes?.items) ? challengesRes.items : Array.isArray(challengesRes) ? challengesRes : []);
+            const safeItems = Array.isArray(challengesRes?.items) ? challengesRes.items : Array.isArray(challengesRes) ? challengesRes : [];
+            setChallenges(safeItems);
             setIsCycleActive(challengesRes?.isCycleActive ?? true);
+
+            const challengeImageUrls = safeItems
+              .map((c: any) => c.imageUrl)
+              .filter((url: any): url is string => Boolean(url));
+            if (challengeImageUrls.length > 0) {
+              void FastImage.prefetch(challengeImageUrls);
+            }
           }
           if (newEvents) {
             setEvents(Array.isArray(newEvents) ? newEvents : Array.isArray((newEvents as any)?.items) ? (newEvents as any).items : []);

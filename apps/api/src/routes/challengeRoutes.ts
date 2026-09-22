@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary, HttpError } from '../http/errorResponder';
-import { getOrCreateActiveInstance } from '../services/cycleManagerService';
+import { getOrCreateActiveInstance, getOrCreateActiveInstancesBatch } from '../services/cycleManagerService';
 import { GamificationService } from '../services/GamificationService';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { challengeUploadMiddleware, analyzeUploadMiddleware } from '../http/uploadMiddleware';
@@ -17,6 +17,8 @@ import { JWT_SECRET } from '../security/tokenService';
 import { recognizeChallengeImage } from '../services/challengeImageService';
 import { signChallengeAnalysis, detectionSettingsHash, verifyChallengeAnalysis } from '../security/challengeAnalysisToken';
 import { sendDirectNotification } from '../services/notificationService';
+
+import { apiCache } from '../lib/cache';
 
 const challengeRoutes = Router();
 const gamificationService = new GamificationService();
@@ -87,6 +89,23 @@ async function consumeAiAttempt(userId: string, challengeId: string) {
   return toAiAttemptState(rows[0]);
 }
 
+/**
+ * Refunds an AI attempt when an upstream infrastructure error (429/500/502/503) occurs,
+ * ensuring users are never penalized for server/API provider outages.
+ */
+async function refundAiAttempt(userId: string, challengeId: string) {
+  try {
+    await prisma.$queryRaw`
+      UPDATE challenge_ai_attempt_limits
+      SET attempts_used = GREATEST(0, attempts_used - 1),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId} AND challenge_id = ${challengeId}
+    `;
+  } catch (err) {
+    console.error('[AI Refund] Failed to refund attempt:', err);
+  }
+}
+
 // OWASP: DoS / Resource Exhaustion Protection on AI processing and file uploads
 const analyzeLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -133,66 +152,91 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
   const userId = req.auth!.userId;
   const now = new Date();
 
-  const challengeTemplates = await prisma.challenge.findMany({
-    where: {
-      active: true,
-      AND: [
-        {
-          OR: [
-            { startDate: null },
-            { startDate: { lte: now } }
-          ]
-        },
-        {
-          OR: [
-            { endDate: null },
-            { endDate: { gt: now } }
-          ]
-        }
-      ]
-    },
-    orderBy: [{ difficulty: 'asc' }, { title: 'asc' }],
+  // 1. Cache the global active challenge templates and instances for 30 seconds
+  // This avoids re-querying Prisma + Supabase for template definitions & cycle instance IDs on every user tap
+  const templateInstances = await apiCache.getOrSet('global_active_challenges_with_instances', 30, async () => {
+    const challengeTemplates = await prisma.challenge.findMany({
+      where: {
+        active: true,
+        AND: [
+          {
+            OR: [
+              { startDate: null },
+              { startDate: { lte: now } }
+            ]
+          },
+          {
+            OR: [
+              { endDate: null },
+              { endDate: { gt: now } }
+            ]
+          }
+        ]
+      },
+      orderBy: [{ difficulty: 'asc' }, { title: 'asc' }],
+    });
+
+    if (challengeTemplates.length === 0) {
+      return [];
+    }
+
+    const batchInstances = await getOrCreateActiveInstancesBatch(challengeTemplates);
+    const instanceMap = new Map(batchInstances.map(bi => [bi.challengeId, bi.instance]));
+
+    return challengeTemplates
+      .map(challenge => {
+        const instance = instanceMap.get(challenge.id);
+        if (!instance) return null;
+        return { challenge, instance };
+      })
+      .filter((item): item is { challenge: typeof challengeTemplates[0]; instance: any } => item !== null);
   });
 
-  if (challengeTemplates.length === 0) {
+  if (!templateInstances || templateInstances.length === 0) {
     return res.json({ items: [], isCycleActive: true });
   }
 
-  // 1. Resolve or create active instances concurrently for each template
-  const templateInstances = await Promise.all(
-    challengeTemplates.map(async (challenge) => {
-      const instance = await getOrCreateActiveInstance(challenge.id);
-      return { challenge, instance };
-    })
-  );
-
-  const challengeIds = challengeTemplates.map(c => c.id);
+  const challengeIds = templateInstances.map(ti => ti.challenge.id);
   const instanceIds = templateInstances.map(ti => ti.instance.id);
 
-  // 2. Batch fetch UserChallenges and Submissions in just 2 queries instead of 2 * N queries
-  const [userChallenges, allSubmissions, freshChallenges] = await Promise.all([
+  // 2. Fetch UserChallenges and User Submissions concurrently in just 2 lightweight queries
+  const [userChallenges, allSubmissions] = await Promise.all([
     prisma.userChallenge.findMany({
       where: {
         userId,
         challengeInstanceId: { in: instanceIds },
       },
+      select: {
+        id: true,
+        challengeInstanceId: true,
+        progressPercentage: true,
+        status: true,
+      }
     }),
     prisma.challengeSubmission.findMany({
       where: {
         userId,
-        challengeInstance: {
-          challengeId: { in: challengeIds },
-        },
+        challengeInstanceId: { in: instanceIds },
       },
-      include: {
-        challengeInstance: {
-          select: { challengeId: true },
-        },
+      select: {
+        id: true,
+        status: true,
+        proofUrl: true,
+        afterProofUrl: true,
+        detectedQuantity: true,
+        reservedQuantity: true,
+        qrToken: true,
+        qrVerified: true,
+        adminPreliminaryApproved: true,
+        adminFinalApproved: true,
+        rewardAwarded: true,
+        ecoCoinsAwarded: true,
+        expAwarded: true,
+        moderatorNotes: true,
+        challengeInstanceId: true,
+        createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
-    }),
-    prisma.challenge.findMany({
-      where: { id: { in: challengeIds } },
     }),
   ]);
 
@@ -201,28 +245,23 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     userChallenges.map(uc => [uc.challengeInstanceId, uc])
   );
 
-  // Index latest and all submissions by template challengeId
-  const submissionsByChallengeId = new Map<string, typeof allSubmissions>();
+  // Index submissions by challengeInstanceId
+  const submissionsByInstanceId = new Map<string, typeof allSubmissions>();
   for (const sub of allSubmissions) {
-    const cId = sub.challengeInstance?.challengeId;
-    if (!cId) continue;
-    const existing = submissionsByChallengeId.get(cId);
+    const iId = sub.challengeInstanceId;
+    if (!iId) continue;
+    const existing = submissionsByInstanceId.get(iId);
     if (existing) {
       existing.push(sub);
     } else {
-      submissionsByChallengeId.set(cId, [sub]);
+      submissionsByInstanceId.set(iId, [sub]);
     }
   }
 
-  const freshChallengeById = new Map(
-    freshChallenges.map(fc => [fc.id, fc])
-  );
-
-  // 3. Map memory-indexed records cleanly without any more queries
+  // 3. Map memory-indexed records cleanly without extra database queries
   const items = templateInstances.map(({ challenge, instance }) => {
     const userChallenge = userChallengeByInstanceId.get(instance.id);
-    const submissions = submissionsByChallengeId.get(challenge.id) || [];
-    const freshChallenge = freshChallengeById.get(challenge.id);
+    const submissions = submissionsByInstanceId.get(instance.id) || [];
 
     const latestSubmission = submissions.length > 0 ? submissions[0] : null;
 
@@ -232,7 +271,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     }
 
     return {
-      ...(freshChallenge || challenge),
+      ...challenge,
       cycle: {
         startDate: instance.startDate,
         endDate: instance.endDate,
@@ -279,6 +318,8 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     };
   });
 
+  // HTTP Caching: private to user, cache for 15s, allow stale-while-revalidate for 30s
+  res.setHeader('Cache-Control', 'private, max-age=15, stale-while-revalidate=30');
   return res.json({ items, isCycleActive: true });
 });
 
@@ -352,9 +393,18 @@ challengeRoutes.post(
 
       const attemptState = await consumeAiAttempt(req.auth!.userId, challenge.id);
 
-      const bytes = await fs.promises.readFile(req.file.path);
-
-      const { mimeType, ...result } = await recognizeChallengeImage(bytes, challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1);
+      let result: any;
+      let mimeType: string;
+      try {
+        const bytes = await fs.promises.readFile(req.file.path);
+        const recognitionOutput = await recognizeChallengeImage(bytes, challenge.aiDetectionTargets, challenge.aiMinimumConfidence || 1);
+        mimeType = recognitionOutput.mimeType;
+        result = recognitionOutput;
+      } catch (recognitionErr) {
+        // Refund the attempt so users are not penalized for 429 rate limits, server errors (500/502/503), or provider timeouts
+        await refundAiAttempt(req.auth!.userId, challenge.id);
+        throw recognitionErr;
+      }
 
       if (!result.passed) {
         return res.json({ ...result, ...attemptState });
@@ -369,6 +419,7 @@ challengeRoutes.post(
           mimeType,
         );
       } catch {
+        await refundAiAttempt(req.auth!.userId, challenge.id);
         throw new HttpError(503, 'Could not save the analyzed photo. Please retry.');
       }
 

@@ -5874,6 +5874,7 @@ export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
 }
 
 export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
+  const { theme, isDark } = useTheme();
   const [page, setPage] = React.useState(1);
   const itemsPerPage = 10;
   const actualItems = model.leaderboard?.items ?? [];
@@ -5918,14 +5919,9 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   const currentUser = actualItems.find(item => item.isCurrentUser);
 
   return (
-    <View style={styles.fullscreenOverlay}>
+    <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} title="Leaderboard" />
       <View style={[styles.homeContent, { flex: 1, paddingBottom: 0 }]}>
-        <View style={styles.leaderboardFilterRow}>
-          <TouchableOpacity style={[styles.filterPillActive, { flex: 1, justifyContent: 'center' }]}><Text style={styles.filterPillActiveText}>Global</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.filterPillInactive, { flex: 1, justifyContent: 'center' }]}><Text style={styles.filterPillInactiveText}>Friends</Text></TouchableOpacity>
-        </View>
-
         <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {isPageOne && top3.length > 0 && (
             <View style={styles.leaderboardTop3}>
@@ -5939,7 +5935,13 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                       <AvatarBubble
                         label={leader.isCurrentUser ? model.userDisplayName : leader.displayName}
                         size={leader.avatarSize}
-                        style={styles.lbAvatarImg}
+                        style={[
+                          styles.lbAvatarImg,
+                          {
+                            borderColor: leader.badgeColor,
+                            backgroundColor: isDark ? theme.colors.surfaceMuted : '#CBEFD6',
+                          },
+                        ]}
                         textStyle={leader.avatarSize > 64 ? styles.lbAvatarTextLarge : styles.lbAvatarText}
                         avatarUrl={leaderAvatar}
                       />
@@ -5948,6 +5950,7 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                           styles.lbRankBadge,
                           {
                             backgroundColor: leader.badgeColor,
+                            borderColor: theme.colors.card,
                             width: leader.rank === 1 ? 28 : 24,
                             height: leader.rank === 1 ? 28 : 24,
                             borderRadius: leader.rank === 1 ? 14 : 12,
@@ -5958,8 +5961,10 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                       </View>
                     </View>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.lbTopName,
+                        { color: theme.colors.textPrimary },
                         leader.rank === 1 ? { fontSize: 18, fontWeight: 'bold' } : null,
                       ]}
                     >
@@ -5968,7 +5973,8 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                     <Text
                       style={[
                         styles.lbTopPoints,
-                        leader.rank === 1 ? { color: '#126027', fontWeight: 'bold' } : null,
+                        { color: isDark ? theme.colors.primaryLight : '#126027' },
+                        leader.rank === 1 ? { fontWeight: 'bold' } : null,
                       ]}
                     >
                       {leader.points} pts
@@ -5985,19 +5991,39 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                 ? (user.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
                 : user.avatarUrl;
               return (
-                <View key={user.rank} style={styles.lbListRow}>
-                  <Text style={styles.lbListRank}>{user.rank}</Text>
+                <View
+                  key={user.rank}
+                  style={[
+                    styles.lbListRow,
+                    {
+                      backgroundColor: isDark ? theme.colors.surfaceMuted : '#FFF',
+                      borderWidth: isDark ? 1 : 0,
+                      borderColor: theme.colors.cardBorder,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.lbListRank, { color: theme.colors.textMuted }]}>{user.rank}</Text>
                   <AvatarBubble
                     label={user.isCurrentUser ? model.userDisplayName : user.displayName}
                     size={40}
-                    style={styles.lbListAvatar}
-                    textStyle={styles.lbListAvatarText}
+                    style={[
+                      styles.lbListAvatar,
+                      {
+                        backgroundColor: isDark ? theme.colors.card : '#ECFAEF',
+                        borderColor: isDark ? theme.colors.border : '#E6F4EC',
+                      },
+                    ]}
+                    textStyle={[styles.lbListAvatarText, { color: isDark ? theme.colors.primary : '#126027' }]}
                     avatarUrl={userAvatar}
                   />
                   <View style={{ flex: 1, marginLeft: 16 }}>
-                    <Text style={styles.cardTitle}>{user.isCurrentUser ? 'You' : user.displayName}</Text>
+                    <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                      {user.isCurrentUser ? 'You' : user.displayName}
+                    </Text>
                   </View>
-                  <Text style={styles.lbListPoints}>{user.points} pts</Text>
+                  <Text style={[styles.lbListPoints, { color: isDark ? theme.colors.primary : '#126027' }]}>
+                    {user.points} pts
+                  </Text>
                 </View>
               );
             })}
@@ -6005,15 +6031,15 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
         </Animated.View>
 
         {/* Pagination Controls */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderColor: '#EDF6F1', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderColor: theme.colors.border, alignItems: 'center' }}>
           <TouchableOpacity 
             disabled={page === 1} 
             onPress={() => setPage(page - 1)}
             style={{ padding: 8, opacity: page === 1 ? 0.3 : 1 }}
           >
-            <Ionicons name="chevron-back" size={24} color="#126027" />
+            <Ionicons name="chevron-back" size={24} color={isDark ? theme.colors.primary : '#126027'} />
           </TouchableOpacity>
-          <Text style={{ fontWeight: '800', color: '#126027', fontSize: 14 }}>
+          <Text style={{ fontWeight: '800', color: isDark ? theme.colors.primary : '#126027', fontSize: 14 }}>
             Page {page} of {totalPages}
           </Text>
           <TouchableOpacity 
@@ -6021,22 +6047,45 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
             onPress={() => setPage(page + 1)}
             style={{ padding: 8, opacity: page >= totalPages ? 0.3 : 1 }}
           >
-            <Ionicons name="chevron-forward" size={24} color="#126027" />
+            <Ionicons name="chevron-forward" size={24} color={isDark ? theme.colors.primary : '#126027'} />
           </TouchableOpacity>
         </View>
 
         {currentUser && (
-          <View style={[styles.lbCurrentUserCard, { marginTop: 0, marginBottom: 24, borderRadius: 16, marginHorizontal: 16 }]}>
-            <Text style={styles.lbListRank}>{currentUser.rank}</Text>
+          <View
+            style={[
+              styles.lbCurrentUserCard,
+              {
+                backgroundColor: isDark ? theme.colors.surfaceMuted : '#126027',
+                borderColor: theme.colors.primary,
+                borderWidth: isDark ? 1.5 : 0,
+                marginTop: 0,
+                marginBottom: 24,
+                borderRadius: 16,
+                marginHorizontal: 16,
+                shadowColor: isDark ? '#000' : '#126027',
+              },
+            ]}
+          >
+            <Text style={[styles.lbListRank, { color: isDark ? theme.colors.primary : '#ECFAEF' }]}>{currentUser.rank}</Text>
             <AvatarBubble
               label={model.userDisplayName}
               size={40}
-              style={[styles.lbListAvatar, styles.lbCurrentUserAvatar]}
-              textStyle={styles.lbCurrentUserAvatarText}
+              style={[
+                styles.lbListAvatar,
+                styles.lbCurrentUserAvatar,
+                {
+                  backgroundColor: isDark ? theme.colors.card : '#ECFAEF',
+                  borderColor: theme.colors.primary,
+                },
+              ]}
+              textStyle={[
+                styles.lbCurrentUserAvatarText,
+                { color: isDark ? theme.colors.primary : '#126027' },
+              ]}
               avatarUrl={currentUser.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl}
             />
             <View style={{ flex: 1, marginLeft: 16 }}>
-              <Text style={[styles.cardTitle, { color: '#FFF' }]}>You</Text>
             </View>
             <Text style={[styles.lbListPoints, { color: '#FFF' }]}>{currentUser.points} pts</Text>
           </View>
