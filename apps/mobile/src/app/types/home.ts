@@ -234,7 +234,7 @@ export interface EcoBudMobileModel {
   showLessonComplete: (type: 'quiz' | 'lesson' | 'claim') => void;
   handleChallengeProgress: (challenge: ChallengeWithProgress, nextProgress: number) => Promise<void>;
   handleHabitCheckIn: (habitId: string) => Promise<void>;
-  handleJoinEvent: (eventId: string) => Promise<void>;
+  handleJoinEvent: (eventId: string) => Promise<boolean>;
   handleClaimEventReward: (eventId: string) => Promise<void>;
   handleAssistantSend: (seedMessage?: string) => Promise<void>;
   loadTrackerMonth: (offset: number) => Promise<void>;
@@ -274,7 +274,6 @@ export interface EcoBudMobileModel {
   coachMarksReplay: boolean;
   completeCoachMarks: () => void;
   showCoachMarks: () => void;
-  spotlightTargetRect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null;
   setSpotlightTargetRect: (rect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null) => void;
   /** Real measured screen position of the LevelCard progress bar, for accurate particle targeting */
   progressBarLayout: { x: number; y: number; width: number; height: number } | null;

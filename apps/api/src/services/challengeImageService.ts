@@ -2,6 +2,16 @@ import { z } from 'zod';
 import { HttpError } from '../http/errorResponder';
 
 export const AI_TARGETS = ['Plastic Bottle', 'Glass Bottle', 'Plastic Wrapper'] as const;
+type AiTarget = typeof AI_TARGETS[number];
+const TARGET_DESCRIPTIONS: Record<AiTarget, string> = {
+  'Plastic Bottle': 'a rigid plastic bottle with a neck, clear or colored, capped or uncapped',
+  'Glass Bottle': 'a rigid glass bottle with a neck, clear or colored, capped or uncapped',
+  'Plastic Wrapper': 'flexible plastic or plastic-laminated packaging: snack/chip bags, food pouches, noodle seasoning packets, bread bags, sachets, and crumpled or flattened packets, full or empty, sealed or opened',
+};
+
+function recognitionInstructions(targets: AiTarget[]): string {
+  return `Identify ONLY the selected target classes in this photo: ${targets.map(target => `${target} = ${TARGET_DESCRIPTIONS[target]}`).join('; ')}. Judge the physical object by material and shape, not printed words or product pictures. A flat pouch is a wrapper, never a bottle; a bottle label is part of the bottle, not a separate wrapper. Glass and plastic bottles must not be confused. Include small or partly obscured target objects, and count distinct items. Return an empty detected array when none of the selected classes is visibly present. Do not add unselected classes or duplicate one item under multiple classes. Use realistic confidence percentages and tight boxes [ymin, xmin, ymax, xmax] in 0-1000 coordinates.`;
+}
 export const detectionSettingsSchema = z.object({
   aiDetectionTargets: z.array(z.enum(AI_TARGETS)).min(1).max(3)
     .refine(values => new Set(values).size === values.length, 'Select each class only once.'),
@@ -140,6 +150,7 @@ async function callGeminiVision(
   key: string,
   mimeType: string,
   base64Data: string,
+  targets: AiTarget[],
   timeoutMs = 20_000
 ): Promise<{ text: string }> {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
@@ -150,13 +161,13 @@ async function callGeminiVision(
     body: JSON.stringify({
       systemInstruction: {
         parts: [{
-          text: 'You are an environmental assistant classifying waste and recyclable objects in user photos for an eco challenge. Identify any: "Plastic Bottle" (including any plastic drink bottle, mineral water bottle, soft drink bottle, plastic flask/tumbler, or plastic jug/container), "Glass Bottle" (including glass drink bottles, condiment bottles, jars, or glass beverage containers), or "Plastic Wrapper" (including plastic snack wrappers, food packaging, bread bags, plastic bags, sachets, grocery bags, or cellophane wrappers). If the photo shows any of these items or anything resembling them, classify it accordingly. If there are multiple items (e.g. 2 or 3 bottles), detect ALL of them and provide tight bounding box coordinates in boxes array (each box as [ymin, xmin, ymax, xmax] 0-1000) tightly enclosing each individual detected item. Provide an estimated confidence percentage from 50 to 100, the count, and tight bounding boxes for each item.'
+          text: recognitionInstructions(targets)
         }]
       },
       contents: [{
         role: 'user',
         parts: [
-          { text: 'Analyze this photo and detect any Plastic Bottle, Glass Bottle, or Plastic Wrapper. Detect all items visible and return precise tight bounding box coordinates for each individual item.' },
+          { text: `Detect only ${targets.join(' or ')} in this photo. Return all distinct matching items with tight bounding boxes.` },
           { inlineData: { mimeType, data: base64Data } }
         ]
       }],
@@ -175,7 +186,7 @@ async function callGeminiVision(
                 type: 'OBJECT',
                 required: ['object', 'confidence', 'count'],
                 properties: {
-                  object: { type: 'STRING', enum: [...AI_TARGETS] },
+                  object: { type: 'STRING', enum: targets },
                   confidence: { type: 'NUMBER' },
                   count: { type: 'INTEGER' },
                   box_2d: { type: 'ARRAY', minItems: 4, maxItems: 4, items: { type: 'INTEGER' } },
@@ -221,33 +232,17 @@ async function callGeminiVision(
 }
 
 /**
- * Cross-provider fallback to Mistral Pixtral multimodal vision API.
+ * Cross-provider fallback to Mistral's vision API.
  */
 async function callMistralVision(
   key: string,
   mimeType: string,
   base64Data: string,
+  targets: AiTarget[],
   timeoutMs = 20_000
 ): Promise<{ text: string }> {
   const dataUrl = `data:${mimeType};base64,${base64Data}`;
-  const promptText = `You are an AI environmental assistant classifying recyclable waste in user challenge photos.
-Detect any of these 3 items if present:
-1. "Plastic Bottle"
-2. "Glass Bottle"
-3. "Plastic Wrapper"
-
-Respond ONLY with a valid JSON object matching this schema without markdown code blocks:
-{
-  "detected": [
-    {
-      "object": "Plastic Bottle" | "Glass Bottle" | "Plastic Wrapper",
-      "confidence": 50-100,
-      "count": 1,
-      "box_2d": [ymin, xmin, ymax, xmax] (coordinates 0 to 1000)
-    }
-  ]
-}
-If no items are detected, return {"detected": []}.`;
+  const promptText = `${recognitionInstructions(targets)} Return ONLY a JSON object with a "detected" array. Each entry must contain "object" (one of the selected exact class names), "confidence" (a realistic number from 0 to 100), "count" (number of distinct objects of that class), and "box_2d" ([ymin,xmin,ymax,xmax], coordinates 0 to 1000). If none qualify, return {"detected":[]}.`;
 
   const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
     method: 'POST',
@@ -258,7 +253,7 @@ If no items are detected, return {"detected": []}.`;
     },
     signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
-      model: 'pixtral-12b-2409',
+      model: process.env.MISTRAL_IMAGE_MODEL || 'mistral-medium-2604',
       temperature: 0,
       max_tokens: 1024,
       response_format: { type: 'json_object' },
@@ -290,7 +285,7 @@ If no items are detected, return {"detected": []}.`;
 /**
  * Production-grade Challenge Image Recognition
  * Features:
- * - Multi-tier cascade (Gemini Flash Primary -> Gemini Flash Secondary -> Mistral Pixtral Cross-Provider)
+ * - Multi-tier cascade (Mistral vision -> Gemini Flash Lite -> Gemini Flash)
  * - Exponential backoff with jitter on HTTP 429 (Rate Limit / Quota Exceeded)
  * - Immediate failover on 500, 502, 503, 504 server errors and network timeouts
  * - Result schema normalization to guarantee valid client verification & token signing
@@ -298,6 +293,7 @@ If no items are detected, return {"detected": []}.`;
 export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, minimumConfidence: unknown) {
   // Validate server-owned settings and file bytes before spending any API quota.
   evaluateDetections({ detected: [] }, targets, minimumConfidence);
+  const selectedTargets = targets as AiTarget[];
   const mimeType = imageMimeType(bytes);
   const base64Data = bytes.toString('base64');
 
@@ -312,15 +308,24 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
   }
 
   inFlight += 1;
-  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash';
-  const secondaryModel = 'gemini-2.5-flash';
+  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.5-flash-lite';
+  const secondaryModel = 'gemini-3.6-flash';
 
   try {
     let parsedRawResult: any = null;
     let lastError: any = null;
 
-    // TIER 1 & TIER 2: Google Gemini (Primary & Backup Model) with 429 Backoff
-    if (geminiKey) {
+    if (mistralKey) {
+      try {
+        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, 18_000);
+        parsedRawResult = normalizeDetectionResult(JSON.parse(text));
+      } catch (err: any) {
+        console.error('[AI Vision] Mistral vision failed:', err.message);
+        lastError = err;
+      }
+    }
+
+    if (!parsedRawResult && geminiKey) {
       const modelsToTry = [primaryModel];
       if (secondaryModel !== primaryModel) {
         modelsToTry.push(secondaryModel);
@@ -330,7 +335,7 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
         let attemptsLeft = 2; // Up to 2 attempts per model (for 429 rate limit recovery)
         while (attemptsLeft > 0) {
           try {
-            const { text } = await callGeminiVision(model, geminiKey, mimeType, base64Data, 18_000);
+            const { text } = await callGeminiVision(model, geminiKey, mimeType, base64Data, selectedTargets, 18_000);
             parsedRawResult = normalizeDetectionResult(JSON.parse(text));
             break;
           } catch (err: any) {
@@ -356,18 +361,6 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
         }
 
         if (parsedRawResult) break;
-      }
-    }
-
-    // TIER 3: Cross-Provider Fallback to Mistral Pixtral Multimodal Vision
-    if (!parsedRawResult && mistralKey) {
-      try {
-        console.warn(`[AI Vision] All Gemini attempts exhausted. Routing to Mistral Pixtral vision fallback...`);
-        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, 18_000);
-        parsedRawResult = normalizeDetectionResult(JSON.parse(text));
-      } catch (err: any) {
-        console.error(`[AI Vision] Mistral Pixtral fallback also encountered error:`, err.message);
-        lastError = err;
       }
     }
 

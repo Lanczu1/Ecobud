@@ -3,12 +3,13 @@ import React, { useState, useCallback } from 'react';
 import {
   BackHandler,
   RefreshControl,
-  ScrollView,
+  FlatList,
   View,
   StyleSheet,
   LogBox,
   Text,
   TextInput,
+  Platform,
 } from 'react-native';
 
 // Suppress the Expo/React Native DevTools client connection warnings
@@ -83,7 +84,7 @@ function AppWithModel() {
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const scrollRef = React.useRef<ScrollView>(null);
+  const scrollRef = React.useRef<FlatList<number>>(null);
   const scrollYRef = React.useRef(0);
   const pendingSearchY = React.useRef<number | null>(null);
   const [searchKeyboardHeight, setSearchKeyboardHeight] = useState(0);
@@ -111,7 +112,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     if (searchKeyboardHeight <= 0 || pendingSearchY.current === null) return;
     const frame = requestAnimationFrame(() => {
       if (pendingSearchY.current !== null) {
-        scrollRef.current?.scrollTo({ y: pendingSearchY.current, animated: true });
+        scrollRef.current?.scrollToOffset({ offset: pendingSearchY.current, animated: true });
       }
     });
     return () => cancelAnimationFrame(frame);
@@ -122,7 +123,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     pendingSearchY.current = null;
     setSearchKeyboardHeight(0);
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ y: 0, animated: false });
+      scrollRef.current.scrollToOffset({ offset: 0, animated: false });
     }
   }, [model.activeTab]);
 
@@ -179,18 +180,33 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         ) : (
           <ScreenTransition key={model.activeTab} enabled={!model.coachMarksReplay || !model.coachMarksVisible}>
-            <ScrollView
+            <FlatList<number>
               ref={scrollRef}
+              data={[]}
+              renderItem={null}
+              initialNumToRender={1}
+              maxToRenderPerBatch={1}
+              windowSize={3}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[styles.mainScrollContent, { paddingBottom: (styles.mainScrollContent.paddingBottom as number) + insets.bottom }]}
+              ListHeaderComponent={
+                <>
+              {model.activeTab === 'home' && <HomeView model={model} />}
+              {model.activeTab === 'tracker' && <TrackerView model={model} />}
+              {model.activeTab === 'profile' && <ProfileView model={model} />}
+                </>
+              }
               onContentSizeChange={() => {
                 if (pendingSearchY.current === null) return;
                 const targetY = pendingSearchY.current;
                 pendingSearchY.current = null;
-                scrollRef.current?.scrollTo({ y: targetY, animated: true });
+                scrollRef.current?.scrollToOffset({ offset: targetY, animated: true });
               }}
               onScroll={(event) => { scrollYRef.current = event.nativeEvent.contentOffset.y; }}
               scrollEventThrottle={16}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
+              removeClippedSubviews={Platform.OS === 'android'}
               refreshControl={
                 <RefreshControl
                   refreshing={model.refreshing}
@@ -199,12 +215,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
                   colors={[theme.colors.primary, theme.colors.primaryLight]}
                 />
               }
-              contentContainerStyle={[styles.mainScrollContent, { paddingBottom: (styles.mainScrollContent.paddingBottom as number) + insets.bottom }]}
-            >
-              {model.activeTab === 'home' && <HomeView model={model} />}
-              {model.activeTab === 'tracker' && <TrackerView model={model} />}
-              {model.activeTab === 'profile' && <ProfileView model={model} />}
-            </ScrollView>
+            />
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
@@ -250,10 +261,10 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         activeTab={model.activeTab}
         onTabChange={model.setActiveTab}
         onScrollTo={(y, animated = true) => {
-          scrollRef.current?.scrollTo({ y, animated });
+          scrollRef.current?.scrollToOffset({ offset: y, animated });
         }}
         onScrollBy={(delta, animated = true) => {
-          scrollRef.current?.scrollTo({ y: Math.max(0, scrollYRef.current + delta), animated });
+          scrollRef.current?.scrollToOffset({ offset: Math.max(0, scrollYRef.current + delta), animated });
         }}
         model={model}
       />

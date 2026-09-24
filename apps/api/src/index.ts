@@ -117,6 +117,15 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get('/maps/Nagcarlan.geojson', (_req, res, next) => {
+  res.setHeader('Content-Type', 'application/geo+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(path.resolve(__dirname, '../../web/public/maps/Nagcarlan.geojson'), (error) => {
+    if (error) next(error);
+  });
+});
+
 app.get('/api/health', (_req, res) => {
   return res.json({
     status: 'ok',

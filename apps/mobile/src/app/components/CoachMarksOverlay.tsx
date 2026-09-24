@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
 import LottieView from 'lottie-react-native';
+import Svg, { Path } from 'react-native-svg';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
+import { coachMarkSpotlightStore } from '../utils/coachMarkSpotlightStore';
 import type { AppTab, EcoBudMobileModel } from '../types/home';
 
 export type MascotPose = 'wave' | 'idle' | 'left_point' | 'right_point' | 'celebrate';
@@ -29,6 +31,8 @@ const MASCOT_SOURCES: Record<MascotPose, any> = {
   left_point: require('../../../assets/Ecobud Mascot/New Lottie files/Left Point.lottie'),
   celebrate: require('../../../assets/Ecobud Mascot/New Lottie files/Celebrate.lottie'),
 };
+
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 export interface CoachMarksOverlayProps {
   visible: boolean;
@@ -73,6 +77,7 @@ export function CoachMarksOverlay({
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [pendingRevealStep, setPendingRevealStep] = useState<number | null>(null);
+  const spotlightTargetRect = useSyncExternalStore(coachMarkSpotlightStore.subscribe, coachMarkSpotlightStore.getSnapshot);
 
   const isSmallDevice = height <= 680 || width < 375;
   const isCompact = height < 750 || width < 380;
@@ -81,13 +86,14 @@ export function CoachMarksOverlay({
   const overlayFade = useRef(new Animated.Value(0)).current;
   const cardFade = useRef(new Animated.Value(1)).current;
   const cardSlide = useRef(new Animated.Value(0)).current;
-  const pulseGlow = useRef(new Animated.Value(1)).current;
+  const mascotFade = useRef(new Animated.Value(1)).current;
   const mascotSlide = useRef(new Animated.Value(0)).current;
+  const nextPressScale = useRef(new Animated.Value(1)).current;
+  const backPressScale = useRef(new Animated.Value(1)).current;
   const isAnimating = useRef(false);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealScheduled = useRef(false);
   const pendingReveal = useRef<{ step: number; show: () => void } | null>(null);
-  const scrolledReplayStep = useRef<number | null>(null);
 
   // Step configs tailored to guide through the REAL live screens
   const steps: StepConfig[] = [
@@ -178,16 +184,18 @@ export function CoachMarksOverlay({
   ];
 
   useEffect(() => {
-    let pulseAnim: Animated.CompositeAnimation | null = null;
     if (visible) {
+      coachMarkSpotlightStore.set(null);
       isAnimating.current = false;
       pendingReveal.current = null;
       revealScheduled.current = false;
       setPendingRevealStep(null);
       cardFade.setValue(1);
       cardSlide.setValue(0);
+      mascotFade.setValue(1);
       mascotSlide.setValue(0);
-      scrolledReplayStep.current = null;
+      nextPressScale.setValue(1);
+      backPressScale.setValue(1);
       setCurrentStep(0);
       if (model?.setCoachMarksCurrentStep) {
         model.setCoachMarksCurrentStep(0);
@@ -200,25 +208,8 @@ export function CoachMarksOverlay({
         useNativeDriver: true,
       }).start();
 
-      pulseAnim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseGlow, {
-            toValue: 0.4,
-            duration: 1000,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseGlow, {
-            toValue: 1,
-            duration: 1000,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnim.start();
-
     } else {
+      coachMarkSpotlightStore.set(null);
       Animated.timing(overlayFade, {
         toValue: 0,
         duration: 200,
@@ -227,25 +218,12 @@ export function CoachMarksOverlay({
     }
 
     return () => {
-      if (pulseAnim) pulseAnim.stop();
       if (revealTimer.current !== null) {
         clearTimeout(revealTimer.current);
         revealTimer.current = null;
       }
     };
-  }, [visible, overlayFade, cardFade, cardSlide, mascotSlide, onTabChange]);
-
-  useEffect(() => {
-    const target = model?.spotlightTargetRect;
-    if (!visible || !replay || !onScrollBy || activeTab !== steps[currentStep]?.targetTab ||
-        (currentStep !== 3 && currentStep !== 4) || !target ||
-        target.width <= 0 || target.height <= 0 || scrolledReplayStep.current === currentStep) return;
-
-    scrolledReplayStep.current = currentStep;
-    const desiredTop = Math.max(insets.top + verticalScale(220), height * 0.42);
-    const delta = target.y - desiredTop;
-    if (delta > verticalScale(12)) onScrollBy(delta, false);
-  }, [visible, replay, currentStep, activeTab, model?.spotlightTargetRect, onScrollBy, height, insets.top]);
+  }, [visible, overlayFade, cardFade, cardSlide, mascotFade, mascotSlide, nextPressScale, backPressScale, onTabChange]);
 
   useEffect(() => {
     const pending = pendingReveal.current;
@@ -253,25 +231,30 @@ export function CoachMarksOverlay({
         activeTab !== steps[currentStep]?.targetTab) return;
 
     const needsTarget = currentStep >= 1 && currentStep <= 5;
-    if (needsTarget && !model?.spotlightTargetRect) return;
-    if ((currentStep === 3 || currentStep === 4) && scrolledReplayStep.current !== currentStep) return;
+    if (needsTarget && !spotlightTargetRect) return;
     if (revealScheduled.current) return;
 
     revealScheduled.current = true;
-    const delay = currentStep === 3 || currentStep === 4 ? 100 : 0;
     if (revealTimer.current !== null) clearTimeout(revealTimer.current);
-    revealTimer.current = setTimeout(() => {
-      revealTimer.current = null;
-      if (pendingReveal.current !== pending) return;
-      pendingReveal.current = null;
-      setPendingRevealStep(null);
-      pending.show();
-    }, delay);
-  }, [visible, replay, currentStep, activeTab, model?.spotlightTargetRect]);
+    if (pendingReveal.current !== pending) return;
+    pendingReveal.current = null;
+    setPendingRevealStep(null);
+    pending.show();
+  }, [visible, replay, currentStep, activeTab, spotlightTargetRect]);
 
   if (!visible) return null;
 
   const currentStepData = steps[currentStep] || steps[0];
+
+  const animateButton = (value: Animated.Value, pressed: boolean) => {
+    Animated.spring(value, {
+      toValue: pressed ? 0.96 : 1,
+      stiffness: 320,
+      damping: 24,
+      mass: 0.7,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const animateToStep = (nextIndex: number) => {
     if (isAnimating.current || nextIndex === currentStep) return;
@@ -279,7 +262,6 @@ export function CoachMarksOverlay({
     if (revealTimer.current !== null) clearTimeout(revealTimer.current);
     pendingReveal.current = null;
     revealScheduled.current = false;
-    scrolledReplayStep.current = null;
     triggerSelectionHaptic();
 
     const isForward = nextIndex > currentStep;
@@ -290,56 +272,39 @@ export function CoachMarksOverlay({
       onTabChange(targetStep.targetTab);
     }
 
-    // Auto-scroll screen so target card is fully visible and nicely framed
+    // Reset the shared scroll view; the Challenges and Learn lists scroll their own measured cards.
     if (onScrollTo && !replay) {
-      if (targetStep?.targetTab === 'challenges') {
-        // Scroll down smoothly so the entire Discover featured card is comfortably in clear view
-        // On small / compact devices, scroll further down so the full card and OPEN button are cleanly exposed
-        const challengesScrollOffset = isSmallDevice
-          ? verticalScale(370)
-          : isCompact
-            ? verticalScale(340)
-            : verticalScale(310);
-
-        setTimeout(() => {
-          onScrollTo(challengesScrollOffset, true);
-        }, 120);
-      } else if (targetStep?.targetTab === 'learn') {
-        // Scroll down smoothly so the entire Learn featured lesson card is comfortably in clear view
-        const learnScrollOffset = isSmallDevice
-          ? verticalScale(260)
-          : isCompact
-            ? verticalScale(240)
-            : verticalScale(220);
-
-        setTimeout(() => {
-          onScrollTo(learnScrollOffset, true);
-        }, 120);
-      } else {
+      if (targetStep?.targetTab !== 'challenges' && targetStep?.targetTab !== 'learn') {
         onScrollTo(0, true);
       }
     } else if (onScrollTo && targetStep?.targetTab !== 'challenges' && targetStep?.targetTab !== 'learn') {
       onScrollTo(0, true);
     }
 
-    // Step 1: Smoothly fade and slide out current card (snappy 100ms for high responsiveness)
+    // Keep card and mascot movement on the native animation driver.
     Animated.parallel([
       Animated.timing(cardFade, {
         toValue: 0,
-        duration: 90,
-        easing: Easing.out(Easing.quad),
+        duration: 100,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(cardSlide, {
-        toValue: isForward ? -6 : 6,
-        duration: 90,
-        easing: Easing.out(Easing.quad),
+        toValue: isForward ? -18 : 18,
+        duration: 100,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(mascotFade, {
+        toValue: 0,
+        duration: 100,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(mascotSlide, {
-        toValue: isForward ? -10 : 10,
-        duration: 90,
-        easing: Easing.out(Easing.quad),
+        toValue: isForward ? -16 : 16,
+        duration: 100,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
@@ -359,25 +324,31 @@ export function CoachMarksOverlay({
       if (model?.setCoachMarksCurrentStep) {
         model.setCoachMarksCurrentStep(nextIndex);
       }
-      cardSlide.setValue(isForward ? 6 : -6);
-      mascotSlide.setValue(isForward ? 10 : -10);
+      cardSlide.setValue(isForward ? 18 : -18);
+      mascotSlide.setValue(isForward ? 16 : -16);
 
       const fadeIn = () => Animated.parallel([
         Animated.timing(cardFade, {
           toValue: 1,
-          duration: 140,
+          duration: 160,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(cardSlide, {
           toValue: 0,
-          duration: 140,
+          duration: 160,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(mascotFade, {
+          toValue: 1,
+          duration: 160,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(mascotSlide, {
           toValue: 0,
-          duration: 150,
+          duration: 160,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -385,7 +356,7 @@ export function CoachMarksOverlay({
         isAnimating.current = false;
       });
 
-      if (replay) {
+      if (replay && nextIndex !== steps.length - 1) {
         const pending = { step: nextIndex, show: fadeIn };
         pendingReveal.current = pending;
         setPendingRevealStep(nextIndex);
@@ -395,7 +366,7 @@ export function CoachMarksOverlay({
           pendingReveal.current = null;
           setPendingRevealStep(null);
           fadeIn();
-        }, 650);
+        }, nextIndex === 3 || nextIndex === 4 ? 450 : 220);
       } else {
         fadeIn();
       }
@@ -467,7 +438,7 @@ export function CoachMarksOverlay({
     }
   };
 
-  const targetRect = model?.spotlightTargetRect;
+  const targetRect = spotlightTargetRect;
   const isMeasured = Boolean(targetRect && targetRect.width > 0 && targetRect.height > 0);
 
   // Safe fallback if target hasn't reported measurement yet
@@ -484,18 +455,17 @@ export function CoachMarksOverlay({
   // Calculate available space above and below the target card within Safe Area
   const safeTop = insets.top || verticalScale(20);
   const safeBottom = height - (insets.bottom || verticalScale(20));
-  const estimatedTooltipHeight = verticalScale(195);
-
   const isStep2 = currentStepData.stepNumber === 2;
   const isStep4 = currentStepData.stepNumber === 4;
   const isStep5 = currentStepData.stepNumber === 5;
   const isStep6 = currentStepData.stepNumber === 6;
-  const isTargetBottomRight = isStep2 || isStep4 || isStep5 || isStep6;
+  const estimatedTooltipHeight = verticalScale(isStep4 || isStep5 ? (width < 360 ? 245 : 225) : 195);
+  const isTargetBottomRight = isStep2 || isStep6;
 
   const spaceAbove = resolvedTarget.y - safeTop;
   const spaceBelow = safeBottom - (resolvedTarget.y + resolvedTarget.height);
 
-  // For Steps 2, 4, 5, and 6, we want to put the mascot right below the target, so we need more space below
+  // Steps 2 and 6 reserve space below the target for the mascot.
   const effectiveTooltipSpace = isTargetBottomRight ? estimatedTooltipHeight + mascotSize - verticalScale(20) : estimatedTooltipHeight;
   const placeTooltipBelow = spaceAbove < effectiveTooltipSpace && spaceBelow >= effectiveTooltipSpace;
 
@@ -503,20 +473,27 @@ export function CoachMarksOverlay({
     ? resolvedTarget.y + resolvedTarget.height + (isTargetBottomRight ? mascotSize - verticalScale(15) : verticalScale(14))
     : Math.max(safeTop + verticalScale(8), resolvedTarget.y - estimatedTooltipHeight - verticalScale(16));
 
+  const isBottomRightMascot = isStep4 || isStep5;
+  const spotlightMascotSize = isBottomRightMascot
+    ? Math.min(isSmallDevice ? 108 : 132, width * 0.3, height * 0.18)
+    : mascotSize;
+
   // Place mascot so it stands clearly above or below the tooltip, avoiding the target cutout completely
-  // For Steps 2, 4, 5, and 6, place it cleanly just below the right side of the target hole
+  // Steps 4 and 5 anchor the mascot above the bottom navigation.
   // Clamped to screen bounds to ensure it's always visible on smaller devices ("hindi na kita" fix)
-  const mascotTop = isTargetBottomRight
+  const mascotTop = isBottomRightMascot
+    ? Math.max(safeTop, safeBottom - verticalScale(88) - spotlightMascotSize)
+    : isTargetBottomRight
     ? resolvedTarget.y + resolvedTarget.height + verticalScale(4) // Right below the target hole
     : placeTooltipBelow
-      ? Math.min(tooltipTop + estimatedTooltipHeight + verticalScale(4), height - mascotSize - verticalScale(10))
-      : Math.max(safeTop + verticalScale(4), tooltipTop - mascotSize - verticalScale(4));
+      ? Math.min(tooltipTop + estimatedTooltipHeight + verticalScale(4), height - spotlightMascotSize - verticalScale(10))
+      : Math.max(safeTop + verticalScale(4), tooltipTop - spotlightMascotSize - verticalScale(4));
 
   const cardWidthForMascot = Math.min(width - scale(32), 480);
   const cardLeftForMascot = (width - cardWidthForMascot) / 2;
 
   const mascotRight = currentStepData.mascotPosition === 'right'
-    ? cardLeftForMascot
+    ? isBottomRightMascot ? Math.max(scale(16), cardLeftForMascot) : cardLeftForMascot
     : undefined;
   
   const mascotLeft = currentStepData.mascotPosition === 'left'
@@ -542,29 +519,27 @@ export function CoachMarksOverlay({
             const holeH = resolvedTarget.height;
             const r = targetBorderRadius;
 
-            // Extra outer thickness to cover entire screen around the cutout
-            const overlayThickness = Math.max(width, height) * 1.5;
+            const radius = Math.max(0, Math.min(r, holeW / 2, holeH / 2));
+            const holePath = `M ${holeX + radius} ${holeY} H ${holeX + holeW - radius} Q ${holeX + holeW} ${holeY} ${holeX + holeW} ${holeY + radius} V ${holeY + holeH - radius} Q ${holeX + holeW} ${holeY + holeH} ${holeX + holeW - radius} ${holeY + holeH} H ${holeX + radius} Q ${holeX} ${holeY + holeH} ${holeX} ${holeY + holeH - radius} V ${holeY + radius} Q ${holeX} ${holeY} ${holeX + radius} ${holeY} Z`;
 
             return (
               <>
-                {/* Clean Full-Screen Dimmed Mask with exact Rounded Hole (Tapping advances to next step) */}
+                {/* Full-screen mask with a rounded spotlight cutout. */}
                 <TouchableOpacity
                   activeOpacity={1}
                   onPress={handleNext}
-                  style={{
-                    position: 'absolute',
-                    left: holeX - overlayThickness,
-                    top: holeY - overlayThickness,
-                    width: holeW + overlayThickness * 2,
-                    height: holeH + overlayThickness * 2,
-                    borderRadius: overlayThickness + r,
-                    borderWidth: overlayThickness,
-                    borderColor: 'rgba(10, 28, 22, 0.72)',
-                  }}
-                />
+                  style={StyleSheet.absoluteFill}
+                >
+                  <Svg width={width} height={height} pointerEvents="none">
+                    <Path
+                      d={`M 0 0 H ${width} V ${height} H 0 Z ${holePath}`}
+                      fill="rgba(10, 28, 22, 0.72)"
+                      fillRule="evenodd"
+                    />
+                  </Svg>
+                </TouchableOpacity>
 
-                {/* Subtle Pulsing Glowing Border locked exactly around the Hole */}
-                <Animated.View
+                <View
                   pointerEvents="none"
                   style={[
                     styles.spotlightCutoutBorder,
@@ -574,14 +549,14 @@ export function CoachMarksOverlay({
                       width: holeW,
                       height: holeH,
                       borderRadius: r,
-                      opacity: pulseGlow,
+                      shadowOpacity: replay && (isStep4 || isStep5) ? 0 : 1,
                     },
                   ]}
                 >
                   <View style={styles.cutoutSparkle}>
                     <Ionicons name="sparkles" size={scale(16)} color="#4ADE80" />
                   </View>
-                </Animated.View>
+                </View>
               </>
             );
           })()}
@@ -594,7 +569,8 @@ export function CoachMarksOverlay({
               {
                 top: mascotTop,
                 right: mascotRight,
-                left: currentStepData.mascotPosition === 'center' ? (width - mascotSize) / 2 : mascotLeft,
+                left: currentStepData.mascotPosition === 'center' ? (width - spotlightMascotSize) / 2 : mascotLeft,
+                opacity: mascotFade,
                 transform: [{ translateX: mascotSlide }],
               },
             ]}
@@ -607,14 +583,23 @@ export function CoachMarksOverlay({
               renderMode="HARDWARE"
               cacheComposition={true}
               hardwareAccelerationAndroid={true}
-              style={{ width: mascotSize, height: mascotSize }}
+              style={{ width: spotlightMascotSize, height: spotlightMascotSize }}
             />
           </Animated.View>
 
           {/* Layer 5 & 6: Coach Mark Tooltip with Centered Arrow dynamically positioned relative to Cutout Hole */}
           {(() => {
-            const cardWidth = Math.min(width - scale(32), 480);
-            const cardLeft = (width - cardWidth) / 2;
+            const targetCardStep = isStep4 || isStep5;
+            const cardWidth = targetCardStep && isMeasured
+              ? Math.min(width - scale(32), 480, Math.max(scale(280), resolvedTarget.width))
+              : Math.min(width - scale(32), 480);
+            const cardLeft = targetCardStep && isMeasured
+              ? Math.max(scale(16), Math.min(resolvedTarget.x, width - cardWidth - scale(16)))
+              : (width - cardWidth) / 2;
+            const arrowLeft = targetCardStep && isMeasured
+              ? Math.max(scale(18), Math.min(resolvedTarget.x + resolvedTarget.width / 2 - cardLeft - 12, cardWidth - scale(42)))
+              : undefined;
+            const alignedArrow = arrowLeft === undefined ? undefined : { alignSelf: 'flex-start' as const, marginLeft: arrowLeft };
 
             return (
               <Animated.View
@@ -631,7 +616,7 @@ export function CoachMarksOverlay({
               >
                 {/* Arrow pointing UP when tooltip is below target */}
                 {placeTooltipBelow && (
-                  <View style={[styles.tooltipArrowUp, isDark && { borderBottomColor: theme.colors.card }]} />
+                  <View style={[styles.tooltipArrowUp, isDark && { borderBottomColor: theme.colors.card }, alignedArrow]} />
                 )}
 
                 {/* Tooltip Content Body */}
@@ -645,15 +630,12 @@ export function CoachMarksOverlay({
                     },
                   ]}
                 >
-                  {/* Step Badge + Settings Icon */}
+                  {/* Step badge */}
                   <View style={styles.cardHeaderRow}>
                     <View style={styles.stepBadge}>
                       <Text style={styles.stepBadgeText}>
                         STEP {currentStepData.stepNumber} OF {currentStepData.totalSteps}
                       </Text>
-                    </View>
-                    <View style={[styles.cardSettingsIconWrap, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-                      <Ionicons name="settings-sharp" size={scale(15)} color={isDark ? theme.colors.textMuted : '#9CA3AF'} />
                     </View>
                   </View>
 
@@ -666,23 +648,28 @@ export function CoachMarksOverlay({
 
                   {/* Navigation Buttons */}
                   <View style={styles.tooltipBtnsRow}>
-                    <TouchableOpacity
+                    <AnimatedTouchableOpacity
                       onPress={handleBack}
+                      onPressIn={() => animateButton(backPressScale, true)}
+                      onPressOut={() => animateButton(backPressScale, false)}
                       activeOpacity={0.7}
-                      style={[styles.backBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
+                      style={[styles.backBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }, { transform: [{ scale: backPressScale }] }]}
                     >
                       <Text style={[styles.backBtnText, isDark && { color: theme.colors.textPrimary }]}>Back</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleNext} activeOpacity={0.88} style={styles.nextBtn}>
+                    </AnimatedTouchableOpacity>
+                    <AnimatedTouchableOpacity onPress={handleNext}
+                      onPressIn={() => animateButton(nextPressScale, true)}
+                      onPressOut={() => animateButton(nextPressScale, false)}
+                      activeOpacity={0.88} style={[styles.nextBtn, { transform: [{ scale: nextPressScale }] }]}>
                       <Text style={styles.nextBtnText}>Next</Text>
                       <Ionicons name="arrow-forward" size={scale(14)} color="#FFF" />
-                    </TouchableOpacity>
+                    </AnimatedTouchableOpacity>
                   </View>
                 </View>
 
                 {/* Arrow pointing DOWN when tooltip is above target */}
                 {!placeTooltipBelow && (
-                  <View style={[styles.tooltipArrowBottom, isDark && { borderTopColor: theme.colors.card }]} />
+                  <View style={[styles.tooltipArrowBottom, isDark && { borderTopColor: theme.colors.card }, alignedArrow]} />
                 )}
               </Animated.View>
             );
@@ -732,6 +719,7 @@ export function CoachMarksOverlay({
                     styles.mascotContainer,
                     getMascotAlignStyle() as any,
                     {
+                      opacity: mascotFade,
                       transform: [{ translateX: mascotSlide }],
                       marginBottom: verticalScale(10),
                       zIndex: 20,
@@ -764,15 +752,12 @@ export function CoachMarksOverlay({
                   },
                 ]}
               >
-                {/* Top Row: Step Pill Header + Settings Icon */}
+                {/* Step badge */}
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>
                       STEP {currentStepData.stepNumber} OF {currentStepData.totalSteps}
                     </Text>
-                  </View>
-                  <View style={[styles.cardSettingsIconWrap, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-                    <Ionicons name="settings-sharp" size={scale(15)} color={isDark ? theme.colors.textMuted : '#9CA3AF'} />
                   </View>
                 </View>
 
@@ -782,10 +767,13 @@ export function CoachMarksOverlay({
                 <Text style={[styles.cardDesc, isDark && { color: theme.colors.textMuted }]}>{currentStepData.description}</Text>
 
                 {currentStepData.stepNumber === 7 ? (
-                  <TouchableOpacity onPress={handleNext} activeOpacity={0.88} style={styles.startExploringBtn}>
+                  <AnimatedTouchableOpacity onPress={handleNext}
+                    onPressIn={() => animateButton(nextPressScale, true)}
+                    onPressOut={() => animateButton(nextPressScale, false)}
+                    activeOpacity={0.88} style={[styles.startExploringBtn, { transform: [{ scale: nextPressScale }] }]}>
                     <Text style={styles.startExploringBtnText}>Start Exploring EcoBud</Text>
                     <Ionicons name="arrow-forward" size={scale(18)} color="#FFFFFF" />
-                  </TouchableOpacity>
+                  </AnimatedTouchableOpacity>
                 ) : (
                   <View style={styles.buttonsRow}>
                     {currentStep === 0 ? (
@@ -793,18 +781,23 @@ export function CoachMarksOverlay({
                         <Text style={[styles.skipBtnText, isDark && { color: theme.colors.textMuted }]}>Skip</Text>
                       </TouchableOpacity>
                     ) : (
-                      <TouchableOpacity
+                      <AnimatedTouchableOpacity
                         onPress={handleBack}
+                        onPressIn={() => animateButton(backPressScale, true)}
+                        onPressOut={() => animateButton(backPressScale, false)}
                         activeOpacity={0.7}
-                        style={[styles.backBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
+                        style={[styles.backBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }, { transform: [{ scale: backPressScale }] }]}
                       >
                         <Text style={[styles.backBtnText, isDark && { color: theme.colors.textPrimary }]}>Back</Text>
-                      </TouchableOpacity>
+                      </AnimatedTouchableOpacity>
                     )}
-                    <TouchableOpacity onPress={handleNext} activeOpacity={0.88} style={styles.nextBtn}>
+                    <AnimatedTouchableOpacity onPress={handleNext}
+                      onPressIn={() => animateButton(nextPressScale, true)}
+                      onPressOut={() => animateButton(nextPressScale, false)}
+                      activeOpacity={0.88} style={[styles.nextBtn, { transform: [{ scale: nextPressScale }] }]}>
                       <Text style={styles.nextBtnText}>Next</Text>
                       <Ionicons name="arrow-forward" size={scale(15)} color="#FFFFFF" />
-                    </TouchableOpacity>
+                    </AnimatedTouchableOpacity>
                   </View>
                 )}
 
@@ -849,7 +842,7 @@ export function CoachMarksOverlay({
                           zIndex: 25,
                         }
                       : { marginTop: verticalScale(10) },
-                    { transform: [{ translateX: mascotSlide }] },
+                    { opacity: mascotFade, transform: [{ translateX: mascotSlide }] },
                   ]}
                   pointerEvents="none"
                 >
@@ -1011,17 +1004,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(14),
     paddingVertical: verticalScale(4),
     borderRadius: moderateScale(14),
-  },
-  cardSettingsIconWrap: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: scale(28),
-    height: scale(28),
-    borderRadius: scale(14),
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   stepBadgeText: {
     color: '#FFFFFF',

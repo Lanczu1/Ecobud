@@ -84,11 +84,13 @@ export class GamificationService {
       });
     }, { maxWait: 10000, timeout: 30000 });
 
-    await this.broadcastUserActivity(userId, ['learn', 'tracker'], {
-      actorRole: 'user',
-      actorUserId: userId,
-      entityId: lessonId,
-      reason: 'lesson-completed',
+    setImmediate(() => {
+      void this.broadcastUserActivity(userId, ['learn', 'tracker'], {
+        actorRole: 'user',
+        actorUserId: userId,
+        entityId: lessonId,
+        reason: 'lesson-completed',
+      }).catch((error) => console.error('lesson_completion_broadcast_failed', error));
     });
 
     return result;

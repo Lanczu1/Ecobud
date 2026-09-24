@@ -293,7 +293,7 @@ export class LearnService {
     // Resume saves are serialized by the app and represent the user's actual
     // stopping position. Page-only progress remains monotonic.
     const finalProgress = existingProgress
-      ? (isVideoResumeSave ? clampedProgress : Math.max(existingProgress.progress, clampedProgress))
+      ? (isVideoResumeSave ? (existingProgress.progress >= 70 ? Math.max(existingProgress.progress, clampedProgress) : clampedProgress) : Math.max(existingProgress.progress, clampedProgress))
       : clampedProgress;
     const finalVideoTimestamp = isVideoResumeSave
       ? videoTimestamp!

@@ -1,8 +1,8 @@
 # Challenge image recognition
 
-Before photos use Gemini through the backend `POST /api/challenges/:id/analyze` route. The active request path no longer executes Python or YOLO. After photos retain their existing upload/review flow.
+Before photos use Mistral vision first, with Gemini as a fallback, through the backend `POST /api/challenges/:id/analyze` route. The active request path no longer executes Python or YOLO. After photos retain their existing upload/review flow.
 
-Set `GEMINI_API_KEY` in the ignored backend `.env` and optionally set `GEMINI_IMAGE_MODEL` (default `gemini-3.6-flash`). Restart the API after changing environment variables. Do not put the key in mobile/web source or any `EXPO_PUBLIC_`/`VITE_` variable. Rotate credentials shared in chat before production use.
+Set `MISTRAL_API_KEY` in the ignored backend `.env` and optionally set `MISTRAL_IMAGE_MODEL` (default `mistral-medium-2604`). Set `GEMINI_API_KEY` for fallback and optionally `GEMINI_IMAGE_MODEL` (default `gemini-3.5-flash-lite`, with `gemini-3.6-flash` as a backup). Restart the API after changing environment variables. Do not put keys in mobile/web source or any `EXPO_PUBLIC_`/`VITE_` variable. Rotate credentials shared in chat before production use.
 
 Admin detection settings accept one or more of exactly these classes:
 
@@ -11,6 +11,8 @@ Admin detection settings accept one or more of exactly these classes:
 - Plastic Wrapper: flexible film packaging, including bread bags, snack wrappers, and sachets, empty or containing food.
 
 The backend accepts only selected classes whose model-estimated confidence meets the saved threshold. Unselected objects do not contribute to the detection count. If multiple classes are selected, a match to any selected class is sufficient. An empty selection is rejected, with no implicit fallback. Confidence is an AI estimate, not a calibrated guarantee of material identity. Existing moderation and reward amounts remain in place; recognition does not itself award rewards.
+
+The provider prompt and Gemini response schema include only the challenge's selected classes. On nine supplied sample photos (three per class), the pinned Mistral primary accepted all nine matching-class checks and rejected nine checks against a different class at the saved 80% threshold. This is a small validation set, not a general accuracy guarantee; add varied lighting, backgrounds, and non-target objects before relying on an accuracy claim.
 
 The mobile app forwards a signed `analysisToken` with a successful before-photo submission. Tokens expire after 15 minutes and bind the image URL, member, challenge instance, detection count, and saved detection settings. Re-analyze after expiration or an admin settings change. Old app versions must update to submit AI before photos.
 

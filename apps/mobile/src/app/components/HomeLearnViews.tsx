@@ -228,11 +228,42 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
   keyboardHeight?: number;
 }) {
   const { theme, isDark } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const searchBarRef = React.useRef<View>(null);
   const searchFocusedRef = React.useRef(false);
   const listRef = React.useRef<FlatList<LessonWithProgress[]>>(null);
   const scrollOffsetRef = React.useRef(0);
+  const tutorialTargetRef = React.useRef<View>(null);
+  const tutorialScrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tutorialScrolledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!model.coachMarksVisible || model.coachMarksCurrentStep !== 4) {
+      tutorialScrolledRef.current = false;
+      if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
+      tutorialScrollTimerRef.current = null;
+    }
+    return () => {
+      if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
+      tutorialScrollTimerRef.current = null;
+    };
+  }, [model.coachMarksVisible, model.coachMarksCurrentStep]);
+
+  const finishTutorialScroll = () => {
+    if (tutorialScrollTimerRef.current === null) return;
+    clearTimeout(tutorialScrollTimerRef.current);
+    tutorialScrollTimerRef.current = null;
+    tutorialTargetRef.current?.measureInWindow((x, y, targetWidth, targetHeight) => {
+      if (targetWidth > 0 && targetHeight > 0) {
+        model.setSpotlightTargetRect?.({ x, y, width: targetWidth, height: targetHeight, borderRadius: moderateScale(22) });
+      }
+    });
+  };
+
+  const settleTutorialScroll = (delay: number) => {
+    if (tutorialScrollTimerRef.current === null) return;
+    clearTimeout(tutorialScrollTimerRef.current);
+    tutorialScrollTimerRef.current = setTimeout(finishTutorialScroll, delay);
+  };
 
   React.useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -276,7 +307,11 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
     <FlatList<LessonWithProgress[]>
       ref={listRef}
       style={{ flex: 1, backgroundColor: theme.colors.background }}
-      onScroll={(event) => { scrollOffsetRef.current = event.nativeEvent.contentOffset.y; }}
+      onScroll={(event) => {
+        scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+        settleTutorialScroll(180);
+      }}
+      onMomentumScrollEnd={() => settleTutorialScroll(32)}
       scrollEventThrottle={32}
       data={isCardsLoading ? [] : lessonRows}
       keyExtractor={(row) => row.map((lesson) => lesson.id).join(':')}
@@ -284,6 +319,9 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
       maxToRenderPerBatch={5}
       windowSize={5}
       removeClippedSubviews={Platform.OS === 'android'}
+      updateCellsBatchingPeriod={50}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: verticalScale(80) + keyboardHeight }}
       refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.refreshEverything()}
         tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
@@ -594,13 +632,32 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
           {lessonRow.map((lesson, columnIndex) => {
             const lessonIndex = layoutMode === 'grid' ? rowIndex * gridColumnCount + columnIndex : rowIndex;
             const card = <LearnLessonCard lesson={lesson} compact={layoutMode === 'grid'}
+              ref={lessonIndex === 0 ? tutorialTargetRef : undefined}
               style={{ marginBottom: layoutMode === 'grid' ? 0 : verticalScale(14) }}
               onPress={() => void model.openLesson(lesson.id)} />;
             return <View key={lesson.id} style={{ flex: 1 }}>
               {lessonIndex === 0 ? <CoachMarkTarget name="firstLearnLesson" borderRadius={moderateScale(22)}
+                measureRef={tutorialTargetRef}
                 active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
                 pollWhileActive={!model.coachMarksReplay}
-                onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}>{card}</CoachMarkTarget> : card}
+                onMeasure={(rect) => {
+                  if (!model.coachMarksReplay) model.setSpotlightTargetRect?.(rect);
+                  if (tutorialScrolledRef.current) {
+                    if (model.coachMarksReplay && tutorialScrollTimerRef.current === null) model.setSpotlightTargetRect?.(rect);
+                    return;
+                  }
+                  tutorialScrolledRef.current = true;
+                  const desiredTop = Math.min(Math.max(260, height * 0.55), 420);
+                  const delta = rect.y - desiredTop;
+                  if (Math.abs(delta) > 20) {
+                    listRef.current?.scrollToOffset({ offset: Math.max(0, scrollOffsetRef.current + delta), animated: true });
+                    if (model.coachMarksReplay) {
+                      tutorialScrollTimerRef.current = setTimeout(finishTutorialScroll, 700);
+                    }
+                  } else {
+                    model.setSpotlightTargetRect?.(rect);
+                  }
+                }}>{card}</CoachMarkTarget> : card}
             </View>;
           })}
           {layoutMode === 'grid' && lessonRow.length < gridColumnCount &&

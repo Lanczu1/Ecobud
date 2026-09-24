@@ -354,13 +354,14 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Video File</label>
                       <div className="flex items-center gap-2">
-                        <input key={videoKey} type="file" accept="video/*" onChange={(e) => { handleVideoSelect(e); setRemoveVideo(false); }} className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
+                        <input key={videoKey} type="file" accept=".mp4,.mov,.webm,.mkv,video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={(e) => { handleVideoSelect(e); setRemoveVideo(false); }} className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
                         {(videoFile || (initial?.videoUrl && !removeVideo)) && (
                           <button type="button" onClick={clearVideo} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors shrink-0" title="Remove file">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
+                      <p className="mt-2 text-xs font-medium text-green-700">Allowed formats: MP4, MOV, WebM, MKV · Maximum file size: 50 MB</p>
                       {initial?.videoUrl && !videoFile && !isTranscribing && !removeVideo && (
                         <p className="mt-2 text-xs text-green-600 font-medium">
                           ✓ Current video: <a href={`${API_HOST}${initial.videoUrl}`} target="_blank" rel="noreferrer" className="underline hover:text-green-700" title={initial.videoUrl}>{initial.videoUrl.split('/').pop()}</a>

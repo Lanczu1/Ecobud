@@ -14,6 +14,7 @@ export interface CoachMarkTargetProps extends ViewProps {
   borderRadius?: number;
   active?: boolean;
   pollWhileActive?: boolean;
+  measureRef?: React.RefObject<View | null>;
   onMeasure?: (rect: SpotlightRect) => void;
   children: React.ReactNode;
 }
@@ -24,7 +25,7 @@ export interface CoachMarkTargetProps extends ViewProps {
  * on layout, layout changes, window resize, or when requested.
  */
 export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
-  ({ name, borderRadius, active = true, pollWhileActive = true, onMeasure, style, children, onLayout, ...props }, forwardedRef) => {
+  ({ name, borderRadius, active = true, pollWhileActive = true, measureRef, onMeasure, style, children, onLayout, ...props }, forwardedRef) => {
     const internalRef = useRef<View | null>(null);
 
     const onMeasureRef = useRef(onMeasure);
@@ -33,8 +34,9 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
     const lastRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
     const measureTarget = useCallback(() => {
-      if (!internalRef.current) return;
-      internalRef.current.measureInWindow((x, y, width, height) => {
+      const target = measureRef?.current ?? internalRef.current;
+      if (!target) return;
+      target.measureInWindow((x, y, width, height) => {
         if (width > 0 && height > 0) {
           const last = lastRectRef.current;
           // Avoid triggering redundant state updates if coordinates haven't changed
@@ -57,7 +59,7 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
           });
         }
       });
-    }, [borderRadius]);
+    }, [borderRadius, measureRef]);
 
     // Re-measure when target becomes active and settle smoothly without heavy bridge thrashing
     useEffect(() => {
@@ -75,8 +77,8 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
       const timer3 = setTimeout(measureTarget, 450);
       const timer4 = setTimeout(measureTarget, 750);
 
-      // Lightweight 150ms check while active to stay pinned during auto-scroll animations
-      const interval = pollWhileActive ? setInterval(measureTarget, 150) : null;
+      // Follow the target during auto-scroll when polling is enabled.
+      const interval = pollWhileActive ? setInterval(measureTarget, 200) : null;
 
       return () => {
         cancelAnimationFrame(raf);
