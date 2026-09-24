@@ -44,12 +44,11 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
   return 'Not Started';
 };
 
-export function LearnLessonCard({ lesson, onPress, style, compact = false }: LearnLessonCardProps) {
+export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(function LearnLessonCard({ lesson, onPress, style, compact = false }, ref) {
   const { theme, isDark } = useTheme();
   const { isSmall } = useResponsive();
   const [imgError, setImgError] = React.useState(false);
-  const animatedProgress = React.useRef(new Animated.Value(0)).current;
-  const [displayProgress, setDisplayProgress] = React.useState(0);
+  const progressWidth = `${Math.max(0, Math.min(100, lesson.progress || 0))}%` as const;
 
   const resolvedImageUrl = resolveMediaUrl(lesson.imageUrl, ecobudApiOrigin);
 
@@ -57,26 +56,10 @@ export function LearnLessonCard({ lesson, onPress, style, compact = false }: Lea
     setImgError(false);
   }, [lesson.imageUrl]);
 
-  React.useEffect(() => {
-    animatedProgress.addListener(({ value }) => {
-      setDisplayProgress(Math.round(value));
-    });
-    
-    Animated.timing(animatedProgress, {
-      toValue: Math.max(lesson.progress, 0),
-      duration: 1500,
-      useNativeDriver: false,
-    }).start();
-    
-    return () => {
-      animatedProgress.removeAllListeners();
-    };
-  }, [lesson.progress]);
-
   const starIconSize = isSmall ? clampFontSize(9.5, 8, 10) : clampFontSize(11, 10, 12);
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.92} style={[styles.card, compact && styles.cardCompact, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
+    <TouchableOpacity ref={ref} onPress={onPress} activeOpacity={0.92} style={[styles.card, compact && styles.cardCompact, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
       <View style={[styles.imageWrapper, compact && styles.imageWrapperCompact]}>
         {resolvedImageUrl && !imgError ? (
           <FastImage 
@@ -172,18 +155,15 @@ export function LearnLessonCard({ lesson, onPress, style, compact = false }: Lea
 
       {/* Sleek Progress Bar */}
       <View style={{ height: verticalScale(4), backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0F5F2', width: '100%', position: 'absolute', bottom: 0, left: 0, right: 0 }}>
-        <Animated.View style={{
+        <View style={{
           height: '100%',
           backgroundColor: isDark ? theme.colors.primary : '#126027',
-          width: animatedProgress.interpolate({
-            inputRange: [0, 100],
-            outputRange: ['0%', '100%']
-          })
+          width: progressWidth,
         }} />
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

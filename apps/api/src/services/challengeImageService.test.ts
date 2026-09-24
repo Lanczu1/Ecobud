@@ -49,22 +49,44 @@ describe('Gemini boundary', () => {
     const result = await recognizeChallengeImage(png, ['Plastic Wrapper'], 80);
     expect(result.passed).toBe(true);
     const [url, options] = fetchMock.mock.calls[0];
-    expect(url).toMatch(/^https:\/\/generativelanguage.googleapis.com\//);
+    expect(url).toContain('/models/gemini-3.5-flash-lite:generateContent');
     expect(url).not.toContain('test-secret');
     expect(options.headers['x-goog-api-key']).toBe('test-secret');
     expect(options.redirect).toBe('error');
     expect(options.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(options.body).systemInstruction.parts[0].text).toContain('bread bags');
+    expect(JSON.parse(options.body).generationConfig.responseSchema.properties.detected.items.properties.object.enum).toEqual(['Plastic Wrapper']);
   });
   it('fails closed and hides provider errors and keys', async () => {
     vi.stubEnv('GEMINI_API_KEY', 'test-secret');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('sensitive provider error test-secret', { status: 403 })));
-    await expect(recognizeChallengeImage(png, ['Plastic Wrapper'], 80)).rejects.toMatchObject({ statusCode: 503, message: 'Image recognition is temporarily unavailable. Please retry later.' });
+    await expect(recognizeChallengeImage(png, ['Plastic Wrapper'], 80)).rejects.toMatchObject({ statusCode: 503, message: 'Image recognition is temporarily unavailable across all providers. Please retry in a moment.' });
+  });
+  it('uses Mistral vision first when both providers are configured', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-gemini');
+    vi.stubEnv('MISTRAL_API_KEY', 'test-mistral');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ detected: [detection('Glass Bottle')] }) } }] })));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await recognizeChallengeImage(png, ['Glass Bottle'], 80);
+    expect(result.passed).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('mistral-medium-2604');
+  });
+  it('falls back to Gemini when Mistral vision is unavailable', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'test-gemini');
+    vi.stubEnv('MISTRAL_API_KEY', 'test-mistral');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ detected: [detection('Glass Bottle')] }) }] } }] })));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await recognizeChallengeImage(png, ['Glass Bottle'], 80);
+    expect(result.passed).toBe(true);
+    expect(fetchMock.mock.calls[1][0]).toContain('/models/gemini-3.5-flash-lite:generateContent');
   });
   it('fails closed on malformed and truncated model responses', async () => {
     vi.stubEnv('GEMINI_API_KEY', 'test-secret');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates: [{ finishReason: 'MAX_TOKENS' }] }))));
-    await expect(recognizeChallengeImage(png, ['Plastic Wrapper'], 80)).rejects.toMatchObject({ statusCode: 502 });
+    await expect(recognizeChallengeImage(png, ['Plastic Wrapper'], 80)).rejects.toMatchObject({ statusCode: 503 });
   });
   it('does not call Google when no class is selected', async () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);

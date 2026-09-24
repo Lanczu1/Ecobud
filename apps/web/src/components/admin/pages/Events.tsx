@@ -10,9 +10,48 @@ import {
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+const NAGCARLAN_MAP_CENTER: [number, number] = [14.12558, 121.41918];
+
+function NagcarlanOsmLayer() {
+  const [data, setData] = useState<GeoJSON.FeatureCollection | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/maps/Nagcarlan.geojson')
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Nagcarlan map data unavailable')))
+      .then((geoJson: GeoJSON.FeatureCollection) => {
+        if (active) setData(geoJson);
+      })
+      .catch(error => console.warn('[EventsMap] Nagcarlan OSM overlay unavailable', error));
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!data) return null;
+
+  return (
+    <GeoJSON
+      data={data}
+      interactive={false}
+      style={feature => {
+        const tags = feature?.properties ?? {};
+        if (tags.highway) {
+          const majorRoad = ['primary', 'secondary', 'tertiary'].includes(String(tags.highway));
+          return { color: majorRoad ? '#b78338' : '#ead8b3', weight: majorRoad ? 2.2 : 1.4, opacity: 0.9 };
+        }
+        if (tags.waterway) return { color: '#4f9db8', weight: 1.8, opacity: 0.85 };
+        const fillColor = tags.building ? '#a9b9ae' : tags.natural === 'water' || tags.landuse === 'reservoir' ? '#4f9db8' : '#6f9b66';
+        return { color: fillColor, weight: tags.building ? 0.5 : 1, opacity: 0.45, fillColor, fillOpacity: tags.building ? 0.22 : 0.18 };
+      }}
+    />
+  );
+}
 
 export interface EventSubmission {
   id: string;
@@ -379,8 +418,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             </div>
             <div className="h-48 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 relative z-0">
               <MapContainer 
-                center={form.latitude && form.longitude ? [form.latitude, form.longitude] : [14.5995, 120.9842]}
-                zoom={11} 
+                center={form.latitude && form.longitude ? [form.latitude, form.longitude] : NAGCARLAN_MAP_CENTER}
+                zoom={form.latitude && form.longitude ? 11 : 13}
                 scrollWheelZoom={false}
                 className="w-full h-full"
                 style={{ height: '100%', width: '100%', zIndex: 0 }}
@@ -389,6 +428,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                   attribution='&copy; OpenStreetMap contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+                <NagcarlanOsmLayer />
                 <LocationPickerMarker 
                   position={form.latitude && form.longitude ? [form.latitude, form.longitude] : null}
                   onChange={async (lat, lng) => {
@@ -1882,4 +1922,3 @@ export function Events() {
     </div>
   );
 }
-

@@ -2254,6 +2254,10 @@ export const styles = StyleSheet.create({
     paddingTop: verticalScale(16),
     paddingBottom: verticalScale(28),
   },
+  overlayHeaderCompact: {
+    paddingTop: verticalScale(12),
+    paddingBottom: verticalScale(22),
+  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2271,10 +2275,20 @@ export const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: verticalScale(18),
   },
+  overlayTitleCompact: {
+    fontSize: responsiveFontSize(25),
+    lineHeight: moderateScale(31),
+    marginTop: verticalScale(12),
+    letterSpacing: -0.5,
+  },
   overlaySubtitle: {
     marginTop: verticalScale(8),
     fontSize: responsiveFontSize(16),
     color: 'rgba(255,255,255,0.88)',
+  },
+  overlaySubtitleCompact: {
+    marginTop: verticalScale(5),
+    fontSize: responsiveFontSize(13),
   },
   overlayBody: {
     flex: 1,

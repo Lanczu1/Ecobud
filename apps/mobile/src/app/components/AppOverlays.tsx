@@ -69,7 +69,6 @@ import {
   OverlayScaffold,
   LessonMedia,
   SurfaceCard,
-  TinyBadge,
   ChallengeMeta,
   PrimaryButton,
   AvatarBubble,
@@ -590,7 +589,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     return (
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
         <OverlayScaffold title="Result Page" subtitle="Verification Result" onBack={returnToDetails}>
-          <ScrollView contentContainerStyle={[styles.overlayScroll, { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, alignItems: 'center' }]}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.overlayScroll, { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, alignItems: 'center' }]}>
             <View style={{ width: '100%', alignItems: 'center' }}>
               {/* Header Title with horizontal decorative lines */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20, gap: 12 }}>
@@ -1178,7 +1177,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
       <OverlayScaffold title="AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
-        <ScrollView contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
           <View>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027', marginBottom: 16 }}>{challenge.title}</Text>
 
@@ -1771,13 +1770,13 @@ export function AssistantOverlay({ model }: { model: EcoBudMobileModel }) {
         <View style={{ flex: 1, width: '100%', maxWidth: maxContainerWidth }}>
           <ScrollView
             ref={scrollViewRef}
+            showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               paddingHorizontal: horizontalPadding,
               paddingVertical: contentPaddingVertical,
               flexGrow: 1,
             }}
             onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             <View style={{ alignItems: 'center', marginBottom: isSmall ? 16 : 24, opacity: 0.75 }}>
@@ -2085,8 +2084,8 @@ const PH_BOUNDS = {
 };
 
 const DEFAULT_PH_CENTER = {
-  latitude: 14.5995,
-  longitude: 120.9842,
+  latitude: 14.12558,
+  longitude: 121.41918,
   latitudeDelta: 0.1,
   longitudeDelta: 0.1,
 };
@@ -2233,7 +2232,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       </head>
       <body>
         <div id="map"></div>
-        <div class="osm-badge">🇵🇭 OpenStreetMap PH</div>
+        <div class="osm-badge">Nagcarlan · © OpenStreetMap contributors</div>
         <script>
           const phBounds = L.latLngBounds(
             L.latLng(4.5, 116.0),
@@ -2242,13 +2241,27 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 
           const map = L.map('map', {
             center: [${initialLat}, ${initialLng}],
-            zoom: ${userLocation ? 13 : 7},
+            zoom: 13,
             minZoom: 5,
             maxZoom: 18,
             maxBounds: phBounds,
             maxBoundsViscosity: 0.85,
-            zoomControl: true
+            zoomControl: true,
+            dragging: true,
+            touchZoom: true,
+            scrollWheelZoom: false,
+            doubleClickZoom: true,
+            tap: true
           });
+
+          // Let the map consume one-finger pans and two-finger pinch gestures
+          // inside its viewport while leaving page scrolling available outside it.
+          map.getContainer().addEventListener('touchstart', function(event) {
+            if (event.touches && event.touches.length > 1) event.preventDefault();
+          }, { passive: false });
+          map.getContainer().addEventListener('touchmove', function(event) {
+            if (event.touches && event.touches.length > 1) event.preventDefault();
+          }, { passive: false });
 
           const osmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             subdomains: ['a', 'b', 'c'],
@@ -2268,6 +2281,29 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           });
 
           osmTileLayer.addTo(map);
+
+          const nagcarlanOsmPane = map.createPane('nagcarlanOsmPane');
+          nagcarlanOsmPane.style.zIndex = '350';
+          nagcarlanOsmPane.style.pointerEvents = 'none';
+          fetch('${ecobudApiOrigin}/maps/Nagcarlan.geojson')
+            .then(response => response.ok ? response.json() : Promise.reject(new Error('Nagcarlan map data unavailable')))
+            .then(data => {
+              L.geoJSON(data, {
+                pane: 'nagcarlanOsmPane',
+                interactive: false,
+                style: feature => {
+                  const tags = feature && feature.properties ? feature.properties : {};
+                  if (tags.highway) {
+                    const majorRoad = ['primary', 'secondary', 'tertiary'].includes(tags.highway);
+                    return { color: majorRoad ? '#d8a85c' : '#f4e5bf', weight: majorRoad ? 2.2 : 1.4, opacity: 0.9 };
+                  }
+                  if (tags.waterway) return { color: '#5baac2', weight: 1.8, opacity: 0.85 };
+                  const fillColor = tags.building ? '#c5d0c8' : tags.natural === 'water' || tags.landuse === 'reservoir' ? '#5baac2' : '#6f9b66';
+                  return { color: fillColor, weight: tags.building ? 0.5 : 1, opacity: 0.45, fillColor, fillOpacity: tags.building ? 0.22 : 0.18 };
+                }
+              }).addTo(map);
+            })
+            .catch(error => console.warn('[EcoEventsMap] Nagcarlan OSM overlay unavailable', error));
 
           const userLoc = ${userLocJson};
           if (userLoc) {
@@ -2371,6 +2407,12 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           originWhitelist={['*']}
           source={{ html: leafletHtml }}
           style={{ flex: 1, backgroundColor: 'transparent' }}
+          scrollEnabled={false}
+          nestedScrollEnabled
+          javaScriptEnabled
+          domStorageEnabled
+          bounces={false}
+          overScrollMode="never"
           onMessage={(event: any) => {
             try {
               const data = JSON.parse(event.nativeEvent.data);
@@ -2653,6 +2695,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past'>('browse');
+  const [joinedEventId, setJoinedEventId] = React.useState<string | null>(null);
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [attendanceEvent, setAttendanceEvent] = React.useState<string | null>(null);
   const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string; eventId: string | null }>({
@@ -2723,6 +2766,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
       <ScrollView
+        showsVerticalScrollIndicator={false}
         style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
         refreshControl={
@@ -2803,12 +2847,17 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                     },
                   ]}
                 >
-                  <ImageBackground
-                    source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
-                    style={styles.eventListImg}
-                    imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    disabled={!['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(event.userStatus ?? '')}
+                    onPress={() => setJoinedEventId(event.id)}
                   >
-                    <View style={{ position: 'absolute', left: 14, top: 14, flexDirection: 'row', gap: 6, zIndex: 2 }}>
+                    <ImageBackground
+                      source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
+                      style={styles.eventListImg}
+                      imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+                    >
+                      <View style={{ position: 'absolute', left: 14, top: 14, flexDirection: 'row', gap: 6, zIndex: 2 }}>
                       {event.isFeatured && (
                         <View
                           style={{
@@ -2842,12 +2891,18 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                           {lc === 'ongoing' ? 'ONGOING' : lc === 'ended' ? 'ENDED' : 'UPCOMING'}
                         </Text>
                       </View>
-                    </View>
-                    <View style={[styles.dateTagRight, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: isDark ? 1 : 0 }]}>
-                      <Text style={[styles.dateTagRightText, { color: theme.colors.textPrimary }]}>{formatEventDateTag(event.startDatetime)}</Text>
-                    </View>
-                  </ImageBackground>
+                      </View>
+                      <View style={[styles.dateTagRight, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: isDark ? 1 : 0 }]}>
+                        <Text style={[styles.dateTagRightText, { color: theme.colors.textPrimary }]}>{formatEventDateTag(event.startDatetime)}</Text>
+                      </View>
+                    </ImageBackground>
+                  </TouchableOpacity>
                   <View style={styles.eventListBody}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      disabled={!['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(event.userStatus ?? '')}
+                      onPress={() => setJoinedEventId(event.id)}
+                    >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                       {event.isFeatured && <Ionicons name="star" size={12} color="#F59E0B" />}
                       <Text style={[styles.welcomeLabel, { color: event.isFeatured ? '#D97706' : (isDark ? theme.colors.primary : '#126027') }, event.isFeatured && { marginBottom: 0 }]}>
@@ -2913,6 +2968,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                         </View>
                       </View>
                     )}
+                    </TouchableOpacity>
 
                     {(() => {
                       if (lc === 'ended' && !event.userStatus) {
@@ -3007,7 +3063,9 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                       }
 
                       return (
-                        <TouchableOpacity style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.primary }]} onPress={() => void model.handleJoinEvent(event.id)}>
+                        <TouchableOpacity style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.primary }]} onPress={async () => {
+                          if (await model.handleJoinEvent(event.id)) setJoinedEventId(event.id);
+                        }}>
                           <Text style={[styles.quickJoinBtnText, isDark && { color: '#0E1512' }]}>Join Event</Text>
                         </TouchableOpacity>
                       );
@@ -3037,17 +3095,114 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           setAttendanceEvent(rejectionModal.eventId);
         } : undefined}
       />
+      {(() => {
+        const joinedEvent = model.events.find((event) => event.id === joinedEventId);
+        if (!joinedEvent) return null;
+        const formatTime = (value: string) => new Date(value).toLocaleTimeString('en-PH', {
+          timeZone: 'Asia/Manila',
+          hour: 'numeric',
+          minute: '2-digit',
+        });
+        const startsAt = `${formatLongDate(joinedEvent.startDatetime)} · ${formatTime(joinedEvent.startDatetime)}`;
+        const endsAt = new Date(joinedEvent.startDatetime).toDateString() === new Date(joinedEvent.endDatetime).toDateString()
+          ? formatTime(joinedEvent.endDatetime)
+          : `${formatLongDate(joinedEvent.endDatetime)} · ${formatTime(joinedEvent.endDatetime)}`;
+
+        return (
+          <Modal
+            visible
+            transparent
+            animationType="fade"
+            onRequestClose={() => setJoinedEventId(null)}
+          >
+            <View style={{ flex: 1, backgroundColor: 'rgba(4, 20, 13, 0.62)', justifyContent: 'center', padding: 22 }}>
+              <View style={{ width: '100%', maxWidth: 460, maxHeight: '88%', alignSelf: 'center', backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, borderRadius: 24, overflow: 'hidden' }}>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 22, paddingBottom: 18 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                    <View style={{ flex: 1, paddingRight: 12 }}>
+                      <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 12, fontWeight: '800', letterSpacing: 1 }}>
+                        {['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(joinedEvent.userStatus ?? '') ? 'YOU’RE JOINED' : 'EVENT DETAILS'}
+                      </Text>
+                      <Text style={{ color: theme.colors.textPrimary, fontSize: 23, lineHeight: 29, fontWeight: '800', marginTop: 6 }}>{joinedEvent.title}</Text>
+                    </View>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close event details" onPress={() => setJoinedEventId(null)} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: theme.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="close" size={20} color={theme.colors.textPrimary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ gap: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11 }}>
+                      <Ionicons name="location-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '700' }}>WHERE</Text>
+                        <Text style={{ color: theme.colors.textPrimary, fontSize: 15, lineHeight: 21, marginTop: 3 }}>{joinedEvent.location || 'Location details will be shared by the organizer.'}</Text>
+                      </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11 }}>
+                      <Ionicons name="calendar-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '700' }}>WHEN</Text>
+                        <Text style={{ color: theme.colors.textPrimary, fontSize: 15, lineHeight: 21, marginTop: 3 }}>{startsAt} – {endsAt}</Text>
+                      </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11 }}>
+                      <Ionicons name="information-circle-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '700' }}>WHAT TO DO</Text>
+                        <Text style={{ color: theme.colors.textPrimary, fontSize: 15, lineHeight: 21, marginTop: 3 }}>{joinedEvent.description || 'Check with the event organizer for activity instructions.'}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </ScrollView>
+                <View style={{ paddingHorizontal: 22, paddingBottom: 20, paddingTop: 4 }}>
+                  <PrimaryButton label="Got it" onPress={() => setJoinedEventId(null)} />
+                </View>
+              </View>
+            </View>
+          </Modal>
+        );
+      })()}
     </View>
   );
 }
 
 // ─── Lesson video progress crash-safe storage helpers ─────────────────────────
 const LESSON_PROGRESS_STORAGE_PREFIX = '@lesson_progress_';
+const LESSON_PAGE_INDEX_PREFIX = '@lesson_page_index_';
 const lessonProgressWriteQueues = new Map<string, Promise<void>>();
+const lessonPageIndexWriteQueues = new Map<string, Promise<void>>();
 const LESSON_PROGRESS_SERVER_SAVE_INTERVAL_MS = 1_000;
 
 const getLessonProgressStorageKey = (lessonId: string) =>
   `${LESSON_PROGRESS_STORAGE_PREFIX}${lessonId}`;
+
+const getLessonPageIndexStorageKey = (userId: string, lessonId: string) =>
+  `${LESSON_PAGE_INDEX_PREFIX}${userId}:${lessonId}`;
+
+const readLocalLessonPageIndex = async (userId: string, lessonId: string): Promise<number | null> => {
+  try {
+    const key = getLessonPageIndexStorageKey(userId, lessonId);
+    const raw = mobileStorage.getItemSync(key) ?? await mobileStorage.getItem(key);
+    if (raw === null) return null;
+    const pageIndex = Number(raw);
+    return Number.isInteger(pageIndex) && pageIndex >= 0 ? pageIndex : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalLessonPageIndex = (userId: string, lessonId: string, pageIndex: number) => {
+  const key = getLessonPageIndexStorageKey(userId, lessonId);
+  const value = String(pageIndex);
+  try { mobileStorage.setItemSync(key, value); } catch {}
+  const previousWrite = lessonPageIndexWriteQueues.get(key) ?? Promise.resolve();
+  const nextWrite = previousWrite
+    .catch(() => undefined)
+    .then(() => mobileStorage.setItem(key, value));
+  lessonPageIndexWriteQueues.set(key, nextWrite);
+};
 
 const readLocalLessonProgress = async (
   lessonId: string
@@ -3066,7 +3221,18 @@ const readLocalLessonProgress = async (
 };
 
 const writeLocalLessonProgress = (lessonId: string, timestamp: number, progress: number) => {
-  const value = JSON.stringify({ timestamp, progress, savedAt: Date.now() });
+  let previous: { progress?: number; videoCompleted?: boolean; videoCompletedAtEnd?: boolean } = {};
+  try {
+    const raw = mobileStorage.getItemSync(getLessonProgressStorageKey(lessonId));
+    if (raw) previous = JSON.parse(raw);
+  } catch {}
+  const value = JSON.stringify({
+    timestamp,
+    progress: Math.max(previous.progress ?? 0, progress),
+    videoCompleted: previous.videoCompleted === true,
+    videoCompletedAtEnd: previous.videoCompletedAtEnd === true,
+    savedAt: Date.now(),
+  });
   try {
     mobileStorage.setItemSync(
       getLessonProgressStorageKey(lessonId),
@@ -3086,25 +3252,82 @@ const writeLocalLessonProgress = (lessonId: string, timestamp: number, progress:
     .then(() => mobileStorage.setItem(key, value));
   lessonProgressWriteQueues.set(key, nextWrite);
 };
+
+export const isLessonVideoWatchedLocally = (userId?: string, lessonId?: string): boolean => {
+  if (!userId || !lessonId) return false;
+  try {
+    const progKey = getLessonProgressStorageKey(`${userId}:${lessonId}`);
+    const raw = mobileStorage.getItemSync(progKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.videoCompletedAtEnd) return true;
+    }
+  } catch {}
+  return false;
+};
+
+export const markLessonVideoWatchedLocally = (userId: string, lessonId: string, progress: number, completedAt?: number) => {
+  try {
+    const progKey = getLessonProgressStorageKey(`${userId}:${lessonId}`);
+    let prev: any = { timestamp: 0, progress: 0 };
+    try {
+      const raw = mobileStorage.getItemSync(progKey);
+      if (raw) prev = JSON.parse(raw);
+    } catch {}
+
+    const value = JSON.stringify({
+      timestamp: (completedAt ?? prev.timestamp) || 1,
+      progress: Math.max(prev.progress ?? 0, progress),
+      videoCompleted: true,
+      videoCompletedAtEnd: true,
+      savedAt: Date.now(),
+    });
+    mobileStorage.setItemSync(progKey, value);
+    void mobileStorage.setItem(progKey, value);
+  } catch {}
+};
 // ──────────────────────────────────────────────────────────────────────────────
 
 export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
+  const pageIndexTouchedRef = React.useRef(false);
   const pageAnim = React.useRef(new Animated.Value(1)).current;
 
   const maxAllowedProgress = model.selectedLesson?.hasQuiz ? 80 : 99;
   const numPages = model.selectedLesson?.pages?.length ?? 0;
+  const visiblePageIndex = Math.min(currentPageIndex, Math.max(0, numPages - 1));
+  const videoProgressLimit = getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, numPages);
+
+  const isVideoWatchedInitial = React.useMemo(() => {
+    if (!model.selectedLesson?.videoUrl) return true;
+    if (model.selectedLesson?.status === 'completed') return true;
+    return isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id);
+  }, [model.selectedLesson?.id, model.selectedLesson?.status, model.selectedLesson?.videoUrl, model.session?.user.id]);
+
+  const [videoCollapsed, setVideoCollapsed] = React.useState(() => {
+    if (!model.selectedLesson?.videoUrl) return false;
+    if (model.selectedLesson?.status === 'completed') return true;
+    return isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id);
+  });
+
+
+
+
 
   const handleNextPage = () => {
     const lesson = model.selectedLesson;
     const pageCount = lesson?.pages?.length ?? 0;
+    const nextPageIndex = Math.min(visiblePageIndex + 1, Math.max(0, pageCount - 1));
     if (lesson && pageCount > 0) {
       const videoContribution = lesson.videoUrl
         ? getVideoProgressLimit(!!lesson.hasQuiz, pageCount)
         : 0;
-      const pageContribution = (maxAllowedProgress - videoContribution) * ((currentPageIndex + 1) / pageCount);
+      const pageContribution = (maxAllowedProgress - videoContribution) * ((visiblePageIndex + 1) / pageCount);
       void model.handleUpdateLessonProgress(lesson.id, Math.round(videoContribution + pageContribution));
+      const userId = model.session?.user.id;
+      if (userId) writeLocalLessonPageIndex(userId, lesson.id, nextPageIndex);
+      pageIndexTouchedRef.current = true;
     }
     Animated.sequence([
       Animated.timing(pageAnim, {
@@ -3113,7 +3336,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      setCurrentPageIndex(currentPageIndex + 1);
+      setCurrentPageIndex(nextPageIndex);
       Animated.timing(pageAnim, {
         toValue: 1,
         duration: 250,
@@ -3190,6 +3413,12 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     let cancelled = false;
     readLocalLessonProgress(model.session?.user.id + ":" + model.selectedLesson.id).then((stored) => {
       if (cancelled) return;
+      const localLimit = getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, model.selectedLesson?.pages?.length ?? 0);
+      const isDone = Boolean((stored as any)?.videoCompletedAtEnd || isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id));
+      if (isDone) {
+        setVideoCollapsed(true);
+        setLocalRestoredProgress((prev) => Math.max(prev ?? 0, localLimit, stored?.progress ?? 0));
+      }
       if (stored && stored.timestamp > 0 && isLocalLessonProgressNewer(stored.savedAt, model.selectedLesson?.progressUpdatedAt)) {
         localRestoredRef.current = stored;
         // A local save is the newest source of truth for this device. Do not
@@ -3208,6 +3437,9 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         // Prime maxWatchedTimeRef so the anti-cheat guard doesn't block the restored seek
         maxWatchedTimeRef.current = stored.timestamp;
         lastKnownPlayerTimeRef.current = stored.timestamp;
+
+        // Collapse only when local storage carries the explicit end marker.
+        if ((stored as any).videoCompletedAtEnd) setVideoCollapsed(true);
 
         try {
           if (safeSeekPlayer(stored.timestamp)) {
@@ -3230,9 +3462,16 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       ? Math.max(model.selectedLesson?.progress ?? 0, 0)
       : Math.max(model.selectedLesson?.progress ?? 0, 0);
 
-  const initialProgress = localRestoredProgress !== null
-    ? localRestoredProgress
-    : serverProgress;
+  const localSavedWatched = isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id);
+
+  const initialProgress = model.selectedLesson?.status === 'completed'
+    ? 100
+    : localRestoredProgress !== null
+      ? (localSavedWatched ? Math.max(videoProgressLimit, localRestoredProgress) : localRestoredProgress)
+      : (localSavedWatched ? Math.max(videoProgressLimit, serverProgress) : serverProgress);
+
+
+
 
   const animatedProgress = React.useRef(new Animated.Value(initialProgress)).current;
   const [displayProgress, setDisplayProgress] = React.useState(initialProgress);
@@ -3245,11 +3484,11 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
     const targetValue = model.selectedLesson?.status === 'completed'
       ? 100
-      : localRestoredProgress !== null
-        ? localRestoredProgress
-        : model.selectedLesson?.videoUrl
-          ? Math.max(model.selectedLesson?.progress ?? 0, 0)
-          : Math.max(model.selectedLesson?.progress ?? 0, 0);
+      : Math.max(
+        initialProgress,
+        localRestoredProgress ?? 0,
+        model.selectedLesson?.progress ?? 0,
+      );
 
     Animated.timing(animatedProgress, {
       toValue: targetValue,
@@ -3260,7 +3499,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => {
       animatedProgress.removeAllListeners();
     };
-  }, [model.selectedLesson?.progress, model.selectedLesson?.videoUrl, model.selectedLesson?.hasQuiz, currentPageIndex, numPages, model.selectedLesson?.status, maxAllowedProgress, localRestoredProgress]);
+  }, [model.selectedLesson?.progress, model.selectedLesson?.status, initialProgress, localRestoredProgress]);
 
   const maxWatchedTimeRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
   const lastKnownPlayerTimeRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
@@ -3278,11 +3517,22 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const lessonRef = React.useRef(model.selectedLesson);
   lessonRef.current = model.selectedLesson;
   React.useEffect(() => {
+    let cancelled = false;
     lessonRef.current = model.selectedLesson;
     // New lesson opened — reset seek & watch tracking
     if (model.selectedLesson?.id !== initialSeekDoneForLessonRef.current) {
       const initialTs = model.selectedLesson?.videoTimestamp ?? 0;
       setCurrentPageIndex(0);
+      const lessonId = model.selectedLesson?.id;
+      const userId = model.session?.user.id;
+      const pageCount = model.selectedLesson?.pages?.length ?? 0;
+      pageIndexTouchedRef.current = false;
+      if (lessonId && userId && pageCount > 0) {
+        readLocalLessonPageIndex(userId, lessonId).then((savedPageIndex) => {
+          if (cancelled || pageIndexTouchedRef.current || savedPageIndex === null) return;
+          setCurrentPageIndex(Math.min(savedPageIndex, pageCount - 1));
+        });
+      }
       maxWatchedTimeRef.current = initialTs;
       lastKnownPlayerTimeRef.current = initialTs;
       cachedDurationRef.current = 0;
@@ -3292,8 +3542,12 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       setLocalRestoredProgress(null);
       // Reset seek marker so statusChange will seek again
       initialSeekDoneForLessonRef.current = null;
+      // Restore collapsed state for the newly opened lesson
+      const nl = model.selectedLesson;
+      setVideoCollapsed(!nl?.videoUrl ? false : nl.status === 'completed' || isLessonVideoWatchedLocally(model.session?.user.id, nl?.id));
     }
-  }, [model.selectedLesson?.id, model.selectedLesson?.videoTimestamp]);
+    return () => { cancelled = true; };
+  }, [model.selectedLesson?.id, model.selectedLesson?.videoTimestamp, model.session?.user.id]);
 
   const handleUpdateRef = React.useRef(model.handleUpdateLessonProgress);
   React.useEffect(() => { handleUpdateRef.current = model.handleUpdateLessonProgress; }, [model.handleUpdateLessonProgress]);
@@ -3303,6 +3557,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     if (!lesson) {
       return;
     }
+
+    const userId = model.session?.user.id;
+    const isVideoDone = Boolean((userId && isLessonVideoWatchedLocally(userId, lesson.id)) || videoCollapsed);
+    const limit = getVideoProgressLimit(!!lesson.hasQuiz, lesson.pages?.length ?? 0);
 
     // Prefer live player duration, fall back to our cached value
     let duration = cachedDurationRef.current;
@@ -3316,7 +3574,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }
 
     duration = getVideoDurationForProgress(duration, lesson.durationMinutes);
-    if (!duration) {
+    if (!duration && !isVideoDone) {
       return;
     }
 
@@ -3324,14 +3582,23 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     // the seek guard. A learner who rewinds and leaves should resume where
     // they stopped, not at an earlier high-water mark.
     const resumeTime = Math.max(lastKnownPlayerTimeRef.current, 0);
-    if (resumeTime <= 0) {
+    if (resumeTime <= 0 && !isVideoDone) {
       return;
     }
 
-    const currentProgress = getVideoLessonProgress(resumeTime, duration, !!lesson.hasQuiz, lesson.pages?.length ?? 0);
+    let currentProgress = getVideoLessonProgress(resumeTime, duration || 1, !!lesson.hasQuiz, lesson.pages?.length ?? 0);
+    if (isVideoDone) {
+      currentProgress = Math.max(limit, currentProgress);
+    }
 
     // 1. Persist to local storage first — survives hard kill / OS crash
-    writeLocalLessonProgress(model.session?.user.id + ":" + lesson.id, resumeTime, currentProgress);
+    if (userId) {
+      if (isVideoDone) {
+        markLessonVideoWatchedLocally(userId, lesson.id, currentProgress);
+      } else {
+        writeLocalLessonProgress(userId + ":" + lesson.id, resumeTime, currentProgress);
+      }
+    }
 
     // 2. Fire-and-forget server update
     try {
@@ -3339,7 +3606,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     } catch (err) {
       // Ignore
     }
-  }, [player, model.session?.user.id]);
+  }, [player, model.session?.user.id, videoCollapsed]);
 
   // Save on unmount (covers normal back-navigation)
   React.useEffect(() => {
@@ -3380,13 +3647,32 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       cachedDurationRef.current || pDur,
       model.selectedLesson?.durationMinutes,
     );
+    const lesson = lessonRef.current;
+    const limit = videoProgressLimit;
+    const wasAlreadyWatched = Boolean(
+      (model.session?.user.id && lesson?.id && isLessonVideoWatchedLocally(model.session.user.id, lesson.id))
+      || videoCollapsed,
+    );
+    if (model.session?.user.id && lesson?.id) {
+      markLessonVideoWatchedLocally(model.session.user.id, lesson.id, limit, duration);
+    }
+    if (lesson?.id && model.session?.user.id && !wasAlreadyWatched) {
+      pageIndexTouchedRef.current = true;
+      setCurrentPageIndex(0);
+      writeLocalLessonPageIndex(model.session.user.id, lesson.id, 0);
+    }
+    // Always mark video done in UI when playback reaches the end
+    if (model.selectedLesson?.status !== 'completed') {
+      animatedProgress.setValue(limit);
+      setDisplayProgress(limit);
+    }
+    setVideoCollapsed(true);
     if (duration > 0) {
       cachedDurationRef.current = duration;
       maxWatchedTimeRef.current = duration;
       lastKnownPlayerTimeRef.current = duration;
-      animatedProgress.setValue(model.selectedLesson?.status === 'completed' ? 100 : getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, numPages));
-      doSave();
     }
+    doSave();
   });
 
   useEventListener(player, 'sourceLoad', ({ duration }: { duration: number }) => {
@@ -3495,7 +3781,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           if (lesson) writeLocalLessonProgress(
             model.session?.user.id + ':' + lesson.id,
             curTime,
-            getVideoLessonProgress(curTime, curDuration, !!lesson.hasQuiz, lesson.pages?.length ?? 0)
+            getVideoLessonProgress(maxWatchedTimeRef.current, curDuration, !!lesson.hasQuiz, lesson.pages?.length ?? 0)
           );
           if (Date.now() - lastSaveTime.current >= LESSON_PROGRESS_SERVER_SAVE_INTERVAL_MS) {
             doSave();
@@ -3503,12 +3789,13 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           }
 
           if (model.selectedLesson?.status !== 'completed') {
-            const liveCalculatedPercent = getVideoLessonProgress(curTime, curDuration, !!lessonRef.current?.hasQuiz, lessonRef.current?.pages?.length ?? 0);
+            const liveCalculatedPercent = getVideoLessonProgress(maxWatchedTimeRef.current, curDuration, !!lessonRef.current?.hasQuiz, lessonRef.current?.pages?.length ?? 0);
 
             setDisplayProgress((prev) => {
-              if (liveCalculatedPercent !== prev) {
-                animatedProgress.setValue(liveCalculatedPercent);
-                return liveCalculatedPercent;
+              const highWaterPercent = Math.max(prev, liveCalculatedPercent);
+              if (highWaterPercent !== prev) {
+                animatedProgress.setValue(highWaterPercent);
+                return highWaterPercent;
               }
               return prev;
             });
@@ -3569,17 +3856,18 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         writeLocalLessonProgress(
           model.session?.user.id + ':' + lesson.id,
           curTime,
-          getVideoLessonProgress(curTime, curDuration, !!lesson.hasQuiz, lesson.pages?.length ?? 0),
+          getVideoLessonProgress(maxWatchedTimeRef.current, curDuration, !!lesson.hasQuiz, lesson.pages?.length ?? 0),
         );
       }
 
       if (model.selectedLesson?.status !== 'completed') {
-        const liveCalculatedPercent = getVideoLessonProgress(curTime, curDuration, !!lessonRef.current?.hasQuiz, lessonRef.current?.pages?.length ?? 0);
+        const liveCalculatedPercent = getVideoLessonProgress(maxWatchedTimeRef.current, curDuration, !!lessonRef.current?.hasQuiz, lessonRef.current?.pages?.length ?? 0);
 
         setDisplayProgress((prev) => {
-          if (liveCalculatedPercent !== prev) {
-            animatedProgress.setValue(liveCalculatedPercent);
-            return liveCalculatedPercent;
+          const highWaterPercent = Math.max(prev, liveCalculatedPercent);
+          if (highWaterPercent !== prev) {
+            animatedProgress.setValue(highWaterPercent);
+            return highWaterPercent;
           }
           return prev;
         });
@@ -3600,7 +3888,9 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const [showConfetti, setShowConfetti] = React.useState(false);
   const videoIsComplete = !model.selectedLesson?.videoUrl
-    || displayProgress >= getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, numPages)
+    || videoCollapsed
+    || isVideoWatchedInitial
+    || isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id)
     || model.selectedLesson?.status === 'completed';
 
   React.useEffect(() => {
@@ -3614,8 +3904,9 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <OverlayScaffold
       title={model.selectedLesson?.title ?? 'Lesson Detail'}
-      subtitle={model.selectedLesson?.status ?? 'eco course'}
+      subtitle={model.selectedLesson?.status === 'completed' ? 'Lesson completed' : model.selectedLesson?.status === 'seen' ? 'Lesson in progress' : 'Lesson'}
       headerImage={headerImg}
+      compactHeader
       onBack={handleBack}
       topRightAccessory={
         <Text style={{ fontSize: 16, fontWeight: '800', color: '#FFFFFF' }}>
@@ -3642,14 +3933,11 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           ))}
         </View>
       )}
-      <ScrollView contentContainerStyle={styles.overlayScroll}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
         {model.selectedLesson ? (
           <>
             <SurfaceCard style={styles.lessonDetailCard}>
-              <View style={styles.rowBetween}>
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{model.selectedLesson.title}</Text>
-                <TinyBadge label={`${displayProgress}%`} />
-              </View>
+              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{model.selectedLesson.title}</Text>
               <Text style={[styles.sectionCaption, { color: theme.colors.textMuted }]}>{model.selectedLesson.description}</Text>
               
               {model.selectedLesson.durationMinutes ? (
@@ -3695,47 +3983,74 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
               ) : null}
 
               {model.selectedLesson.videoUrl ? (
-                <View style={{ marginVertical: 16, borderRadius: 16, overflow: 'hidden' }}>
-                  <VideoView
-                    player={player as any}
-                    style={{ width: '100%', height: 220, borderRadius: 16 }}
-                    {...({ nativeControls: false, allowsFullscreen: false, allowsPictureInPicture: false } as any)}
-                  />
-                  <View style={{ backgroundColor: '#0B110E', paddingHorizontal: 14, paddingVertical: 10, gap: 8 }}>
-                    <View style={{ height: 4, borderRadius: 2, backgroundColor: '#314039', overflow: 'hidden' }}>
-                      <View
-                        style={{
-                          height: '100%',
-                          width: `${videoDuration > 0 ? Math.min(100, (videoCurrentTime / videoDuration) * 100) : 0}%`,
-                          backgroundColor: theme.colors.primary,
-                        }}
-                      />
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <TouchableOpacity
-                          accessibilityRole="button"
-                          accessibilityLabel="Go back 10 seconds"
-                          onPress={rewindVideo}
-                          style={{ width: 42, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1B2822' }}
-                        >
-                          <Ionicons name="play-back" size={21} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          accessibilityRole="button"
-                          accessibilityLabel={videoPlaying ? 'Pause video' : 'Play video'}
-                          onPress={toggleVideoPlayback}
-                          style={{ width: 42, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary }}
-                        >
-                          <Ionicons name={videoPlaying ? 'pause' : 'play'} size={21} color={isDark ? '#0E1512' : '#FFFFFF'} />
-                        </TouchableOpacity>
+                videoCollapsed ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Video complete — tap to rewatch"
+                    onPress={() => setVideoCollapsed(false)}
+                    activeOpacity={0.75}
+                    style={{
+                      marginVertical: 16,
+                      borderRadius: 12,
+                      backgroundColor: isDark ? '#0E2016' : '#E6F4EC',
+                      borderWidth: 1,
+                      borderColor: isDark ? theme.colors.primary + '40' : '#C8E6D3',
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    <Ionicons name="checkmark-circle" size={20} color={isDark ? theme.colors.primary : '#126027'} />
+                    <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: isDark ? theme.colors.primary : '#126027' }}>
+                      Video watched
+                    </Text>
+                    <Ionicons name="refresh-outline" size={16} color={isDark ? theme.colors.textMuted : '#6B8F76'} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ marginVertical: 16, borderRadius: 16, overflow: 'hidden' }}>
+                    <VideoView
+                      player={player as any}
+                      style={{ width: '100%', height: 220, borderRadius: 16 }}
+                      {...({ nativeControls: false, allowsFullscreen: false, allowsPictureInPicture: false } as any)}
+                    />
+                    <View style={{ backgroundColor: '#0B110E', paddingHorizontal: 14, paddingVertical: 10, gap: 8 }}>
+                      <View style={{ height: 4, borderRadius: 2, backgroundColor: '#314039', overflow: 'hidden' }}>
+                        <View
+                          style={{
+                            height: '100%',
+                            width: `${videoDuration > 0 ? Math.min(100, (videoCurrentTime / videoDuration) * 100) : 0}%`,
+                            backgroundColor: theme.colors.primary,
+                          }}
+                        />
                       </View>
-                      <Text style={{ color: '#D5DED9', fontSize: responsiveFontSize(12), fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                        {formatVideoTime(videoCurrentTime)} / {formatVideoTime(videoDuration)}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back 10 seconds"
+                            onPress={rewindVideo}
+                            style={{ width: 42, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1B2822' }}
+                          >
+                            <Ionicons name="play-back" size={21} color="#FFFFFF" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel={videoPlaying ? 'Pause video' : 'Play video'}
+                            onPress={toggleVideoPlayback}
+                            style={{ width: 42, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary }}
+                          >
+                            <Ionicons name={videoPlaying ? 'pause' : 'play'} size={21} color={isDark ? '#0E1512' : '#FFFFFF'} />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={{ color: '#D5DED9', fontSize: responsiveFontSize(12), fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                          {formatVideoTime(videoCurrentTime)} / {formatVideoTime(videoDuration)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                </View>
+                )
               ) : null}
               {/* Pages - only unlocked after video completes */}
               {model.selectedLesson.pages && model.selectedLesson.pages.length > 0 ? (
@@ -3751,10 +4066,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                     transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
                   }}>
                     <Text style={[styles.lessonBodyText, { marginTop: 0, color: theme.colors.textPrimary }]}>
-                      {model.selectedLesson.pages[currentPageIndex].content}
+                      {model.selectedLesson.pages[visiblePageIndex].content}
                     </Text>
                     <Text style={{ textAlign: 'center', marginTop: 16, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
-                      Page {currentPageIndex + 1} of {model.selectedLesson.pages.length}
+                      Page {visiblePageIndex + 1} of {model.selectedLesson.pages.length}
                     </Text>
                   </Animated.View>
                 ) : (
@@ -3829,7 +4144,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         const hasPages = !!(lesson.pages && lesson.pages.length > 0);
         const pageCount = lesson.pages?.length ?? 0;
         const isCompleted = lesson.status === 'completed';
-        const isOnLastPage = !hasPages || currentPageIndex === pageCount - 1;
+        const isOnLastPage = !hasPages || visiblePageIndex === pageCount - 1;
 
         // Show bar only when video is done (or no video), or already completed
         const showBar = isCompleted || !hasVideo || (hasVideo && videoIsComplete);
@@ -3941,7 +4256,7 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
           model.setActiveOverlay('lesson');
         }}
       >
-        <ScrollView contentContainerStyle={styles.overlayScroll}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
           <SurfaceCard style={styles.lessonDetailCard}>
             <View style={{ alignItems: 'center', paddingVertical: 32 }}>
               <View style={[styles.badgeCircleMedium, {
@@ -3977,6 +4292,7 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
     <OverlayScaffold
       title={model.selectedLesson?.title ?? 'Quiz'}
       subtitle={`Question ${model.currentQuestionIndex + 1} of ${totalQuestions}`}
+      compactHeader
       onBack={() => {
         model.resetQuiz();
         model.setActiveOverlay('lesson');
@@ -3999,7 +4315,7 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
         </View>
       }
     >
-      <ScrollView contentContainerStyle={styles.overlayScroll}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
         <SurfaceCard style={styles.lessonDetailCard}>
           <View style={{ marginBottom: 16 }}>
             <Text style={[styles.sectionCaption, { marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, color: isDark ? theme.colors.primary : '#126027' }]}>
@@ -4496,8 +4812,8 @@ function ExpCounter({ targetPoints, compact = false }: { targetPoints: number; c
         </Animated.View>
       </View>
 
-      <View>
-        <Animated.Text style={{ fontSize: compact ? responsiveFontSize(30) : 52, fontWeight: '900', color: '#FFFFFF', textShadowColor: 'rgba(16, 185, 129, 0.5)', textShadowOffset: { width: 0, height: compact ? 3 : 4 }, textShadowRadius: compact ? 8 : 10, marginBottom: compact ? 0 : 4 }}>
+      <View style={{ alignItems: 'center' }}>
+        <Animated.Text style={{ fontSize: compact ? responsiveFontSize(30) : 52, fontWeight: '900', color: '#FFFFFF', textAlign: 'center', textShadowColor: 'rgba(16, 185, 129, 0.5)', textShadowOffset: { width: 0, height: compact ? 3 : 4 }, textShadowRadius: compact ? 8 : 10, marginBottom: compact ? 0 : 4 }}>
           +{displayCount}
         </Animated.Text>
         <Text style={{ fontSize: compact ? responsiveFontSize(9) : 13, fontWeight: '800', color: '#A2C2B5', letterSpacing: compact ? 1 : 1.5, textTransform: 'uppercase' }}>
@@ -4767,6 +5083,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
       </Animated.View>
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
@@ -4774,7 +5091,6 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
           paddingHorizontal: scale(20),
           paddingVertical: verticalScale(30),
         }}
-        showsVerticalScrollIndicator={false}
       >
         <Animated.View
           style={{
@@ -5261,6 +5577,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
       </Animated.View>
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
@@ -5268,7 +5585,6 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
           paddingHorizontal: scale(20),
           paddingVertical: verticalScale(30),
         }}
-        showsVerticalScrollIndicator={false}
       >
         <Animated.View
           style={{
@@ -5665,6 +5981,7 @@ export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
       )}
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
@@ -5672,7 +5989,6 @@ export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
           paddingHorizontal: scale(20),
           paddingVertical: verticalScale(30),
         }}
-        showsVerticalScrollIndicator={false}
       >
         <Animated.View
           style={{
@@ -6173,7 +6489,7 @@ export function RewardsOverlay({ model }: { model: EcoBudMobileModel }) {
       subtitle="Track unlocks and next milestones"
       onBack={() => model.setActiveOverlay(null)}
     >
-      <ScrollView contentContainerStyle={styles.overlayScroll}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
         <SurfaceCard style={styles.rewardsHeroCard}>
           <Text style={styles.rewardsHeroValue}>{model.rewards?.points ?? 0} ECO Points</Text>
           <Text style={styles.sectionCaption}>Available for exchange</Text>
@@ -6216,7 +6532,7 @@ export function TransparencyOverlay({ model }: { model: EcoBudMobileModel }) {
       subtitle="Verified impact logs and immutable reward history"
       onBack={() => model.setActiveOverlay(null)}
     >
-      <ScrollView contentContainerStyle={styles.overlayScroll}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
         <View style={styles.timelineRail}>
           {(model.transparency?.logs ?? []).map((log, index) => (
             <View key={log.id} style={styles.timelineRow}>
@@ -6623,7 +6939,7 @@ export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
           <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFF' }}>Your Streak: {currentStreak} Days</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
           <View style={{ gap: 12 }}>
             {rewards.map((reward, index) => {
               const isUnlocked = currentStreak >= reward.day;
@@ -6805,7 +7121,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
-        <ScrollView ref={formScroll.scrollRef} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={formScroll.scrollRef} showsVerticalScrollIndicator={false} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
           
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Username</Text>
           <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
@@ -6941,7 +7257,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
 
             {/* Barangay List */}
-            <ScrollView style={[localStyles.barangayListScroll, { flexShrink: 1 }]} keyboardShouldPersistTaps="handled">
+            <ScrollView style={[localStyles.barangayListScroll, { flexShrink: 1 }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {filteredBarangays.map((barangay) => {
                 const isSelected = selectedBarangay === barangay;
                 return (
@@ -7189,7 +7505,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
-        <ScrollView ref={formScroll.scrollRef} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={formScroll.scrollRef} showsVerticalScrollIndicator={false} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
           {isGoogleAccount ? <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
             <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="logo-google" size={19} color="#4285F4" />
@@ -7649,6 +7965,7 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
       <ScrollView
+        showsVerticalScrollIndicator={false}
         style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
       >
@@ -7901,6 +8218,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
         </View>
       )}
       <ScrollView
+        showsVerticalScrollIndicator={false}
         style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
       >
@@ -8225,4 +8543,3 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
     </View>
   );
 }
-

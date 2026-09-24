@@ -23,12 +23,12 @@ export interface DiscoverChallengeCardProps {
   isTablet?: boolean;
 }
 
-export function DiscoverChallengeCard({
+export const DiscoverChallengeCard = React.forwardRef<View, DiscoverChallengeCardProps>(function DiscoverChallengeCard({
   challenge,
   onPress,
   style,
   isTablet,
-}: DiscoverChallengeCardProps) {
+}, ref) {
   const { theme, isDark } = useTheme();
   const category = ((challenge as any).category || 'General').toUpperCase();
   const isImageMission = challenge.type === 'AI Image Recognition Challenge';
@@ -36,6 +36,7 @@ export function DiscoverChallengeCard({
 
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={`Start ${challenge.title}`}
       style={({ pressed }) => [
@@ -132,7 +133,7 @@ export function DiscoverChallengeCard({
       </View>
     </Pressable>
   );
-}
+});
 
 const cardStyles = StyleSheet.create({
   discoverCard: {

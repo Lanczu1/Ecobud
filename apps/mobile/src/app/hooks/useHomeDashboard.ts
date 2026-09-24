@@ -1,4 +1,4 @@
-import { getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
+import { getQuizLessonProgress, getVideoProgressLimit, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { useNotifications } from './useNotifications';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
@@ -34,6 +34,7 @@ import { realtimeService } from '../../shared/supabase/realtimeService';
 import { type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
+import { coachMarkSpotlightStore } from '../utils/coachMarkSpotlightStore';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -169,25 +170,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [coachMarksCurrentStep, setCoachMarksCurrentStep] = useState(0);
   const [coachMarksVisible, setCoachMarksVisible] = useState(false);
   const [coachMarksReplay, setCoachMarksReplay] = useState(false);
-  const [spotlightTargetRect, setSpotlightTargetRectState] = useState<{ x: number; y: number; width: number; height: number; borderRadius?: number } | null>(null);
-
-  const setSpotlightTargetRect = useCallback((rect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null) => {
-    setSpotlightTargetRectState((prev) => {
-      if (!prev && !rect) return prev;
-      if (
-        prev &&
-        rect &&
-        Math.round(prev.x) === Math.round(rect.x) &&
-        Math.round(prev.y) === Math.round(rect.y) &&
-        Math.round(prev.width) === Math.round(rect.width) &&
-        Math.round(prev.height) === Math.round(rect.height) &&
-        prev.borderRadius === rect.borderRadius
-      ) {
-        return prev;
-      }
-      return rect;
-    });
-  }, []);
+  const setSpotlightTargetRect = coachMarkSpotlightStore.set;
 
   const [progressBarLayout, setProgressBarLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
@@ -540,7 +523,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   const runWithActionLoader = useCallback(
-    async <T,>(label: string, action: () => Promise<T> | T, minimumDuration = 720) => {
+    async <T,>(label: string, action: () => Promise<T> | T, minimumDuration = 250) => {
       const ticket = ++actionOverlayTicket.current;
       const startedAt = Date.now();
       setActionOverlayLabel(label);
@@ -1749,17 +1732,31 @@ export function useHomeDashboard(): EcoBudMobileModel {
       const activeSession = ensureSession();
       // Optimistically update locally without a loading overlay
       const clampedProgress = Math.min(100, Math.max(0, Math.round(progress)));
+      const lessonForProgress = lessons.find((lesson) => lesson.id === lessonId);
+      const videoProgressLimit = getVideoProgressLimit(
+        !!lessonForProgress?.hasQuiz,
+        lessonForProgress?.pages?.length ?? 0,
+      );
 
       const key = '@lesson_progress_' + activeSession.user.id + ':' + lessonId;
-      let previous = { timestamp: 0, progress: 0 };
+      let previous: { timestamp: number; progress: number; videoCompleted?: boolean } = { timestamp: 0, progress: 0 };
       try { previous = JSON.parse(mobileStorage.getItemSync(key) ?? 'null') ?? previous; } catch {}
       const isVideoResumeSave = Number.isFinite(videoTimestamp);
+      const isVideoDone = Boolean(previous.videoCompleted)
+        || (isVideoResumeSave && clampedProgress >= videoProgressLimit);
+      // Keep lesson progress as a high-water mark while videoTimestamp follows
+      // the actual playback position. Rewinding should move the resume point,
+      // never pull the displayed progress bar backwards.
+      const savedProgress = Math.max(
+        previous.progress,
+        lessonForProgress?.progress ?? 0,
+        clampedProgress,
+        isVideoDone ? videoProgressLimit : 0,
+      );
       mobileStorage.setItemSync(key, JSON.stringify({
         timestamp: isVideoResumeSave ? videoTimestamp : previous.timestamp,
-        // The resume marker and the displayed video percentage must describe
-        // the same position. Page-only updates still retain their high-water
-        // progress because they do not include a video timestamp.
-        progress: isVideoResumeSave ? clampedProgress : Math.max(previous.progress, clampedProgress),
+        progress: savedProgress,
+        videoCompleted: isVideoDone,
         savedAt: Date.now(),
       }));
       if (isVideoResumeSave) {
@@ -1768,7 +1765,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           token: activeSession.token,
           userId: activeSession.user.id,
           lessonId,
-          progress: clampedProgress,
+          progress: savedProgress,
           videoTimestamp: videoTimestamp!,
         });
 
@@ -1803,7 +1800,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           })();
         }
       } else {
-        void homeService.updateLessonProgress(activeSession.token, lessonId, clampedProgress)
+        void homeService.updateLessonProgress(activeSession.token, lessonId, savedProgress)
           .catch((error) => console.warn('[handleUpdateLessonProgress] API error:', error));
       }
 
@@ -1813,7 +1810,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           if (lesson.id === lessonId) {
             return {
               ...lesson,
-              progress: isVideoResumeSave ? clampedProgress : Math.max(lesson.progress, clampedProgress),
+              progress: Math.max(lesson.progress, savedProgress),
               videoTimestamp: isVideoResumeSave ? videoTimestamp : lesson.videoTimestamp,
             };
           }
@@ -1898,32 +1895,31 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const finalScore = res.score ?? 100;
         setQuizScore(finalScore);
         setQuizCompleted(true);
-
-        // The API has already accepted and completed the quiz at this point.
-        // SQLite-backed local cleanup must not turn that successful submission
-        // into a user-visible submission failure when its database is unavailable.
-        try {
-          await mobileStorage.removeItem('@lesson_quiz_' + activeSession.user.id + ':' + selectedLessonId);
-        } catch (error) {
-          console.warn('[submitQuiz] Unable to clear saved quiz state:', error);
-        }
-
-        try {
-          await hydrateApp(activeSession, true);
-        } catch (error) {
-          // The completion response is authoritative; the normal background
-          // refresh can retry later without blocking the reward sequence.
-          console.warn('[submitQuiz] Unable to refresh completed lesson:', error);
-        }
         const points = res.pointsAwarded ?? (selectedLesson?.pointsReward ?? 10);
         setEarnedPoints(points);
         setCompletionCelebrationType('quiz');
         setActiveOverlayState('lessonCompleted');
+
+
+
+
+
+        void mobileStorage.removeItem('@lesson_quiz_' + activeSession.user.id + ':' + selectedLessonId)
+          .catch((error) => console.warn('[submitQuiz] Unable to clear saved quiz state:', error));
+
+        // The completion response is authoritative; refresh the rest of the
+        // dashboard in the background so it does not delay the reward overlay.
+        void hydrateApp(activeSession, true)
+          .catch((error) => console.warn('[submitQuiz] Unable to refresh completed lesson:', error));
+
+
+
+
       } catch (error) {
         triggerWarningHaptic();
         Alert.alert('Unable to submit quiz', error instanceof Error ? error.message : 'Please try again.');
       }
-    });
+    }, 0);
   }, [
     quizQuestions,
     quizAnswers,
@@ -2046,7 +2042,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const handleJoinEvent = useCallback(
     async (eventId: string) => {
-      await runWithActionLoader('Reserving your event slot...', async () => {
+      return runWithActionLoader('Reserving your event slot...', async () => {
         try {
           const activeSession = ensureSession();
           setRefreshing(true);
@@ -2066,23 +2062,30 @@ export function useHomeDashboard(): EcoBudMobileModel {
           });
 
           if (mutationMode === 'online') {
-            await hydrateApp(activeSession, true);
+            setEvents((current) => current.map((event) =>
+              event.id === eventId ? { ...event, userStatus: 'joined' } : event,
+            ));
             showNotification({
               title: 'You are in!',
               message: 'Your event slot is reserved. Show up to earn your verified reward.',
               tone: 'success',
             });
+            void hydrateApp(activeSession, true)
+              .catch((error) => console.warn('[handleJoinEvent] Unable to refresh events:', error));
+            return true;
           }
+          return false;
         } catch (error) {
           showNotification({
             title: 'Unable to join event',
             message: error instanceof Error ? error.message : 'Please try again.',
             tone: 'error',
           });
+          return false;
         } finally {
           setRefreshing(false);
         }
-      });
+      }, 0);
     },
     [ensureSession, hydrateApp, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
   );
@@ -2348,7 +2351,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     } catch (error) {
       throw error;
     }
-  }, [ensureSession]);
+  }, [ensureSession, lessons]);
 
   const uploadChallengeProofImage = useCallback(async (challengeId: string, uri: string) => {
     try {
@@ -2870,7 +2873,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
     coachMarksReplay,
     completeCoachMarks,
     showCoachMarks,
-    spotlightTargetRect,
     setSpotlightTargetRect,
     progressBarLayout,
     setProgressBarLayout,

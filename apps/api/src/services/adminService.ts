@@ -428,7 +428,7 @@ export class AdminService {
         imageUrl: data.imageUrl,
         badgeLabel: data.badgeLabel,
         type: data.type || "AI Image Recognition Challenge",
-        aiDetectionTargets: data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle"],
+        aiDetectionTargets: data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle", "Plastic Wrapper"],
         aiMinimumConfidence: data.aiMinimumConfidence || 80,
         isFeatured: data.isFeatured ?? false,
         quantityUnit: data.quantityUnit || "bottles",

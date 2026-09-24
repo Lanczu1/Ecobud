@@ -503,7 +503,11 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             <Animated.View key={challenge.id} style={localStyles.featuredCard}>
               <View style={[localStyles.featuredImage, { backgroundColor: '#1A3B2A' }]}>
                 {challenge.imageUrl ? (
-                  <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={StyleSheet.absoluteFill} blurRadius={10} />
+                  <Image
+                    source={{ uri: getValidImageUrl(challenge.imageUrl) }}
+                    style={StyleSheet.absoluteFill}
+                    blurRadius={Platform.OS === 'android' ? 0 : 10}
+                  />
                 ) : (
                   <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', paddingBottom: 60 }]}>
                     <Ionicons name="trophy" size={80} color="#4ADE80" style={{ opacity: 0.5 }} />
@@ -604,7 +608,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 
 export function LearnView({ model }: { model: EcoBudMobileModel }) {
   const { theme } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const featuredLesson = model.lessons[0];
   const availableLessons = model.lessons.slice(1);
   const [layoutMode, setLayoutMode] = useContentLayoutPreference('ecobud_learn_layout');
@@ -858,12 +862,44 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
   keyboardHeight?: number;
 }) {
   const { theme, isDark } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isCardsLoading = (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
   const searchBarRef = useRef<View>(null);
   const searchFocusedRef = useRef(false);
   const challengeListRef = useRef<FlatList<ChallengeListItem>>(null);
   const challengeScrollOffsetRef = useRef(0);
+  const tutorialTargetRef = useRef<View>(null);
+  const tutorialScrollStartedRef = useRef(false);
+  const tutorialScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const measureTutorialTarget = () => {
+    if (!model.coachMarksVisible || model.coachMarksCurrentStep !== 3) return;
+    tutorialTargetRef.current?.measureInWindow((x, y, targetWidth, targetHeight) => {
+      if (targetWidth > 0 && targetHeight > 0) {
+        model.setSpotlightTargetRect?.({ x, y, width: targetWidth, height: targetHeight, borderRadius: moderateScale(22) });
+      }
+    });
+  };
+
+  const settleTutorialTarget = (delay = 100) => {
+    if (!model.coachMarksReplay || !model.coachMarksVisible || model.coachMarksCurrentStep !== 3) return;
+    if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
+    tutorialScrollTimerRef.current = setTimeout(() => {
+      tutorialScrollTimerRef.current = null;
+      measureTutorialTarget();
+    }, delay);
+  };
+
+  useEffect(() => {
+    if (model.coachMarksVisible && model.coachMarksCurrentStep === 3) return;
+    tutorialScrollStartedRef.current = false;
+    if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
+    tutorialScrollTimerRef.current = null;
+  }, [model.coachMarksVisible, model.coachMarksCurrentStep]);
+
+  useEffect(() => () => {
+    if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -1134,7 +1170,11 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
       <FlatList<ChallengeListItem>
         ref={challengeListRef}
         style={{ flex: 1, backgroundColor: theme.colors.background }}
-        onScroll={(event) => { challengeScrollOffsetRef.current = event.nativeEvent.contentOffset.y; }}
+        onScroll={(event) => {
+          challengeScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          settleTutorialTarget(120);
+        }}
+        onMomentumScrollEnd={() => settleTutorialTarget(40)}
         scrollEventThrottle={32}
         data={challengeItems}
         onViewableItemsChanged={prefetchUpcomingChallenges}
@@ -1143,6 +1183,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
         maxToRenderPerBatch={5}
         windowSize={5}
         removeClippedSubviews={Platform.OS === 'android'}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 + keyboardHeight }}
         refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.refreshEverything()}
           tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
@@ -1924,10 +1965,30 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                 style={{ marginBottom: contentLayout === 'grid' ? 0 : verticalScale(16), width: '100%' }}
                 onPress={() => model.openChallengeMission(challenge)} />;
               return <View key={challenge.uniqueId || challenge.id} style={{ flex: 1 }}>
-                {challengeIndex === 0 ? <CoachMarkTarget name="featuredChallenge" borderRadius={moderateScale(22)}
+                {challengeIndex === 0 ? <CoachMarkTarget ref={tutorialTargetRef} name="featuredChallenge" borderRadius={moderateScale(22)}
+                  measureRef={tutorialTargetRef}
                   active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
                   pollWhileActive={!model.coachMarksReplay}
-                  onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}>{card}</CoachMarkTarget> : card}
+                  onMeasure={(rect) => {
+                    if (!model.coachMarksReplay) model.setSpotlightTargetRect?.(rect);
+                    if (tutorialScrollStartedRef.current) return;
+
+                    tutorialScrollStartedRef.current = true;
+                    const desiredTop = Math.min(Math.max(250, height * 0.5), 400);
+                    const delta = rect.y - desiredTop;
+                    if (Math.abs(delta) <= 20) {
+                      model.setSpotlightTargetRect?.(rect);
+                      return;
+                    }
+
+                    const nextOffset = Math.max(0, challengeScrollOffsetRef.current + delta);
+                    if (Math.abs(nextOffset - challengeScrollOffsetRef.current) <= 1) {
+                      model.setSpotlightTargetRect?.(rect);
+                      return;
+                    }
+                    challengeListRef.current?.scrollToOffset({ offset: nextOffset, animated: true });
+                    if (model.coachMarksReplay) settleTutorialTarget(120);
+                  }}>{card}</CoachMarkTarget> : card}
               </View>;
             })}
             {contentLayout === 'grid' && challengeRow.length < challengeColumnCount &&
@@ -2283,7 +2344,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                           trackerStyles.heatmapText,
                           { color: theme.colors.textMuted },
                           cell.completed && trackerStyles.heatmapTextDone,
-                          cell.isToday && [trackerStyles.heatmapTextToday, { color: isDark ? theme.colors.primary : '#126027' }],
+                          cell.isToday && !cell.completed && [trackerStyles.heatmapTextToday, { color: theme.colors.primary }],
                         ]}
                       >
                         {cell.day}
@@ -3654,7 +3715,7 @@ const trackerStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  heatmapTextDone: { color: '#FFF', fontWeight: '700' },
+  heatmapTextDone: { color: '#052E16', fontWeight: '700' },
   heatmapTextToday: { fontWeight: '800', color: '#126027' },
 
   // ── Leaderboard ────────────────────────────────────────────────────────────
