@@ -30,7 +30,7 @@ import { CoachMarksOverlay } from '../../app/components/CoachMarksOverlay';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { LegalDocumentModal, LegalDocumentType } from '../../shared/ui/LegalDocumentModal';
 
-type AuthModeType = 'signin' | 'signup' | 'verify';
+type AuthModeType = 'signin' | 'signup' | 'verify' | 'mfa';
 type FieldName = 'username' | 'email' | 'password' | 'verificationCode' | 'city';
 type FieldErrors = Partial<Record<FieldName, string>>;
 type UsernameCheckState = 'idle' | 'checking' | 'available' | 'taken';
@@ -48,14 +48,15 @@ const showEnhancedChrome = !isLegacyAndroid;
 interface AuthViewProps {
   authLoading: boolean;
   authError: string | null;
-  onLogin: (email: string, pass: string) => void;
+  onLogin: (email: string, pass: string) => Promise<{ mfaRequired: true; challengeToken: string; expiresAt: string } | void>;
+  onVerifyMfa: (challengeToken: string, code: string) => Promise<void>;
   onGoogleSignIn: () => Promise<{
     requiresBarangay: boolean;
     email: string;
     displayName: string;
     avatarUrl: string;
     onConfirmBarangay: (chosenBarangay: string) => Promise<void>;
-  } | void> | void;
+  } | { mfaRequired: true; challengeToken: string; expiresAt: string } | void> | void;
 
   onSignUp: (username: string, email: string, pass: string, city: string, otpCode: string) => void;
   onSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
@@ -110,6 +111,12 @@ const AUTH_COPY: Record<
     title: 'Verify your email',
     subtitle: 'Enter the 6-digit code we sent to secure your account and finish setup.',
     primaryLabel: 'Verify & Sign Up',
+    loadingLabel: 'Verifying...',
+  },
+  mfa: {
+    title: 'Two-step verification',
+    subtitle: 'Enter the code from your authenticator app to finish signing in.',
+    primaryLabel: 'Verify and sign in',
     loadingLabel: 'Verifying...',
   },
 };
@@ -167,6 +174,12 @@ function validateFields(
   const trimmedEmail = values.email.trim().toLowerCase();
   const trimmedCode = values.verificationCode.trim();
 
+  if (mode === 'mfa') {
+    if (!trimmedCode) errors.verificationCode = 'Enter your authenticator or recovery code.';
+    else if (!/^\d{6}$/.test(trimmedCode) && !/^[A-Z2-7]{10,16}$/i.test(trimmedCode.replace(/[-\s]/g, ''))) errors.verificationCode = 'Enter a valid six-digit code or recovery code.';
+    return errors;
+  }
+
   if (mode !== 'signin') {
     if (!trimmedUsername) {
       errors.username = 'Enter a username so your profile can be created.';
@@ -216,6 +229,8 @@ function getRequiredFields(mode: AuthModeType): FieldName[] {
   if (mode === 'signup') {
     return ['username', 'email', 'password', 'city'];
   }
+
+  if (mode === 'mfa') return ['verificationCode'];
 
   return ['username', 'email', 'password', 'city', 'verificationCode'];
 }
@@ -309,6 +324,7 @@ export function AuthView({
   authLoading,
   authError,
   onLogin,
+  onVerifyMfa,
   onGoogleSignIn,
 
   onSignUp,
@@ -353,6 +369,7 @@ export function AuthView({
   const [selectedGoogleBarangay, setSelectedGoogleBarangay] = useState('');
   const [isConfirmingGoogleBarangay, setIsConfirmingGoogleBarangay] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -657,7 +674,21 @@ export function AuthView({
     }
 
     if (mode === 'signin') {
-      onLogin(email.trim(), password);
+      const result = await onLogin(email.trim(), password);
+      if (result?.mfaRequired) {
+        setMfaChallengeToken(result.challengeToken);
+        switchMode('mfa');
+      }
+      return;
+    }
+
+    if (mode === 'mfa') {
+      if (!mfaChallengeToken) {
+        setLocalError('Sign-in verification expired. Please sign in again.');
+        switchMode('signin');
+        return;
+      }
+      await onVerifyMfa(mfaChallengeToken, verificationCode.trim());
       return;
     }
 
@@ -689,7 +720,7 @@ export function AuthView({
     }
 
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
-  }, [email, fieldErrors, mode, onLogin, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal]);
+  }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken]);
 
   // Login errors belong to the login form and must not leak into the sign-up view.
   // Sign-up request errors are surfaced through localError; verification errors still
@@ -771,9 +802,9 @@ export function AuthView({
             >
               {bannerMessage ? <InlineBanner message={bannerMessage} /> : null}
 
-              {mode === 'verify' ? (
+              {mode === 'verify' || mode === 'mfa' ? (
                 <View style={styles.verifyStepBox}>
-                  <View style={[styles.verifyEmailBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                  {mode === 'verify' ? <View style={[styles.verifyEmailBadge, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                     <Ionicons name="mail-outline" size={16} color={isDark ? theme.colors.primary : palette.primary} />
                     <Text style={[styles.verifyEmailText, isDark && { color: theme.colors.textPrimary }]} numberOfLines={1}>
                       {email.trim()}
@@ -785,11 +816,22 @@ export function AuthView({
                     >
                       <Text style={[styles.changeEmailText, isDark && { color: theme.colors.primary }]}>Edit</Text>
                     </Pressable>
-                  </View>
+                  </View> : null}
 
-                  <Text style={[styles.otpPromptLabel, isDark && { color: theme.colors.textPrimary }]}>Enter the 6-digit verification code</Text>
+                  <Text style={[styles.otpPromptLabel, isDark && { color: theme.colors.textPrimary }]}>{mode === 'mfa' ? 'Authenticator or recovery code' : 'Enter the 6-digit verification code'}</Text>
                   
-                  <SegmentedOtpInput
+                  {mode === 'mfa' ? <TextInput
+                    value={verificationCode}
+                    onChangeText={(value) => setVerificationCode(value.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 16))}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    keyboardType="default"
+                    maxLength={16}
+                    onFocus={() => scrollToField(180)}
+                    placeholder="6-digit code or recovery code"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={{ minHeight: 52, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary, textAlign: 'center', letterSpacing: 2 }}
+                  /> : <SegmentedOtpInput
                     value={verificationCode}
                     onChange={(val) => {
                       setVerificationCode(val);
@@ -799,9 +841,10 @@ export function AuthView({
                     }}
                     onFocus={() => scrollToField(180)}
                     error={visibleFieldErrors.verificationCode}
-                  />
+                  />}
+                  {visibleFieldErrors.verificationCode ? <Text style={[styles.inlineErrorText, isDark && { color: '#F87171' }]}>{visibleFieldErrors.verificationCode}</Text> : null}
 
-                  <View style={styles.resendRow}>
+                  {mode === 'verify' ? <View style={styles.resendRow}>
                     <Text style={[styles.resendPromptText, isDark && { color: theme.colors.textMuted }]}>Didn't receive the code?</Text>
                     <Pressable
                       disabled={resendCooldown > 0 || isLoading}
@@ -834,7 +877,9 @@ export function AuthView({
                         {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
                       </Text>
                     </Pressable>
-                  </View>
+                  </View> : mode === 'mfa' ? <Pressable onPress={() => { setMfaChallengeToken(null); setVerificationCode(''); switchMode('signin'); }} style={{ alignSelf: 'center', padding: 8 }}>
+                    <Text style={{ color: isDark ? theme.colors.primary : palette.primary, fontSize: 13, fontWeight: '700' }}>Back to sign in</Text>
+                  </Pressable> : null}
                 </View>
               ) : (
                 <>
@@ -986,7 +1031,7 @@ export function AuthView({
                 loading={isLoading}
               />
 
-              {mode !== 'verify' ? (
+              {mode !== 'verify' && mode !== 'mfa' ? (
                 <>
                   <AuthSeparator label="OR" />
 
@@ -996,11 +1041,14 @@ export function AuthView({
                     onPress={async () => {
                       try {
                         const result = await onGoogleSignIn();
-                        if (result && result.requiresBarangay) {
+                        if (result && 'requiresBarangay' in result) {
                           setPendingGoogleAuth(result);
                           setSelectedGoogleBarangay('');
                           setBarangaySearchQuery('');
                           setIsGoogleBarangayModalOpen(true);
+                        } else if (result && 'mfaRequired' in result) {
+                          setMfaChallengeToken(result.challengeToken);
+                          switchMode('mfa');
                         }
                       } catch (e) {
                         // Handled in parent hook
@@ -1014,11 +1062,13 @@ export function AuthView({
 
             <View style={styles.footerSwitchRow}>
               <Text style={[styles.footerSwitchText, isDark && { color: theme.colors.textMuted }]}>
-                {mode === 'signin'
-                  ? 'Need an account?'
-                  : mode === 'verify'
-                    ? 'Want to update your email?'
-                    : 'Already have an account?'}
+              {mode === 'signin'
+                ? 'Need an account?'
+                : mode === 'verify'
+                  ? 'Want to update your email?'
+                  : mode === 'mfa'
+                    ? 'Sign in verification required'
+                  : 'Already have an account?'}
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -1029,6 +1079,9 @@ export function AuthView({
                     switchMode('signup');
                   } else if (mode === 'verify') {
                     switchMode('signup');
+                  } else if (mode === 'mfa') {
+                    setMfaChallengeToken(null);
+                    switchMode('signin');
                   } else {
                     switchMode('signin');
                   }
@@ -1043,9 +1096,11 @@ export function AuthView({
                   <Text style={[styles.footerSwitchLinkText, isDark && { color: theme.colors.primary }]}>
                     {mode === 'signin'
                       ? 'Create account'
-                      : mode === 'verify'
-                        ? 'Back to sign up'
-                        : 'Log in'}
+                    : mode === 'verify'
+                      ? 'Back to sign up'
+                      : mode === 'mfa'
+                        ? 'Back to sign in'
+                      : 'Log in'}
                   </Text>
                   {mode === 'signin' && (
                     <Ionicons name="leaf-outline" size={14} color={isDark ? theme.colors.primary : palette.primary} style={{ marginLeft: 4, marginTop: 4 }} />

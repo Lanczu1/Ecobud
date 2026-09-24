@@ -69,7 +69,7 @@ const TERMS_SECTIONS: LegalSection[] = [
 const PRIVACY_SECTIONS: LegalSection[] = [
   {
     heading: '1. Information We Collect',
-    body: 'We collect account and profile information such as your username, email address, authentication records, selected barangay, avatar, and preferences. We also process activity information including lesson progress, challenge entries, photos, rewards, event participation, Give and Get Hub listings and messages, reports, and notification settings.',
+    body: 'We collect account and profile information such as your username, email address, authentication records, selected barangay, avatar, and preferences. If you enable two-step verification, ECOBUD stores your encrypted authenticator secret and hashes of recovery codes; the plain recovery codes are shown only when issued. We also process activity information including lesson progress, challenge entries, photos, rewards, event participation, Give and Get Hub listings and messages, reports, and notification settings.',
   },
   {
     heading: '2. Device and Technical Information',

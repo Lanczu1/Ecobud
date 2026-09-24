@@ -385,6 +385,13 @@ interface RequestOptions {
   timeoutMs?: number;
 }
 
+export interface MfaChallengePayload {
+  mfaRequired: true;
+  challengeToken: string;
+  expiresAt: string;
+}
+export type LoginPayload = SessionPayload | MfaChallengePayload;
+
 export interface AppVersionPayload {
   latestVersion: string;
   minimumVersion: string;
@@ -612,12 +619,12 @@ export const ecobudApi = {
   registerPush: (token:string,deviceToken:string) => request('/notifications/devices',{token,method:'POST',body:{token:deviceToken}}),
   unregisterPush: (token:string,deviceToken:string) => request('/notifications/devices',{token,method:'DELETE',body:{token:deviceToken}}),
   login: (email: string, password: string) =>
-    request<SessionPayload>('/auth/login', {
+    request<LoginPayload>('/auth/login', {
       method: 'POST',
       body: { email, password, clientType: 'mobile' },
     }),
   googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
-    request<SessionPayload>('/auth/google', {
+    request<LoginPayload>('/auth/google', {
       method: 'POST',
       body: { ...payload, clientType: 'mobile' },
     }),
@@ -644,6 +651,8 @@ export const ecobudApi = {
       method: 'POST',
       body: { email },
     }),
+  verifyMfaChallenge: (challengeToken: string, code: string) =>
+    request<SessionPayload>('/auth/mfa/verify', { method: 'POST', body: { challengeToken, code } }),
   fetchRealtimeSession: (token: string) =>
     request<RealtimeSessionPayload>('/realtime/session', { token }),
   connectPresence: (token: string, payload: PresenceSyncRequest) =>
@@ -794,6 +803,16 @@ export const ecobudApi = {
       token,
       body: payload,
     }),
+  getTotpStatus: (token: string) =>
+    request<{ enabled: boolean; enabledAt: string | null; remainingRecoveryCodes: number }>('/users/me/mfa/totp', { token }),
+  beginTotpEnrollment: (token: string) =>
+    request<{ enrollmentId: string; secret: string; otpauthUri: string; expiresAt: string }>('/users/me/mfa/totp/enroll', { method: 'POST', token, body: {} }),
+  confirmTotpEnrollment: (token: string, enrollmentId: string, code: string) =>
+    request<{ success: true; recoveryCodes: string[]; token: string; refreshToken: string }>('/users/me/mfa/totp/confirm', { method: 'POST', token, body: { enrollmentId, code } }),
+  rotateMfaRecoveryCodes: (token: string, code: string) =>
+    request<{ recoveryCodes: string[] }>('/users/me/mfa/recovery-codes/rotate', { method: 'POST', token, body: { code } }),
+  disableTotp: (token: string, code: string) =>
+    request<{ success: true; token: string; refreshToken: string }>('/users/me/mfa/disable', { method: 'POST', token, body: { code } }),
   sendEmailChangeCode: (token: string, currentPassword: string, newEmail: string) =>
     request<{ success: boolean }>('/users/me/email-code', { method: 'POST', token, body: { currentPassword, newEmail } }),
   fetchRewards: (token: string) =>

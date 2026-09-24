@@ -18,8 +18,8 @@ import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { resolveMediaUrl } from '../../app/utils/appUtils';
 
-function getValidImageUrl(url: string | null | undefined): string | undefined {
-  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
+function getValidImageUrl(url: string | null | undefined, width?: number): string | undefined {
+  return resolveMediaUrl(url, ecobudApiOrigin, width ? { width, quality: 75 } : undefined) || undefined;
 }
 
 function getInitials(name: string): string {
@@ -86,7 +86,7 @@ function SwapListingCardComponent({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeCardImage, setActiveCardImage] = useState(0);
   const images = listing.images.length > 0
-    ? listing.images.map((img) => getValidImageUrl(img.url)).filter(Boolean) as string[]
+    ? listing.images.map((img) => getValidImageUrl(img.url, 720)).filter(Boolean) as string[]
     : [];
   const mainImage = images[0];
   const user = listing.user;
@@ -160,7 +160,7 @@ function SwapListingCardComponent({
                       ]}
                     >
                       <Image
-                        source={{ uri: imgUri }}
+                        source={{ uri: getValidImageUrl(listing.images[idx]?.url, 120) || imgUri }}
                         style={localStyles.cardThumbImage}
                         resizeMode="cover"
                         cachePolicy="memory-disk"

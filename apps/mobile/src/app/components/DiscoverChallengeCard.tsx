@@ -57,6 +57,7 @@ export function DiscoverChallengeCard({
             source={{ uri: imageUrl }}
             style={cardStyles.discoverImage}
             contentFit="cover"
+            cachePolicy="disk"
             thumbnailWidth={500}
             imageQuality={80}
           />

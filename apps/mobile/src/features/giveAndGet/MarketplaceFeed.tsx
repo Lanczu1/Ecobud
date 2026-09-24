@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
@@ -13,6 +14,7 @@ import {
   Modal,
   Pressable,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,8 +40,10 @@ export function MarketplaceFeed({
   activeTab,
   onTabChange,
   conversations,
+  conversationsLoading,
+  conversationsError,
+  onRetryConversations,
   onSelectConversation,
-  onRefreshConversations,
   model,
 }: {
   currentUserId?: string;
@@ -49,16 +53,25 @@ export function MarketplaceFeed({
   activeTab: FeedTab;
   onTabChange: (tab: FeedTab) => void;
   conversations: SwapConversation[];
+  conversationsLoading: boolean;
+  conversationsError: boolean;
+  onRetryConversations: () => void;
   onSelectConversation: (conversation: SwapConversation) => void;
-  onRefreshConversations?: () => void;
   model?: EcoBudMobileModel;
 }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [listings, setListings] = useState<SwapListing[]>([]);
+  const [hasMoreListings, setHasMoreListings] = useState(false);
+  const [loadingMoreListings, setLoadingMoreListings] = useState(false);
+  const listingsRequestRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const nextListingsOffsetRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [searchKeyboardHeight, setSearchKeyboardHeight] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<SwapCategory | 'all'>('all');
   const [selectedMeetup, setSelectedMeetup] = useState<MeetupMethod | 'all'>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
@@ -67,6 +80,15 @@ export function MarketplaceFeed({
   const [myListingsLoading, setMyListingsLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const createBtnScale = useRef(new Animated.Value(1)).current;
+  const feedScrollRef = useRef<FlatList<typeof feedRows[number]>>(null);
+  const searchBarY = useRef(0);
+  const searchFocused = useRef(false);
+  const pendingSearchScroll = useRef(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const handleCreatePressIn = () => {
     Animated.spring(createBtnScale, {
@@ -108,21 +130,56 @@ export function MarketplaceFeed({
   ];
 
   const loadListings = useCallback(async () => {
+    const requestId = ++listingsRequestRef.current;
     try {
       const data = await swapService.fetchListings({
-        search: searchQuery || undefined,
+        search: debouncedSearchQuery || undefined,
         category: selectedCategory === 'all' ? undefined : selectedCategory,
         meetupMethod: selectedMeetup === 'all' ? undefined : selectedMeetup,
         sortBy,
+        limit: 20,
+        offset: 0,
       });
+      if (requestId !== listingsRequestRef.current) return;
       setListings(data);
+      nextListingsOffsetRef.current = data.length;
+      setHasMoreListings(data.length === 20);
     } catch (err) {
       console.error('Failed to load listings:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [searchQuery, selectedCategory, selectedMeetup, sortBy]);
+  }, [debouncedSearchQuery, selectedCategory, selectedMeetup, sortBy]);
+
+  const loadMoreListings = useCallback(async () => {
+    if (activeTab !== 'browse' || loading || !hasMoreListings || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMoreListings(true);
+    const requestId = listingsRequestRef.current;
+    try {
+      const next = await swapService.fetchListings({
+        search: debouncedSearchQuery || undefined,
+        category: selectedCategory === 'all' ? undefined : selectedCategory,
+        meetupMethod: selectedMeetup === 'all' ? undefined : selectedMeetup,
+        sortBy,
+        limit: 20,
+        offset: nextListingsOffsetRef.current,
+      });
+      if (requestId !== listingsRequestRef.current) return;
+      nextListingsOffsetRef.current += next.length;
+      setListings((previous) => {
+        const known = new Set(previous.map((listing) => listing.id));
+        return [...previous, ...next.filter((listing) => !known.has(listing.id))];
+      });
+      setHasMoreListings(next.length === 20);
+    } catch (err) {
+      console.error('Failed to load more listings:', err);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMoreListings(false);
+    }
+  }, [activeTab, loading, hasMoreListings, debouncedSearchQuery, selectedCategory, selectedMeetup, sortBy]);
 
   const loadMyListings = useCallback(async () => {
     if (!currentUserId) return;
@@ -138,8 +195,8 @@ export function MarketplaceFeed({
   }, [currentUserId]);
 
   useEffect(() => {
-    loadListings();
-  }, [loadListings]);
+    if (activeTab === 'browse') loadListings();
+  }, [activeTab, loadListings]);
 
   useEffect(() => {
     if (activeTab === 'mylistings') {
@@ -169,35 +226,67 @@ export function MarketplaceFeed({
     setSearchQuery(text);
   }, []);
 
-  return (
-    <ScrollView 
-      style={[localStyles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={{ paddingBottom: verticalScale(96) + insets.bottom, backgroundColor: theme.colors.background }}
-      stickyHeaderIndices={[1]}
-      removeClippedSubviews={Platform.OS === 'android'}
-      scrollEventThrottle={32}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        activeTab === 'browse' ? (
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark}
-            colors={[isDark ? theme.colors.primary : ecoTheme.colors.primaryDark]}
-          />
-        ) : activeTab === 'mylistings' ? (
-          <RefreshControl
-            refreshing={myListingsLoading}
-            onRefresh={loadMyListings}
-            tintColor={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark}
-            colors={[isDark ? theme.colors.primary : ecoTheme.colors.primaryDark]}
-          />
-        ) : undefined
+  const scrollToSearch = useCallback(() => {
+    feedScrollRef.current?.scrollToOffset({ offset: Math.max(0, searchBarY.current - verticalScale(12)), animated: true });
+  }, []);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (searchFocused.current && activeTab !== 'chats') {
+        pendingSearchScroll.current = true;
+        setSearchKeyboardHeight(event.endCoordinates.height);
       }
-    >
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      pendingSearchScroll.current = false;
+      setSearchKeyboardHeight(0);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!searchKeyboardHeight || activeTab === 'chats') return;
+    const frame = requestAnimationFrame(() => {
+      if (pendingSearchScroll.current) scrollToSearch();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [searchKeyboardHeight, activeTab, scrollToSearch]);
+
+  const myListingsQuery = searchQuery.trim().toLocaleLowerCase();
+  const visibleMyListings = myListingsQuery
+    ? myListings.filter((listing) =>
+        [listing.title, listing.description, listing.category, listing.lookingFor]
+          .some((value) => value?.toLocaleLowerCase().includes(myListingsQuery))
+      )
+    : myListings;
+
+  const feedRows: Array<{ kind: 'hero' } | { kind: 'tabs' } | { kind: 'content' } | { kind: 'listing' | 'myListing'; listing: SwapListing }> = [
+    { kind: 'hero' }, { kind: 'tabs' }, { kind: 'content' },
+    ...(activeTab === 'browse' && !loading ? listings.map((listing) => ({ kind: 'listing' as const, listing })) : []),
+    ...(activeTab === 'mylistings' && !myListingsLoading ? visibleMyListings.map((listing) => ({ kind: 'myListing' as const, listing })) : []),
+  ];
+
+  return (
+    <>
+    <FlatList
+      ref={feedScrollRef}
+      data={feedRows}
+      keyExtractor={(item) => item.kind === 'listing' || item.kind === 'myListing' ? `${item.kind}-${item.listing.id}` : item.kind}
+      initialNumToRender={6}
+      maxToRenderPerBatch={5}
+      windowSize={5}
+      onEndReached={loadMoreListings}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={loadingMoreListings ? <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: verticalScale(14) }} /> : null}
+      renderItem={({ item }) => {
+        if (item.kind === 'hero') return (<>
       <View>
-        {/* Compact page header — TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
+        {/* Compact page header â€” TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
         <CoachMarkTarget
+          pollWhileActive={!model?.coachMarksReplay}
           name="giveAndGetHero"
           borderRadius={moderateScale(22)}
           active={Boolean(model?.coachMarksVisible && model?.coachMarksCurrentStep === 5)}
@@ -239,34 +328,40 @@ export function MarketplaceFeed({
           </LinearGradient>
         </CoachMarkTarget>
 
-        {/* Search bar */}
-        <View style={[localStyles.searchBar, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
-          <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
-          <TextInput
-            style={[localStyles.searchInput, { color: theme.colors.textPrimary }]}
-            placeholder="Search items to swap..."
-            placeholderTextColor={theme.colors.textMuted}
-            value={searchQuery}
-            onChangeText={handleSearch}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => setShowFilters(true)}
-            style={[localStyles.filterButton, isDark && { backgroundColor: theme.colors.primary }]}
+        {activeTab !== 'chats' && (
+          <View
+            onLayout={(event) => { searchBarY.current = event.nativeEvent.layout.y; }}
+            style={[localStyles.searchBar, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
           >
-            <Ionicons name="filter" size={16} color={isDark ? '#0E1512' : '#FFF'} />
-            {(selectedCategory !== 'all' || selectedMeetup !== 'all') && (
-              <View style={localStyles.filterDot} />
+            <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
+            <TextInput
+              style={[localStyles.searchInput, { color: theme.colors.textPrimary }]}
+              placeholder={activeTab === 'mylistings' ? 'Search my listings...' : 'Search items to swap...'}
+              placeholderTextColor={theme.colors.textMuted}
+              value={searchQuery}
+              onChangeText={handleSearch}
+              onFocus={() => { searchFocused.current = true; }}
+              onBlur={() => { searchFocused.current = false; }}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
-        </View>
+            {activeTab === 'browse' && (
+              <TouchableOpacity
+                onPress={() => setShowFilters(true)}
+                style={[localStyles.filterButton, isDark && { backgroundColor: theme.colors.primary }]}
+              >
+                <Ionicons name="filter" size={16} color={isDark ? '#0E1512' : '#FFF'} />
+                {(selectedCategory !== 'all' || selectedMeetup !== 'all') && <View style={localStyles.filterDot} />}
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-        <ScrollView
+        {activeTab === 'browse' && <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={localStyles.categoryScroll}
@@ -298,9 +393,11 @@ export function MarketplaceFeed({
               </Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </ScrollView>}
       </View>
 
+        </>);
+        if (item.kind === 'tabs') return (<>
       <View style={{ backgroundColor: theme.colors.background, zIndex: 10, paddingVertical: 4 }}>
         <ScrollView
           horizontal
@@ -323,10 +420,7 @@ export function MarketplaceFeed({
           </TouchableOpacity>
           <TouchableOpacity
             style={[localStyles.tabPill, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeTab === 'chats' && [localStyles.tabPillActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }]]}
-            onPress={() => {
-              onTabChange('chats');
-              onRefreshConversations?.();
-            }}
+            onPress={() => onTabChange('chats')}
           >
             <View style={localStyles.tabPillIconWrap}>
               <Ionicons
@@ -350,7 +444,6 @@ export function MarketplaceFeed({
             style={[localStyles.tabPill, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeTab === 'mylistings' && [localStyles.tabPillActive, { backgroundColor: isDark ? theme.colors.primary : '#126027', borderColor: isDark ? theme.colors.primary : '#126027' }]]}
             onPress={() => {
               onTabChange('mylistings');
-              loadMyListings();
             }}
           >
             <Ionicons
@@ -365,6 +458,8 @@ export function MarketplaceFeed({
         </ScrollView>
       </View>
 
+        </>);
+        if (item.kind === 'content') return (<>
       <Animated.View style={[localStyles.feedContent, { opacity: fadeAnim }]}>
         {activeTab === 'browse' ? (
           <>
@@ -401,9 +496,64 @@ export function MarketplaceFeed({
                 )}
               </View>
             ) : (
-              listings.map((listing) => {
-                return (
-                  <View key={listing.id}>
+              null
+            )}
+          </>
+        ) : activeTab === 'chats' ? (
+          <SwapChatList
+            conversations={conversations}
+            loading={conversationsLoading}
+            error={conversationsError}
+            onRetry={onRetryConversations}
+            currentUserId={currentUserId || ''}
+            onSelectConversation={onSelectConversation}
+          />
+        ) : (
+          <>
+            {myListingsLoading ? (
+              <>
+                <SwapListingSkeleton />
+                <SwapListingSkeleton />
+              </>
+            ) : visibleMyListings.length === 0 ? (
+              <View style={localStyles.emptyState}>
+                <Ionicons name="clipboard-outline" size={64} color={isDark ? theme.colors.primary : "#A7D5BA"} />
+                <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>{myListingsQuery ? 'No matching listings' : 'No listings yet'}</Text>
+                <Text style={[localStyles.emptySubtitle, { color: theme.colors.textMuted }]}>
+                  {myListingsQuery ? 'Try another search term.' : 'Create a listing to see it here with its approval status.'}
+                </Text>
+                {!myListingsQuery && <TouchableOpacity onPress={onCreateListing} style={[localStyles.emptyButton, isDark && { backgroundColor: theme.colors.primary }]}>
+                  <Text style={[localStyles.emptyButtonText, isDark && { color: '#0E1512' }]}>Create Listing</Text>
+                </TouchableOpacity>}
+              </View>
+            ) : null}
+          </>
+        )}
+      </Animated.View>
+
+        </>);
+        const listing = item.listing;
+        if (item.kind === 'myListing') {
+          const status = listing.approvalStatus || 'pending';
+          const statusColor = status === 'approved' ? '#10B981' : status === 'rejected' ? '#EF4444' : '#F59E0B';
+          const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending Review';
+          return <Animated.View style={{ opacity: fadeAnim }}>
+            <View style={{ paddingHorizontal: scale(16) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
+                </View>
+                {status === 'pending' && <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Waiting for admin approval</Text>}
+                {status === 'rejected' && listing.description &&
+                  <Text style={{ fontSize: 11, color: '#EF4444' }} numberOfLines={1}>Reason: {listing.description}</Text>}
+              </View>
+              <SwapListingCard listing={listing} isOwnListing={true} onPress={() => onSelectListing(listing)} />
+            </View>
+          </Animated.View>;
+        }
+        return <Animated.View style={{ opacity: fadeAnim }}>
+                  <View style={{ paddingHorizontal: scale(16) }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' }} />
@@ -424,66 +574,33 @@ export function MarketplaceFeed({
                       }
                     />
                   </View>
-                );
-              })
-            )}
-          </>
-        ) : activeTab === 'chats' ? (
-          <SwapChatList
-            conversations={conversations}
-            currentUserId={currentUserId || ''}
-            onSelectConversation={onSelectConversation}
-          />
-        ) : (
-          <>
-            {myListingsLoading ? (
-              <>
-                <SwapListingSkeleton />
-                <SwapListingSkeleton />
-              </>
-            ) : myListings.length === 0 ? (
-              <View style={localStyles.emptyState}>
-                <Ionicons name="clipboard-outline" size={64} color={isDark ? theme.colors.primary : "#A7D5BA"} />
-                <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>No listings yet</Text>
-                <Text style={[localStyles.emptySubtitle, { color: theme.colors.textMuted }]}>
-                  Create a listing to see it here with its approval status.
-                </Text>
-                <TouchableOpacity onPress={onCreateListing} style={[localStyles.emptyButton, isDark && { backgroundColor: theme.colors.primary }]}>
-                  <Text style={[localStyles.emptyButtonText, isDark && { color: '#0E1512' }]}>Create Listing</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              myListings.map((listing) => {
-                const status = listing.approvalStatus || 'pending';
-                const statusColor = status === 'approved' ? '#10B981' : status === 'rejected' ? '#EF4444' : '#F59E0B';
-                const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending Review';
-                return (
-                  <View key={listing.id}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
-                      </View>
-                      {status === 'pending' && (
-                        <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Waiting for admin approval</Text>
-                      )}
-                      {status === 'rejected' && listing.description && (
-                        <Text style={{ fontSize: 11, color: '#EF4444' }} numberOfLines={1}>Reason: {listing.description}</Text>
-                      )}
-                    </View>
-                    <SwapListingCard
-                      listing={listing}
-                      isOwnListing={true}
-                      onPress={() => onSelectListing(listing)}
-                    />
-                  </View>
-                );
-              })
-            )}
-          </>
-        )}
-      </Animated.View>
-
+        </Animated.View>;
+      }}
+      onContentSizeChange={() => {
+        if (!pendingSearchScroll.current) return;
+        pendingSearchScroll.current = false;
+        scrollToSearch();
+      }}
+      style={[localStyles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={{ paddingBottom: verticalScale(96) + insets.bottom + searchKeyboardHeight, backgroundColor: theme.colors.background }}
+      stickyHeaderIndices={[1]}
+      removeClippedSubviews={Platform.OS === 'android'}
+      scrollEventThrottle={32}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        activeTab === 'browse' ? (
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh}
+            tintColor={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark}
+            colors={[isDark ? theme.colors.primary : ecoTheme.colors.primaryDark]} />
+        ) : activeTab === 'mylistings' ? (
+          <RefreshControl refreshing={myListingsLoading} onRefresh={loadMyListings}
+            tintColor={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark}
+            colors={[isDark ? theme.colors.primary : ecoTheme.colors.primaryDark]} />
+        ) : undefined
+      }
+    />
       <Modal
         visible={showFilters}
         transparent
@@ -570,7 +687,8 @@ export function MarketplaceFeed({
           </View>
         </View>
       </Modal>
-    </ScrollView>
+
+    </>
   );
 }
 
@@ -701,7 +819,7 @@ const localStyles = StyleSheet.create({
   },
   feedContent: {
     padding: scale(16),
-    paddingBottom: verticalScale(120),
+    paddingBottom: 0,
   },
   resultsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(12) },
   resultsTitle: { color: ecoTheme.colors.text, fontSize: responsiveFontSize(17), fontWeight: '900', letterSpacing: -0.25 },

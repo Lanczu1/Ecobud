@@ -39,6 +39,9 @@ export const homeService = {
   googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
     ecobudApi.googleLogin(payload),
 
+  verifyMfaChallenge: (challengeToken: string, code: string) =>
+    ecobudApi.verifyMfaChallenge(challengeToken, code),
+
   checkEmail: (email: string, accessToken: string) =>
     ecobudApi.checkEmailExists(email.trim(), accessToken),
 
@@ -97,6 +100,12 @@ export const homeService = {
 
   updateSecuritySettings: (token: string, payload: { currentPassword: string; newEmail?: string; emailCode?: string; newPassword?: string }) =>
     ecobudApi.updateSecuritySettings(token, payload),
+
+  getTotpStatus: (token: string) => ecobudApi.getTotpStatus(token),
+  beginTotpEnrollment: (token: string) => ecobudApi.beginTotpEnrollment(token),
+  confirmTotpEnrollment: (token: string, enrollmentId: string, code: string) => ecobudApi.confirmTotpEnrollment(token, enrollmentId, code),
+  rotateMfaRecoveryCodes: (token: string, code: string) => ecobudApi.rotateMfaRecoveryCodes(token, code),
+  disableTotp: (token: string, code: string) => ecobudApi.disableTotp(token, code),
 
   // ─── Actions ───────────────────────────────────────────────────────────────────
 

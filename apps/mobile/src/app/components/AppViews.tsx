@@ -7,6 +7,8 @@ import {
   Animated,
   Platform,
   ScrollView,
+  FlatList,
+  RefreshControl,
   ImageBackground,
   Pressable,
   Easing,
@@ -14,6 +16,7 @@ import {
   useWindowDimensions,
   StyleSheet,
   Alert,
+  Keyboard,
   TextInput,
   Modal,
   Switch,
@@ -54,6 +57,7 @@ import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard, DiscoverChallengeSkeleton } from './DiscoverChallengeCard';
+import { FastImage } from '../../shared/ui/FastImage';
 import { LearnLessonCard } from './LearnLessonCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
@@ -69,7 +73,7 @@ const getValidImageUrl = (url: string | null | undefined) => {
 
 type ContentLayoutMode = 'grid' | 'list';
 
-function useContentLayoutPreference(storageKey: string, initialMode: ContentLayoutMode = 'list') {
+function useContentLayoutPreference(storageKey: string, initialMode: ContentLayoutMode = 'grid') {
   const [layoutMode, setLayoutModeState] = useState<ContentLayoutMode>(() => {
     const savedMode = mobileStorage.getItemSync(storageKey);
     return savedMode === 'grid' || savedMode === 'list' ? savedMode : initialMode;
@@ -848,10 +852,33 @@ export function GroupedChallengeSkeleton() {
   );
 }
 
-export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
+export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight = 0 }: {
+  model: EcoBudMobileModel;
+  onSearchKeyboardChange?: (keyboardHeight: number, searchScreenY?: number) => void;
+  keyboardHeight?: number;
+}) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isCardsLoading = (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
+  const searchBarRef = useRef<View>(null);
+  const searchFocusedRef = useRef(false);
+  const challengeListRef = useRef<FlatList<ChallengeListItem>>(null);
+  const challengeScrollOffsetRef = useRef(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (!searchFocusedRef.current) return;
+      searchBarRef.current?.measureInWindow((_x, y) => {
+        onSearchKeyboardChange?.(event.endCoordinates.height, y);
+        requestAnimationFrame(() => challengeListRef.current?.scrollToOffset({ offset: Math.max(0, challengeScrollOffsetRef.current + y - verticalScale(80)), animated: true }));
+      });
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => onSearchKeyboardChange?.(0));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [onSearchKeyboardChange]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
@@ -1059,11 +1086,69 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
   const currentActiveList = viewMode === 'Discover' ? discoverChallenges : [];
   const challengeColumnCount = width >= 900 ? 3 : 2;
   const challengeGridGap = scale(width < 360 ? 8 : 14);
+  const challengeRows = React.useMemo<ChallengeWithProgress[][]>(() => contentLayout === 'grid'
+    ? Array.from({ length: Math.ceil(currentActiveList.length / challengeColumnCount) }, (_, index) =>
+        currentActiveList.slice(index * challengeColumnCount, (index + 1) * challengeColumnCount))
+    : currentActiveList.map((challenge) => [challenge]),
+    [currentActiveList, contentLayout, challengeColumnCount]);
+
+  type ChallengeListItem =
+    | { kind: 'discover'; id: string; row: ChallengeWithProgress[] }
+    | { kind: 'myTask'; id: string; group: InProgressGroup }
+    | { kind: 'history'; id: string; group: CompletedGroup };
+  const challengeItems: ChallengeListItem[] = viewMode === 'Discover'
+    ? (isCardsLoading ? [] : challengeRows.map((row) => ({
+        kind: 'discover' as const,
+        id: row.map((challenge) => challenge.uniqueId || challenge.id).join(':'),
+        row,
+      })))
+    : viewMode === 'My Tasks'
+      ? (isCardsLoading ? [] : inProgressGroups.map((group) => ({ kind: 'myTask' as const, id: group.challenge.id, group })))
+      : (isCardsLoading ? [] : completedGroups.map((group) => ({ kind: 'history' as const, id: group.challenge.id, group })));
+  const challengeItemsRef = useRef(challengeItems);
+  challengeItemsRef.current = challengeItems;
+  const prefetchedChallengeUrlsRef = useRef(new Set<string>());
+  const prefetchInFlightRef = useRef(false);
+  const prefetchUpcomingChallenges = useRef(({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+    if (prefetchInFlightRef.current || viewableItems.length === 0) return;
+    const lastVisibleIndex = Math.max(...viewableItems.map((entry) => entry.index ?? -1));
+    const upcoming = challengeItemsRef.current.slice(lastVisibleIndex + 1, lastVisibleIndex + 3);
+    const urls = upcoming.flatMap((item) => item.kind === 'discover'
+      ? item.row.map((challenge) => challenge.imageUrl)
+      : [item.group.challenge.imageUrl])
+      .filter((url): url is string => Boolean(url))
+      .filter((url) => !prefetchedChallengeUrlsRef.current.has(url))
+      .slice(0, 4);
+    if (urls.length === 0) return;
+    urls.forEach((url) => prefetchedChallengeUrlsRef.current.add(url));
+    if (prefetchedChallengeUrlsRef.current.size > 32) {
+      const oldest = prefetchedChallengeUrlsRef.current.values().next().value;
+      if (oldest) prefetchedChallengeUrlsRef.current.delete(oldest);
+    }
+    prefetchInFlightRef.current = true;
+    void FastImage.prefetch(urls).catch(() => {}).finally(() => { prefetchInFlightRef.current = false; });
+  }).current;
 
   return (
     <>
+      <FlatList<ChallengeListItem>
+        ref={challengeListRef}
+        style={{ flex: 1, backgroundColor: theme.colors.background }}
+        onScroll={(event) => { challengeScrollOffsetRef.current = event.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={32}
+        data={challengeItems}
+        onViewableItemsChanged={prefetchUpcomingChallenges}
+        keyExtractor={(item) => `${item.kind}-${item.id}`}
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+        contentContainerStyle={{ paddingBottom: 100 + keyboardHeight }}
+        refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.refreshEverything()}
+          tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
+        ListHeaderComponent={<>
       <TopNavbar model={model} />
-      <View style={styles.homeContent}>
+      <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         <View style={{ marginBottom: verticalScale(4) }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
             <View style={{ flex: 1, paddingRight: scale(8) }}>
@@ -1176,7 +1261,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
         </View>
 
         {/* Discovery & Filtering Section */}
-        <View style={[localStyles.challengeSearch, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder }]}>
+        <View ref={searchBarRef} collapsable={false} style={[localStyles.challengeSearch, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder }]}>
           <Ionicons name="search-outline" size={20} color={theme.colors.textMuted} style={{ marginRight: 10 }} />
           <TextInput
             style={{ flex: 1, fontSize: 16, color: theme.colors.textPrimary }}
@@ -1184,6 +1269,8 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             placeholderTextColor={theme.colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => { searchFocusedRef.current = true; }}
+            onBlur={() => { searchFocusedRef.current = false; }}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear challenge search" onPress={() => setSearchQuery('')} hitSlop={8}>
@@ -1313,49 +1400,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
             ) : (
               <View>{[1, 2, 3].map((item) => <DiscoverChallengeSkeleton key={item} />)}</View>
             )
-          ) : (
-            <View style={{ gap: contentLayout === 'grid' ? challengeGridGap : 0 }}>
-              {(contentLayout === 'grid'
-                ? Array.from({ length: Math.ceil(currentActiveList.length / challengeColumnCount) }, (_, rowIndex) =>
-                    currentActiveList.slice(rowIndex * challengeColumnCount, (rowIndex + 1) * challengeColumnCount)
-                  )
-                : currentActiveList.map((challenge) => [challenge])
-              ).map((challengeRow, rowIndex) => (
-                <View key={`challenge-row-${rowIndex}`} style={{ flexDirection: 'row', gap: contentLayout === 'grid' ? challengeGridGap : 0 }}>
-                  {challengeRow.map((challenge, columnIndex) => {
-                    const challengeIndex = contentLayout === 'grid' ? rowIndex * challengeColumnCount + columnIndex : rowIndex;
-                    const card = (
-                      <DiscoverChallengeCard
-                        challenge={challenge}
-                        isTablet={contentLayout === 'grid'}
-                        style={{ marginBottom: contentLayout === 'grid' ? 0 : verticalScale(16), width: '100%' }}
-                        onPress={() => model.openChallengeMission(challenge)}
-                      />
-                    );
-
-                    return (
-                      <View key={challenge.uniqueId || challenge.id} style={{ flex: 1 }}>
-                        {challengeIndex === 0 ? (
-                          <CoachMarkTarget
-                            name="featuredChallenge"
-                            borderRadius={moderateScale(22)}
-                            active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
-                            onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}
-                          >
-                            {card}
-                          </CoachMarkTarget>
-                        ) : card}
-                      </View>
-                    );
-                  })}
-                  {contentLayout === 'grid' && challengeRow.length < challengeColumnCount &&
-                    Array.from({ length: challengeColumnCount - challengeRow.length }).map((_, spacerIndex) => (
-                      <View key={`challenge-spacer-${spacerIndex}`} style={{ flex: 1 }} />
-                    ))}
-                </View>
-              ))}
-            </View>
-          )
+          ) : null
         )}
 
         {/* === VIEW MODE 2: MY TASKS TAB (GROUPED BY CHALLENGE TEMPLATE) === */}
@@ -1366,9 +1411,38 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                 <GroupedChallengeSkeleton key={`my-tasks-skel-${idx}`} />
               ))}
             </View>
-          ) : (
+          ) : null
+        )}
+
+
+        {/* === VIEW MODE 3: HISTORY TAB (GROUPED COMPLETED CHALLENGES) === */}
+        {viewMode === 'History' && (
+          isCardsLoading ? (
             <View style={{ gap: 14 }}>
-              {inProgressGroups.map((group) => {
+              {Array.from({ length: Math.max(2, completedGroups.length || 0) }).map((_, idx) => (
+                <GroupedChallengeSkeleton key={`history-skel-${idx}`} />
+              ))}
+            </View>
+          ) : null
+        )}
+
+
+        {model.challenges.length === 0 && (
+          <View style={{ padding: 40, alignItems: 'center', opacity: 0.5 }}>
+            <Ionicons name="trophy-outline" size={48} color="#126027" />
+            <Text style={[styles.sectionHeadline, { marginTop: 16 }]}>Check back soon!</Text>
+            <Text style={styles.pageSubtitle}>Admins are preparing new challenges for the community.</Text>
+          </View>
+        )}
+
+
+
+      </View>
+        </>}
+        renderItem={({ item, index: rowIndex }) => {
+          if (item.kind === 'myTask') {
+            const group = item.group;
+            const renderGroup = () => {
                 const { challenge, submissions, totalQuantity, approvedCollectionCount, pendingCount, rejectedCount } = group;
                 const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
                 const isExpanded = expandedTaskGroups[challenge.id] !== false; // default true
@@ -1400,7 +1474,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       {/* Image Thumbnail */}
                       <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
                         {challenge.imageUrl ? (
-                          <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                          <FastImage source={{ uri: challenge.imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" thumbnailWidth={500} imageQuality={80} />
                         ) : (
                           <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
                             <Ionicons name={isImageMission ? "camera-outline" : "leaf-outline"} size={30} color={isDark ? theme.colors.primary : "#126027"} />
@@ -1624,22 +1698,12 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   )}
                 </View>
               );
-            })}
-          </View>
-          )
-        )}
-
-        {/* === VIEW MODE 3: HISTORY TAB (GROUPED COMPLETED CHALLENGES) === */}
-        {viewMode === 'History' && (
-          isCardsLoading ? (
-            <View style={{ gap: 14 }}>
-              {Array.from({ length: Math.max(2, completedGroups.length || 0) }).map((_, idx) => (
-                <GroupedChallengeSkeleton key={`history-skel-${idx}`} />
-              ))}
-            </View>
-          ) : (
-            <View style={{ gap: 14 }}>
-              {completedGroups.map((group) => {
+            };
+            return <View style={{ paddingHorizontal: scale(24), marginBottom: 14 }}>{renderGroup()}</View>;
+          }
+          if (item.kind === 'history') {
+            const group = item.group;
+            const renderGroup = () => {
                 const { challenge, submissions, totalQuantity, totalEarnedExp, totalEarnedCoins, unclaimedCount, claimedCount } = group;
                 const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
                 const isExpanded = expandedTaskGroups[`history-${challenge.id}`] !== false; // default true
@@ -1671,7 +1735,7 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                       {/* Image Thumbnail */}
                       <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
                         {challenge.imageUrl ? (
-                          <Image source={{ uri: getValidImageUrl(challenge.imageUrl) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                          <FastImage source={{ uri: challenge.imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" thumbnailWidth={500} imageQuality={80} />
                         ) : (
                           <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
                             <Ionicons name="trophy" size={30} color={isDark ? theme.colors.primary : "#126027"} />
@@ -1848,23 +1912,31 @@ export function ChallengesView({ model }: { model: EcoBudMobileModel }) {
                   )}
                 </View>
               );
+            };
+            return <View style={{ paddingHorizontal: scale(24), marginBottom: 14 }}>{renderGroup()}</View>;
+          }
+          const challengeRow = item.row;
+          return (
+          <View style={{ flexDirection: 'row', gap: contentLayout === 'grid' ? challengeGridGap : 0, paddingHorizontal: scale(24), marginBottom: contentLayout === 'grid' ? challengeGridGap : 0 }}>
+            {challengeRow.map((challenge, columnIndex) => {
+              const challengeIndex = contentLayout === 'grid' ? rowIndex * challengeColumnCount + columnIndex : rowIndex;
+              const card = <DiscoverChallengeCard challenge={challenge} isTablet={contentLayout === 'grid'}
+                style={{ marginBottom: contentLayout === 'grid' ? 0 : verticalScale(16), width: '100%' }}
+                onPress={() => model.openChallengeMission(challenge)} />;
+              return <View key={challenge.uniqueId || challenge.id} style={{ flex: 1 }}>
+                {challengeIndex === 0 ? <CoachMarkTarget name="featuredChallenge" borderRadius={moderateScale(22)}
+                  active={model.coachMarksVisible && model.coachMarksCurrentStep === 3}
+                  pollWhileActive={!model.coachMarksReplay}
+                  onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}>{card}</CoachMarkTarget> : card}
+              </View>;
             })}
+            {contentLayout === 'grid' && challengeRow.length < challengeColumnCount &&
+              Array.from({ length: challengeColumnCount - challengeRow.length }).map((_, spacerIndex) =>
+                <View key={`challenge-spacer-${spacerIndex}`} style={{ flex: 1 }} />)}
           </View>
-          )
-        )}
-
-        {model.challenges.length === 0 && (
-          <View style={{ padding: 40, alignItems: 'center', opacity: 0.5 }}>
-            <Ionicons name="trophy-outline" size={48} color="#126027" />
-            <Text style={[styles.sectionHeadline, { marginTop: 16 }]}>Check back soon!</Text>
-            <Text style={styles.pageSubtitle}>Admins are preparing new challenges for the community.</Text>
-          </View>
-        )}
-
-
-
-        <View style={{ height: 100 }} />
-      </View>
+          );
+        }}
+      />
 
       <RejectionModal
         visible={rejectionModal.visible}
@@ -2059,6 +2131,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               name="ecoStreak"
               borderRadius={moderateScale(24)}
               active={model.coachMarksVisible && model.coachMarksCurrentStep === 2}
+              pollWhileActive={!model.coachMarksReplay}
               onMeasure={(rect) => {
                 model.setSpotlightTargetRect?.(rect);
               }}
@@ -2623,6 +2696,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
             name="ecoCoins"
             borderRadius={isSmallDevice ? moderateScale(12) : moderateScale(16)}
             active={model.coachMarksVisible && model.coachMarksCurrentStep === 1}
+            pollWhileActive={!model.coachMarksReplay}
             onMeasure={(rect) => {
               model.setSpotlightTargetRect?.(rect);
             }}

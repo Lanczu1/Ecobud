@@ -9,6 +9,7 @@ import {
   Image,
   Alert,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   Modal,
@@ -71,6 +72,53 @@ export function CreateSwapListing({
   const [step, setStep] = useState(1);
   const [showImageError, setShowImageError] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const formScrollRef = useRef<ScrollView>(null);
+  const formViewportRef = useRef<View>(null);
+  const formScrollYRef = useRef(0);
+  const keyboardTopRef = useRef<number | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scrollFocusedFieldIntoView = React.useCallback(() => {
+    const focusedInput = TextInput.State.currentlyFocusedInput();
+    const keyboardTop = keyboardTopRef.current;
+    if (!focusedInput || keyboardTop === null) return;
+
+    formViewportRef.current?.measureInWindow((_scrollX, scrollTop) => {
+      focusedInput.measureInWindow((_inputX, inputTop) => {
+        const fieldTop = Math.min(scrollTop + 56, keyboardTop - 100);
+        const targetY = Math.max(0, formScrollYRef.current + inputTop - fieldTop);
+        formScrollRef.current?.scrollTo({ y: targetY, animated: true });
+      });
+    });
+  }, []);
+
+  const scheduleFocusedFieldScroll = React.useCallback(() => {
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(scrollFocusedFieldIntoView, 90);
+  }, [scrollFocusedFieldIntoView]);
+
+  React.useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', (event) => {
+      keyboardTopRef.current = event.endCoordinates.screenY;
+      setKeyboardHeight(event.endCoordinates.height);
+      scheduleFocusedFieldScroll();
+    });
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardTopRef.current = null;
+      setKeyboardHeight(0);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
+  }, [scheduleFocusedFieldScroll]);
+
+  const handleFieldFocus = () => {
+    if (keyboardTopRef.current !== null) scheduleFocusedFieldScroll();
+  };
 
   React.useEffect(() => {
     Animated.timing(slideAnim, {
@@ -221,12 +269,15 @@ export function CreateSwapListing({
           </Text>
         </LinearGradient>
 
+        <View ref={formViewportRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView
+          ref={formScrollRef}
           style={[localStyles.body, { backgroundColor: theme.colors.background }]}
-          contentContainerStyle={[localStyles.bodyContent, { backgroundColor: theme.colors.background }]}
+          contentContainerStyle={[localStyles.bodyContent, { backgroundColor: theme.colors.background, paddingBottom: verticalScale(24) + keyboardHeight }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
-          automaticallyAdjustKeyboardInsets
+          onScroll={(event) => { formScrollYRef.current = event.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
         >
           {step === 1 && (
             <>
@@ -279,6 +330,7 @@ export function CreateSwapListing({
                 placeholderTextColor={theme.colors.textMuted}
                 value={title}
                 onChangeText={setTitle}
+                onFocus={handleFieldFocus}
               />
 
               <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Category *</Text>
@@ -316,6 +368,7 @@ export function CreateSwapListing({
                 placeholderTextColor={theme.colors.textMuted}
                 value={quantity}
                 onChangeText={(text) => setQuantity(text.replace(/[^0-9]/g, ''))}
+                onFocus={handleFieldFocus}
                 keyboardType="numeric"
               />
 
@@ -354,6 +407,7 @@ export function CreateSwapListing({
                 placeholderTextColor={theme.colors.textMuted}
                 value={description}
                 onChangeText={setDescription}
+                onFocus={handleFieldFocus}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -413,6 +467,7 @@ export function CreateSwapListing({
                     placeholderTextColor={theme.colors.textMuted}
                     value={lookingFor}
                     onChangeText={setLookingFor}
+                    onFocus={handleFieldFocus}
                   />
 
                   <Text style={[localStyles.suggestionLabel, isDark && { color: theme.colors.textMuted }]}>Popular requests:</Text>
@@ -480,6 +535,7 @@ export function CreateSwapListing({
                     placeholderTextColor={theme.colors.textMuted}
                     value={meetupLocation}
                     onChangeText={setMeetupLocation}
+                    onFocus={handleFieldFocus}
                   />
                   <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Landmark</Text>
                   <TextInput
@@ -488,6 +544,7 @@ export function CreateSwapListing({
                     placeholderTextColor={theme.colors.textMuted}
                     value={meetupLandmark}
                     onChangeText={setMeetupLandmark}
+                    onFocus={handleFieldFocus}
                   />
                 </>
               )}
@@ -517,6 +574,7 @@ export function CreateSwapListing({
                 placeholderTextColor={theme.colors.textMuted}
                 value={city}
                 onChangeText={setCity}
+                onFocus={handleFieldFocus}
               />
               <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Province</Text>
               <TextInput
@@ -525,6 +583,7 @@ export function CreateSwapListing({
                 placeholderTextColor={theme.colors.textMuted}
                 value={province}
                 onChangeText={setProvince}
+                onFocus={handleFieldFocus}
               />
 
               <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Additional Notes</Text>
@@ -534,6 +593,7 @@ export function CreateSwapListing({
                 placeholderTextColor={theme.colors.textMuted}
                 value={meetupNotes}
                 onChangeText={setMeetupNotes}
+                onFocus={handleFieldFocus}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
@@ -576,6 +636,7 @@ export function CreateSwapListing({
             </TouchableOpacity>
           </View>
         </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </View>
 

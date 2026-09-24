@@ -9,6 +9,7 @@ import {
   type QuizQuestion,
   type RewardsData,
   type SessionPayload,
+  type MfaChallengePayload,
   type TrackerData,
   type TransparencyFeed,
   type HabitSummary,
@@ -25,6 +26,7 @@ export type {
   QuizQuestion,
   RewardsData,
   SessionPayload,
+  MfaChallengePayload,
   TrackerData,
   TransparencyFeed,
   HabitSummary,
@@ -206,14 +208,15 @@ export interface EcoBudMobileModel {
   completeOnboarding: () => Promise<void>;
   continueWithReadOnlyAccess: () => Promise<void>;
   leaveReadOnlyAccess: () => Promise<void>;
-  handleLoginArgs: (email: string, pass: string) => Promise<void>;
+  handleLoginArgs: (email: string, pass: string) => Promise<MfaChallengePayload | void>;
+  handleVerifyMfaChallenge: (challengeToken: string, code: string) => Promise<void>;
   handleGoogleSignIn: () => Promise<{
     requiresBarangay: boolean;
     email: string;
     displayName: string;
     avatarUrl: string;
     onConfirmBarangay: (chosenBarangay: string) => Promise<void>;
-  } | void>;
+  } | MfaChallengePayload | void>;
   handleSignUpArgs: (username: string, email: string, pass: string, city: string, otpCode?: string) => Promise<void>;
   handleSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
@@ -260,9 +263,15 @@ export interface EcoBudMobileModel {
   handleUpdateProfileImage: (uri: string) => Promise<any>;
   handleUpdateProfile: (payload: { displayName?: string; email?: string; city?: string }) => Promise<void>;
   handleUpdateSecuritySettings: (payload: { currentPassword: string; newEmail?: string; emailCode?: string; newPassword?: string }) => Promise<void>;
+  getTotpStatus: () => Promise<{ enabled: boolean; enabledAt: string | null; remainingRecoveryCodes: number }>;
+  beginTotpEnrollment: () => Promise<{ enrollmentId: string; secret: string; otpauthUri: string; expiresAt: string }>;
+  confirmTotpEnrollment: (enrollmentId: string, code: string) => Promise<string[]>;
+  rotateMfaRecoveryCodes: (code: string) => Promise<string[]>;
+  disableTotp: (code: string) => Promise<void>;
   coachMarksCurrentStep: number;
   setCoachMarksCurrentStep: (step: number) => void;
   coachMarksVisible: boolean;
+  coachMarksReplay: boolean;
   completeCoachMarks: () => void;
   showCoachMarks: () => void;
   spotlightTargetRect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null;

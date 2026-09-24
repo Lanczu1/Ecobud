@@ -18,6 +18,9 @@ model User {
   passwordHash                 String                    @map("password")
   sessionVersion               Int                       @default(0)
   googleIdentityId             String?                   @unique
+  totpSecretEncrypted          String?                   @map("totp_secret_encrypted")
+  totpEnabledAt                DateTime?                 @map("totp_enabled_at")
+  totpLastUsedStep             BigInt?                   @map("totp_last_used_step")
   role                         UserRole                  @default(user)
   status                       UserStatus                @default(pending)
   points                       Int                       @default(0)
@@ -45,6 +48,9 @@ model User {
   rewardTransactions           RewardTransaction[]
   notifications                Notification[]
   challengeAiAttemptLimits     ChallengeAiAttemptLimit[]
+  mfaLoginChallenges           MfaLoginChallenge[]
+  mfaRecoveryCodes             MfaRecoveryCode[]
+  mfaEnrollments               MfaEnrollment[]
   giveAndGetItems              GiveAndGetItem[]
   swapListings                 SwapListing[]
   swapRequestsSent             SwapRequest[]             @relation("SwapRequestFrom")
@@ -53,6 +59,44 @@ model User {
   @@index([role, createdAt], map: "users_role_created_at_idx")
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
   @@map("users")
+}
+
+model MfaLoginChallenge {
+  id        String    @id
+  userId    String    @map("user_id")
+  clientType String   @map("client_type")
+  expiresAt DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId, consumedAt])
+  @@map("mfa_login_challenges")
+}
+
+model MfaRecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@map("mfa_recovery_codes")
+}
+
+model MfaEnrollment {
+  id               String   @id
+  userId           String   @map("user_id")
+  secretEncrypted  String   @map("secret_encrypted")
+  expiresAt        DateTime @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("mfa_enrollments")
 }
 
 model Profile {
