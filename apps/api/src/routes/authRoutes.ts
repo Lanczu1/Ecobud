@@ -102,6 +102,7 @@ const toAuthResponse = (user: {
   sessionVersion: number;
   role: AccessRole;
   status: 'active' | 'pending' | 'suspended';
+  googleIdentityId: string | null;
   points: number;
   currentStreak: number;
   lastActionDate: Date | null;
@@ -131,6 +132,7 @@ const toAuthResponse = (user: {
       email: user.email,
       role: user.role,
       status: user.status,
+      isGoogleAccount: user.googleIdentityId != null,
       points: user.points,
       currentStreak: resolveLiveStreak(user.currentStreak, user.lastActionDate),
       displayName: user.profile?.displayName ?? user.name,

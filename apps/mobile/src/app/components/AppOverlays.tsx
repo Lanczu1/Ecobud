@@ -45,6 +45,7 @@ import { styles } from '../styles/appStyles';
 import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LinearGradient } from 'expo-linear-gradient';
+import QRCode from 'react-native-qrcode-svg';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { AiThinkingBubble } from './AiThinkingBubble';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
@@ -6734,6 +6735,7 @@ function useKeyboardFormScroll(enabled = true) {
 
 export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
+  const isGoogleAccount = model.session?.user.isGoogleAccount === true || model.profile?.isGoogleAccount === true;
   const currentDisplayName = model.profile?.profile?.displayName ?? model.session?.user.displayName ?? '';
   const currentEmail = model.session?.user.email ?? '';
   const currentCity = model.profile?.profile?.city ?? '';
@@ -6744,6 +6746,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
   const [isBarangayPickerOpen, setIsBarangayPickerOpen] = React.useState(false);
   const [barangaySearchQuery, setBarangaySearchQuery] = React.useState('');
   const [barangayKeyboardTop, setBarangayKeyboardTop] = React.useState<number | null>(null);
+  const [dialog, setDialog] = React.useState<SettingsDialogState | null>(null);
   const insets = useSafeAreaInsets();
   const formScroll = useKeyboardFormScroll(!isBarangayPickerOpen);
 
@@ -6771,15 +6774,15 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
     const trimmedEmail = email.trim();
 
     if (!trimmedName) {
-      Alert.alert('Error', 'Username cannot be empty.');
+      setDialog({ title: 'Add a username', message: 'Username cannot be empty.', tone: 'error' });
       return;
     }
     if (trimmedName.length < 2) {
-      Alert.alert('Error', 'Username must be at least 2 characters.');
+      setDialog({ title: 'Username is too short', message: 'Enter at least 2 characters.', tone: 'error' });
       return;
     }
     if (!trimmedEmail) {
-      Alert.alert('Error', 'Email address cannot be empty.');
+      setDialog({ title: 'Add an email address', message: 'Email address cannot be empty.', tone: 'error' });
       return;
     }
 
@@ -6788,9 +6791,9 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
         displayName: trimmedName,
         city: selectedBarangay,
       });
-      model.setActiveOverlay(null);
-    } catch (e) {
-      // error handled in hook
+      setDialog({ title: 'Profile updated', message: 'Your profile changes have been saved.', tone: 'success', confirmLabel: 'Done', onConfirm: () => model.setActiveOverlay(null) });
+    } catch (error) {
+      setDialog({ title: 'Could not update profile', message: error instanceof Error ? error.message : 'Please try again.', tone: 'error' });
     }
   };
 
@@ -6839,7 +6842,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
               editable={false}
               autoCapitalize="none"
               keyboardType="email-address"
-              placeholder="Change email in Privacy & Settings"
+              placeholder={isGoogleAccount ? 'Managed through your Google Account' : 'Change email in Privacy & Settings'}
               placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
@@ -6986,7 +6989,62 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
       </Modal>
+      <SettingsDialogModal dialog={dialog} theme={theme} isDark={isDark} onClose={() => setDialog(null)} onConfirm={() => {
+        const action = dialog?.onConfirm;
+        setDialog(null);
+        action?.();
+      }} />
     </OverlayScaffold>
+  );
+}
+
+type SettingsDialogState = {
+  title: string;
+  message: string;
+  tone?: 'info' | 'success' | 'error' | 'danger';
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm?: () => void;
+};
+
+function SettingsDialogModal({
+  dialog,
+  theme,
+  isDark,
+  onClose,
+  onConfirm,
+}: {
+  dialog: SettingsDialogState | null;
+  theme: ReturnType<typeof useTheme>['theme'];
+  isDark: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const tone = dialog?.tone ?? 'info';
+  const accentColor = tone === 'error' || tone === 'danger' ? '#DC2626' : tone === 'success' ? '#15803D' : (isDark ? theme.colors.primary : '#126027');
+  const iconName = tone === 'error' || tone === 'danger' ? 'alert-circle' : tone === 'success' ? 'checkmark-circle' : 'information-circle';
+
+  return (
+    <Modal visible={dialog !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <View style={{ flex: 1, padding: 24, backgroundColor: 'rgba(3, 12, 8, 0.62)', alignItems: 'center', justifyContent: 'center' }}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} accessibilityLabel="Close dialog" />
+        <View style={{ width: '100%', maxWidth: 380, borderRadius: 24, padding: 22, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.cardBorder }}>
+          <View style={{ width: 48, height: 48, borderRadius: 24, marginBottom: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: `${accentColor}18` }}>
+            <Ionicons name={iconName} size={25} color={accentColor} />
+          </View>
+          <Text style={{ fontSize: 19, fontWeight: '800', color: theme.colors.textPrimary }}>{dialog?.title}</Text>
+          <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 21, color: theme.colors.textSecondary }}>{dialog?.message}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+            {dialog?.cancelLabel ? <TouchableOpacity accessibilityRole="button" onPress={onClose} style={{ minHeight: 46, paddingHorizontal: 18, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surfaceMuted }}>
+              <Text style={{ color: theme.colors.textPrimary, fontSize: 14, fontWeight: '700' }}>{dialog.cancelLabel}</Text>
+            </TouchableOpacity> : null}
+            <TouchableOpacity accessibilityRole="button" onPress={onConfirm} style={{ minHeight: 46, paddingHorizontal: 20, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: tone === 'danger' ? '#DC2626' : (isDark ? theme.colors.primary : '#126027') }}>
+              <Text style={{ color: isDark && tone !== 'danger' ? '#0E1512' : '#FFFFFF', fontSize: 14, fontWeight: '800' }}>{dialog?.confirmLabel ?? 'Got it'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -7001,10 +7059,18 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [emailBusy, setEmailBusy] = React.useState(false);
   const [legalDocument, setLegalDocument] = React.useState<LegalDocumentType | null>(null);
   const [totpStatus, setTotpStatus] = React.useState<{ enabled: boolean; enabledAt: string | null; remainingRecoveryCodes: number } | null>(null);
-  const [totpEnrollment, setTotpEnrollment] = React.useState<{ enrollmentId: string; secret: string; expiresAt: string } | null>(null);
+  const [totpEnrollment, setTotpEnrollment] = React.useState<{ enrollmentId: string; secret: string; otpauthUri: string; expiresAt: string } | null>(null);
   const [totpCode, setTotpCode] = React.useState('');
   const [recoveryCodes, setRecoveryCodes] = React.useState<string[] | null>(null);
   const [totpBusy, setTotpBusy] = React.useState(false);
+  const [dialog, setDialog] = React.useState<SettingsDialogState | null>(null);
+  const passwordRequirements = [
+    { label: 'At least 8 characters', met: newPassword.length >= 8 },
+    { label: 'Contains at least one letter (a-z or A-Z)', met: /[a-zA-Z]/.test(newPassword) },
+    { label: 'Contains at least one number (0-9)', met: /[0-9]/.test(newPassword) },
+  ];
+  const isGoogleAccount = model.session?.user.isGoogleAccount === true || model.profile?.isGoogleAccount === true;
+  const accountEmail = model.session?.user.email ?? model.profile?.email ?? '';
 
   React.useEffect(() => {
     let current = true;
@@ -7021,7 +7087,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       setTotpCode('');
       setRecoveryCodes(null);
     } catch (error) {
-      Alert.alert('Could not start setup', error instanceof Error ? error.message : 'Please try again.');
+      setDialog({ title: 'Could not start setup', message: error instanceof Error ? error.message : 'Please try again.', tone: 'error' });
     } finally {
       setTotpBusy(false);
     }
@@ -7029,6 +7095,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const confirmTotpSetup = async () => {
     if (!totpEnrollment) return;
+    Keyboard.dismiss();
     setTotpBusy(true);
     try {
       const codes = await model.confirmTotpEnrollment(totpEnrollment.enrollmentId, totpCode);
@@ -7037,14 +7104,15 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       setTotpCode('');
       setTotpStatus({ enabled: true, enabledAt: new Date().toISOString(), remainingRecoveryCodes: codes.length });
     } catch (error) {
-      Alert.alert('Code not accepted', error instanceof Error ? error.message : 'Check the code and try again.');
+      setDialog({ title: 'Code not accepted', message: error instanceof Error ? error.message : 'Check the code and try again.', tone: 'error' });
     } finally {
       setTotpBusy(false);
     }
   };
 
   const rotateTotpRecoveryCodes = async () => {
-    if (!totpCode.trim()) { Alert.alert('Enter a code', 'Enter a current authenticator code to replace your recovery codes.'); return; }
+    if (!totpCode.trim()) { setDialog({ title: 'Enter a code', message: 'Enter a current authenticator code to replace your recovery codes.', tone: 'error' }); return; }
+    Keyboard.dismiss();
     setTotpBusy(true);
     try {
       const codes = await model.rotateMfaRecoveryCodes(totpCode.trim());
@@ -7052,43 +7120,49 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       setTotpCode('');
       setTotpStatus((status) => status ? { ...status, remainingRecoveryCodes: codes.length } : status);
     } catch (error) {
-      Alert.alert('Could not replace codes', error instanceof Error ? error.message : 'Please try again.');
+      setDialog({ title: 'Could not replace codes', message: error instanceof Error ? error.message : 'Please try again.', tone: 'error' });
     } finally {
       setTotpBusy(false);
     }
   };
 
   const disableTotp = () => {
-    if (!totpCode.trim()) { Alert.alert('Enter a code', 'Enter a current authenticator or unused recovery code to turn off 2-step verification.'); return; }
-    Alert.alert('Turn off authenticator?', 'You will need only your password or Google sign-in to access this account.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Turn off', style: 'destructive', onPress: () => {
+    if (!totpCode.trim()) { setDialog({ title: 'Enter a code', message: 'Enter a current authenticator or unused recovery code to turn off 2-step verification.', tone: 'error' }); return; }
+    Keyboard.dismiss();
+    setDialog({ title: 'Turn off authenticator?', message: 'You will need only your password or Google sign-in to access this account.', tone: 'danger', cancelLabel: 'Cancel', confirmLabel: 'Turn off', onConfirm: () => {
         setTotpBusy(true);
         void model.disableTotp(totpCode.trim()).then(() => {
           setTotpStatus({ enabled: false, enabledAt: null, remainingRecoveryCodes: 0 });
           setTotpCode('');
           setRecoveryCodes(null);
-        }).catch((error) => Alert.alert('Could not turn off', error instanceof Error ? error.message : 'Please try again.'))
+        }).catch((error) => setDialog({ title: 'Could not turn off', message: error instanceof Error ? error.message : 'Please try again.', tone: 'error' }))
           .finally(() => setTotpBusy(false));
-      } },
-    ]);
+      } });
   };
 
   const handleSave = async () => {
     if (!currentPassword) {
-      Alert.alert('Error', 'Current password is required to save changes.');
+      setDialog({ title: 'Current password required', message: 'Enter your current password to save changes.', tone: 'error' });
       return;
     }
     if (!newPassword) {
-      Alert.alert('Error', 'Please enter a new password.');
+      setDialog({ title: 'Enter a new password', message: 'Please enter a new password.', tone: 'error' });
       return;
     }
     if (newPassword.length < 8) {
-      Alert.alert('Error', 'New password must be at least 8 characters.');
+      setDialog({ title: 'Password is too short', message: 'New password must be at least 8 characters.', tone: 'error' });
+      return;
+    }
+    if (!/[a-zA-Z]/.test(newPassword)) {
+      setDialog({ title: 'Add a letter', message: 'Your new password must contain at least one letter (a-z or A-Z).', tone: 'error' });
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setDialog({ title: 'Add a number', message: 'Your new password must contain at least one number (0-9).', tone: 'error' });
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match.');
+      setDialog({ title: 'Passwords do not match', message: 'Enter the same password in both password fields.', tone: 'error' });
       return;
     }
 
@@ -7101,10 +7175,9 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      Alert.alert('Success', 'Security settings saved.');
-      model.setActiveOverlay(null);
+      setDialog({ title: 'Password updated', message: 'Your security settings were saved.', tone: 'success', confirmLabel: 'Done', onConfirm: () => model.setActiveOverlay(null) });
     } catch (e) {
-      // error handled in hook
+      setDialog({ title: 'Could not update password', message: e instanceof Error ? e.message : 'Please try again.', tone: 'error' });
     }
   };
 
@@ -7117,6 +7190,17 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView ref={formScroll.scrollRef} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
+          {isGoogleAccount ? <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="logo-google" size={19} color="#4285F4" />
+            </View>
+            <View style={{ flex: 1, gap: 5 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary }}>Linked with Google</Text>
+              <Text style={{ fontSize: 12, lineHeight: 18, color: theme.colors.textMuted }}>
+                {`Your account is linked and authenticated via Google${accountEmail ? ` (${accountEmail})` : ''}. Password and email updates are managed directly through your Google Account settings.`}
+              </Text>
+            </View>
+          </SurfaceCard> : <>
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Change Email</Text>
           <SurfaceCard style={{ padding: 16, gap: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 }}>
@@ -7149,10 +7233,10 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               onFocus={formScroll.onFocus}
             />
             <TouchableOpacity disabled={emailBusy} onPress={async () => {
-              if (!model.session || !currentPassword || !newEmail.trim()) { Alert.alert('Missing details', 'Enter your current password and new email.'); return; }
+              if (!model.session || !currentPassword || !newEmail.trim()) { setDialog({ title: 'Missing details', message: 'Enter your current password and new email.', tone: 'error' }); return; }
               setEmailBusy(true);
-              try { await ecobudApi.sendEmailChangeCode(model.session.token, currentPassword, newEmail.trim()); Alert.alert('Code sent', 'Check your new email for the verification code.'); }
-              catch (error) { Alert.alert('Could not send code', error instanceof Error ? error.message : 'Please try again.'); }
+              try { await ecobudApi.sendEmailChangeCode(model.session.token, currentPassword, newEmail.trim()); setDialog({ title: 'Code sent', message: 'Check your new email for the verification code.', tone: 'success' }); }
+              catch (error) { setDialog({ title: 'Could not send code', message: error instanceof Error ? error.message : 'Please try again.', tone: 'error' }); }
               finally { setEmailBusy(false); }
             }} activeOpacity={0.8} style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.inputBorder, backgroundColor: theme.colors.surfaceMuted, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: emailBusy ? 0.6 : 1 }}>
               <Ionicons name="paper-plane-outline" size={17} color={theme.colors.textPrimary} />
@@ -7169,15 +7253,22 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               onFocus={formScroll.onFocus}
             />
             <TouchableOpacity disabled={emailBusy} onPress={async () => {
+              Keyboard.dismiss();
               setEmailBusy(true);
-              try { await model.handleUpdateSecuritySettings({ currentPassword, newEmail: newEmail.trim(), emailCode }); setNewEmail(''); setEmailCode(''); setCurrentPassword(''); }
-              catch { /* The model displays the error. */ }
+              try {
+                await model.handleUpdateSecuritySettings({ currentPassword, newEmail: newEmail.trim(), emailCode });
+                setNewEmail(''); setEmailCode(''); setCurrentPassword('');
+                setDialog({ title: 'Email updated', message: 'Your email address has been changed.', tone: 'success' });
+              } catch (error) {
+                setDialog({ title: 'Could not update email', message: error instanceof Error ? error.message : 'Check the code and try again.', tone: 'error' });
+              }
               finally { setEmailBusy(false); }
             }} activeOpacity={0.85} style={{ minHeight: 50, borderRadius: 25, backgroundColor: isDark ? theme.colors.primary : '#126027', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: emailBusy ? 0.6 : 1 }}>
               <Ionicons name="shield-checkmark-outline" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} />
               <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Verify and change email</Text>
             </TouchableOpacity>
           </SurfaceCard>
+          </>}
           <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Two-Step Verification</Text>
           <SurfaceCard style={{ padding: 16, gap: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -7191,7 +7282,11 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
 
             {totpEnrollment ? <>
-              <Text style={{ fontSize: 13, lineHeight: 19, color: theme.colors.textMuted }}>In your authenticator app, choose “Enter a setup key”. Type this key exactly, then enter the six-digit code it generates.</Text>
+              <Text style={{ fontSize: 13, lineHeight: 19, color: theme.colors.textMuted }}>Scan this QR code with Google Authenticator or another authenticator app. If scanning is unavailable, enter the setup key below.</Text>
+              <View accessibilityLabel="Authenticator setup QR code" accessible style={{ alignSelf: 'center', padding: 12, borderRadius: 14, backgroundColor: '#FFFFFF' }}>
+                <QRCode value={totpEnrollment.otpauthUri} size={208} color="#111827" backgroundColor="#FFFFFF" />
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textMuted, textAlign: 'center' }}>Or enter this setup key manually</Text>
               <Text selectable style={{ padding: 14, borderRadius: 12, backgroundColor: theme.colors.surfaceMuted, color: theme.colors.textPrimary, fontSize: 16, fontWeight: '800', letterSpacing: 2, textAlign: 'center' }}>{totpEnrollment.secret.match(/.{1,4}/g)?.join(' ')}</Text>
               <TextInput
                 style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary, textAlign: 'center', letterSpacing: 5 }]}
@@ -7349,6 +7444,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
             />
           </SurfaceCard>
 
+          {!isGoogleAccount ? <>
           <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Change Password</Text>
           <SurfaceCard style={{ padding: 16, gap: 12 }}>
             <TextInput
@@ -7360,6 +7456,15 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               onChangeText={setNewPassword}
               onFocus={formScroll.onFocus}
             />
+            <View accessibilityLabel="Password requirements" style={{ gap: 8, paddingHorizontal: 4 }}>
+              {passwordRequirements.map((requirement) => {
+                const color = requirement.met ? (isDark ? theme.colors.primary : '#15803D') : theme.colors.textMuted;
+                return <View key={requirement.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name={requirement.met ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={color} />
+                  <Text style={{ fontSize: 12, color }}>{requirement.label}</Text>
+                </View>;
+              })}
+            </View>
             <TextInput
               style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               placeholder="Confirm new password"
@@ -7386,14 +7491,24 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
+          </> : null}
         </ScrollView>
         </View>
 
-        <View style={{ padding: 16, paddingBottom: 32, backgroundColor: theme.colors.card, borderTopWidth: 1, borderColor: theme.colors.border }}>
-          <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
-        </View>
+        {!isGoogleAccount ? <View style={{ padding: 16, paddingBottom: 32, backgroundColor: theme.colors.card, borderTopWidth: 1, borderColor: theme.colors.border }}>
+          <PrimaryButton
+            label="Save Changes"
+            onPress={() => void handleSave()}
+            disabled={!passwordRequirements.every((requirement) => requirement.met)}
+          />
+        </View> : null}
       </KeyboardAvoidingView>
       <LegalDocumentModal document={legalDocument} onClose={() => setLegalDocument(null)} />
+      <SettingsDialogModal dialog={dialog} theme={theme} isDark={isDark} onClose={() => setDialog(null)} onConfirm={() => {
+        const action = dialog?.onConfirm;
+        setDialog(null);
+        action?.();
+      }} />
     </OverlayScaffold>
   );
 }

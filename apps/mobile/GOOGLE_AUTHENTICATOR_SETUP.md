@@ -12,7 +12,7 @@ This document records the implementation design and current behavior for 2FA.
 - Mobile sign-in calls `/auth/login` or `/auth/google`; Google sign-in completes the provider flow before the app receives an ECOBUD API session.
 - The API `User` model now stores an encrypted authenticator secret and enabled state. Recovery codes and login challenges are stored separately.
 - The API provides enrollment, confirmation, recovery-code rotation, disable, and sign-in verification endpoints.
-- TOTP uses Node's built-in crypto; setup displays a local manual key instead of using a QR library or remote QR service.
+- TOTP uses Node's built-in crypto. Enrollment displays a QR code generated locally from the `otpauth://` URI, with a manual setup key as a fallback; no QR service receives the secret.
 
 ## Recommended user experience
 
@@ -20,7 +20,7 @@ Add an **Authenticator app** section to the **Privacy & Settings** screen:
 
 1. Show the current state: **Off** or **On**.
 2. When off, **Set up authenticator app** starts enrollment. Explain that any TOTP-compatible authenticator app can be used.
-3. The server creates a pending enrollment secret and returns an `otpauth://` URI, a manual entry key, and a short-lived enrollment identifier. The current mobile implementation uses the manual key so the secret stays local; do not activate 2FA yet.
+3. The server creates a pending enrollment secret and returns an `otpauth://` URI, a manual entry key, and a short-lived enrollment identifier. The app renders the URI as a local QR code. The user can scan it or enter the manual key; do not activate 2FA yet.
 4. Ask the user to enter the current six-digit code from their authenticator app. The server verifies it before enabling 2FA.
 5. After successful verification, show one-time recovery codes. Require the user to save or acknowledge them before leaving the screen; show them only once and do not log or persist them on the device.
 6. When on, replace recovery codes after a valid authenticator code, or turn off after a valid authenticator or unused recovery code. Replacing codes invalidates all previous codes.
@@ -63,7 +63,7 @@ The implementation uses Node crypto for RFC 6238 TOTP and AES-256-GCM encryption
 
 ## Mobile implementation files
 
-- `apps/mobile/src/app/components/AppOverlays.tsx` — manual setup key, code confirmation, recovery codes, and disable controls in `SettingsOverlay`.
+- `apps/mobile/src/app/components/AppOverlays.tsx` — locally generated setup QR, manual setup key, code confirmation, recovery codes, and disable controls in `SettingsOverlay`.
 - `apps/mobile/src/app/hooks/useHomeDashboard.ts` — authenticated API actions and challenge continuation while preserving current session/hydration behavior.
 - `apps/mobile/src/app/types/home.ts` — model action and enrollment/status types.
 - `apps/mobile/src/shared/api/ecobudApi.ts` and `apps/mobile/src/app/services/homeService.ts` — typed API calls.

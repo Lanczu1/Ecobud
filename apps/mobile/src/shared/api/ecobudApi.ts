@@ -96,6 +96,7 @@ export interface SessionUser {
   email: string;
   role: string;
   status: string;
+  isGoogleAccount?: boolean;
   points: number;
   currentStreak: number;
   displayName: string;
@@ -358,6 +359,7 @@ export interface ProfileData {
   id: string;
   name?: string | null;
   email: string;
+  isGoogleAccount?: boolean;
   role: string;
   status?: string | null;
   points: number;
