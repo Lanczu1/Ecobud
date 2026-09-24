@@ -688,6 +688,7 @@ export function AuthView({
         switchMode('signin');
         return;
       }
+      Keyboard.dismiss();
       await onVerifyMfa(mfaChallengeToken, verificationCode.trim());
       return;
     }
@@ -719,6 +720,7 @@ export function AuthView({
       return;
     }
 
+    Keyboard.dismiss();
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
   }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken]);
 

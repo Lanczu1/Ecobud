@@ -34,7 +34,7 @@ const preferenceSchema = z.object({
 });
 
 const securitySchema = z.object({
-  currentPassword: z.string().min(1).max(100),
+  currentPassword: z.string().min(1).max(100).optional(),
   newEmail: z.string().email().optional(),
   emailCode: z.string().regex(/^\d{6}$/).optional(),
   newPassword: z.string().min(8).max(72).regex(/[a-zA-Z]/).regex(/[0-9]/).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be at most 72 bytes.').optional(),
@@ -59,6 +59,7 @@ userRoutes.get(
         id: true,
         name: true,
         email: true,
+        googleIdentityId: true,
         role: true,
         status: true,
         points: true,
@@ -102,6 +103,7 @@ userRoutes.get(
       id: user?.id,
       name: user?.name,
       email: user?.email,
+      isGoogleAccount: user?.googleIdentityId != null,
       role: user?.role,
       status: user?.status,
       points: user?.points ?? 0,
@@ -352,9 +354,12 @@ userRoutes.post('/me/mfa/disable', authenticateRequest, requireUserAccess, secur
 
 userRoutes.post('/me/email-code', authenticateRequest, requireUserAccess, securityUpdateLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    const payload = z.object({ currentPassword: z.string().min(1).max(128), newEmail: z.string().trim().toLowerCase().email() }).parse(req.body);
+    const payload = z.object({ currentPassword: z.string().min(1).max(128).optional(), newEmail: z.string().trim().toLowerCase().email() }).parse(req.body);
     const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
-    if (!user || !await PasswordService.compare(payload.currentPassword, user.passwordHash)) throw new HttpError(401, 'Incorrect current password.');
+    if (!user) throw new HttpError(404, 'User not found.');
+    if (user.googleIdentityId) throw new HttpError(403, 'Email settings for this account are managed through Google.');
+    if (!payload.currentPassword) throw new HttpError(400, 'Current password is required.');
+    if (!await PasswordService.compare(payload.currentPassword, user.passwordHash)) throw new HttpError(401, 'Incorrect current password.');
     if (await prisma.user.findUnique({ where: { email: payload.newEmail } })) throw new HttpError(409, 'This email cannot be used.');
     await sendEmailChangeCode(user.id, payload.newEmail);
     return res.json({ success: true });
@@ -377,6 +382,13 @@ userRoutes.patch(
     const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
     if (!user) {
       throw new HttpError(404, 'User not found.');
+    }
+
+    if (user.googleIdentityId) {
+      throw new HttpError(403, 'Password and email settings for this account are managed through Google.');
+    }
+    if (!payload.currentPassword) {
+      throw new HttpError(400, 'Current password is required.');
     }
 
     const passwordMatches = await PasswordService.compare(payload.currentPassword, user.passwordHash);

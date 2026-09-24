@@ -11,6 +11,7 @@ vi.mock('../security/googleIdentity', () => ({ verifyGoogleIdentity: google }));
 vi.mock('../security/passwordService', () => ({ PasswordService: { compare, hash: vi.fn(async () => 'new-hash') } }));
 vi.mock('nodemailer', () => ({ default: { createTransport: () => ({ sendMail }) } }));
 vi.mock('../services/supabaseStorageService', () => ({ supabaseStorageService: {} }));
+vi.mock('express-rate-limit', () => ({ default: () => (_req: unknown, _res: unknown, next: (error?: unknown) => void) => next() }));
 import { authRoutes } from './authRoutes';
 import { userRoutes } from './userRoutes';
 import { errorResponder } from '../http/errorResponder';
@@ -42,6 +43,7 @@ describe('authentication security regressions', () => {
     const result = await request(app).post('/auth/google').send({ accessToken: 'verified', email: 'admin@ecobud.app' }).expect(200);
     expect(db.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { email: user.email } }));
     expect(TokenService.verify(result.body.token).role).toBe('user');
+    expect(result.body.user.isGoogleAccount).toBe(true);
   });
   it('does not grant privileged accounts Google sessions', async () => {
     db.user.findUnique.mockResolvedValue({ ...user, role: 'admin' });
@@ -67,6 +69,17 @@ describe('authentication security regressions', () => {
     const result = await request(app).patch('/users/me/security').auth(token(), { type: 'bearer' }).send({ currentPassword: 'old-password', newPassword: 'newPassword123' }).expect(200);
     expect(db.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sessionVersion: { increment: 1 } }) }));
     expect(TokenService.verify(result.body.token).sessionVersion).toBe(1);
+  });
+  it('blocks password and email security updates for Google-linked accounts', async () => {
+    db.user.findUnique.mockResolvedValue({ ...user, googleIdentityId: 'google-alice' });
+    await request(app).patch('/users/me/security').auth(token(), { type: 'bearer' }).send({ newPassword: 'newPassword123' }).expect(403);
+    expect(compare).not.toHaveBeenCalled();
+  });
+  it('blocks email verification code requests for Google-linked accounts', async () => {
+    db.user.findUnique.mockResolvedValue({ ...user, googleIdentityId: 'google-alice' });
+    await request(app).post('/users/me/email-code').auth(token(), { type: 'bearer' }).send({ newEmail: 'new@gmail.com' }).expect(403);
+    expect(compare).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
   });
   it('requires a verification code before changing email', async () => {
     db.user.findUnique.mockResolvedValueOnce(user).mockResolvedValueOnce(user).mockResolvedValueOnce(null);

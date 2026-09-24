@@ -2669,9 +2669,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           });
         }
 
-        Alert.alert('Success', 'Profile updated successfully.');
       } catch (error) {
-        Alert.alert('Update Failed', error instanceof Error ? error.message : 'Please try again.');
         throw error;
       }
     });
@@ -2696,9 +2694,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           await persistSession(updatedSession);
           setSession(updatedSession);
         }
-        Alert.alert('Success', 'Security settings updated successfully.');
       } catch (error) {
-        Alert.alert('Update Failed', error instanceof Error ? error.message : 'Please try again.');
         throw error;
       }
     });
