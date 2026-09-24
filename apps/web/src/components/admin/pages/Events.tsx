@@ -14,7 +14,31 @@ import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const NAGCARLAN_MAP_CENTER: [number, number] = [14.12558, 121.41918];
+const NAGCARLAN_MAP_BOUNDS: [[number, number], [number, number]] = [
+  [14.08556, 121.35773],
+  [14.18883, 121.4861],
+];
+const NAGCARLAN_MAP_CENTER: [number, number] = [
+  (NAGCARLAN_MAP_BOUNDS[0][0] + NAGCARLAN_MAP_BOUNDS[1][0]) / 2,
+  (NAGCARLAN_MAP_BOUNDS[0][1] + NAGCARLAN_MAP_BOUNDS[1][1]) / 2,
+];
+
+function NagcarlanMapLimits() {
+  const map = useMap();
+
+  useEffect(() => {
+    const bounds = L.latLngBounds(
+      L.latLng(NAGCARLAN_MAP_BOUNDS[0][0], NAGCARLAN_MAP_BOUNDS[0][1]),
+      L.latLng(NAGCARLAN_MAP_BOUNDS[1][0], NAGCARLAN_MAP_BOUNDS[1][1]),
+    );
+    map.setMaxBounds(bounds);
+    map.options.maxBoundsViscosity = 1;
+    map.fitBounds(bounds, { padding: [4, 4] });
+    map.setMinZoom(map.getBoundsZoom(bounds, true, L.point(4, 4)));
+  }, [map]);
+
+  return null;
+}
 
 function NagcarlanOsmLayer() {
   const [data, setData] = useState<GeoJSON.FeatureCollection | null>(null);
@@ -419,11 +443,14 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             <div className="h-48 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 relative z-0">
               <MapContainer 
                 center={form.latitude && form.longitude ? [form.latitude, form.longitude] : NAGCARLAN_MAP_CENTER}
-                zoom={form.latitude && form.longitude ? 11 : 13}
+                zoom={12}
+                minZoom={10}
+                maxZoom={18}
                 scrollWheelZoom={false}
                 className="w-full h-full"
                 style={{ height: '100%', width: '100%', zIndex: 0 }}
               >
+                <NagcarlanMapLimits />
                 <TileLayer
                   attribution='&copy; OpenStreetMap contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
