@@ -1,8 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Text, View, TextInput, ScrollView, TouchableOpacity, Image, useWindowDimensions, StyleSheet } from 'react-native';
+import { Text, View, TextInput, ScrollView, FlatList, RefreshControl, TouchableOpacity, Image, useWindowDimensions, StyleSheet, Keyboard, Platform } from 'react-native';
 import { styles } from '../styles/appStyles';
-import { type EcoBudMobileModel } from '../types/home';
+import { type EcoBudMobileModel, type LessonWithProgress } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard } from './DiscoverChallengeCard';
 import { TopNavbar, SurfaceCard, AvatarBubble, AiAssistantBar } from './CommonComponents';
@@ -30,7 +30,7 @@ type LearnLayoutMode = 'grid' | 'list';
 function useLearnLayoutPreference() {
   const [layoutMode, setLayoutModeState] = React.useState<LearnLayoutMode>(() => {
     const savedMode = mobileStorage.getItemSync('ecobud_learn_layout');
-    return savedMode === 'grid' || savedMode === 'list' ? savedMode : 'list';
+    return savedMode === 'grid' || savedMode === 'list' ? savedMode : 'grid';
   });
 
   const setLayoutMode = (nextMode: LearnLayoutMode) => {
@@ -222,9 +222,32 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
-export function LearnView({ model }: { model: EcoBudMobileModel }) {
+export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }: {
+  model: EcoBudMobileModel;
+  onSearchKeyboardChange?: (keyboardHeight: number, searchScreenY?: number) => void;
+  keyboardHeight?: number;
+}) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
+  const searchBarRef = React.useRef<View>(null);
+  const searchFocusedRef = React.useRef(false);
+  const listRef = React.useRef<FlatList<LessonWithProgress[]>>(null);
+  const scrollOffsetRef = React.useRef(0);
+
+  React.useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (!searchFocusedRef.current) return;
+      searchBarRef.current?.measureInWindow((_x, y) => {
+        onSearchKeyboardChange?.(event.endCoordinates.height, y);
+        requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: Math.max(0, scrollOffsetRef.current + y - verticalScale(80)), animated: true }));
+      });
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => onSearchKeyboardChange?.(0));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [onSearchKeyboardChange]);
   const [layoutMode, setLayoutMode] = useLearnLayoutPreference();
   const gridColumnCount = width >= 900 ? 3 : 2;
   const gridGap = scale(width < 360 ? 8 : 12);
@@ -243,11 +266,30 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
   const completedLessonsCount = model.lessons.filter((l) => l.status === 'completed').length;
   const totalLessonsCount = model.lessons.length;
   const progressPercentage = totalLessonsCount > 0 ? Math.round((completedLessonsCount / totalLessonsCount) * 100) : 0;
+  const lessonRows = React.useMemo<LessonWithProgress[][]>(() => layoutMode === 'grid'
+    ? Array.from({ length: Math.ceil(model.filteredLessons.length / gridColumnCount) }, (_, index) =>
+        model.filteredLessons.slice(index * gridColumnCount, (index + 1) * gridColumnCount))
+    : model.filteredLessons.map((lesson) => [lesson]),
+    [model.filteredLessons, layoutMode, gridColumnCount]);
 
   return (
-    <>
+    <FlatList<LessonWithProgress[]>
+      ref={listRef}
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      onScroll={(event) => { scrollOffsetRef.current = event.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={32}
+      data={isCardsLoading ? [] : lessonRows}
+      keyExtractor={(row) => row.map((lesson) => lesson.id).join(':')}
+      initialNumToRender={5}
+      maxToRenderPerBatch={5}
+      windowSize={5}
+      removeClippedSubviews={Platform.OS === 'android'}
+      contentContainerStyle={{ paddingBottom: verticalScale(80) + keyboardHeight }}
+      refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.refreshEverything()}
+        tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
+      ListHeaderComponent={<>
       <TopNavbar model={model} />
-      <View style={styles.homeContent}>
+      <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         <View style={{ marginBottom: verticalScale(12) }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
             <View style={{ flex: 1, paddingRight: scale(8) }}>
@@ -385,7 +427,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
           );
         })()}
 
-        <View style={{
+        <View ref={searchBarRef} collapsable={false} style={{
           flexDirection: 'row',
           alignItems: 'center',
           backgroundColor: theme.colors.inputBackground,
@@ -413,6 +455,8 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
             placeholderTextColor={theme.colors.textMuted}
             value={model.learnSearch}
             onChangeText={model.setLearnSearch}
+            onFocus={() => { searchFocusedRef.current = true; }}
+            onBlur={() => { searchFocusedRef.current = false; }}
           />
         </View>
 
@@ -541,54 +585,30 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
               <Text style={[styles.cardTitle, { textAlign: 'center', fontSize: responsiveFontSize(16), marginBottom: verticalScale(6), color: theme.colors.textPrimary }]}>No lessons available yet.</Text>
               <Text style={[styles.metaTextSmallDark, { textAlign: 'center', fontSize: responsiveFontSize(13), color: theme.colors.textMuted }]}>Check back soon for new content.</Text>
             </SurfaceCard>
-          ) : (
-            <View style={{ gap: layoutMode === 'grid' ? gridGap : 0 }}>
-              {(layoutMode === 'grid'
-                ? Array.from({ length: Math.ceil(model.filteredLessons.length / gridColumnCount) }, (_, rowIndex) =>
-                    model.filteredLessons.slice(rowIndex * gridColumnCount, (rowIndex + 1) * gridColumnCount)
-                  )
-                : model.filteredLessons.map((lesson) => [lesson])
-              ).map((lessonRow, rowIndex) => (
-                <View key={`lesson-row-${rowIndex}`} style={{ flexDirection: 'row', gap: layoutMode === 'grid' ? gridGap : 0 }}>
-                  {lessonRow.map((lesson, columnIndex) => {
-                    const lessonIndex = layoutMode === 'grid' ? rowIndex * gridColumnCount + columnIndex : rowIndex;
-                    const card = (
-                      <LearnLessonCard
-                        lesson={lesson}
-                        compact={layoutMode === 'grid'}
-                        style={{ marginBottom: layoutMode === 'grid' ? 0 : verticalScale(14) }}
-                        onPress={() => void model.openLesson(lesson.id)}
-                      />
-                    );
-
-                    return (
-                      <View key={lesson.id} style={{ flex: 1 }}>
-                        {lessonIndex === 0 ? (
-                          <CoachMarkTarget
-                            name="firstLearnLesson"
-                            borderRadius={moderateScale(22)}
-                            active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
-                            onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}
-                          >
-                            {card}
-                          </CoachMarkTarget>
-                        ) : card}
-                      </View>
-                    );
-                  })}
-                  {layoutMode === 'grid' && lessonRow.length < gridColumnCount &&
-                    Array.from({ length: gridColumnCount - lessonRow.length }).map((_, spacerIndex) => (
-                      <View key={`lesson-spacer-${spacerIndex}`} style={{ flex: 1 }} />
-                    ))}
-                </View>
-              ))}
-            </View>
-          )}
+          ) : null}
         </View>
-
-        <View style={{ height: verticalScale(80) }} />
       </View>
-    </>
+      </>}
+      renderItem={({ item: lessonRow, index: rowIndex }) => (
+        <View style={{ flexDirection: 'row', gap: layoutMode === 'grid' ? gridGap : 0, paddingHorizontal: scale(24), marginBottom: layoutMode === 'grid' ? gridGap : 0 }}>
+          {lessonRow.map((lesson, columnIndex) => {
+            const lessonIndex = layoutMode === 'grid' ? rowIndex * gridColumnCount + columnIndex : rowIndex;
+            const card = <LearnLessonCard lesson={lesson} compact={layoutMode === 'grid'}
+              style={{ marginBottom: layoutMode === 'grid' ? 0 : verticalScale(14) }}
+              onPress={() => void model.openLesson(lesson.id)} />;
+            return <View key={lesson.id} style={{ flex: 1 }}>
+              {lessonIndex === 0 ? <CoachMarkTarget name="firstLearnLesson" borderRadius={moderateScale(22)}
+                active={model.coachMarksVisible && model.coachMarksCurrentStep === 4}
+                pollWhileActive={!model.coachMarksReplay}
+                onMeasure={(rect) => model.setSpotlightTargetRect?.(rect)}>{card}</CoachMarkTarget> : card}
+            </View>;
+          })}
+          {layoutMode === 'grid' && lessonRow.length < gridColumnCount &&
+            Array.from({ length: gridColumnCount - lessonRow.length }).map((_, spacerIndex) =>
+              <View key={`lesson-spacer-${spacerIndex}`} style={{ flex: 1 }} />)}
+        </View>
+      )}
+    />
   );
 }
 

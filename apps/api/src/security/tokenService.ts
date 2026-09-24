@@ -48,6 +48,15 @@ const refreshClaims = z.object({
   tokenUse: z.literal('refresh'),
 });
 
+const mfaChallengeClaims = z.object({
+  userId: z.string().min(1),
+  challengeId: z.string().uuid(),
+  clientType: z.enum(['mobile', 'web']),
+  tokenUse: z.literal('mfa-challenge'),
+});
+
+export type MfaChallengeSession = z.infer<typeof mfaChallengeClaims>;
+
 export type RefreshTokenSession = z.infer<typeof refreshClaims>;
 
 const MOBILE_REFRESH_LIFETIME_SECONDS = 90 * 24 * 60 * 60;
@@ -83,5 +92,14 @@ export const TokenService = {
   },
   verifyRefresh: (token: string): RefreshTokenSession => refreshClaims.parse(jwt.verify(token, JWT_SECRET, {
     algorithms: ['HS256'], issuer: 'ecobud-api', audience: 'ecobud-refresh',
+  })),
+  signMfaChallenge: (challenge: Omit<MfaChallengeSession, 'tokenUse'>) => jwt.sign({
+    ...challenge,
+    tokenUse: 'mfa-challenge',
+  }, JWT_SECRET, {
+    algorithm: 'HS256', issuer: 'ecobud-api', audience: 'ecobud-mfa', expiresIn: '5m',
+  }),
+  verifyMfaChallenge: (token: string): MfaChallengeSession => mfaChallengeClaims.parse(jwt.verify(token, JWT_SECRET, {
+    algorithms: ['HS256'], issuer: 'ecobud-api', audience: 'ecobud-mfa',
   })),
 };

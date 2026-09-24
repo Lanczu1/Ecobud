@@ -20,6 +20,7 @@ import {
   type QuizQuestion,
   type RewardsData,
   type SessionPayload,
+  type MfaChallengePayload,
   type TrackerData,
   type TransparencyFeed,
   type OverlayScreen,
@@ -34,7 +35,6 @@ import { type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
-import { FastImage } from '../../shared/ui/FastImage';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 
@@ -50,6 +50,10 @@ const CHATBOT_ENABLED_STORAGE_KEY = 'ecobud.mobile.chatbotEnabled';
 const CHATBOT_SIZE_STORAGE_KEY = 'ecobud.mobile.chatbotSize';
 const PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY = 'ecobud.mobile.pushNotificationsEnabled';
 const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
+type FocusedResource = 'lessons' | 'challenges' | 'events';
+const FOCUSED_REFRESH_INTERVAL_MS = 60_000;
+type SecondaryResource = 'tracker' | 'profile' | 'rewards' | 'leaderboard' | 'transparency';
+const SECONDARY_REFRESH_INTERVAL_MS = 5 * 60_000;
 
 // --- Internal Utilities ---
 
@@ -129,6 +133,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const isHydratingRef = React.useRef(false);
   const resumeRefreshInFlightRef = React.useRef(false);
   const previousAppStateRef = React.useRef(AppState.currentState);
+  const lastFocusedRefreshAtRef = React.useRef<Record<FocusedResource, number>>({ lessons: 0, challenges: 0, events: 0 });
+  const focusedRefreshInFlightRef = React.useRef<Set<FocusedResource>>(new Set());
+  const secondaryRefreshInFlightRef = React.useRef<Set<SecondaryResource>>(new Set());
+  const lastSecondaryRefreshAtRef = React.useRef<Record<SecondaryResource, number>>({ tracker: 0, profile: 0, rewards: 0, leaderboard: 0, transparency: 0 });
+  const currentSessionTokenRef = React.useRef<string | null>(null);
+  currentSessionTokenRef.current = session?.token ?? null;
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -158,6 +168,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
   const [coachMarksCurrentStep, setCoachMarksCurrentStep] = useState(0);
   const [coachMarksVisible, setCoachMarksVisible] = useState(false);
+  const [coachMarksReplay, setCoachMarksReplay] = useState(false);
   const [spotlightTargetRect, setSpotlightTargetRectState] = useState<{ x: number; y: number; width: number; height: number; borderRadius?: number } | null>(null);
 
   const setSpotlightTargetRect = useCallback((rect: { x: number; y: number; width: number; height: number; borderRadius?: number } | null) => {
@@ -345,6 +356,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setTabHistory(['home']);
     previousStreakRef.current = null;
     previousUnlockedBadgeIdsRef.current = null;
+    lastSecondaryRefreshAtRef.current = { tracker: 0, profile: 0, rewards: 0, leaderboard: 0, transparency: 0 };
     void mobileStorage.removeItem(CACHED_HOME_DATA_STORAGE_KEY).catch(() => {});
     // Intentionally keep viewed missions across logouts
   }, []);
@@ -617,15 +629,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setChallenges(safeChallenges);
         setIsCycleActive(homeData?.isCycleActive ?? true);
 
-        // Pre-warm disk cache for all challenge images immediately so scrolling is 60fps with zero pop-in delay
-        const challengeImageUrls = safeChallenges
-          .map((c: any) => c.imageUrl)
-          .filter((url: any): url is string => Boolean(url));
-        if (challengeImageUrls.length > 0) {
-          void FastImage.prefetch(challengeImageUrls);
-        }
         setHabitsToday(homeData?.habitsToday ?? null);
         setEvents(Array.isArray(homeData?.events) ? homeData.events : []);
+        const hydratedAt = Date.now();
+        lastFocusedRefreshAtRef.current = { lessons: hydratedAt, challenges: hydratedAt, events: hydratedAt };
         setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
 
         // Release pull-to-refresh spinner immediately so UI feels instantaneous
@@ -661,20 +668,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
           }),
         ).catch(() => {});
 
-        // Step 2: Fetch non-critical secondary data for other tabs in the background
-        void homeService.getSecondaryHydrationData(existingSession.token).then((secData) => {
-          if (previousUnlockedBadgeIdsRef.current === null && secData?.rewards?.badges) {
-            const unlockedIds = new Set<string>(secData.rewards.badges.filter((b: any) => b.unlocked).map((b: any) => String(b.id)));
-            previousUnlockedBadgeIdsRef.current = unlockedIds;
-          }
-          setTracker(secData?.tracker ?? null);
-          setProfile(secData?.profile ?? null);
-          setRewards(secData?.rewards ?? null);
-          setLeaderboard(secData?.leaderboard ?? null);
-          setTransparency(secData?.transparency ?? null);
-        }).catch((e) => {
-          console.warn('[ECOBUD secondary hydration warning]:', e);
-        });
       } catch (error) {
         const status = (error as any)?.status;
         const msg = error instanceof Error ? error.message : '';
@@ -947,48 +940,112 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, []);
 
-  // Auto-sync polling for Lessons, Challenges, Events & Real-time status updates
+  // Refresh only the data visible on the current page.
   useEffect(() => {
     if (!session?.token) return;
+    const token = session.token;
+    const visibleResources: FocusedResource[] = activeOverlay === 'events'
+      ? ['events']
+      : activeOverlay !== null
+        ? []
+        : activeTab === 'home'
+          ? ['lessons', 'challenges', 'events']
+          : activeTab === 'learn'
+            ? ['lessons']
+            : activeTab === 'challenges'
+              ? ['challenges']
+              : [];
+    if (visibleResources.length === 0) return;
 
-    const interval = setInterval(() => {
-      if (AppState.currentState === 'active' && presence.hasUsableInternet) {
-        // Silently fetch latest lessons, challenges and events without blocking UI
-        Promise.all([
-          homeService.getLessons(session.token).catch(() => null),
-          homeService.getChallenges(session.token).catch(() => null),
-          homeService.getEvents(session.token).catch(() => null),
-        ]).then(([lessonsRes, challengesRes, newEvents]) => {
-          if (lessonsRes && Array.isArray(lessonsRes)) {
-            const safeLessons = [...lessonsRes];
-            safeLessons.sort((a: any, b: any) => {
-              if (a.featured && !b.featured) return -1;
-              if (!a.featured && b.featured) return 1;
-              return 0;
-            });
-            setLessons(safeLessons);
-          }
-          if (challengesRes) {
-            const safeItems = Array.isArray(challengesRes?.items) ? challengesRes.items : Array.isArray(challengesRes) ? challengesRes : [];
-            setChallenges(safeItems);
-            setIsCycleActive(challengesRes?.isCycleActive ?? true);
-
-            const challengeImageUrls = safeItems
-              .map((c: any) => c.imageUrl)
-              .filter((url: any): url is string => Boolean(url));
-            if (challengeImageUrls.length > 0) {
-              void FastImage.prefetch(challengeImageUrls);
+    const refreshVisible = () => {
+      if (AppState.currentState !== 'active' || !presence.hasUsableInternet || isHydratingRef.current) return;
+      for (const resource of visibleResources) {
+        if (focusedRefreshInFlightRef.current.has(resource)) continue;
+        if (Date.now() - lastFocusedRefreshAtRef.current[resource] < FOCUSED_REFRESH_INTERVAL_MS) continue;
+        focusedRefreshInFlightRef.current.add(resource);
+        const requestStartedAt = Date.now();
+        void (async () => {
+          try {
+            if (resource === 'lessons') {
+              const result = await homeService.getLessons(token);
+              if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt || !Array.isArray(result)) return;
+              const safeLessons = [...result].sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)));
+              setLessons(safeLessons);
+            } else if (resource === 'challenges') {
+              const result = await homeService.getChallenges(token);
+              if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt) return;
+              const items = Array.isArray(result?.items) ? result.items : Array.isArray(result) ? result : [];
+              setChallenges(items);
+              setIsCycleActive(result?.isCycleActive ?? true);
+            } else {
+              const result = await homeService.getEvents(token);
+              if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt) return;
+              setEvents(Array.isArray(result) ? result : Array.isArray(result?.items) ? result.items : []);
             }
+            lastFocusedRefreshAtRef.current[resource] = Date.now();
+          } catch {
+            // Keep the previous data; the next focused refresh can retry.
+          } finally {
+            focusedRefreshInFlightRef.current.delete(resource);
           }
-          if (newEvents) {
-            setEvents(Array.isArray(newEvents) ? newEvents : Array.isArray((newEvents as any)?.items) ? (newEvents as any).items : []);
-          }
-        }).catch(() => {});
+        })();
       }
-    }, 25000); // Automatically sync every 25 seconds for seamless real-time updates
-
+    };
+    refreshVisible();
+    const interval = setInterval(refreshVisible, FOCUSED_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [session?.token, presence.hasUsableInternet]);
+  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating]);
+
+  useEffect(() => {
+    if (!session?.token || !presence.hasUsableInternet || isHydrating || AppState.currentState !== 'active') return;
+    const token = session.token;
+    const needed: SecondaryResource[] = activeOverlay === 'leaderboard' ? ['leaderboard']
+      : activeOverlay === 'rewards' || activeOverlay === 'streakRewards' || activeOverlay === 'redeemPoints' || activeOverlay === 'coinsHistory' ? ['rewards']
+      : activeOverlay === 'transparency' ? ['transparency']
+      : activeOverlay === 'editProfile' ? ['profile']
+      : activeOverlay !== null ? []
+      : activeTab === 'tracker' ? ['tracker']
+      : activeTab === 'profile' ? ['profile', 'rewards']
+      : activeTab === 'challenges' ? ['profile']
+      : [];
+
+    for (const resource of needed) {
+      if (secondaryRefreshInFlightRef.current.has(resource) ||
+          Date.now() - lastSecondaryRefreshAtRef.current[resource] < SECONDARY_REFRESH_INTERVAL_MS) continue;
+      secondaryRefreshInFlightRef.current.add(resource);
+      const requestStartedAt = Date.now();
+      void (async () => {
+        try {
+          if (resource === 'tracker') {
+            const result = await homeService.getTracker(token, tracker?.month);
+            if (currentSessionTokenRef.current === token && lastSecondaryRefreshAtRef.current.tracker <= requestStartedAt) setTracker(result);
+          } else if (resource === 'profile') {
+            const result = await homeService.getProfile(token);
+            if (currentSessionTokenRef.current === token) setProfile(result);
+          } else if (resource === 'rewards') {
+            const result = await homeService.getRewards(token);
+            if (currentSessionTokenRef.current === token) {
+              if (previousUnlockedBadgeIdsRef.current === null && result?.badges) {
+                previousUnlockedBadgeIdsRef.current = new Set(result.badges.filter((badge) => badge.unlocked).map((badge) => String(badge.id)));
+              }
+              setRewards(result);
+            }
+          } else if (resource === 'leaderboard') {
+            const result = await homeService.getLeaderboard(token);
+            if (currentSessionTokenRef.current === token) setLeaderboard(result);
+          } else {
+            const result = await homeService.getTransparency(token);
+            if (currentSessionTokenRef.current === token) setTransparency(result);
+          }
+          if (currentSessionTokenRef.current === token && lastSecondaryRefreshAtRef.current[resource] <= requestStartedAt) lastSecondaryRefreshAtRef.current[resource] = Date.now();
+        } catch (error) {
+          console.warn(`[ECOBUD ${resource} refresh warning]:`, error);
+        } finally {
+          secondaryRefreshInFlightRef.current.delete(resource);
+        }
+      })();
+    }
+  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating, tracker?.month]);
 
   useEffect(() => {
     if (!session || !presence.hasUsableInternet) {
@@ -1032,11 +1089,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const completeCoachMarks = useCallback(() => {
     setCoachMarksVisible(false);
+    setCoachMarksReplay(false);
     setCoachMarksCurrentStep(0);
   }, []);
 
   const showCoachMarks = useCallback(() => {
     setCoachMarksCurrentStep(0);
+    setCoachMarksReplay(true);
     setCoachMarksVisible(true);
   }, []);
 
@@ -1064,13 +1123,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }, 520);
   }, [clearAppData, persistSession, runWithActionLoader]);
 
-  const handleLoginArgs = useCallback(async (email: string, pass: string) => {
-    await runWithActionLoader('Signing you into EcoBud...', async () => {
+  const handleLoginArgs = useCallback(async (email: string, pass: string): Promise<MfaChallengePayload | void> => {
+    return runWithActionLoader('Signing you into EcoBud...', async () => {
       setAuthLoading(true);
       setAuthError(null);
 
       try {
         const nextSession = await homeService.login(email.trim(), pass);
+        if ('mfaRequired' in nextSession) return nextSession;
 
         if (nextSession?.user?.role === 'admin' || nextSession?.user?.role === 'moderator') {
           throw new Error('Administrators and moderators cannot log in via the mobile app. Please use the web portal.');
@@ -1081,6 +1141,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         await hydrateApp(nextSession);
       } catch (error) {
         setAuthError(error instanceof Error ? error.message : 'Login failed.');
+        return;
       } finally {
         setAuthLoading(false);
       }
@@ -1234,8 +1295,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
         // Fallback to proceed if check failed
       }
 
-      const completeGoogleAuth = async (selectedCity?: string, isNewUser?: boolean) => {
-        await runWithActionLoader('Signing you into EcoBud...', async () => {
+      const completeGoogleAuth = async (selectedCity?: string, isNewUser?: boolean): Promise<MfaChallengePayload | void> => {
+        return runWithActionLoader('Signing you into EcoBud...', async () => {
           setAuthLoading(true);
           try {
             const nextSession = await homeService.googleLogin({
@@ -1245,6 +1306,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               avatarUrl: authAvatarUrl,
               city: selectedCity || existingCity || undefined,
             });
+            if ('mfaRequired' in nextSession) return nextSession;
 
             if (nextSession?.user?.role === 'admin' || nextSession?.user?.role === 'moderator') {
               throw new Error('Administrators and moderators cannot log in via the mobile app.');
@@ -1269,7 +1331,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       if (userExists) {
         // If user already exists, proceed directly to home dashboard without asking barangay
-        await completeGoogleAuth(undefined, false);
+        return await completeGoogleAuth(undefined, false);
       } else {
         // If new user signing up via Google, prompt for barangay selection first
         return {
@@ -1313,6 +1375,24 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
     }, 900);
   }, [hydrateApp, persistSession, runWithActionLoader]);
+
+  const handleVerifyMfaChallenge = useCallback(async (challengeToken: string, code: string) => {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const nextSession = await homeService.verifyMfaChallenge(challengeToken, code);
+      if (nextSession?.user?.role === 'admin' || nextSession?.user?.role === 'moderator') {
+        throw new Error('Administrators and moderators cannot log in via the mobile app. Please use the web portal.');
+      }
+      setSession(nextSession);
+      await persistSession(nextSession);
+      await hydrateApp(nextSession);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Authenticator verification failed.');
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [hydrateApp, persistSession]);
 
   const handleSendOTP = useCallback(async (email: string) => {
     try {
@@ -2138,9 +2218,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
           const baseMonth = tracker?.month ?? getPhMonthKey();
           const targetMonth = shiftMonth(baseMonth, offset);
           setRefreshing(true);
+          lastSecondaryRefreshAtRef.current.tracker = Date.now();
           const nextTracker = await homeService.getTracker(activeSession.token, targetMonth);
           setTracker(nextTracker);
         } catch (error) {
+          lastSecondaryRefreshAtRef.current.tracker = 0;
           Alert.alert('Unable to load month', error instanceof Error ? error.message : 'Please try again.');
         } finally {
           setRefreshing(false);
@@ -2622,6 +2704,39 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
   }, [ensureSession, runWithActionLoader, persistSession]);
 
+  const getTotpStatus = useCallback(async () => {
+    const activeSession = ensureSession();
+    return homeService.getTotpStatus(activeSession.token);
+  }, [ensureSession]);
+
+  const beginTotpEnrollment = useCallback(async () => {
+    const activeSession = ensureSession();
+    return homeService.beginTotpEnrollment(activeSession.token);
+  }, [ensureSession]);
+
+  const confirmTotpEnrollment = useCallback(async (enrollmentId: string, code: string) => {
+    const activeSession = ensureSession();
+    const result = await homeService.confirmTotpEnrollment(activeSession.token, enrollmentId, code);
+    const updatedSession = { ...activeSession, token: result.token, refreshToken: result.refreshToken };
+    setSession(updatedSession);
+    await persistSession(updatedSession);
+    return result.recoveryCodes;
+  }, [ensureSession, persistSession]);
+
+  const rotateMfaRecoveryCodes = useCallback(async (code: string) => {
+    const activeSession = ensureSession();
+    const result = await homeService.rotateMfaRecoveryCodes(activeSession.token, code);
+    return result.recoveryCodes;
+  }, [ensureSession]);
+
+  const disableTotp = useCallback(async (code: string) => {
+    const activeSession = ensureSession();
+    const result = await homeService.disableTotp(activeSession.token, code);
+    const updatedSession = { ...activeSession, token: result.token, refreshToken: result.refreshToken };
+    setSession(updatedSession);
+    await persistSession(updatedSession);
+  }, [ensureSession, persistSession]);
+
   const userDisplayName =
     profile?.profile?.displayName ??
     session?.user.displayName ??
@@ -2713,6 +2828,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     continueWithReadOnlyAccess,
     leaveReadOnlyAccess,
     handleLoginArgs,
+    handleVerifyMfaChallenge,
     handleGoogleSignIn,
     handleSignUpArgs,
     handleSendOTP,
@@ -2747,9 +2863,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleUpdateProfileImage,
     handleUpdateProfile,
     handleUpdateSecuritySettings,
+    getTotpStatus,
+    beginTotpEnrollment,
+    confirmTotpEnrollment,
+    rotateMfaRecoveryCodes,
+    disableTotp,
     coachMarksCurrentStep,
     setCoachMarksCurrentStep,
     coachMarksVisible,
+    coachMarksReplay,
     completeCoachMarks,
     showCoachMarks,
     spotlightTargetRect,

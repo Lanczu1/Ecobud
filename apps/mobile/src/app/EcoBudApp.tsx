@@ -84,6 +84,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const scrollRef = React.useRef<ScrollView>(null);
+  const scrollYRef = React.useRef(0);
+  const pendingSearchY = React.useRef<number | null>(null);
+  const [searchKeyboardHeight, setSearchKeyboardHeight] = useState(0);
   const [hideMarketplaceChrome, setHideMarketplaceChrome] = useState(false);
   const [onboardingAnimationPending, setOnboardingAnimationPending] = useState(false);
   const finishOnboardingAnimation = useCallback(() => setOnboardingAnimationPending(false), []);
@@ -97,7 +100,27 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     setHideMarketplaceChrome(hidden);
   }, []);
 
+  const handleSearchKeyboardChange = useCallback((keyboardHeight: number, searchScreenY?: number) => {
+    setSearchKeyboardHeight(keyboardHeight);
+    pendingSearchY.current = keyboardHeight > 0 && searchScreenY !== undefined
+      ? Math.max(0, scrollYRef.current + searchScreenY - insets.top - 16)
+      : null;
+  }, [insets.top]);
+
   React.useEffect(() => {
+    if (searchKeyboardHeight <= 0 || pendingSearchY.current === null) return;
+    const frame = requestAnimationFrame(() => {
+      if (pendingSearchY.current !== null) {
+        scrollRef.current?.scrollTo({ y: pendingSearchY.current, animated: true });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [searchKeyboardHeight]);
+
+  React.useEffect(() => {
+    scrollYRef.current = 0;
+    pendingSearchY.current = null;
+    setSearchKeyboardHeight(0);
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ y: 0, animated: false });
     }
@@ -130,7 +153,8 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       <AuthView
         authLoading={model.authLoading}
         authError={model.authError}
-        onLogin={(email, pass) => void model.handleLoginArgs(email, pass)}
+        onLogin={(email, pass) => model.handleLoginArgs(email, pass)}
+        onVerifyMfa={model.handleVerifyMfaChallenge}
         onGoogleSignIn={() => model.handleGoogleSignIn()}
         onSignUp={(username, email, pass, city, otpCode) => void model.handleSignUpArgs(username, email, pass, city, otpCode)}
         onSendOTP={(email) => model.handleSendOTP(email)}
@@ -142,13 +166,31 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         {model.activeTab === 'marketplace' ? (
-          <ScreenTransition key="marketplace">
+          <ScreenTransition key="marketplace" enabled={!model.coachMarksReplay || !model.coachMarksVisible}>
             <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />
           </ScreenTransition>
+        ) : model.activeTab === 'learn' ? (
+          <ScreenTransition key="learn" enabled={!model.coachMarksReplay || !model.coachMarksVisible}>
+            <LearnView model={model} onSearchKeyboardChange={handleSearchKeyboardChange} keyboardHeight={searchKeyboardHeight} />
+          </ScreenTransition>
+        ) : model.activeTab === 'challenges' ? (
+          <ScreenTransition key="challenges" enabled={!model.coachMarksReplay || !model.coachMarksVisible}>
+            <ChallengesView model={model} onSearchKeyboardChange={handleSearchKeyboardChange} keyboardHeight={searchKeyboardHeight} />
+          </ScreenTransition>
         ) : (
-          <ScreenTransition key={model.activeTab}>
+          <ScreenTransition key={model.activeTab} enabled={!model.coachMarksReplay || !model.coachMarksVisible}>
             <ScrollView
               ref={scrollRef}
+              onContentSizeChange={() => {
+                if (pendingSearchY.current === null) return;
+                const targetY = pendingSearchY.current;
+                pendingSearchY.current = null;
+                scrollRef.current?.scrollTo({ y: targetY, animated: true });
+              }}
+              onScroll={(event) => { scrollYRef.current = event.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               refreshControl={
                 <RefreshControl
                   refreshing={model.refreshing}
@@ -160,8 +202,6 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
               contentContainerStyle={[styles.mainScrollContent, { paddingBottom: (styles.mainScrollContent.paddingBottom as number) + insets.bottom }]}
             >
               {model.activeTab === 'home' && <HomeView model={model} />}
-              {model.activeTab === 'learn' && <LearnView model={model} />}
-              {model.activeTab === 'challenges' && <ChallengesView model={model} />}
               {model.activeTab === 'tracker' && <TrackerView model={model} />}
               {model.activeTab === 'profile' && <ProfileView model={model} />}
             </ScrollView>
@@ -204,12 +244,16 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       )}
       <CoachMarksOverlay
         visible={Boolean(model.session && model.coachMarksVisible)}
+        replay={model.coachMarksReplay}
         onFinish={model.completeCoachMarks}
         onSkip={model.completeCoachMarks}
         activeTab={model.activeTab}
         onTabChange={model.setActiveTab}
         onScrollTo={(y, animated = true) => {
           scrollRef.current?.scrollTo({ y, animated });
+        }}
+        onScrollBy={(delta, animated = true) => {
+          scrollRef.current?.scrollTo({ y: Math.max(0, scrollYRef.current + delta), animated });
         }}
         model={model}
       />

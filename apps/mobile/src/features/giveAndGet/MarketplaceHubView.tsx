@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, BackHandler } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, StyleSheet, BackHandler, DeviceEventEmitter } from 'react-native';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import type { EcoBudMobileModel } from '../../app/types/home';
 import { TopNavbar } from '../../app/components/CommonComponents';
@@ -36,6 +36,13 @@ export function MarketplaceHubView({
   const [showSwapDialog, setShowSwapDialog] = useState(false);
   const [showAcceptedDialog, setShowAcceptedDialog] = useState(false);
   const [conversations, setConversations] = useState<SwapConversation[]>([]);
+  const [conversationsLoading, setConversationsLoading] = useState(true);
+  const [conversationsError, setConversationsError] = useState(false);
+  const conversationsRequestId = useRef(0);
+  const conversationsInFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const conversationsLoadedFor = useRef<string | null>(null);
+  const handleLogoutRef = useRef(model.handleLogout);
+  handleLogoutRef.current = model.handleLogout;
   const [showReportDialog, setShowReportDialog] = useState(false);
 
   useEffect(() => {
@@ -61,26 +68,45 @@ export function MarketplaceHubView({
 
   const currentUserId = model.session?.user.id || '';
   const token = model.session?.token || '';
-
-  const loadConversations = useCallback(async () => {
-    if (!currentUserId || !token) return;
-    try {
-      swapService.init(token);
-      const convs = await swapService.fetchConversations(currentUserId);
-      setConversations(convs);
-    } catch (err: any) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isAuthExpired = err?.status === 401 || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized');
-      if (isAuthExpired) {
-        // Silently reset expired session via root handler without popping LogBox
-        void model.handleLogout?.();
-        return;
-      }
+  const loadConversations = useCallback(async (showLoading = false) => {
+    if (!currentUserId || !token) {
+      setConversationsLoading(false);
+      return;
     }
-  }, [currentUserId, token, model]);
+    const key = `${currentUserId}:${token}`;
+    if (showLoading && conversationsLoadedFor.current !== key) setConversationsLoading(true);
+    if (conversationsInFlight.current?.key === key) return conversationsInFlight.current.promise;
+
+    const requestId = ++conversationsRequestId.current;
+    const promise = Promise.resolve().then(async () => {
+      try {
+        swapService.init(token);
+        const convs = await swapService.fetchConversations(currentUserId);
+        if (requestId === conversationsRequestId.current) {
+          setConversations(convs);
+          setConversationsError(false);
+          conversationsLoadedFor.current = key;
+        }
+      } catch (err: any) {
+        if (requestId !== conversationsRequestId.current) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        const isAuthExpired = err?.status === 401 || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('unauthorized');
+        if (isAuthExpired) {
+          void handleLogoutRef.current?.();
+        } else {
+          setConversationsError(true);
+        }
+      } finally {
+        if (requestId === conversationsRequestId.current) setConversationsLoading(false);
+        if (conversationsInFlight.current?.key === key) conversationsInFlight.current = null;
+      }
+    });
+    conversationsInFlight.current = { key, promise };
+    return promise;
+  }, [currentUserId, token]);
 
   useEffect(() => {
-    loadConversations();
+    loadConversations(true);
   }, [loadConversations]);
 
   // Hardware back button support within Marketplace (closes dialogs or steps back to feed)
@@ -149,6 +175,9 @@ export function MarketplaceHubView({
             if (revision <= (seenRevisions['swap'] ?? 0)) return;
             seenRevisions['swap'] = revision;
             loadConversations();
+            if (payload?.eventType === 'message' && payload?.swapRequestId) {
+              DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
+            }
           })
           .subscribe();
       } catch {
@@ -267,15 +296,18 @@ export function MarketplaceHubView({
           onRequestSwap={handleRequestSwap}
           activeTab={feedTab}
           onTabChange={(tab) => {
+            if (tab === feedTab) return;
             setFeedTab(tab);
-            if (tab === 'chats') loadConversations();
+            if (tab === 'chats') loadConversations(true);
           }}
           conversations={conversations}
+          conversationsLoading={conversationsLoading}
+          conversationsError={conversationsError}
+          onRetryConversations={() => void loadConversations(true)}
           onSelectConversation={(conv) => {
             setSelectedConversation(conv);
             setScreen('chat');
           }}
-          onRefreshConversations={loadConversations}
           model={model}
         />
         </ScreenTransition>

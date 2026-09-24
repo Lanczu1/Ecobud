@@ -14,6 +14,7 @@ import { verifyGoogleIdentity } from '../security/googleIdentity';
 import { emailCodeHash } from '../security/emailChange';
 import { welcomeEmail } from '../services/welcomeEmail';
 import { sendDirectNotification } from '../services/notificationService';
+import { hashRecoveryCode, decryptTotpSecret, verifyTotp } from '../security/totp';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -75,6 +76,14 @@ const loginSchema = z.object({
 const usernameAvailabilitySchema = z.object({
   displayName: z.string().trim().min(2).max(50),
 });
+
+async function requireMfaChallenge(userId: string, clientType: SessionClient) {
+  const id = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 5 * 60_000);
+  await prisma.mfaLoginChallenge.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  await prisma.mfaLoginChallenge.create({ data: { id, userId, clientType, expiresAt } });
+  return { mfaRequired: true as const, challengeToken: TokenService.signMfaChallenge({ userId, challengeId: id, clientType }), expiresAt: expiresAt.toISOString() };
+}
 
 function assertAccountNotLocked(email: string): void {
   const lockStatus = LoginAttemptTracker.isLocked(email.trim().toLowerCase());
@@ -388,12 +397,76 @@ authRoutes.post(
       throw new HttpError(403, getInactiveStatusMessage(user.status));
     }
 
+    if (user.totpEnabledAt) {
+      if (!user.totpSecretEncrypted) throw new HttpError(503, 'Authenticator verification is unavailable. Contact support before signing in.');
+      return res.json(await requireMfaChallenge(user.id, payload.clientType));
+    }
+
     // Reset failed attempts upon successful login
     LoginAttemptTracker.recordSuccess(normalizedEmail);
 
     return res.json(toAuthResponse(user, payload.clientType));
   }),
 );
+
+const mfaVerifySchema = z.object({ challengeToken: z.string().min(1).max(4096), code: z.string().trim().min(1).max(32) });
+authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
+  const payload = mfaVerifySchema.parse(req.body);
+  let challengeClaims;
+  try {
+    challengeClaims = TokenService.verifyMfaChallenge(payload.challengeToken);
+  } catch {
+    throw new HttpError(401, 'This sign-in verification expired. Please sign in again.');
+  }
+
+  const challenge = await prisma.mfaLoginChallenge.findUnique({
+    where: { id: challengeClaims.challengeId },
+    include: { user: { include: { profile: true } } },
+  });
+  if (!challenge || challenge.userId !== challengeClaims.userId || challenge.consumedAt || challenge.expiresAt <= new Date()) {
+    throw new HttpError(401, 'This sign-in verification expired. Please sign in again.');
+  }
+  const user = challenge.user;
+  assertAccountNotLocked(user.email);
+  if (user.status !== 'active' || !user.totpEnabledAt || !user.totpSecretEncrypted) {
+    throw new HttpError(401, 'Authenticator verification could not be completed. Please sign in again.');
+  }
+
+  const normalizedCode = payload.code.replace(/[\s-]/g, '').toUpperCase();
+  const secret = decryptTotpSecret(user.totpSecretEncrypted);
+  const step = verifyTotp(secret, normalizedCode);
+  if (step !== null) {
+    await prisma.$transaction(async (tx) => {
+      const reserved = await tx.user.updateMany({
+        where: { id: user.id, OR: [{ totpLastUsedStep: null }, { totpLastUsedStep: { lt: BigInt(step) } }] },
+        data: { totpLastUsedStep: BigInt(step) },
+      });
+      if (reserved.count !== 1) throw new HttpError(401, 'That authenticator code has already been used. Try the next code.');
+      const consumed = await tx.mfaLoginChallenge.updateMany({ where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() } }, data: { consumedAt: new Date() } });
+      if (consumed.count !== 1) throw new HttpError(401, 'This sign-in verification expired. Please sign in again.');
+    });
+  } else {
+    const recoveryRows = await prisma.mfaRecoveryCode.findMany({ where: { userId: user.id, usedAt: null } });
+    const matching = recoveryRows.find((row) => {
+      const expected = Buffer.from(row.codeHash, 'hex');
+      const actual = Buffer.from(hashRecoveryCode(normalizedCode), 'hex');
+      return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+    });
+    if (!matching) {
+      LoginAttemptTracker.recordFailure(user.email);
+      throw new HttpError(401, 'The authenticator code or recovery code is invalid.');
+    }
+    await prisma.$transaction(async (tx) => {
+      const consumedRecovery = await tx.mfaRecoveryCode.updateMany({ where: { id: matching.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (consumedRecovery.count !== 1) throw new HttpError(401, 'That recovery code has already been used.');
+      const consumed = await tx.mfaLoginChallenge.updateMany({ where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() } }, data: { consumedAt: new Date() } });
+      if (consumed.count !== 1) throw new HttpError(401, 'This sign-in verification expired. Please sign in again.');
+    });
+  }
+
+  LoginAttemptTracker.recordSuccess(user.email);
+  return res.json(toAuthResponse(user, challengeClaims.clientType));
+}));
 
 const googleAuthSchema = z.object({
   accessToken: z.string().min(1).max(16384),
@@ -500,6 +573,10 @@ authRoutes.post(
       throw new HttpError(500, 'Failed to authenticate user.');
     }
 
+    if (user.totpEnabledAt) {
+      if (!user.totpSecretEncrypted) throw new HttpError(503, 'Authenticator verification is unavailable. Contact support before signing in.');
+      return res.json(await requireMfaChallenge(user.id, payload.clientType));
+    }
     return res.json(toAuthResponse(user, payload.clientType));
   }),
 );

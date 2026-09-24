@@ -69,6 +69,8 @@ export const authenticateRequest = async (
       status: user.status,
       city: user.profile?.city ?? null,
       sessionVersion: user.sessionVersion,
+      clientType: session.clientType ?? 'mobile',
+      authTime: session.authTime,
     };
 
     return next();

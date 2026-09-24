@@ -103,8 +103,9 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
     }).start();
   }, [animatedPosition, targetPosition.x, targetPosition.y]);
 
-  // Max width of speech bubble dynamically bound to screen width (never overflows)
-  const bubbleMaxWidth = Math.min(screenWidth * 0.58, scale(220));
+  const bubbleWidth = Math.min(screenWidth * 0.48, mascotSize * 1.35);
+  const bubblePadding = Math.max(8, Math.round(mascotSize * 0.08));
+  const bubbleTextSize = Math.max(10, Math.min(12, mascotSize * 0.105));
 
   // Animated values for speech bubble (fade + translate)
   const bubbleOpacity = useRef(new Animated.Value(0)).current;
@@ -187,7 +188,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
 
   // Gentle periodic bubble appearance without compounding continuous CPU render loops
   useEffect(() => {
-    if (reduceMascotMotion) {
+    if (performanceMode === 'reduced') {
       bubbleOpacity.stopAnimation();
       bubbleTranslateY.stopAnimation();
       bubbleOpacity.setValue(0);
@@ -244,7 +245,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           ]),
         ]).start(() => {
           // Stay hidden for 7 seconds before next reminder cycle (conserves low-end CPU)
-          if (isMounted) {
+          if (isMounted && !useLightweightBubble) {
             timer = setTimeout(runCycle, 7000);
           }
         });
@@ -259,7 +260,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       if (initialDelay) clearTimeout(initialDelay);
       if (timer) clearTimeout(timer);
     };
-  }, [bubbleOpacity, bubbleTranslateY, reduceMascotMotion, useLightweightBubble]);
+  }, [bubbleOpacity, bubbleTranslateY, performanceMode, useLightweightBubble]);
 
   return (
     <Animated.View
@@ -292,17 +293,15 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       {/* Speech Bubble: Responsively positioned according to Mascot placement */}
       <Animated.View
         pointerEvents="none"
-        renderToHardwareTextureAndroid
+        renderToHardwareTextureAndroid={!useLightweightBubble}
         shouldRasterizeIOS
         style={{
           position: 'absolute',
-          ...(position.startsWith('top')
-            ? { top: mascotSize * 0.85 }
-            : { bottom: mascotSize * 0.76 }),
+          top: mascotSize * 0.18,
           ...(isLeftPosition
-            ? { left: mascotSize * 0.72 }
-            : { right: mascotSize * 0.72 }),
-          width: bubbleMaxWidth,
+            ? { left: mascotSize * 0.88 }
+            : { right: mascotSize * 0.88 }),
+          width: bubbleWidth,
           opacity: bubbleOpacity,
           transform: useLightweightBubble ? undefined : [{ translateY: bubbleTranslateY }],
           zIndex: 10,
@@ -311,12 +310,10 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
         <View
           style={{
             backgroundColor: isDark ? '#111D17' : '#FFFFFF',
-            borderRadius: moderateScale(18),
-            borderBottomRightRadius: moderateScale(4),
-            paddingHorizontal: scale(14),
-            paddingTop: verticalScale(10),
-            paddingBottom: verticalScale(10),
-            borderWidth: 1.5,
+            borderRadius: moderateScale(13),
+            paddingHorizontal: bubblePadding,
+            paddingVertical: Math.max(6, Math.round(bubblePadding * 0.7)),
+            borderWidth: 1,
             borderColor: isDark ? 'rgba(74, 222, 128, 0.45)' : 'rgba(16, 185, 129, 0.28)',
             ...(useLightweightBubble
               ? { elevation: 0 }
@@ -335,24 +332,24 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginBottom: verticalScale(5),
+              marginBottom: 3,
             }}
           >
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 5,
+                gap: 3,
                 backgroundColor: isDark ? 'rgba(74, 222, 128, 0.15)' : '#ECFDF5',
-                paddingHorizontal: scale(7),
-                paddingVertical: verticalScale(2),
+                paddingHorizontal: 5,
+                paddingVertical: 1,
                 borderRadius: moderateScale(10),
               }}
             >
-              <Ionicons name="sparkles" size={scale(10)} color={isDark ? '#4ADE80' : '#059669'} />
+              <Ionicons name="sparkles" size={9} color={isDark ? '#4ADE80' : '#059669'} />
               <Text
                 style={{
-                  fontSize: responsiveFontSize(isSmallDevice ? 9.5 : 10.5),
+                  fontSize: 9,
                   fontWeight: '800',
                   color: isDark ? '#4ADE80' : '#047857',
                   letterSpacing: 0.4,
@@ -363,7 +360,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
               </Text>
             </View>
 
-            {!useLightweightBubble && (
+            {!useLightweightBubble && bubbleWidth > 155 && (
               <View
                 style={{
                   flexDirection: 'row',
@@ -395,39 +392,32 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           {/* Main Conversational Text */}
           <Text
             style={{
-              fontSize: responsiveFontSize(isSmallDevice ? 12.5 : 13.5),
-              lineHeight: responsiveFontSize(isSmallDevice ? 17 : 19),
+              fontSize: bubbleTextSize,
+              lineHeight: Math.round(bubbleTextSize * 1.35),
               fontWeight: '700',
               color: isDark ? '#F9FAFB' : '#111827',
               letterSpacing: -0.1,
             }}
           >
-            Hi! I’m Ecobud.{' '}
-            <Text
-              style={{
-                fontWeight: '500',
-                color: isDark ? '#9CA3AF' : '#4B5563',
-              }}
-            >
-              How can I help?
-            </Text>
+            Hi! How can I help?
           </Text>
         </View>
 
         {/* Bubble Pointer Tail pointing toward Mascot */}
         <View
           style={{
-            alignSelf: 'flex-end',
-            marginRight: scale(14),
+            position: 'absolute',
+            top: Math.max(16, Math.round(mascotSize * 0.26)),
+            ...(isLeftPosition ? { left: -9 } : { right: -9 }),
             width: 0,
             height: 0,
-            borderTopWidth: verticalScale(9),
-            borderTopColor: isDark ? '#111D17' : '#FFFFFF',
-            borderLeftWidth: scale(8),
-            borderLeftColor: 'transparent',
-            borderRightWidth: scale(3),
-            borderRightColor: 'transparent',
-            marginTop: -1,
+            borderTopWidth: 7,
+            borderTopColor: 'transparent',
+            borderBottomWidth: 7,
+            borderBottomColor: 'transparent',
+            ...(isLeftPosition
+              ? { borderRightWidth: 10, borderRightColor: isDark ? '#111D17' : '#FFFFFF' }
+              : { borderLeftWidth: 10, borderLeftColor: isDark ? '#111D17' : '#FFFFFF' }),
           }}
         />
       </Animated.View>

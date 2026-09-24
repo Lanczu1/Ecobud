@@ -5906,6 +5906,7 @@ export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
 
 export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [page, setPage] = React.useState(1);
   const itemsPerPage = 10;
   const actualItems = model.leaderboard?.items ?? [];
@@ -5952,10 +5953,19 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} title="Leaderboard" />
-      <View style={[styles.homeContent, { flex: 1, paddingBottom: 0 }]}>
+      <View style={[styles.homeContent, { flex: 1, paddingHorizontal: 0, paddingBottom: 0 }]}>
         <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 4 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontSize: 25, fontWeight: '800' }}>Community ranks</Text>
+            <Text style={{ color: theme.colors.textMuted, fontSize: 14, marginTop: 4 }}>See how everyone is doing.</Text>
+          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
+            showsVerticalScrollIndicator={false}
+          >
           {isPageOne && top3.length > 0 && (
-            <View style={styles.leaderboardTop3}>
+            <View style={[styles.leaderboardTop3, { marginTop: 12, minHeight: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: isDark ? theme.colors.surfaceMuted : theme.colors.card, borderRadius: 20 }]}>
               {podiumLeaders.map((leader) => {
                 const leaderAvatar = leader.isCurrentUser
                   ? (leader.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
@@ -6021,11 +6031,14 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
           )}
 
-          <ScrollView 
-            style={{ flex: 1, marginTop: isPageOne ? 18 : 8 }}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 100 }}
-            showsVerticalScrollIndicator={false}
-          >
+          {actualItems.length === 0 && (
+            <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+              <Ionicons name="podium-outline" size={34} color={theme.colors.textMuted} />
+              <Text style={{ color: theme.colors.textPrimary, fontSize: 17, fontWeight: '700', marginTop: 12 }}>No rankings yet</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 14, marginTop: 4 }}>Earn points to appear on the leaderboard.</Text>
+            </View>
+          )}
+          <View style={{ marginTop: remainingList.length > 0 ? 18 : 0 }}>
             {remainingList.map(user => {
               const userAvatar = user.isCurrentUser
                 ? (user.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
@@ -6086,6 +6099,18 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               );
             })}
+          </View>
+          {totalPages > 1 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 12 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous leaderboard page" disabled={page === 1} onPress={() => setPage(page - 1)} style={{ padding: 10, opacity: page === 1 ? 0.4 : 1 }}>
+                <Ionicons name="chevron-back" size={22} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{page} / {totalPages}</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next leaderboard page" disabled={page === totalPages} onPress={() => setPage(page + 1)} style={{ padding: 10, opacity: page === totalPages ? 0.4 : 1 }}>
+                <Ionicons name="chevron-forward" size={22} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          )}
           </ScrollView>
         </Animated.View>
 
@@ -6098,8 +6123,9 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                 backgroundColor: isDark ? theme.colors.surfaceMuted : '#126027',
                 borderColor: isDark ? theme.colors.primary : '#126027',
                 borderWidth: isDark ? 1.5 : 0,
-                marginHorizontal: 16,
-                marginBottom: 10,
+                marginHorizontal: 20,
+                marginTop: 8,
+                marginBottom: Math.max(insets.bottom, 12) + 8,
                 borderRadius: 16,
                 shadowColor: isDark ? '#000' : '#126027',
               },
@@ -6126,7 +6152,9 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
               ]}
               avatarUrl={currentUser.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl}
             />
-            <View style={{ flex: 1, marginLeft: 16 }}>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text numberOfLines={1} style={{ color: '#FFF', fontSize: 15, fontWeight: '800' }}>You</Text>
+              <Text style={{ color: '#D9F4E5', fontSize: 12, marginTop: 2 }}>Your rank</Text>
             </View>
             <Text style={[styles.lbListPoints, { color: '#FFF' }]}>{currentUser.points} pts</Text>
           </View>
@@ -6645,6 +6673,65 @@ export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+function useKeyboardFormScroll(enabled = true) {
+  const scrollRef = React.useRef<ScrollView>(null);
+  const viewportRef = React.useRef<View>(null);
+  const scrollYRef = React.useRef(0);
+  const keyboardTopRef = React.useRef<number | null>(null);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+
+  const scrollToFocusedField = React.useCallback(() => {
+    const input = TextInput.State.currentlyFocusedInput();
+    const keyboardTop = keyboardTopRef.current;
+    if (!enabled || !input || keyboardTop === null) return;
+    viewportRef.current?.measureInWindow((_x, viewportTop) => {
+      input.measureInWindow((_inputX, inputTop) => {
+        const desiredTop = Math.min(viewportTop + 56, keyboardTop - 100);
+        scrollRef.current?.scrollTo({ y: Math.max(0, scrollYRef.current + inputTop - desiredTop), animated: true });
+      });
+    });
+  }, [enabled]);
+
+  const scheduleScroll = React.useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(scrollToFocusedField, 90);
+  }, [scrollToFocusedField]);
+
+  React.useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (!enabled) return;
+      keyboardTopRef.current = event.endCoordinates.screenY;
+      setKeyboardHeight(event.endCoordinates.height);
+      scheduleScroll();
+    });
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardTopRef.current = null;
+      setKeyboardHeight(0);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [enabled, scheduleScroll]);
+
+  React.useEffect(() => {
+    if (enabled) return;
+    keyboardTopRef.current = null;
+    setKeyboardHeight(0);
+  }, [enabled]);
+
+  return {
+    scrollRef,
+    viewportRef,
+    keyboardHeight,
+    onScroll: (event: { nativeEvent: { contentOffset: { y: number } } }) => { scrollYRef.current = event.nativeEvent.contentOffset.y; },
+    onFocus: () => { if (keyboardTopRef.current !== null) scheduleScroll(); },
+  };
+}
+
 export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const currentDisplayName = model.profile?.profile?.displayName ?? model.session?.user.displayName ?? '';
@@ -6656,6 +6743,22 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
   const [selectedBarangay, setSelectedBarangay] = React.useState(currentCity);
   const [isBarangayPickerOpen, setIsBarangayPickerOpen] = React.useState(false);
   const [barangaySearchQuery, setBarangaySearchQuery] = React.useState('');
+  const [barangayKeyboardTop, setBarangayKeyboardTop] = React.useState<number | null>(null);
+  const insets = useSafeAreaInsets();
+  const formScroll = useKeyboardFormScroll(!isBarangayPickerOpen);
+
+  React.useEffect(() => {
+    if (!isBarangayPickerOpen) return;
+    const shown = Keyboard.addListener('keyboardDidShow', (event) => setBarangayKeyboardTop(event.endCoordinates.screenY));
+    const hidden = Keyboard.addListener('keyboardDidHide', () => setBarangayKeyboardTop(null));
+    return () => { shown.remove(); hidden.remove(); };
+  }, [isBarangayPickerOpen]);
+
+  const closeBarangayPicker = () => {
+    Keyboard.dismiss();
+    setBarangayKeyboardTop(null);
+    setIsBarangayPickerOpen(false);
+  };
 
   const filteredBarangays = React.useMemo(() => {
     if (!barangaySearchQuery.trim()) return BARANGAYS;
@@ -6698,7 +6801,8 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
+        <ScrollView ref={formScroll.scrollRef} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
           
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Username</Text>
           <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
@@ -6713,6 +6817,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
               ]}
               value={displayName}
               onChangeText={setDisplayName}
+              onFocus={formScroll.onFocus}
               autoCapitalize="words"
               placeholder="Enter your username"
               placeholderTextColor={theme.colors.textMuted}
@@ -6778,24 +6883,36 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
             <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />
           </View>
         </ScrollView>
+        </View>
       </KeyboardAvoidingView>
 
       {/* Barangay Picker Modal */}
-      {isBarangayPickerOpen && (
-        <View style={localStyles.modalOverlay}>
-          <TouchableOpacity 
-            style={localStyles.modalBackdrop} 
-            activeOpacity={1} 
-            onPress={() => setIsBarangayPickerOpen(false)} 
+      <Modal visible={isBarangayPickerOpen} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={closeBarangayPicker}>
+        <View style={{ flex: 1 }}>
+          <TouchableOpacity
+            style={localStyles.modalBackdrop}
+            activeOpacity={1}
+            onPress={closeBarangayPicker}
           />
-          <View style={[localStyles.modalContainer, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}>
+          <View style={[
+            localStyles.modalContainer,
+            {
+              position: 'absolute', left: 0, right: 0,
+              bottom: barangayKeyboardTop === null ? insets.bottom : Math.max(0, Dimensions.get('screen').height - barangayKeyboardTop),
+              maxHeight: Math.min(verticalScale(470), (barangayKeyboardTop ?? Dimensions.get('screen').height) - insets.top - 16),
+              paddingBottom: 12,
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+              borderWidth: isDark ? 1 : 0,
+            },
+          ]}>
             <View style={[localStyles.modalHeader, isDark && { borderBottomColor: theme.colors.border }]}>
               <View>
                 <Text style={[localStyles.modalTitle, { color: theme.colors.textPrimary }]}>Select Barangay</Text>
                 <Text style={[localStyles.modalSub, { color: theme.colors.textMuted }]}>Choose your local community</Text>
               </View>
               <TouchableOpacity
-                onPress={() => setIsBarangayPickerOpen(false)}
+                onPress={closeBarangayPicker}
                 style={[localStyles.modalCloseBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
               >
                 <Ionicons name="close" size={20} color={isDark ? theme.colors.textPrimary : "#334155"} />
@@ -6821,7 +6938,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
 
             {/* Barangay List */}
-            <ScrollView style={localStyles.barangayListScroll} keyboardShouldPersistTaps="handled">
+            <ScrollView style={[localStyles.barangayListScroll, { flexShrink: 1 }]} keyboardShouldPersistTaps="handled">
               {filteredBarangays.map((barangay) => {
                 const isSelected = selectedBarangay === barangay;
                 return (
@@ -6833,7 +6950,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
                     ]}
                     onPress={() => {
                       setSelectedBarangay(barangay);
-                      setIsBarangayPickerOpen(false);
+                      closeBarangayPicker();
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
@@ -6868,13 +6985,14 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
             </ScrollView>
           </View>
         </View>
-      )}
+      </Modal>
     </OverlayScaffold>
   );
 }
 
 export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark, themeMode, setThemeMode } = useTheme();
+  const formScroll = useKeyboardFormScroll();
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
@@ -6882,6 +7000,79 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [emailCode, setEmailCode] = React.useState('');
   const [emailBusy, setEmailBusy] = React.useState(false);
   const [legalDocument, setLegalDocument] = React.useState<LegalDocumentType | null>(null);
+  const [totpStatus, setTotpStatus] = React.useState<{ enabled: boolean; enabledAt: string | null; remainingRecoveryCodes: number } | null>(null);
+  const [totpEnrollment, setTotpEnrollment] = React.useState<{ enrollmentId: string; secret: string; expiresAt: string } | null>(null);
+  const [totpCode, setTotpCode] = React.useState('');
+  const [recoveryCodes, setRecoveryCodes] = React.useState<string[] | null>(null);
+  const [totpBusy, setTotpBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    let current = true;
+    void model.getTotpStatus().then((status) => { if (current) setTotpStatus(status); })
+      .catch(() => { if (current) setTotpStatus(null); });
+    return () => { current = false; };
+  }, [model.session?.token, model.getTotpStatus]);
+
+  const beginTotpSetup = async () => {
+    setTotpBusy(true);
+    try {
+      const enrollment = await model.beginTotpEnrollment();
+      setTotpEnrollment(enrollment);
+      setTotpCode('');
+      setRecoveryCodes(null);
+    } catch (error) {
+      Alert.alert('Could not start setup', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setTotpBusy(false);
+    }
+  };
+
+  const confirmTotpSetup = async () => {
+    if (!totpEnrollment) return;
+    setTotpBusy(true);
+    try {
+      const codes = await model.confirmTotpEnrollment(totpEnrollment.enrollmentId, totpCode);
+      setRecoveryCodes(codes);
+      setTotpEnrollment(null);
+      setTotpCode('');
+      setTotpStatus({ enabled: true, enabledAt: new Date().toISOString(), remainingRecoveryCodes: codes.length });
+    } catch (error) {
+      Alert.alert('Code not accepted', error instanceof Error ? error.message : 'Check the code and try again.');
+    } finally {
+      setTotpBusy(false);
+    }
+  };
+
+  const rotateTotpRecoveryCodes = async () => {
+    if (!totpCode.trim()) { Alert.alert('Enter a code', 'Enter a current authenticator code to replace your recovery codes.'); return; }
+    setTotpBusy(true);
+    try {
+      const codes = await model.rotateMfaRecoveryCodes(totpCode.trim());
+      setRecoveryCodes(codes);
+      setTotpCode('');
+      setTotpStatus((status) => status ? { ...status, remainingRecoveryCodes: codes.length } : status);
+    } catch (error) {
+      Alert.alert('Could not replace codes', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setTotpBusy(false);
+    }
+  };
+
+  const disableTotp = () => {
+    if (!totpCode.trim()) { Alert.alert('Enter a code', 'Enter a current authenticator or unused recovery code to turn off 2-step verification.'); return; }
+    Alert.alert('Turn off authenticator?', 'You will need only your password or Google sign-in to access this account.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Turn off', style: 'destructive', onPress: () => {
+        setTotpBusy(true);
+        void model.disableTotp(totpCode.trim()).then(() => {
+          setTotpStatus({ enabled: false, enabledAt: null, remainingRecoveryCodes: 0 });
+          setTotpCode('');
+          setRecoveryCodes(null);
+        }).catch((error) => Alert.alert('Could not turn off', error instanceof Error ? error.message : 'Please try again.'))
+          .finally(() => setTotpBusy(false));
+      } },
+    ]);
+  };
 
   const handleSave = async () => {
     if (!currentPassword) {
@@ -6924,7 +7115,8 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.overlayScroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
+        <ScrollView ref={formScroll.scrollRef} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Change Email</Text>
           <SurfaceCard style={{ padding: 16, gap: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 }}>
@@ -6943,6 +7135,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               secureTextEntry
               value={currentPassword}
               onChangeText={setCurrentPassword}
+              onFocus={formScroll.onFocus}
             />
             <TextInput
               style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
@@ -6953,6 +7146,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               keyboardType="email-address"
               value={newEmail}
               onChangeText={value => { setNewEmail(value); setEmailCode(''); }}
+              onFocus={formScroll.onFocus}
             />
             <TouchableOpacity disabled={emailBusy} onPress={async () => {
               if (!model.session || !currentPassword || !newEmail.trim()) { Alert.alert('Missing details', 'Enter your current password and new email.'); return; }
@@ -6972,6 +7166,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               maxLength={6}
               value={emailCode}
               onChangeText={setEmailCode}
+              onFocus={formScroll.onFocus}
             />
             <TouchableOpacity disabled={emailBusy} onPress={async () => {
               setEmailBusy(true);
@@ -6982,6 +7177,64 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               <Ionicons name="shield-checkmark-outline" size={18} color={isDark ? '#0E1512' : '#FFFFFF'} />
               <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Verify and change email</Text>
             </TouchableOpacity>
+          </SurfaceCard>
+          <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Two-Step Verification</Text>
+          <SurfaceCard style={{ padding: 16, gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5EE', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="key-outline" size={19} color={isDark ? theme.colors.primary : '#126027'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>Authenticator app</Text>
+                <Text style={{ fontSize: 12, lineHeight: 17, color: theme.colors.textMuted }}>{totpStatus?.enabled ? `On · ${totpStatus.remainingRecoveryCodes} recovery codes left` : 'Add a code from Google Authenticator or another TOTP app when you sign in.'}</Text>
+              </View>
+            </View>
+
+            {totpEnrollment ? <>
+              <Text style={{ fontSize: 13, lineHeight: 19, color: theme.colors.textMuted }}>In your authenticator app, choose “Enter a setup key”. Type this key exactly, then enter the six-digit code it generates.</Text>
+              <Text selectable style={{ padding: 14, borderRadius: 12, backgroundColor: theme.colors.surfaceMuted, color: theme.colors.textPrimary, fontSize: 16, fontWeight: '800', letterSpacing: 2, textAlign: 'center' }}>{totpEnrollment.secret.match(/.{1,4}/g)?.join(' ')}</Text>
+              <TextInput
+                style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary, textAlign: 'center', letterSpacing: 5 }]}
+                placeholder="6-digit authenticator code"
+                placeholderTextColor={theme.colors.textMuted}
+                keyboardType="number-pad"
+                maxLength={6}
+                value={totpCode}
+                onChangeText={(value) => setTotpCode(value.replace(/\D/g, '').slice(0, 6))}
+              />
+              <TouchableOpacity disabled={totpBusy || totpCode.length !== 6} onPress={() => void confirmTotpSetup()} activeOpacity={0.85} style={{ minHeight: 48, borderRadius: 24, backgroundColor: isDark ? theme.colors.primary : '#126027', alignItems: 'center', justifyContent: 'center', opacity: totpBusy || totpCode.length !== 6 ? 0.55 : 1 }}>
+                <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontSize: 14, fontWeight: '800' }}>{totpBusy ? 'Verifying...' : 'Verify and enable'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity disabled={totpBusy} onPress={() => { setTotpEnrollment(null); setTotpCode(''); }} style={{ alignSelf: 'center', padding: 8 }}><Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Cancel setup</Text></TouchableOpacity>
+            </> : null}
+
+            {recoveryCodes ? <View style={{ gap: 8, padding: 14, borderRadius: 12, backgroundColor: theme.colors.surfaceMuted }}>
+              <Text style={{ color: theme.colors.textPrimary, fontSize: 14, fontWeight: '800' }}>Save these one-time recovery codes</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12, lineHeight: 17 }}>Each code works once. They will not be shown again. Store them somewhere private.</Text>
+              <Text selectable style={{ color: theme.colors.textPrimary, fontSize: 15, lineHeight: 26, fontWeight: '700', letterSpacing: 1 }}>{recoveryCodes.join('\n')}</Text>
+              <TouchableOpacity onPress={() => setRecoveryCodes(null)} style={{ minHeight: 42, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: isDark ? theme.colors.primary : '#126027', fontWeight: '800' }}>I saved these codes</Text></TouchableOpacity>
+            </View> : null}
+
+            {totpStatus?.enabled && !recoveryCodes ? <>
+              <TextInput
+                style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary, textAlign: 'center', letterSpacing: 2 }]}
+                placeholder="Authenticator or recovery code"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={16}
+                value={totpCode}
+                onChangeText={setTotpCode}
+              />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity disabled={totpBusy} onPress={() => void rotateTotpRecoveryCodes()} style={{ flex: 1, minHeight: 46, borderWidth: 1, borderColor: theme.colors.inputBorder, borderRadius: 14, alignItems: 'center', justifyContent: 'center', opacity: totpBusy ? 0.55 : 1 }}><Text style={{ color: theme.colors.textPrimary, fontSize: 12, fontWeight: '700', textAlign: 'center' }}>Replace recovery codes</Text></TouchableOpacity>
+                <TouchableOpacity disabled={totpBusy} onPress={disableTotp} style={{ flex: 1, minHeight: 46, borderWidth: 1, borderColor: '#DC2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', opacity: totpBusy ? 0.55 : 1 }}><Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '700' }}>Turn off</Text></TouchableOpacity>
+              </View>
+            </> : null}
+
+            {!totpStatus?.enabled && !totpEnrollment && !recoveryCodes ? <TouchableOpacity disabled={totpBusy || !totpStatus} onPress={() => void beginTotpSetup()} activeOpacity={0.85} style={{ minHeight: 48, borderRadius: 24, backgroundColor: isDark ? theme.colors.primary : '#126027', alignItems: 'center', justifyContent: 'center', opacity: totpBusy || !totpStatus ? 0.55 : 1 }}>
+              <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontSize: 14, fontWeight: '800' }}>{totpBusy ? 'Starting setup...' : 'Set up authenticator app'}</Text>
+            </TouchableOpacity> : null}
           </SurfaceCard>
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>App Appearance</Text>
           <SurfaceCard style={{ padding: 16, gap: 12 }}>
@@ -7105,6 +7358,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               secureTextEntry
               value={newPassword}
               onChangeText={setNewPassword}
+              onFocus={formScroll.onFocus}
             />
             <TextInput
               style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
@@ -7113,6 +7367,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               secureTextEntry
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              onFocus={formScroll.onFocus}
             />
           </SurfaceCard>
 
@@ -7125,12 +7380,14 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               style={[localStyles.formInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               value={currentPassword}
               onChangeText={setCurrentPassword}
+              onFocus={formScroll.onFocus}
               secureTextEntry
               placeholder="Current Password"
               placeholderTextColor={theme.colors.textMuted}
             />
           </SurfaceCard>
         </ScrollView>
+        </View>
 
         <View style={{ padding: 16, paddingBottom: 32, backgroundColor: theme.colors.card, borderTopWidth: 1, borderColor: theme.colors.border }}>
           <PrimaryButton label="Save Changes" onPress={() => void handleSave()} />

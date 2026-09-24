@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  FlatList,
   ActivityIndicator,
   RefreshControl,
   DeviceEventEmitter,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ecobudApi } from '../../shared/api/ecobudApi';
 import type { AppNotification, NotificationType } from '../types/notifications';
 import type { EcoBudMobileModel } from '../types/home';
@@ -82,6 +84,7 @@ export function notificationTime(date: string) {
 
 export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { showNotification } = useInAppNotification();
   const c = theme.colors;
   const token = model.session?.token;
@@ -89,34 +92,45 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   const [filter, setFilter] = React.useState<string>('all');
   const [expanded, setExpanded] = React.useState(false);
   const [items, setItems] = React.useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = React.useState(model.notificationCount);
   const [next, setNext] = React.useState<number | null>(null);
-  const [busy, setBusy] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   const [isMarkingAll, setIsMarkingAll] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [failedOffset, setFailedOffset] = React.useState<number | null>(null);
   const generation = React.useRef(0);
 
   const load = React.useCallback(
-    async (offset = 0) => {
+    async (offset = 0, mode: 'initial' | 'refresh' | 'more' = 'initial') => {
       if (!token) return;
       const g = ++generation.current;
-      setBusy(true);
+      if (mode === 'initial') setInitialLoading(true);
+      if (mode === 'refresh') setRefreshing(true);
+      if (mode === 'more') setLoadingMore(true);
       setError('');
+      setFailedOffset(null);
       try {
         const q = filter === 'unread' ? '&unread=true' : filter === 'all' ? '' : `&type=${filter}`;
         const p = await ecobudApi.notifications(token, `?offset=${offset}${q}`);
         if (g === generation.current) {
-          setItems((old) =>
-            offset ? [...old, ...p.items.filter((n) => !old.some((o) => o.id === n.id))] : p.items,
-          );
+          setItems((old) => offset
+            ? [...old, ...p.items.filter((n) => !old.some((o) => o.id === n.id))]
+            : p.items);
           setNext(p.nextOffset);
+          setUnreadCount(p.unreadCount);
         }
       } catch {
         if (g === generation.current) {
-          setError('Unable to load notifications. Pull down to retry.');
+          setError(mode === 'more' ? 'Could not load older notifications.' : 'Unable to load notifications. Pull down to retry.');
+          setFailedOffset(mode === 'more' ? offset : null);
         }
       } finally {
         if (g === generation.current) {
-          setBusy(false);
+          setInitialLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
         }
       }
     },
@@ -125,8 +139,10 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
 
   React.useEffect(() => {
     setItems([]);
-    void load();
-    const sub = DeviceEventEmitter.addListener('notificationsInboxRefresh', () => void load());
+    setNext(null);
+    setInitialLoading(true);
+    void load(0, 'initial');
+    const sub = DeviceEventEmitter.addListener('notificationsInboxRefresh', () => void load(0, 'refresh'));
     return () => {
       generation.current++;
       sub.remove();
@@ -139,8 +155,12 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       triggerSelectionHaptic();
       if (!n.isRead) {
         await ecobudApi.readNotification(token, n.id);
-        setItems((old) => old.map((o) => (o.id === n.id ? { ...o, isRead: true } : o)));
+        setItems((old) => filter === 'unread'
+          ? old.filter((o) => o.id !== n.id)
+          : old.map((o) => (o.id === n.id ? { ...o, isRead: true } : o)));
+        setUnreadCount((count) => Math.max(0, count - 1));
         DeviceEventEmitter.emit('notificationsChanged');
+        if (filter === 'unread') void load(0, 'refresh');
       }
 
       const id = n.relatedId;
@@ -221,24 +241,31 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       triggerSuccessHaptic();
       await ecobudApi.readAllNotifications(token);
       setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+      setUnreadCount(0);
       DeviceEventEmitter.emit('notificationsChanged');
-      await load();
+      await load(0, 'refresh');
+      showNotification({ title: 'Notifications updated', message: 'All notifications are marked as read.', tone: 'success' });
     } catch {
-      setError('Unable to mark notifications as read. Try again.');
+      showNotification({ title: 'Could not mark notifications as read', message: 'Please try again.', tone: 'error' });
     } finally {
       setIsMarkingAll(false);
     }
   };
 
-  const hasUnread = items.some((item) => !item.isRead);
-  const unreadCount = items.filter((item) => !item.isRead).length;
+  const hasUnread = unreadCount > 0;
 
   return (
-    <ScrollView
-      contentContainerStyle={inboxStyles.container}
+    <FlatList
+      style={{ flex: 1 }}
+      data={items}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={[inboxStyles.container, { paddingBottom: insets.bottom + verticalScale(24) }]}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void load()} tintColor={c.primary} />}
-    >
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(0, 'refresh')} tintColor={c.primary} />}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      windowSize={7}
+      ListHeaderComponent={<>
       <LinearGradient colors={['#0F6B3A', '#16A34A', '#34D399']} style={inboxStyles.hero}>
         <View style={inboxStyles.heroIcon}>
           <Ionicons name="notifications" size={24} color="#FFFFFF" />
@@ -247,18 +274,16 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
         <View style={{ flex: 1 }}>
           <Text style={inboxStyles.heroEyebrow}>ECOBUD UPDATES</Text>
           <Text style={inboxStyles.heroTitle}>
-            {hasUnread ? `${unreadCount} new ${unreadCount === 1 ? 'update' : 'updates'}` : 'You’re all caught up'}
+            {initialLoading ? 'Checking updates...' : hasUnread ? `${unreadCount} unread ${unreadCount === 1 ? 'update' : 'updates'}` : 'You’re all caught up'}
           </Text>
-          <Text style={inboxStyles.heroSubtitle}>Fresh lessons, challenges, and community events—all in one place.</Text>
         </View>
       </LinearGradient>
 
       <View style={inboxStyles.headerRow}>
         <View style={{ flex: 1 }}>
           <Text style={[inboxStyles.headerTitle, { color: c.textPrimary }]}>Your activity</Text>
-          <Text style={[inboxStyles.headerSubtitle, { color: c.textSecondary }]}>Tap an update to jump straight to its content.</Text>
         </View>
-        {hasUnread && (
+        {hasUnread && !initialLoading && (
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Mark all as read"
@@ -280,7 +305,8 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
 
       {/* Filter Tabs */}
       <View style={inboxStyles.filtersWrap}>
-        <View style={inboxStyles.filtersRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <ScrollView horizontal style={{ flex: 1 }} showsHorizontalScrollIndicator={false} contentContainerStyle={inboxStyles.filtersRow} keyboardShouldPersistTaps="handled">
           {categories.map(([key, label]) => {
             const selected = filter === key;
             return (
@@ -312,8 +338,10 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
             );
           })}
 
+        </ScrollView>
           <TouchableOpacity
             accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Show fewer notification categories' : 'Show more notification categories'}
             onPress={() => {
               triggerSelectionHaptic();
               setExpanded((prev) => !prev);
@@ -374,18 +402,18 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       </View>
 
       {/* Error alert */}
-      {!!error && (
+      {!!error && failedOffset === null && (
         <View style={[inboxStyles.errorBanner, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
           <Ionicons name="alert-circle" size={18} color="#EF4444" />
           <Text style={inboxStyles.errorText}>{error}</Text>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Retry loading notifications"
-            disabled={busy}
-            onPress={() => void load()}
+            disabled={initialLoading || refreshing || loadingMore}
+            onPress={() => void load(0, items.length ? 'refresh' : 'initial')}
             style={[inboxStyles.retryButton, { borderColor: c.error }]}
           >
-            {busy ? (
+            {initialLoading || refreshing ? (
               <ActivityIndicator size="small" color={c.error} />
             ) : (
               <Text style={[inboxStyles.retryButtonText, { color: c.error }]}>Retry</Text>
@@ -393,24 +421,38 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* Empty State */}
-      {!busy && !error && items.length === 0 && (
+      </>}
+      ListEmptyComponent={initialLoading ? (
+        <View style={{ gap: 10 }}>
+          {[0, 1, 2, 3].map((index) => (
+            <View key={index} style={[inboxStyles.card, { backgroundColor: c.card, borderColor: c.border, opacity: 0.78 }]}>
+              <View style={[inboxStyles.iconBadge, { backgroundColor: c.surfaceMuted }]} />
+              <View style={{ flex: 1, gap: 9 }}>
+                <View style={{ width: '52%', height: 13, borderRadius: 7, backgroundColor: c.surfaceMuted }} />
+                <View style={{ width: '92%', height: 11, borderRadius: 6, backgroundColor: c.surfaceMuted }} />
+                <View style={{ width: '68%', height: 11, borderRadius: 6, backgroundColor: c.surfaceMuted }} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : !error ? (
         <View style={inboxStyles.emptyStateContainer}>
           <View style={[inboxStyles.emptyIconCircle, { backgroundColor: 'rgba(34, 197, 94, 0.12)' }]}>
             <Ionicons name="notifications-outline" size={40} color={c.primary} />
           </View>
-          <Text style={[inboxStyles.emptyTitle, { color: c.textPrimary }]}>No notifications yet</Text>
+          <Text style={[inboxStyles.emptyTitle, { color: c.textPrimary }]}>
+            {filter === 'all' ? 'No notifications yet' : filter === 'unread' ? 'All caught up' : 'No updates in this category'}
+          </Text>
           <Text style={[inboxStyles.emptySubtitle, { color: c.textSecondary }]}>
             {filter === 'unread'
-              ? "You're all caught up! No unread notifications."
-              : 'Updates about challenges, events, and community activities will show up here.'}
+              ? 'You have no unread notifications.'
+              : filter === 'all'
+                ? 'Updates about challenges, events, and community activities will show up here.'
+                : 'Try another category or check back later.'}
           </Text>
         </View>
-      )}
-
-      {/* Notifications List */}
-      {items.map((n) => {
+      ) : null}
+      renderItem={({ item: n }) => {
         const themeCat =
           categoryThemeColors[n.type as NotificationType] ?? categoryThemeColors.system;
         const iconName =
@@ -474,50 +516,49 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
             )}
           </TouchableOpacity>
         );
-      })}
-
-      {/* Busy Spinner */}
-      {busy && items.length > 0 && (
+      }}
+      ListFooterComponent={failedOffset !== null ? (
+        <View style={[inboxStyles.errorBanner, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+          <Ionicons name="alert-circle" size={18} color={c.error} />
+          <Text style={inboxStyles.errorText}>{error}</Text>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retry loading older notifications" onPress={() => void load(failedOffset, 'more')} style={[inboxStyles.retryButton, { borderColor: c.error }]}>
+            <Text style={[inboxStyles.retryButtonText, { color: c.error }]}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loadingMore ? (
         <ActivityIndicator color={c.primary} style={{ marginVertical: 16 }} />
-      )}
-
-      {/* Load More Button */}
-      {next !== null && !busy && (
+      ) : next !== null && !initialLoading ? (
         <TouchableOpacity
-          onPress={() => void load(next)}
+          accessibilityRole="button"
+          accessibilityLabel="Load older notifications"
+          onPress={() => void load(next, 'more')}
           style={[inboxStyles.loadMoreBtn, { borderColor: c.border, backgroundColor: c.card }]}
         >
           <Text style={[inboxStyles.loadMoreText, { color: c.primary }]}>Load older notifications</Text>
         </TouchableOpacity>
-      )}
-    </ScrollView>
+      ) : null}
+    />
   );
 }
 
 const inboxStyles = StyleSheet.create({
   container: {
     paddingHorizontal: scale(18),
-    paddingTop: verticalScale(16),
-    paddingBottom: verticalScale(100),
+    paddingTop: verticalScale(12),
   },
   hero: {
-    minHeight: verticalScale(126),
-    borderRadius: moderateScale(24),
-    padding: moderateScale(18),
-    marginBottom: verticalScale(20),
+    minHeight: verticalScale(82),
+    borderRadius: moderateScale(18),
+    padding: moderateScale(14),
+    marginBottom: verticalScale(16),
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(14),
-    shadowColor: '#15803D',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    elevation: 6,
   },
   heroIcon: {
-    width: scale(50),
-    height: scale(50),
-    borderRadius: scale(25),
+    width: scale(42),
+    height: scale(42),
+    borderRadius: scale(21),
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -534,16 +575,16 @@ const inboxStyles = StyleSheet.create({
     borderColor: '#16A34A',
   },
   heroEyebrow: { color: 'rgba(255,255,255,0.76)', fontSize: responsiveFontSize(10), fontWeight: '800', letterSpacing: 1.2 },
-  heroTitle: { color: '#FFFFFF', fontSize: responsiveFontSize(22), fontWeight: '900', marginTop: 2 },
+  heroTitle: { color: '#FFFFFF', fontSize: responsiveFontSize(18), fontWeight: '800', marginTop: 2 },
   heroSubtitle: { color: 'rgba(255,255,255,0.88)', fontSize: responsiveFontSize(12), lineHeight: 17, marginTop: 4 },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: verticalScale(16),
+    marginBottom: verticalScale(12),
   },
   headerTitle: {
-    fontSize: responsiveFontSize(26),
+    fontSize: responsiveFontSize(20),
     fontWeight: '800',
     letterSpacing: -0.5,
   },
@@ -561,18 +602,19 @@ const inboxStyles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(34, 197, 94, 0.25)',
     gap: 4,
+    minHeight: 40,
   },
   markAllText: {
     fontSize: responsiveFontSize(12),
     fontWeight: '700',
   },
   filtersWrap: {
-    marginBottom: verticalScale(16),
+    marginBottom: verticalScale(12),
   },
   filtersRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
+    paddingRight: 2,
   },
   expandedRow: {
     flexDirection: 'row',
@@ -586,6 +628,7 @@ const inboxStyles = StyleSheet.create({
   filterChip: {
     paddingVertical: verticalScale(7),
     paddingHorizontal: scale(14),
+    minHeight: 40,
     borderRadius: moderateScale(20),
     alignItems: 'center',
     justifyContent: 'center',
@@ -657,11 +700,6 @@ const inboxStyles = StyleSheet.create({
     borderRadius: moderateScale(18),
     marginBottom: verticalScale(10),
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   iconBadge: {
     width: scale(42),

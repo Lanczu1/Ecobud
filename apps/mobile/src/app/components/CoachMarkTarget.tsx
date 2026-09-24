@@ -13,6 +13,7 @@ export interface CoachMarkTargetProps extends ViewProps {
   name?: string;
   borderRadius?: number;
   active?: boolean;
+  pollWhileActive?: boolean;
   onMeasure?: (rect: SpotlightRect) => void;
   children: React.ReactNode;
 }
@@ -23,7 +24,7 @@ export interface CoachMarkTargetProps extends ViewProps {
  * on layout, layout changes, window resize, or when requested.
  */
 export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
-  ({ name, borderRadius, active = true, onMeasure, style, children, onLayout, ...props }, forwardedRef) => {
+  ({ name, borderRadius, active = true, pollWhileActive = true, onMeasure, style, children, onLayout, ...props }, forwardedRef) => {
     const internalRef = useRef<View | null>(null);
 
     const onMeasureRef = useRef(onMeasure);
@@ -75,7 +76,7 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
       const timer4 = setTimeout(measureTarget, 750);
 
       // Lightweight 150ms check while active to stay pinned during auto-scroll animations
-      const interval = setInterval(measureTarget, 150);
+      const interval = pollWhileActive ? setInterval(measureTarget, 150) : null;
 
       return () => {
         cancelAnimationFrame(raf);
@@ -83,9 +84,9 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
         clearTimeout(timer2);
         clearTimeout(timer3);
         clearTimeout(timer4);
-        clearInterval(interval);
+        if (interval !== null) clearInterval(interval);
       };
-    }, [active, measureTarget]);
+    }, [active, pollWhileActive, measureTarget]);
 
     const handleLayout = (e: LayoutChangeEvent) => {
       onLayout?.(e);

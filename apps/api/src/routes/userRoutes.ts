@@ -12,6 +12,8 @@ import { TokenService } from '../security/tokenService';
 import { emailChangeKey, emailCodeHash, sendEmailChangeCode } from '../security/emailChange';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+import { createTotpSecret, createTotpUri, encryptTotpSecret, decryptTotpSecret, verifyTotp, makeRecoveryCodes, hashRecoveryCode } from '../security/totp';
 
 const userRoutes = Router();
 
@@ -37,6 +39,14 @@ const securitySchema = z.object({
   emailCode: z.string().regex(/^\d{6}$/).optional(),
   newPassword: z.string().min(8).max(72).regex(/[a-zA-Z]/).regex(/[0-9]/).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be at most 72 bytes.').optional(),
 });
+
+function issueMobileSessionTokens(user: { id: string; name: string; email: string; role: 'user' | 'moderator' | 'admin'; status: 'active' | 'pending' | 'suspended'; sessionVersion: number; profile?: { city?: string | null } | null }) {
+  const authTime = Math.floor(Date.now() / 1000);
+  return {
+    token: TokenService.sign({ userId: user.id, name: user.name, email: user.email, role: user.role, status: user.status, city: user.profile?.city ?? null, sessionVersion: user.sessionVersion, clientType: 'mobile', authTime }),
+    refreshToken: TokenService.signRefresh({ userId: user.id, sessionVersion: user.sessionVersion, authTime }),
+  };
+}
 
 userRoutes.get(
   '/me',
@@ -247,6 +257,98 @@ userRoutes.post(
     }
   }),
 );
+
+userRoutes.get('/me/mfa/totp', authenticateRequest, requireUserAccess, errorBoundary(async (req: AuthenticatedRequest, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { totpEnabledAt: true, id: true } });
+  if (!user) throw new HttpError(404, 'User not found.');
+  const remainingRecoveryCodes = await prisma.mfaRecoveryCode.count({ where: { userId: user.id, usedAt: null } });
+  return res.json({ enabled: Boolean(user.totpEnabledAt), enabledAt: user.totpEnabledAt, remainingRecoveryCodes });
+}));
+
+userRoutes.post('/me/mfa/totp/enroll', authenticateRequest, requireUserAccess, securityUpdateLimiter,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const authTime = req.auth!.authTime ?? 0;
+    if (Math.floor(Date.now() / 1000) - authTime > 10 * 60) {
+      throw new HttpError(403, 'For security, sign in again before setting up an authenticator app.');
+    }
+    const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { id: true, email: true, totpEnabledAt: true } });
+    if (!user) throw new HttpError(404, 'User not found.');
+    if (user.totpEnabledAt) throw new HttpError(409, 'An authenticator app is already enabled.');
+    const secret = createTotpSecret();
+    const id = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 10 * 60_000);
+    await prisma.mfaEnrollment.deleteMany({ where: { userId: user.id } });
+    await prisma.mfaEnrollment.create({ data: { id, userId: user.id, secretEncrypted: encryptTotpSecret(secret), expiresAt } });
+    return res.json({ enrollmentId: id, secret, otpauthUri: createTotpUri(user.email, secret), expiresAt: expiresAt.toISOString() });
+  }));
+
+const totpConfirmSchema = z.object({ enrollmentId: z.string().uuid(), code: z.string().regex(/^\d{6}$/) });
+userRoutes.post('/me/mfa/totp/confirm', authenticateRequest, requireUserAccess, securityUpdateLimiter,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const payload = totpConfirmSchema.parse(req.body);
+    const enrollment = await prisma.mfaEnrollment.findFirst({ where: { id: payload.enrollmentId, userId: req.auth!.userId, expiresAt: { gt: new Date() } } });
+    if (!enrollment) throw new HttpError(400, 'Authenticator setup expired. Start setup again.');
+    const secret = decryptTotpSecret(enrollment.secretEncrypted);
+    const step = verifyTotp(secret, payload.code);
+    if (step === null) throw new HttpError(400, 'That code is invalid. Check your authenticator app and try again.');
+    const recoveryCodes = makeRecoveryCodes();
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.updateMany({ where: { id: req.auth!.userId, totpEnabledAt: null }, data: { totpSecretEncrypted: enrollment.secretEncrypted, totpEnabledAt: new Date(), totpLastUsedStep: BigInt(step), sessionVersion: { increment: 1 } } });
+      if (updated.count !== 1) throw new HttpError(409, 'Authenticator setup has already been completed.');
+      await tx.mfaRecoveryCode.deleteMany({ where: { userId: req.auth!.userId } });
+      await tx.mfaRecoveryCode.createMany({ data: recoveryCodes.map((code) => ({ userId: req.auth!.userId, codeHash: hashRecoveryCode(code) })) });
+      await tx.mfaEnrollment.deleteMany({ where: { userId: req.auth!.userId } });
+      return tx.user.findUniqueOrThrow({ where: { id: req.auth!.userId }, include: { profile: true } });
+    });
+    return res.json({ success: true, recoveryCodes, ...issueMobileSessionTokens(updatedUser) });
+  }));
+
+const totpCodeSchema = z.object({ code: z.string().trim().min(6).max(32) });
+userRoutes.post('/me/mfa/recovery-codes/rotate', authenticateRequest, requireUserAccess, securityUpdateLimiter,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const { code } = totpCodeSchema.parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { id: true, totpSecretEncrypted: true, totpEnabledAt: true, totpLastUsedStep: true } });
+    if (!user?.totpEnabledAt || !user.totpSecretEncrypted) throw new HttpError(409, 'Enable an authenticator app first.');
+    const step = verifyTotp(decryptTotpSecret(user.totpSecretEncrypted), code.replace(/[\s-]/g, ''));
+    if (step === null) throw new HttpError(401, 'Enter a valid authenticator code to rotate recovery codes.');
+    const recoveryCodes = makeRecoveryCodes();
+    await prisma.$transaction(async (tx) => {
+      const accepted = await tx.user.updateMany({ where: { id: user.id, OR: [{ totpLastUsedStep: null }, { totpLastUsedStep: { lt: BigInt(step) } }] }, data: { totpLastUsedStep: BigInt(step) } });
+      if (accepted.count !== 1) throw new HttpError(401, 'That authenticator code has already been used. Try the next code.');
+      await tx.mfaRecoveryCode.deleteMany({ where: { userId: user.id } });
+      await tx.mfaRecoveryCode.createMany({ data: recoveryCodes.map((recoveryCode) => ({ userId: user.id, codeHash: hashRecoveryCode(recoveryCode) })) });
+    });
+    return res.json({ recoveryCodes });
+  }));
+
+userRoutes.post('/me/mfa/disable', authenticateRequest, requireUserAccess, securityUpdateLimiter,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const { code } = totpCodeSchema.parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, include: { profile: true } });
+    if (!user?.totpEnabledAt || !user.totpSecretEncrypted) throw new HttpError(409, 'Authenticator app is not enabled.');
+    const normalizedCode = code.replace(/[\s-]/g, '').toUpperCase();
+    const step = verifyTotp(decryptTotpSecret(user.totpSecretEncrypted), normalizedCode);
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      if (step !== null) {
+        const accepted = await tx.user.updateMany({ where: { id: user.id, OR: [{ totpLastUsedStep: null }, { totpLastUsedStep: { lt: BigInt(step) } }] }, data: { totpLastUsedStep: BigInt(step) } });
+        if (accepted.count !== 1) throw new HttpError(401, 'That authenticator code has already been used. Try the next code.');
+      } else {
+        const rows = await tx.mfaRecoveryCode.findMany({ where: { userId: user.id, usedAt: null } });
+        const hash = hashRecoveryCode(normalizedCode);
+        const match = rows.find((row) => {
+          const expected = Buffer.from(row.codeHash, 'hex'); const actual = Buffer.from(hash, 'hex');
+          return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+        });
+        if (!match) throw new HttpError(401, 'Enter a valid authenticator code or unused recovery code.');
+        const consumed = await tx.mfaRecoveryCode.updateMany({ where: { id: match.id, usedAt: null }, data: { usedAt: new Date() } });
+        if (consumed.count !== 1) throw new HttpError(401, 'That recovery code has already been used.');
+      }
+      await tx.mfaRecoveryCode.deleteMany({ where: { userId: user.id } });
+      await tx.mfaEnrollment.deleteMany({ where: { userId: user.id } });
+      return tx.user.update({ where: { id: user.id }, data: { totpSecretEncrypted: null, totpEnabledAt: null, totpLastUsedStep: null, sessionVersion: { increment: 1 } }, include: { profile: true } });
+    });
+    return res.json({ success: true, ...issueMobileSessionTokens(updatedUser) });
+  }));
 
 userRoutes.post('/me/email-code', authenticateRequest, requireUserAccess, securityUpdateLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {

@@ -95,6 +95,5 @@ FastImage.prefetch = (urls: string[]) => {
     .filter((url): url is string => Boolean(url && (url.startsWith('http://') || url.startsWith('https://'))));
 
   if (validUrls.length === 0) return Promise.resolve(false);
-  return ExpoImage.prefetch(validUrls);
+  return ExpoImage.prefetch(validUrls, 'disk');
 };
-

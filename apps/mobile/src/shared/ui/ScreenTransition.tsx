@@ -8,13 +8,16 @@ import { Animated, Easing, StyleProp, ViewStyle } from 'react-native';
 export function ScreenTransition({
   children,
   style,
+  enabled = true,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  enabled?: boolean;
 }) {
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!enabled) return;
     progress.setValue(0);
     const animation = Animated.timing(progress, {
       toValue: 1,
@@ -25,7 +28,11 @@ export function ScreenTransition({
 
     animation.start();
     return () => animation.stop();
-  }, [progress]);
+  }, [progress, enabled]);
+
+  if (!enabled) {
+    return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
+  }
 
   return (
     <Animated.View

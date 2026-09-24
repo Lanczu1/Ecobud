@@ -32,12 +32,14 @@ const MASCOT_SOURCES: Record<MascotPose, any> = {
 
 export interface CoachMarksOverlayProps {
   visible: boolean;
+  replay?: boolean;
   onFinish: () => void;
   onSkip?: () => void;
   initialStep?: number;
   activeTab?: AppTab;
   onTabChange?: (tab: AppTab) => void;
   onScrollTo?: (y: number, animated?: boolean) => void;
+  onScrollBy?: (delta: number, animated?: boolean) => void;
   model?: EcoBudMobileModel;
 }
 
@@ -56,18 +58,21 @@ interface StepConfig {
 
 export function CoachMarksOverlay({
   visible,
+  replay = false,
   onFinish,
   onSkip,
   initialStep = 0,
   activeTab,
   onTabChange,
   onScrollTo,
+  onScrollBy,
   model,
 }: CoachMarksOverlayProps) {
   const { theme, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState(initialStep);
+  const [pendingRevealStep, setPendingRevealStep] = useState<number | null>(null);
 
   const isSmallDevice = height <= 680 || width < 375;
   const isCompact = height < 750 || width < 380;
@@ -78,8 +83,11 @@ export function CoachMarksOverlay({
   const cardSlide = useRef(new Animated.Value(0)).current;
   const pulseGlow = useRef(new Animated.Value(1)).current;
   const mascotSlide = useRef(new Animated.Value(0)).current;
-  const particlesAnim = useRef(new Animated.Value(0)).current;
   const isAnimating = useRef(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealScheduled = useRef(false);
+  const pendingReveal = useRef<{ step: number; show: () => void } | null>(null);
+  const scrolledReplayStep = useRef<number | null>(null);
 
   // Step configs tailored to guide through the REAL live screens
   const steps: StepConfig[] = [
@@ -171,9 +179,15 @@ export function CoachMarksOverlay({
 
   useEffect(() => {
     let pulseAnim: Animated.CompositeAnimation | null = null;
-    let particleLoop: Animated.CompositeAnimation | null = null;
-
     if (visible) {
+      isAnimating.current = false;
+      pendingReveal.current = null;
+      revealScheduled.current = false;
+      setPendingRevealStep(null);
+      cardFade.setValue(1);
+      cardSlide.setValue(0);
+      mascotSlide.setValue(0);
+      scrolledReplayStep.current = null;
       setCurrentStep(0);
       if (model?.setCoachMarksCurrentStep) {
         model.setCoachMarksCurrentStep(0);
@@ -204,15 +218,6 @@ export function CoachMarksOverlay({
       );
       pulseAnim.start();
 
-      particleLoop = Animated.loop(
-        Animated.timing(particlesAnim, {
-          toValue: 1,
-          duration: 3000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      );
-      particleLoop.start();
     } else {
       Animated.timing(overlayFade, {
         toValue: 0,
@@ -223,9 +228,46 @@ export function CoachMarksOverlay({
 
     return () => {
       if (pulseAnim) pulseAnim.stop();
-      if (particleLoop) particleLoop.stop();
+      if (revealTimer.current !== null) {
+        clearTimeout(revealTimer.current);
+        revealTimer.current = null;
+      }
     };
-  }, [visible, overlayFade, particlesAnim, onTabChange]);
+  }, [visible, overlayFade, cardFade, cardSlide, mascotSlide, onTabChange]);
+
+  useEffect(() => {
+    const target = model?.spotlightTargetRect;
+    if (!visible || !replay || !onScrollBy || activeTab !== steps[currentStep]?.targetTab ||
+        (currentStep !== 3 && currentStep !== 4) || !target ||
+        target.width <= 0 || target.height <= 0 || scrolledReplayStep.current === currentStep) return;
+
+    scrolledReplayStep.current = currentStep;
+    const desiredTop = Math.max(insets.top + verticalScale(220), height * 0.42);
+    const delta = target.y - desiredTop;
+    if (delta > verticalScale(12)) onScrollBy(delta, false);
+  }, [visible, replay, currentStep, activeTab, model?.spotlightTargetRect, onScrollBy, height, insets.top]);
+
+  useEffect(() => {
+    const pending = pendingReveal.current;
+    if (!visible || !replay || !pending || pending.step !== currentStep ||
+        activeTab !== steps[currentStep]?.targetTab) return;
+
+    const needsTarget = currentStep >= 1 && currentStep <= 5;
+    if (needsTarget && !model?.spotlightTargetRect) return;
+    if ((currentStep === 3 || currentStep === 4) && scrolledReplayStep.current !== currentStep) return;
+    if (revealScheduled.current) return;
+
+    revealScheduled.current = true;
+    const delay = currentStep === 3 || currentStep === 4 ? 100 : 0;
+    if (revealTimer.current !== null) clearTimeout(revealTimer.current);
+    revealTimer.current = setTimeout(() => {
+      revealTimer.current = null;
+      if (pendingReveal.current !== pending) return;
+      pendingReveal.current = null;
+      setPendingRevealStep(null);
+      pending.show();
+    }, delay);
+  }, [visible, replay, currentStep, activeTab, model?.spotlightTargetRect]);
 
   if (!visible) return null;
 
@@ -234,18 +276,22 @@ export function CoachMarksOverlay({
   const animateToStep = (nextIndex: number) => {
     if (isAnimating.current || nextIndex === currentStep) return;
     isAnimating.current = true;
+    if (revealTimer.current !== null) clearTimeout(revealTimer.current);
+    pendingReveal.current = null;
+    revealScheduled.current = false;
+    scrolledReplayStep.current = null;
     triggerSelectionHaptic();
 
     const isForward = nextIndex > currentStep;
     const targetStep = steps[nextIndex];
 
     // Automatically navigate to the REAL live screen in background
-    if (onTabChange && targetStep?.targetTab) {
+    if (!replay && onTabChange && targetStep?.targetTab) {
       onTabChange(targetStep.targetTab);
     }
 
     // Auto-scroll screen so target card is fully visible and nicely framed
-    if (onScrollTo) {
+    if (onScrollTo && !replay) {
       if (targetStep?.targetTab === 'challenges') {
         // Scroll down smoothly so the entire Discover featured card is comfortably in clear view
         // On small / compact devices, scroll further down so the full card and OPEN button are cleanly exposed
@@ -272,6 +318,8 @@ export function CoachMarksOverlay({
       } else {
         onScrollTo(0, true);
       }
+    } else if (onScrollTo && targetStep?.targetTab !== 'challenges' && targetStep?.targetTab !== 'learn') {
+      onScrollTo(0, true);
     }
 
     // Step 1: Smoothly fade and slide out current card (snappy 100ms for high responsiveness)
@@ -294,20 +342,27 @@ export function CoachMarksOverlay({
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]).start(({ finished }) => {
+      if (!finished) {
+        isAnimating.current = false;
+        return;
+      }
+
       // Step 2: Switch to next step
-      setCurrentStep(nextIndex);
       if (model?.setSpotlightTargetRect) {
         model.setSpotlightTargetRect(null);
       }
+      if (replay && onTabChange && targetStep?.targetTab) {
+        onTabChange(targetStep.targetTab);
+      }
+      setCurrentStep(nextIndex);
       if (model?.setCoachMarksCurrentStep) {
         model.setCoachMarksCurrentStep(nextIndex);
       }
       cardSlide.setValue(isForward ? 6 : -6);
       mascotSlide.setValue(isForward ? 10 : -10);
 
-      // Step 3: Snappy ease-in for new card and mascot
-      Animated.parallel([
+      const fadeIn = () => Animated.parallel([
         Animated.timing(cardFade, {
           toValue: 1,
           duration: 140,
@@ -329,6 +384,21 @@ export function CoachMarksOverlay({
       ]).start(() => {
         isAnimating.current = false;
       });
+
+      if (replay) {
+        const pending = { step: nextIndex, show: fadeIn };
+        pendingReveal.current = pending;
+        setPendingRevealStep(nextIndex);
+        revealTimer.current = setTimeout(() => {
+          revealTimer.current = null;
+          if (pendingReveal.current !== pending) return;
+          pendingReveal.current = null;
+          setPendingRevealStep(null);
+          fadeIn();
+        }, 650);
+      } else {
+        fadeIn();
+      }
     });
   };
 
@@ -456,6 +526,11 @@ export function CoachMarksOverlay({
   return (
     <Animated.View style={[styles.backdropHost, { opacity: overlayFade }]} pointerEvents="auto">
       <StatusBar style="light" />
+
+      {replay && pendingRevealStep !== null ? (
+        <View style={styles.standardDimmedBackdrop} />
+      ) : (
+      <>
 
       {/* ── STEP 2, 3, 4, 5 & 6: True Transparent Cutout Spotlight ── */}
       {currentStepData.stepNumber === 2 || currentStepData.stepNumber === 3 || currentStepData.stepNumber === 4 || currentStepData.stepNumber === 5 || currentStepData.stepNumber === 6 ? (
@@ -797,6 +872,8 @@ export function CoachMarksOverlay({
             </View>
           </SafeAreaView>
         </TouchableOpacity>
+      )}
+      </>
       )}
     </Animated.View>
   );
