@@ -2076,19 +2076,24 @@ function AnimatedMapMarker({ event }: { event: any }) {
   );
 }
 
-const PH_BOUNDS = {
-  minLat: 4.5,
-  maxLat: 21.5,
-  minLng: 116.0,
-  maxLng: 127.0,
+const NAGCARLAN_BOUNDS = {
+  minLat: 14.08556,
+  maxLat: 14.18883,
+  minLng: 121.35773,
+  maxLng: 121.48610,
 };
+const PH_BOUNDS = { minLat: 4.5, maxLat: 21.5, minLng: 116, maxLng: 127 };
 
 const DEFAULT_PH_CENTER = {
-  latitude: 14.12558,
-  longitude: 121.41918,
+  latitude: (NAGCARLAN_BOUNDS.minLat + NAGCARLAN_BOUNDS.maxLat) / 2,
+  longitude: (NAGCARLAN_BOUNDS.minLng + NAGCARLAN_BOUNDS.maxLng) / 2,
   latitudeDelta: 0.1,
   longitudeDelta: 0.1,
 };
+
+function isWithinNagcarlan(lat: number, lng: number) {
+  return lat >= NAGCARLAN_BOUNDS.minLat && lat <= NAGCARLAN_BOUNDS.maxLat && lng >= NAGCARLAN_BOUNDS.minLng && lng <= NAGCARLAN_BOUNDS.maxLng;
+}
 
 function isWithinPhilippines(lat: number, lng: number) {
   return lat >= PH_BOUNDS.minLat && lat <= PH_BOUNDS.maxLat && lng >= PH_BOUNDS.minLng && lng <= PH_BOUNDS.maxLng;
@@ -2102,11 +2107,11 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
   // Responsive map container height: comfortable top viewport so cards underneath are immediately visible and scrollable
   const mapHeight = Math.max(240, Math.min(screenHeight * 0.38, 320));
 
-  const initialLat = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
+  const initialLat = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
     ? userLocation.latitude
     : DEFAULT_PH_CENTER.latitude;
 
-  const initialLng = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
+  const initialLng = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
     ? userLocation.longitude
     : DEFAULT_PH_CENTER.longitude;
 
@@ -2115,6 +2120,10 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       event.latitude && event.longitude && isWithinPhilippines(event.latitude, event.longitude)
     );
   }, [model.events]);
+  const nagcarlanEvents = React.useMemo(
+    () => phEvents.filter((event: any) => isWithinNagcarlan(event.latitude, event.longitude)),
+    [phEvents],
+  );
 
   const escapeHtml = (text: string) => {
     return String(text)
@@ -2126,7 +2135,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
   };
 
   const leafletHtml = React.useMemo(() => {
-    const rawMarkers = phEvents.map((e: any) => ({
+    const rawMarkers = nagcarlanEvents.map((e: any) => ({
       id: escapeHtml(String(e.id || '')),
       title: escapeHtml(String(e.title || 'Eco Event')),
       location: escapeHtml(String(e.location || 'Philippines')),
@@ -2139,7 +2148,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       .replace(/</g, '\\u003c')
       .replace(/>/g, '\\u003e');
 
-    const userLocJson = userLocation && isWithinPhilippines(userLocation.latitude, userLocation.longitude)
+    const userLocJson = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
       ? JSON.stringify({ lat: Number(userLocation.latitude), lng: Number(userLocation.longitude) })
       : 'null';
 
@@ -2234,18 +2243,18 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
         <div id="map"></div>
         <div class="osm-badge">Nagcarlan · © OpenStreetMap contributors</div>
         <script>
-          const phBounds = L.latLngBounds(
-            L.latLng(4.5, 116.0),
-            L.latLng(21.5, 127.0)
+          const nagcarlanBounds = L.latLngBounds(
+            L.latLng(${NAGCARLAN_BOUNDS.minLat}, ${NAGCARLAN_BOUNDS.minLng}),
+            L.latLng(${NAGCARLAN_BOUNDS.maxLat}, ${NAGCARLAN_BOUNDS.maxLng})
           );
 
           const map = L.map('map', {
             center: [${initialLat}, ${initialLng}],
-            zoom: 13,
-            minZoom: 5,
+            zoom: 12,
+            minZoom: 10,
             maxZoom: 18,
-            maxBounds: phBounds,
-            maxBoundsViscosity: 0.85,
+            maxBounds: nagcarlanBounds,
+            maxBoundsViscosity: 1,
             zoomControl: true,
             dragging: true,
             touchZoom: true,
@@ -2253,6 +2262,8 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             doubleClickZoom: true,
             tap: true
           });
+          map.fitBounds(nagcarlanBounds, { padding: [4, 4] });
+          map.setMinZoom(map.getBoundsZoom(nagcarlanBounds, true, [4, 4]));
 
           // Let the map consume one-finger pans and two-finger pinch gestures
           // inside its viewport while leaving page scrolling available outside it.
@@ -2373,7 +2384,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       </body>
       </html>
     `;
-  }, [phEvents, userLocation, initialLat, initialLng]);
+  }, [nagcarlanEvents, userLocation, initialLat, initialLng]);
 
   const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null);
 
@@ -2455,12 +2466,12 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           >
             <Ionicons name="location" size={12} color={isDark ? theme.colors.primary : '#126027'} />
             <Text style={{ fontSize: moderateScale(11), fontWeight: '800', color: isDark ? theme.colors.primary : '#126027' }}>
-              {phEvents.length} {phEvents.length === 1 ? 'Pin' : 'Pins'}
+              {nagcarlanEvents.length} {nagcarlanEvents.length === 1 ? 'Pin' : 'Pins'}
             </Text>
           </View>
         </View>
 
-        {phEvents.length === 0 ? (
+        {nagcarlanEvents.length === 0 ? (
           <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
             <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>
               No mapped events found

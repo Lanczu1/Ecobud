@@ -12,19 +12,7 @@ nodes = {
 }
 features = []
 way_keys = {"highway", "waterway", "landuse", "natural", "leisure", "building"}
-point_keys = {"amenity", "shop", "tourism", "historic", "healthcare", "public_transport", "natural"}
-property_keys = way_keys | point_keys | {"name", "sport"}
-
-for node in root.findall("node"):
-    tags = {tag.attrib["k"]: tag.attrib["v"] for tag in node.findall("tag")}
-    if not point_keys.intersection(tags):
-        continue
-    features.append({
-        "type": "Feature",
-        "id": f"node/{node.attrib['id']}",
-        "properties": {key: value for key, value in tags.items() if key in property_keys},
-        "geometry": {"type": "Point", "coordinates": [float(node.attrib["lon"]), float(node.attrib["lat"]) ]},
-    })
+property_keys = way_keys | {"name", "sport"}
 
 for way in root.findall("way"):
     tags = {tag.attrib["k"]: tag.attrib["v"] for tag in way.findall("tag")}
@@ -50,7 +38,12 @@ collection = {
     "type": "FeatureCollection",
     "name": "Nagcarlan OpenStreetMap data",
     "attribution": "© OpenStreetMap contributors",
-    "bbox": [121.36828, 14.09861, 121.47008, 14.15255],
+    "bbox": [
+        float(root.find("bounds").attrib["minlon"]),
+        float(root.find("bounds").attrib["minlat"]),
+        float(root.find("bounds").attrib["maxlon"]),
+        float(root.find("bounds").attrib["maxlat"]),
+    ],
     "features": features,
 }
 output_path.write_text(json.dumps(collection, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
