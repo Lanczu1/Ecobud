@@ -153,6 +153,7 @@ export interface EcoBudMobileModel {
   quizAnswers: Record<string, string>;
   quizCompleted: boolean;
   quizScore: number;
+  quizFailureMessage: string | null;
   earnedPoints: number;
   earnedCoins: number;
   completionCelebrationType: 'quiz' | 'lesson' | 'claim';
@@ -234,6 +235,7 @@ export interface EcoBudMobileModel {
   nextQuestion: () => void;
   submitQuiz: () => Promise<void>;
   resetQuiz: () => void;
+  dismissQuizFailure: () => void;
   showLessonComplete: (type: 'quiz' | 'lesson' | 'claim') => void;
   handleChallengeProgress: (challenge: ChallengeWithProgress, nextProgress: number) => Promise<void>;
   handleHabitCheckIn: (habitId: string) => Promise<void>;
