@@ -162,6 +162,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
+  const [quizFailureMessage, setQuizFailureMessage] = useState<string | null>(null);
   const [earnedPoints, setEarnedPoints] = useState(0);
   const [earnedCoins, setEarnedCoins] = useState(0);
   const [pendingStreakUnlock, setPendingStreakUnlock] = useState(false);
@@ -1917,6 +1918,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setQuizAnswers(restored?.answers ?? {});
     setQuizCompleted(false);
     setQuizScore(0);
+    setQuizFailureMessage(null);
     setActiveOverlayState('quiz');
   }, [selectedLesson, session?.user.id, setActiveOverlayState]);
 
@@ -1955,7 +1957,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
           const score = res.score ?? 0;
           setQuizScore(score);
           setQuizCompleted(false);
-          Alert.alert('Quiz Failed', res.message || `You scored ${score}%. You need at least 70% to pass. Please try again.`);
+          setQuizFailureMessage(res.message || `You scored ${score}%. You need at least 70% to pass. Try the questions again.`);
+          const shuffledQuestions = selectedLesson?.quizQuestions ? [...selectedLesson.quizQuestions] : [...quizQuestions];
+          for (let i = shuffledQuestions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledQuestions[i], shuffledQuestions[j]] = [shuffledQuestions[j], shuffledQuestions[i]];
+          }
+          if (shuffledQuestions.length > 1 && shuffledQuestions.every((question, index) => question.id === quizQuestions[index]?.id)) {
+            shuffledQuestions.push(shuffledQuestions.shift()!);
+          }
+          setQuizQuestions(shuffledQuestions);
           setCurrentQuestionIndex(0);
           setSelectedAnswer(null);
           setQuizAnswers({});
@@ -2008,7 +2019,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setQuizAnswers({});
     setQuizCompleted(false);
     setQuizScore(0);
+    setQuizFailureMessage(null);
   }, []);
+
+  const dismissQuizFailure = useCallback(() => setQuizFailureMessage(null), []);
 
   const showLessonComplete = useCallback((type: 'quiz' | 'lesson' | 'claim') => {
     const points = selectedLesson?.pointsReward ?? 10;
@@ -2842,6 +2856,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     quizAnswers,
     quizCompleted,
     quizScore,
+    quizFailureMessage,
     earnedPoints,
     earnedCoins,
     completionCelebrationType,
@@ -2923,6 +2938,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     nextQuestion,
     submitQuiz,
     resetQuiz,
+    dismissQuizFailure,
     showLessonComplete,
 
     handleHabitCheckIn,

@@ -13,6 +13,7 @@ import {
   ImageBackground,
   StyleProp,
   ViewStyle,
+  LayoutChangeEvent,
   TextStyle,
   useWindowDimensions,
   Alert,
@@ -861,9 +862,9 @@ export function SecondaryButton({
   );
 }
 
-export function SurfaceCard({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+export function SurfaceCard({ children, style, onLayout }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; onLayout?: (event: LayoutChangeEvent) => void }) {
   const { theme } = useTheme();
-  return <View style={[styles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, style]}>{children}</View>;
+  return <View onLayout={onLayout} style={[styles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, style]}>{children}</View>;
 }
 
 export function ProgressBar({ progress }: { progress: number }) {

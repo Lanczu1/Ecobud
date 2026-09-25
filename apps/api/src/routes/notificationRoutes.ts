@@ -16,6 +16,10 @@ notificationRoutes.patch('/read-all', errorBoundary(async (req: AuthenticatedReq
     await prisma.notification.updateMany({ where: { userId: req.auth!.userId, isRead: false }, data: { isRead: true, readAt: new Date() } });
     res.json({ success: true });
 }));
+notificationRoutes.delete('/', errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const result = await prisma.notification.deleteMany({ where: { userId: req.auth!.userId } });
+    res.json({ success: true, deletedCount: result.count });
+}));
 notificationRoutes.patch('/:id/read', errorBoundary(async (req: AuthenticatedRequest, res) => {
     const result = await prisma.notification.updateMany({ where: { id: req.params.id, userId: req.auth!.userId }, data: { isRead: true, readAt: new Date() } });
     if (!result.count)

@@ -655,6 +655,7 @@ export const ecobudApi = {
   notifications: (token:string, query='') => request<NotificationPage>('/notifications'+query,{token}),
   readNotification: (token:string,id:string) => request('/notifications/'+encodeURIComponent(id)+'/read',{token,method:'PATCH'}),
   readAllNotifications: (token:string) => request('/notifications/read-all',{token,method:'PATCH'}),
+  clearAllNotifications: (token:string) => request<{ success: boolean; deletedCount: number }>('/notifications',{token,method:'DELETE'}),
   registerPush: (token:string,deviceToken:string) => request('/notifications/devices',{token,method:'POST',body:{token:deviceToken}}),
   unregisterPush: (token:string,deviceToken:string) => request('/notifications/devices',{token,method:'DELETE',body:{token:deviceToken}}),
   login: (email: string, password: string) =>

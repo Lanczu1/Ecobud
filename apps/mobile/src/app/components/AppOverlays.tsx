@@ -1447,15 +1447,40 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               )
             ) : (
-              <PrimaryButton 
-                label={cooldownRemainingSec > 0
-                  ? `Cooldown Active (${Math.floor(cooldownRemainingSec / 60)}:${(cooldownRemainingSec % 60) < 10 ? '0' : ''}${cooldownRemainingSec % 60})`
-                  : isRejectedSubmission
-                    ? "Resubmit: Capture New Before Photo"
-                    : "Start Recognition"} 
-                onPress={handleStartRecognition}
-                style={cooldownRemainingSec > 0 ? { opacity: 0.6, backgroundColor: isDark ? '#4B5563' : '#9CA3AF' } : undefined}
-              />
+              cooldownRemainingSec > 0 ? (
+                <PrimaryButton
+                  label={`Cooldown Active (${Math.floor(cooldownRemainingSec / 60)}:${(cooldownRemainingSec % 60) < 10 ? '0' : ''}${cooldownRemainingSec % 60})`}
+                  onPress={handleStartRecognition}
+                  style={{ opacity: 0.6, backgroundColor: isDark ? '#4B5563' : '#9CA3AF' }}
+                />
+              ) : isRejectedSubmission ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Retake before photo and resubmit mission"
+                  onPress={handleStartRecognition}
+                  activeOpacity={0.86}
+                  style={{
+                    minHeight: 58,
+                    width: '100%',
+                    paddingHorizontal: 16,
+                    borderRadius: 16,
+                    backgroundColor: isDark ? theme.colors.primary : '#126027',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: isDark ? 'rgba(14, 21, 18, 0.12)' : 'rgba(255, 255, 255, 0.16)', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="camera-reverse-outline" size={19} color={isDark ? '#0E1512' : '#FFFFFF'} />
+                  </View>
+                  <Text numberOfLines={1} style={{ flexShrink: 1, color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 15, fontWeight: '800', textAlign: 'center' }}>
+                    Retake Before Photo
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <PrimaryButton label="Start Recognition" onPress={handleStartRecognition} />
+              )
             )}
           </View>
         </ScrollView>
@@ -3336,6 +3361,9 @@ export const markLessonVideoWatchedLocally = (userId: string, lessonId: string, 
 export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
+  const lessonScrollRef = React.useRef<ScrollView>(null);
+  const lessonCardY = React.useRef(0);
+  const pageSectionY = React.useRef(0);
   const pageIndexTouchedRef = React.useRef(false);
   const pageAnim = React.useRef(new Animated.Value(1)).current;
 
@@ -3386,7 +3414,31 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         toValue: 1,
         duration: 250,
         useNativeDriver: true,
-      }).start();
+      }).start(() => {
+        requestAnimationFrame(() => lessonScrollRef.current?.scrollTo({ y: Math.max(0, pageSectionY.current), animated: true }));
+      });
+    });
+  };
+
+  const handlePreviousPage = () => {
+    const lesson = model.selectedLesson;
+    const previousPageIndex = Math.max(0, visiblePageIndex - 1);
+    if (!lesson || previousPageIndex === visiblePageIndex) return;
+    pageIndexTouchedRef.current = true;
+    if (model.session?.user.id) writeLocalLessonPageIndex(model.session.user.id, lesson.id, previousPageIndex);
+    Animated.timing(pageAnim, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setCurrentPageIndex(previousPageIndex);
+      Animated.timing(pageAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+        requestAnimationFrame(() => lessonScrollRef.current?.scrollTo({ y: Math.max(0, pageSectionY.current), animated: true }));
+      });
     });
   };
 
@@ -3978,10 +4030,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           ))}
         </View>
       )}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
+      <ScrollView ref={lessonScrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.overlayScroll}>
         {model.selectedLesson ? (
           <>
-            <SurfaceCard style={styles.lessonDetailCard}>
+            <SurfaceCard onLayout={({ nativeEvent }) => { lessonCardY.current = nativeEvent.layout.y; }} style={styles.lessonDetailCard}>
               <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{model.selectedLesson.title}</Text>
               <Text style={[styles.sectionCaption, { color: theme.colors.textMuted }]}>{model.selectedLesson.description}</Text>
               
@@ -4100,7 +4152,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
               {/* Pages - only unlocked after video completes */}
               {model.selectedLesson.pages && model.selectedLesson.pages.length > 0 ? (
                 videoIsComplete ? (
-                  <Animated.View style={{
+                  <Animated.View onLayout={({ nativeEvent }) => { pageSectionY.current = lessonCardY.current + moderateScale(18) + nativeEvent.layout.y; }} style={{
                     marginTop: 24,
                     backgroundColor: isDark ? theme.colors.surface : '#FAFCFB',
                     padding: 20,
@@ -4110,11 +4162,11 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                     opacity: pageAnim,
                     transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
                   }}>
-                    <Text style={[styles.lessonBodyText, { marginTop: 0, color: theme.colors.textPrimary }]}>
-                      {model.selectedLesson.pages[visiblePageIndex].content}
-                    </Text>
-                    <Text style={{ textAlign: 'center', marginTop: 16, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ textAlign: 'center', marginTop: 0, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
                       Page {visiblePageIndex + 1} of {model.selectedLesson.pages.length}
+                    </Text>
+                    <Text style={[styles.lessonBodyText, { marginTop: 12, color: theme.colors.textPrimary }]}>
+                      {model.selectedLesson.pages[visiblePageIndex].content}
                     </Text>
                   </Animated.View>
                 ) : (
@@ -4137,7 +4189,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 )
               ) : null}
 
-              {model.selectedLesson.transcript ? (
+              {model.selectedLesson.transcript && (!model.selectedLesson.videoUrl || !videoCollapsed) ? (
                 <View style={{
                   backgroundColor: isDark ? theme.colors.surface : '#F8FAF9',
                   padding: 20,
@@ -4190,23 +4242,24 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         const pageCount = lesson.pages?.length ?? 0;
         const isCompleted = lesson.status === 'completed';
         const isOnLastPage = !hasPages || visiblePageIndex === pageCount - 1;
+        const canGoBack = hasPages && visiblePageIndex > 0;
 
         // Show bar only when video is done (or no video), or already completed
         const showBar = isCompleted || !hasVideo || (hasVideo && videoIsComplete);
         if (!showBar) return null;
 
         const barStyle = {
-          paddingHorizontal: 24,
-          paddingTop: 16,
-          paddingBottom: 40,
+          paddingHorizontal: 20,
+          paddingTop: 14,
+          paddingBottom: 28,
           backgroundColor: theme.colors.card,
           borderTopWidth: 1,
           borderTopColor: theme.colors.cardBorder,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: isDark ? 0.3 : 0.05,
-          shadowRadius: 12,
-          elevation: 10,
+          shadowOpacity: isDark ? 0.22 : 0.04,
+          shadowRadius: 10,
+          elevation: 8,
         };
 
         if (isCompleted) {
@@ -4217,30 +4270,64 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           );
         }
 
-        // Still have pages to navigate
-        if (hasPages && !isOnLastPage) {
-          return (
-            <View style={barStyle}>
-              <PrimaryButton label="Next Page" onPress={handleNextPage} />
-            </View>
-          );
-        }
+        const primaryLabel = hasPages && !isOnLastPage
+          ? 'Next Page'
+          : lesson.hasQuiz ? 'Start Quiz' : 'Complete Lesson';
+        const handlePrimaryAction = () => {
+          if (hasPages && !isOnLastPage) {
+            handleNextPage();
+          } else if (lesson.hasQuiz) {
+            doSave();
+            void model.handleUpdateLessonProgress(lesson.id, 80);
+            model.startQuiz();
+          } else {
+            void model.handleCompleteLesson();
+          }
+        };
 
-        // On last page (or no pages) -> quiz or complete
         return (
           <View style={barStyle}>
-            <PrimaryButton
-              label={lesson.hasQuiz ? 'Start Quiz' : 'Complete Lesson'}
-              onPress={() => {
-                if (lesson.hasQuiz) {
-                  doSave();
-                  void model.handleUpdateLessonProgress(lesson.id, 80);
-                  model.startQuiz();
-                } else {
-                  void model.handleCompleteLesson();
-                }
-              }}
-            />
+            {hasPages ? (
+              <View style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '700' }}>Lesson page</Text>
+                  <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 13, fontWeight: '800' }}>
+                    {visiblePageIndex + 1} <Text style={{ color: theme.colors.textMuted, fontWeight: '600' }}>of {pageCount}</Text>
+                  </Text>
+                </View>
+                <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: pageCount, now: visiblePageIndex + 1 }} style={{ height: 4, borderRadius: 2, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E5EEE8', overflow: 'hidden' }}>
+                  <View style={{ width: `${((visiblePageIndex + 1) / pageCount) * 100}%`, height: '100%', borderRadius: 2, backgroundColor: isDark ? theme.colors.primary : '#16804A' }} />
+                </View>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {canGoBack ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to previous lesson page"
+                  onPress={handlePreviousPage}
+                  activeOpacity={0.78}
+                  style={{ minHeight: 54, minWidth: 104, paddingHorizontal: 14, borderRadius: 15, borderWidth: 1, borderColor: theme.colors.cardBorder, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F2F6F3', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+                >
+                  <Ionicons name="chevron-back" size={18} color={theme.colors.textSecondary} />
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 14, fontWeight: '700' }}>Back</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={primaryLabel}
+                onPress={handlePrimaryAction}
+                activeOpacity={0.86}
+                style={{ flex: 1, minHeight: 54, paddingHorizontal: 18, borderRadius: 15, backgroundColor: isDark ? theme.colors.primary : '#126027', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, shadowColor: isDark ? '#000' : '#126027', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 }}
+              >
+                <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 15, fontWeight: '800' }}>{primaryLabel}</Text>
+                <Ionicons
+                  name={primaryLabel === 'Next Page' ? 'arrow-forward' : primaryLabel === 'Start Quiz' ? 'help-circle-outline' : 'checkmark-circle-outline'}
+                  size={19}
+                  color={isDark ? '#0E1512' : '#FFFFFF'}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         );
       })()}
@@ -4334,6 +4421,7 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
   }
 
   return (
+    <>
     <OverlayScaffold
       title={model.selectedLesson?.title ?? 'Quiz'}
       subtitle={`Question ${model.currentQuestionIndex + 1} of ${totalQuestions}`}
@@ -4430,33 +4518,89 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
       </ScrollView>
 
       <View style={{
-        paddingHorizontal: 24,
-        paddingTop: 16,
-        paddingBottom: 40,
+        paddingHorizontal: 20,
+        paddingTop: 14,
+        paddingBottom: 28,
         backgroundColor: theme.colors.card,
         borderTopWidth: 1,
         borderTopColor: theme.colors.cardBorder,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: isDark ? 0.3 : 0.05,
-        shadowRadius: 12,
-        elevation: 10
+        shadowOpacity: isDark ? 0.22 : 0.04,
+        shadowRadius: 10,
+        elevation: 8
       }}>
-        {model.currentQuestionIndex < totalQuestions - 1 ? (
-          <PrimaryButton
-            label="Next Question"
-            onPress={() => model.nextQuestion()}
-            disabled={!model.selectedAnswer}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <Ionicons
+              name={model.selectedAnswer ? 'checkmark-circle' : 'ellipse-outline'}
+              size={17}
+              color={model.selectedAnswer ? (isDark ? theme.colors.primary : '#16804A') : theme.colors.textMuted}
+            />
+            <Text style={{ color: model.selectedAnswer ? theme.colors.textSecondary : theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+              {model.selectedAnswer ? 'Answer selected' : 'Choose an answer to continue'}
+            </Text>
+          </View>
+          <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '700' }}>
+            {model.currentQuestionIndex + 1} / {totalQuestions}
+          </Text>
+        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={model.currentQuestionIndex < totalQuestions - 1 ? 'Next Question' : 'Submit Quiz'}
+          accessibilityState={{ disabled: !model.selectedAnswer }}
+          onPress={() => {
+            if (!model.selectedAnswer) return;
+            if (model.currentQuestionIndex < totalQuestions - 1) model.nextQuestion();
+            else void model.submitQuiz();
+          }}
+          disabled={!model.selectedAnswer}
+          activeOpacity={0.86}
+          style={{
+            minHeight: 56,
+            paddingHorizontal: 20,
+            borderRadius: 16,
+            backgroundColor: !model.selectedAnswer
+              ? (isDark ? theme.colors.surfaceMuted : '#DDE8E0')
+              : (isDark ? theme.colors.primary : '#126027'),
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 9,
+            shadowColor: '#126027',
+            shadowOpacity: model.selectedAnswer ? 0.17 : 0,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: model.selectedAnswer ? 3 : 0,
+          }}
+        >
+          <Text style={{ color: model.selectedAnswer ? (isDark ? '#0E1512' : '#FFFFFF') : theme.colors.textMuted, fontSize: 16, fontWeight: '800' }}>
+            {model.currentQuestionIndex < totalQuestions - 1 ? 'Next Question' : 'Submit Quiz'}
+          </Text>
+          <Ionicons
+            name={model.currentQuestionIndex < totalQuestions - 1 ? 'arrow-forward' : 'checkmark-done'}
+            size={19}
+            color={model.selectedAnswer ? (isDark ? '#0E1512' : '#FFFFFF') : theme.colors.textMuted}
           />
-        ) : (
-          <PrimaryButton
-            label="Submit Quiz"
-            onPress={() => void model.submitQuiz()}
-            disabled={!model.selectedAnswer}
-          />
-        )}
+        </TouchableOpacity>
       </View>
     </OverlayScaffold>
+    <Modal visible={!!model.quizFailureMessage} transparent animationType="fade" statusBarTranslucent onRequestClose={model.dismissQuizFailure}>
+      <View style={{ flex: 1, padding: 24, backgroundColor: 'rgba(3, 12, 8, 0.64)', alignItems: 'center', justifyContent: 'center' }}>
+        <View accessibilityRole="alert" accessibilityLabel="Quiz not passed" style={{ width: '100%', maxWidth: 380, borderRadius: 22, padding: 24, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.cardBorder }}>
+          <View style={{ width: 52, height: 52, borderRadius: 26, marginBottom: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#4B2B22' : '#FFF0E8' }}>
+            <Ionicons name="refresh-circle" size={30} color={isDark ? '#FFB18D' : '#B54720'} />
+          </View>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.textPrimary }}>Not quite yet</Text>
+          <Text style={{ marginTop: 9, fontSize: 15, lineHeight: 22, color: theme.colors.textSecondary }}>{model.quizFailureMessage}</Text>
+          <Text style={{ marginTop: 10, fontSize: 13, lineHeight: 19, color: theme.colors.textMuted }}>The questions have been shuffled for your next try.</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={model.dismissQuizFailure} style={{ minHeight: 48, marginTop: 22, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? theme.colors.primary : '#126027' }}>
+            <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 15, fontWeight: '800' }}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -4877,24 +5021,10 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
     player.play();
   };
 
-  const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const isTablet = width >= 600;
-
-  // Use real measured layout from LevelCard's progress bar
-  const layout2 = model.progressBarLayout;
-  const topSafeArea2 = insets.top || 44;
-  const fallbackY2 =
-    topSafeArea2 +
-    verticalScale(64) +
-    verticalScale(38) +
-    verticalScale(52) +
-    verticalScale(68) +
-    verticalScale(114) +
-    verticalScale(218);
-  const targetProgressBarX = layout2 ? layout2.x + layout2.width * 0.5 - 15 : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
-  const targetProgressBarY = layout2 ? layout2.y + layout2.height * 0.5 - 15 : fallbackY2 - 15;
-
+  const rewardOriginRef = React.useRef<View>(null);
+  const particleLayerRef = React.useRef<View>(null);
+  const progressLayoutRef = React.useRef(model.progressBarLayout);
+  progressLayoutRef.current = model.progressBarLayout;
 
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
   const contentOpacity = React.useRef(new Animated.Value(0)).current;
@@ -4910,7 +5040,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   const numParticles = model.completionCelebrationType === 'claim' ? 24 : 12;
   const particleAnims = React.useRef(
     Array.from({ length: 24 }, () => ({
-      pos: new Animated.ValueXY({ x: width / 2 - 15, y: height / 2 - 80 }),
+      pos: new Animated.ValueXY({ x: 0, y: 0 }),
       scale: new Animated.Value(0),
       opacity: new Animated.Value(0),
     }))
@@ -4918,11 +5048,55 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const startPointsAnimation = () => {
     triggerSuccessHaptic();
-    // 1. Immediately switch tab so the home page renders in background
+    const originPromise = new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
+      const originView = rewardOriginRef.current;
+      if (!originView) {
+        resolve(null);
+        return;
+      }
+      originView.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+        resolve(measuredWidth > 0 && measuredHeight > 0 ? { x, y, width: measuredWidth, height: measuredHeight } : null);
+      });
+    });
+
     model.setActiveTab('home', true);
 
-    // 2. Wait 100ms for the home tab to fully render natively
-    setTimeout(() => {
+    setTimeout(async () => {
+      const origin = await originPromise;
+      let target = progressLayoutRef.current;
+      for (let attempt = 0; (!target || target.width <= 0 || target.height <= 0) && attempt < 30; attempt += 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
+        target = progressLayoutRef.current;
+      }
+      const particleLayer = await new Promise<{ x: number; y: number } | null>((resolve) => {
+        const layerView = particleLayerRef.current;
+        if (!layerView) {
+          resolve(null);
+          return;
+        }
+        layerView.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+          resolve(measuredWidth > 0 && measuredHeight > 0 ? { x, y } : null);
+        });
+      });
+
+      if (!origin || !target || !particleLayer) {
+        model.resetQuiz();
+        model.setActiveOverlay(null);
+        DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
+        return;
+      }
+
+      const particleSize = scale(30);
+      const originX = origin.x + origin.width / 2 - particleLayer.x - particleSize / 2;
+      const originY = origin.y + origin.height / 2 - particleLayer.y - particleSize / 2;
+      const targetX = target.x + target.width / 2 - particleLayer.x - particleSize / 2;
+      const targetY = target.y + target.height / 2 - particleLayer.y - particleSize / 2;
+      particleAnims.forEach((particle) => {
+        particle.pos.setValue({ x: originX, y: originY });
+        particle.scale.setValue(0);
+        particle.opacity.setValue(0);
+      });
+
       setIsAnimatingPoints(true);
 
       Animated.parallel([
@@ -4945,9 +5119,9 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
       const animations = particleAnims.map((particle, index) => {
         const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
-        const radius = 70 + Math.random() * 50;
-        const burstX = width / 2 - 15 + Math.cos(angle) * radius;
-        const burstY = height / 2 - 80 + Math.sin(angle) * radius;
+        const radius = scale(70) + Math.random() * scale(50);
+        const burstX = originX + Math.cos(angle) * radius;
+        const burstY = originY + Math.sin(angle) * radius;
 
         const delay = index * 60;
 
@@ -4975,8 +5149,8 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
           Animated.parallel([
             Animated.timing(particle.pos, {
               toValue: {
-                x: targetProgressBarX + (Math.random() * scale(60) - scale(30)),
-                y: targetProgressBarY,
+                x: targetX + (Math.random() * Math.min(target.width, scale(60)) - Math.min(target.width, scale(60)) / 2),
+                y: targetY,
               }, // Target exactly the green LevelCard progress bar
               duration: 650,
               easing: Easing.bezier(0.25, 1, 0.5, 1),
@@ -5010,7 +5184,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
         model.setActiveOverlay(null);
         DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
       });
-    }, 100);
+    }, 120);
   };
 
   React.useEffect(() => {
@@ -5272,7 +5446,9 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
             {model.completionCelebrationType === 'claim' && model.earnedCoins > 0 ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(20) }}>
-                <ExpCounter targetPoints={model.earnedPoints} />
+                <View ref={rewardOriginRef} collapsable={false}>
+                  <ExpCounter targetPoints={model.earnedPoints} />
+                </View>
                 <View style={{ alignItems: 'center' }}>
                   <View style={{ width: scale(96), height: scale(96), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(16) }}>
                     <View style={{ position: 'absolute', top: 5, left: 5, width: scale(86), height: scale(86), borderRadius: scale(43), backgroundColor: '#FBBF24' }}>
@@ -5285,7 +5461,9 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               </View>
             ) : (
-              <ExpCounter targetPoints={model.earnedPoints} />
+              <View ref={rewardOriginRef} collapsable={false}>
+                <ExpCounter targetPoints={model.earnedPoints} />
+              </View>
             )}
           </View>
         </Animated.View>
@@ -5346,7 +5524,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
         </TouchableOpacity>
       </Animated.View>
 
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View ref={particleLayerRef} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none">
         {particleAnims.map((particle, index) => (
           <Animated.View
             key={index}
@@ -5369,16 +5547,16 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
             }}
           >
             <View style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
+              width: scale(30),
+              height: scale(30),
+              borderRadius: scale(15),
               backgroundColor: model.completionCelebrationType === 'claim' && index % 2 !== 0 ? '#F59E0B' : '#10b981',
               justifyContent: 'center',
               alignItems: 'center',
               borderWidth: 2,
               borderColor: '#FFF',
             }}>
-              <Ionicons name={model.completionCelebrationType === 'claim' && index % 2 !== 0 ? 'cash' : 'leaf'} size={16} color="#FFF" />
+              <Ionicons name={model.completionCelebrationType === 'claim' && index % 2 !== 0 ? 'cash' : 'leaf'} size={scale(16)} color="#FFF" />
             </View>
           </Animated.View>
         ))}

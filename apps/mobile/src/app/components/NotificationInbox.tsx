@@ -98,6 +98,7 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   const [refreshing, setRefreshing] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [isMarkingAll, setIsMarkingAll] = React.useState(false);
+  const [isClearingAll, setIsClearingAll] = React.useState(false);
   const [error, setError] = React.useState('');
   const [failedOffset, setFailedOffset] = React.useState<number | null>(null);
   const generation = React.useRef(0);
@@ -252,6 +253,28 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!token || !items.length || isClearingAll) return;
+    const previousUnreadCount = unreadCount;
+    generation.current++;
+    setIsClearingAll(true);
+    setItems([]);
+    setNext(null);
+    setUnreadCount(0);
+    setError('');
+    try {
+      await ecobudApi.clearAllNotifications(token);
+      DeviceEventEmitter.emit('notificationsChanged');
+      showNotification({ title: 'Notifications cleared', message: 'Your notification history was cleared.', tone: 'success' });
+    } catch {
+      setUnreadCount(previousUnreadCount);
+      await load(0, 'refresh');
+      showNotification({ title: 'Could not clear notifications', message: 'Please try again.', tone: 'error' });
+    } finally {
+      setIsClearingAll(false);
+    }
+  };
+
   const hasUnread = unreadCount > 0;
 
   return (
@@ -280,28 +303,48 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       </LinearGradient>
 
       <View style={inboxStyles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={[inboxStyles.headerTitle, { color: c.textPrimary }]}>Your activity</Text>
-        </View>
-        {hasUnread && !initialLoading && (
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Mark all as read"
-            onPress={handleMarkAllRead}
-            disabled={isMarkingAll}
-            style={[inboxStyles.markAllBtn, { backgroundColor: c.card }]}
-          >
-            {isMarkingAll ? (
-              <ActivityIndicator size="small" color={c.primary} />
-            ) : (
-              <>
-                <Ionicons name="checkmark-done" size={16} color={c.primary} />
-                <Text style={[inboxStyles.markAllText, { color: c.primary }]}>Mark all read</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        <Text style={[inboxStyles.headerTitle, { color: c.textPrimary }]}>Your activity</Text>
       </View>
+      {(hasUnread || ((items.length > 0 || isClearingAll) && !initialLoading)) && (
+        <View style={inboxStyles.actionsRow}>
+          {hasUnread && !initialLoading && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Mark all as read"
+              onPress={handleMarkAllRead}
+              disabled={isMarkingAll || isClearingAll}
+              style={[inboxStyles.markAllBtn, { backgroundColor: c.card, borderColor: c.border }]}
+            >
+              {isMarkingAll ? (
+                <ActivityIndicator size="small" color={c.primary} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-done" size={16} color={c.primary} />
+                  <Text style={[inboxStyles.markAllText, { color: c.primary }]}>Mark all read</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          {(items.length > 0 || isClearingAll) && !initialLoading && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Clear all notifications"
+              onPress={() => void handleClearAll()}
+              disabled={isClearingAll || isMarkingAll}
+              style={[inboxStyles.markAllBtn, inboxStyles.clearAllBtn, { backgroundColor: c.card, borderColor: c.border }]}
+            >
+              {isClearingAll ? (
+                <ActivityIndicator size="small" color={c.error} />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={15} color={c.error} />
+                  <Text style={[inboxStyles.markAllText, { color: c.error }]}>Clear all</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Filter Tabs */}
       <View style={inboxStyles.filtersWrap}>
@@ -452,11 +495,14 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
           </Text>
         </View>
       ) : null}
-      renderItem={({ item: n }) => {
+      renderItem={({ item: n, index }) => {
         const themeCat =
           categoryThemeColors[n.type as NotificationType] ?? categoryThemeColors.system;
         const iconName =
           iconMap[n.type as NotificationType] ?? 'information-circle';
+        const groupedInAll = filter === 'all';
+        const isFirstInGroup = index === 0;
+        const isLastInGroup = index === items.length - 1;
 
 
         return (
@@ -469,8 +515,15 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
             style={[
               inboxStyles.card,
               {
-                backgroundColor: n.isRead ? c.card : c.surface,
-                borderColor: n.isRead ? c.border : 'rgba(34, 197, 94, 0.4)',
+                backgroundColor: groupedInAll ? c.card : n.isRead ? c.card : c.surface,
+                borderColor: groupedInAll ? c.border : n.isRead ? c.border : 'rgba(34, 197, 94, 0.4)',
+                marginBottom: groupedInAll ? (isLastInGroup ? verticalScale(10) : 0) : verticalScale(10),
+                borderTopWidth: groupedInAll && !isFirstInGroup ? 0 : 1,
+                borderBottomWidth: groupedInAll && !isLastInGroup ? StyleSheet.hairlineWidth : 1,
+                borderTopLeftRadius: groupedInAll && !isFirstInGroup ? 0 : moderateScale(18),
+                borderTopRightRadius: groupedInAll && !isFirstInGroup ? 0 : moderateScale(18),
+                borderBottomLeftRadius: groupedInAll && !isLastInGroup ? 0 : moderateScale(18),
+                borderBottomRightRadius: groupedInAll && !isLastInGroup ? 0 : moderateScale(18),
               },
             ]}
           >
@@ -583,6 +636,14 @@ const inboxStyles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: verticalScale(12),
   },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: scale(8),
+    marginTop: verticalScale(-6),
+    marginBottom: verticalScale(10),
+  },
   headerTitle: {
     fontSize: responsiveFontSize(20),
     fontWeight: '800',
@@ -607,6 +668,9 @@ const inboxStyles = StyleSheet.create({
   markAllText: {
     fontSize: responsiveFontSize(12),
     fontWeight: '700',
+  },
+  clearAllBtn: {
+    borderColor: 'rgba(220, 38, 38, 0.2)',
   },
   filtersWrap: {
     marginBottom: verticalScale(12),

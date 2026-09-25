@@ -134,8 +134,8 @@ export function UnifiedProgressCard({
 
   const handleMeasure = () => {
     if (onProgressBarMeasured && progressBarRef.current) {
-      progressBarRef.current.measure((_x, _y, width, height, pageX, pageY) => {
-        onProgressBarMeasured({ x: pageX, y: pageY, width, height });
+      progressBarRef.current.measureInWindow((x, y, width, height) => {
+        onProgressBarMeasured({ x, y, width, height });
       });
     }
   };
