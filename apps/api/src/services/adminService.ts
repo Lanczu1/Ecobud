@@ -10,6 +10,16 @@ type ReviewerContext = {
   city?: string | null;
 };
 
+function runSubmissionFollowUps(label: string, tasks: Array<() => Promise<unknown>>) {
+  void Promise.allSettled(tasks.map((task) => Promise.resolve().then(task))).then((results) => {
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error(`${label} follow-up failed after save.`, result.reason);
+      }
+    }
+  });
+}
+
 export class AdminService {
   static async getAllLessons() {
     return apiCache.getOrSet('admin_lessons_list', 30, async () => {
@@ -644,7 +654,7 @@ export class AdminService {
     });
   }
 
-  static async getSubmissions(filterBarangay?: string | null) {
+  static async getSubmissions(filterBarangay?: string | null, includeEvents = true) {
     const barangay = filterBarangay?.trim() || undefined;
     const where = barangay
       ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
@@ -664,7 +674,7 @@ export class AdminService {
       }
     });
 
-    const eventSubs = await prisma.eventSubmission.findMany({
+    const eventSubs = includeEvents ? await prisma.eventSubmission.findMany({
       where,
       orderBy: { submittedAt: 'desc' },
       include: {
@@ -677,7 +687,7 @@ export class AdminService {
         },
         event: true
       }
-    });
+    }) : [];
 
     const unified = [
       ...challengeSubs.map(s => ({
@@ -748,14 +758,25 @@ export class AdminService {
           },
           include: {
             challengeInstance: { include: { challenge: true } },
-            user: true
+            user: { include: { profile: true } }
           }
         });
 
+        const { user, ...submissionResponse } = submission;
+        const safeSubmission = {
+          ...submissionResponse,
+          user: user ? {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            profile: user.profile,
+          } : null,
+        };
+
         // The review is committed at this point. Audit, realtime, and push
         // notifications must not turn a successful approval into an API error.
-        const followUpResults = await Promise.allSettled([
-          prisma.auditLog.create({
+        runSubmissionFollowUps('Preliminary challenge approval', [
+          () => prisma.auditLog.create({
             data: {
               action: 'SUBMISSION_APPROVED_COLLECTION',
               userId: submission.userId,
@@ -769,7 +790,7 @@ export class AdminService {
               timestamp: new Date()
             }
           }),
-          supabaseRealtimeService.publishUserSectionBundle(
+          () => supabaseRealtimeService.publishUserSectionBundle(
             submission.userId,
             ['challenges', 'tracker'],
             {
@@ -779,7 +800,7 @@ export class AdminService {
               reason: 'submission-approved_collection',
             },
           ),
-          sendDirectNotification({
+          () => sendDirectNotification({
             userId: submission.userId,
             type: 'challenge',
             message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
@@ -791,20 +812,14 @@ export class AdminService {
           }),
         ]);
 
-        for (const result of followUpResults) {
-          if (result.status === 'rejected') {
-            console.error('Preliminary challenge approval follow-up failed after save.', result.reason);
-          }
-        }
-
-        return submission;
+        return safeSubmission;
       }
 
       // Handle Rejection -> If quantity was reserved, return/refund it back to availableQuantity
       if (status === 'rejected') {
         const reserved = challengeSub.reservedQuantity || 0;
 
-        await prisma.$transaction(async (tx) => {
+        const updated = await prisma.$transaction(async (tx) => {
           if (reserved > 0 && challenge?.id) {
             await tx.challenge.update({
               where: { id: challenge.id },
@@ -814,7 +829,7 @@ export class AdminService {
             });
           }
 
-          await tx.challengeSubmission.update({
+          return tx.challengeSubmission.update({
             where: { id },
             data: {
               status: 'rejected',
@@ -822,19 +837,22 @@ export class AdminService {
               reviewedById: reviewerId,
               reviewedAt: new Date(),
               reservedQuantity: 0,
-            }
+            },
+            include: {
+              challengeInstance: { include: { challenge: true } },
+              user: { include: { profile: true } },
+            },
           });
         });
 
-        const updated = await prisma.challengeSubmission.findUnique({
-          where: { id },
-          include: {
-            challengeInstance: { include: { challenge: true } },
-            user: true
-          }
-        });
+        const { user, ...submissionResponse } = updated;
+        const safeSubmission = {
+          ...submissionResponse,
+          user: user ? { id: user.id, name: user.name, email: user.email, profile: user.profile } : null,
+        };
 
-        await prisma.auditLog.create({
+        runSubmissionFollowUps('Challenge rejection', [
+          () => prisma.auditLog.create({
           data: {
             action: 'SUBMISSION_REJECTED',
             userId: challengeSub.userId,
@@ -847,9 +865,8 @@ export class AdminService {
             }),
             timestamp: new Date()
           }
-        });
-
-        await supabaseRealtimeService.publishUserSectionBundle(
+          }),
+          () => supabaseRealtimeService.publishUserSectionBundle(
           challengeSub.userId,
           ['challenges', 'tracker'],
           {
@@ -858,9 +875,8 @@ export class AdminService {
             entityId: challengeSub.challengeInstanceId,
             reason: 'submission-rejected',
           },
-        );
-
-        await sendDirectNotification({
+          ),
+          () => sendDirectNotification({
           userId: challengeSub.userId,
           type: 'challenge',
           message: `Your proof for "${challenge?.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
@@ -869,9 +885,10 @@ export class AdminService {
           relatedType: 'challenge',
           priority: 'high',
           notificationKey: `admin_challenge_rejected:${challengeSub.id}`,
-        });
+          }),
+        ]);
 
-        return updated;
+        return safeSubmission;
       }
 
       // Handle Final Approval (approved)
@@ -887,14 +904,25 @@ export class AdminService {
         },
         include: {
           challengeInstance: { include: { challenge: true } },
-          user: true
+          user: { include: { profile: true } }
         }
       });
 
+      const { user, ...submissionResponse } = submission;
+      const safeSubmission = {
+        ...submissionResponse,
+        user: user ? {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          profile: user.profile,
+        } : null,
+      };
+
       // The final review is committed at this point. Audit, realtime, and push
       // notifications must not turn a successful approval into an API error.
-      const followUpResults = await Promise.allSettled([
-        prisma.auditLog.create({
+      runSubmissionFollowUps('Final challenge approval', [
+        () => prisma.auditLog.create({
           data: {
             action: 'SUBMISSION_APPROVED',
             userId: submission.userId,
@@ -907,7 +935,7 @@ export class AdminService {
             timestamp: new Date()
           }
         }),
-        supabaseRealtimeService.publishUserSectionBundle(
+        () => supabaseRealtimeService.publishUserSectionBundle(
           submission.userId,
           ['challenges', 'tracker'],
           {
@@ -917,7 +945,7 @@ export class AdminService {
             reason: 'submission-approved',
           },
         ),
-        sendDirectNotification({
+        () => sendDirectNotification({
           userId: submission.userId,
           type: 'challenge',
           message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
@@ -927,7 +955,7 @@ export class AdminService {
           priority: 'high',
           notificationKey: `admin_challenge_approved:${submission.id}`,
         }),
-        supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+        () => supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
           actorRole: 'admin',
           actorUserId: reviewerId,
           entityId: submission.userId,
@@ -935,13 +963,7 @@ export class AdminService {
         }),
       ]);
 
-      for (const result of followUpResults) {
-        if (result.status === 'rejected') {
-          console.error('Final challenge approval follow-up failed after save.', result.reason);
-        }
-      }
-
-      return submission;
+      return safeSubmission;
     }
 
     const eventSub = await prisma.eventSubmission.findUnique({
