@@ -680,7 +680,15 @@ export class AdminService {
     const eventSubs = submissionType === 'challenge' ? [] : await prisma.eventSubmission.findMany({
       where,
       orderBy: { submittedAt: 'desc' },
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        eventId: true,
+        qrVerified: true,
+        attendanceImageUrl: true,
+        status: true,
+        rejectionReason: true,
+        submittedAt: true,
         user: {
           select: {
             id: true,
@@ -1100,20 +1108,22 @@ export class AdminService {
 
   // Event Management
   static async getAllEvents() {
-    return await prisma.event.findMany({
+    const events = await prisma.event.findMany({
       orderBy: [
         { isFeatured: 'desc' },
         { startDatetime: 'asc' },
       ],
       include: {
-        registrations: {
-          select: { id: true }
-        },
+        _count: { select: { registrations: true } },
         managedBy: {
           select: { id: true, name: true, email: true }
         }
       }
     });
+    return events.map(({ _count, ...event }) => ({
+      ...event,
+      registrationCount: _count.registrations,
+    }));
   }
 
   static async createEvent(data: {

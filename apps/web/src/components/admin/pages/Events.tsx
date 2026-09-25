@@ -122,7 +122,12 @@ interface AdminEvent {
   createdAt: string;
   updatedAt: string;
   registrations: { id: string }[];
+  registrationCount?: number;
   managedBy: { id: string; name: string; email: string };
+}
+
+function getRegistrationCount(event: AdminEvent) {
+  return event.registrationCount ?? event.registrations.length;
 }
 
 interface EventReportStats {
@@ -162,7 +167,7 @@ function getEventStatus(event: AdminEvent) {
   const now = new Date();
   const eventDate = new Date(event.startDatetime);
   if (eventDate < now) return 'Past';
-  if (event.registrations.length >= event.capacity) return 'Full';
+  if (getRegistrationCount(event) >= event.capacity) return 'Full';
   return 'Upcoming';
 }
 
@@ -618,6 +623,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
 export function Events() {
   const [events, setEvents] = useState<AdminEvent[]>(() => getCachedAdminData<AdminEvent[]>('/admin/events') || []);
   const [loading, setLoading] = useState(() => !getCachedAdminData<AdminEvent[]>('/admin/events'));
+  const eventsRefreshInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -651,7 +657,9 @@ export function Events() {
     if (showLoading) setSubmissionsLoading(true);
     try {
       const data = await adminGet<EventSubmission[]>('/admin/submissions?type=event', { bypassCache: true });
-      setSubmissions(data);
+      setSubmissions(data.filter(submission =>
+        submission.submissionType === 'EVENT' || submission.challenge?.type === 'EVENT'
+      ));
     } catch (err: any) {
       console.error('Failed to load event submissions', err);
     } finally {
@@ -686,8 +694,10 @@ export function Events() {
   };
 
   const load = async () => {
+    if (eventsRefreshInFlight.current) return;
+    eventsRefreshInFlight.current = true;
     try {
-      const data = await adminGet<AdminEvent[]>('/admin/events');
+      const data = await adminGet<AdminEvent[]>('/admin/events', { bypassCache: true });
       setEvents(data);
       setError(null);
     } catch (err: any) {
@@ -695,6 +705,7 @@ export function Events() {
         setError(err.message || 'Failed to load events.');
       }
     } finally {
+      eventsRefreshInFlight.current = false;
       setLoading(false);
     }
   };
@@ -715,13 +726,11 @@ export function Events() {
   };
 
   useEffect(() => {
-    load();
-    // Auto-sync / auto-update the page by polling every 5 seconds
-    const interval = setInterval(() => {
-      load();
-    }, 5000);
+    if (activeTab !== 'events') return;
+    void load();
+    const interval = setInterval(() => void load(), 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTab]);
 
   // Fetch submissions when switching to submissions tab or initially
   useEffect(() => {
@@ -894,7 +903,7 @@ export function Events() {
     }
   };
 
-  const totalAttendees = events.reduce((a, e) => a + e.registrations.length, 0);
+  const totalAttendees = events.reduce((a, e) => a + getRegistrationCount(e), 0);
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
@@ -1156,7 +1165,7 @@ export function Events() {
             </div>
           ))
           : filtered.map(event => {
-            const fillPct = Math.min(100, Math.round((event.registrations.length / event.capacity) * 100));
+            const fillPct = Math.min(100, Math.round((getRegistrationCount(event) / event.capacity) * 100));
             const status = getEventStatus(event);
             return (
               <div key={event.id} className={`bg-white rounded-2xl border ${event.isFeatured ? 'border-yellow-200 shadow-yellow-500/5 ring-1 ring-yellow-300/60' : 'border-gray-100'} shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group flex flex-col`}>
@@ -1234,7 +1243,7 @@ export function Events() {
                 {/* Capacity bar */}
                 <div className="mb-4 mt-auto">
                   <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                    <span className="flex items-center gap-1"><Users className="w-3 h-3" />{event.registrations.length} attending</span>
+                    <span className="flex items-center gap-1"><Users className="w-3 h-3" />{getRegistrationCount(event)} attending</span>
                     <span>{fillPct}% full ({event.capacity} cap.)</span>
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
