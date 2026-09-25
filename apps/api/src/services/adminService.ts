@@ -654,12 +654,15 @@ export class AdminService {
     });
   }
 
-  static async getSubmissions(filterBarangay?: string | null, includeEvents = true) {
+  static async getSubmissions(
+    filterBarangay?: string | null,
+    submissionType: 'all' | 'challenge' | 'event' = 'all',
+  ) {
     const barangay = filterBarangay?.trim() || undefined;
     const where = barangay
       ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
       : undefined;
-    const challengeSubs = await prisma.challengeSubmission.findMany({
+    const challengeSubs = submissionType === 'event' ? [] : await prisma.challengeSubmission.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -674,7 +677,7 @@ export class AdminService {
       }
     });
 
-    const eventSubs = includeEvents ? await prisma.eventSubmission.findMany({
+    const eventSubs = submissionType === 'challenge' ? [] : await prisma.eventSubmission.findMany({
       where,
       orderBy: { submittedAt: 'desc' },
       include: {
@@ -682,12 +685,12 @@ export class AdminService {
           select: {
             id: true,
             name: true,
-            profile: true
+            profile: { select: { displayName: true, avatarUrl: true, city: true } }
           }
         },
-        event: true
+        event: { select: { title: true } }
       }
-    }) : [];
+    });
 
     const unified = [
       ...challengeSubs.map(s => ({
@@ -979,50 +982,60 @@ export class AdminService {
         }
       }
       const eventStatus = status === 'approved' ? 'approved' : 'rejected';
-      const submission = await prisma.eventSubmission.update({
-        where: { id },
-        data: {
-          status: eventStatus as any,
-          rejectionReason: notes,
-          reviewedAt: new Date()
-        },
-        include: {
-          event: true,
-          user: true
-        }
+      const submission = await prisma.$transaction(async (tx) => {
+        const updatedSubmission = await tx.eventSubmission.update({
+          where: { id },
+          data: {
+            status: eventStatus as any,
+            rejectionReason: notes,
+            reviewedAt: new Date()
+          },
+          include: {
+            event: { select: { title: true } },
+            user: {
+              select: {
+                id: true,
+                name: true,
+                profile: { select: { displayName: true, avatarUrl: true, city: true } },
+              },
+            },
+          }
+        });
+
+        await tx.eventRegistration.update({
+          where: { userId_eventId: { userId: updatedSubmission.userId, eventId: updatedSubmission.eventId } },
+          data: {
+            status: status === 'approved' ? 'ATTENDED' : 'REGISTERED',
+            attendedAt: status === 'approved' ? new Date() : null
+          }
+        });
+        return updatedSubmission;
       });
 
-      const eventReg = await prisma.eventRegistration.update({
-        where: { userId_eventId: { userId: submission.userId, eventId: submission.eventId } },
-        data: {
-          status: status === 'approved' ? 'ATTENDED' : 'REGISTERED',
-          attendedAt: status === 'approved' ? new Date() : null
-        }
-      });
-
-      await prisma.auditLog.create({
-        data: {
-          action: `EVENT_SUBMISSION_${status.toUpperCase()}`,
-          userId: submission.userId,
-          details: JSON.stringify({
-            eventId: submission.eventId,
-            eventTitle: submission.event.title,
-            reviewerId,
-            notes
-          }),
-          timestamp: new Date()
-        }
-      });
-
-      await supabaseRealtimeService.publishUserNotice(submission.userId, {
-        level: status === 'approved' ? 'success' : 'warning',
-        message:
-          status === 'approved'
-            ? `Your attendance for event "${submission.event.title}" has been approved.`
-            : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
-        scope: 'moderation',
-        title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
-      });
+      runSubmissionFollowUps(`Event attendance ${status}`, [
+        () => prisma.auditLog.create({
+          data: {
+            action: `EVENT_SUBMISSION_${status.toUpperCase()}`,
+            userId: submission.userId,
+            details: JSON.stringify({
+              eventId: submission.eventId,
+              eventTitle: submission.event.title,
+              reviewerId,
+              notes
+            }),
+            timestamp: new Date()
+          }
+        }),
+        () => supabaseRealtimeService.publishUserNotice(submission.userId, {
+          level: status === 'approved' ? 'success' : 'warning',
+          message:
+            status === 'approved'
+              ? `Your attendance for event "${submission.event.title}" has been approved.`
+              : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
+          scope: 'moderation',
+          title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
+        }),
+      ]);
 
       return {
         id: submission.id,

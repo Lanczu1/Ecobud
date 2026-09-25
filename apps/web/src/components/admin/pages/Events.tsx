@@ -214,6 +214,12 @@ const emptyForm: FormData = {
   imageUrl: null,
 };
 
+function resolveEventImageUrl(imageUrl?: string | null) {
+  if (!imageUrl) return null;
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  return `${API_HOST.replace(/\/$/, '')}/${imageUrl.replace(/^\//, '')}`;
+}
+
 interface ModalProps {
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
@@ -280,7 +286,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
   isPublished: true,
           }
   );
-  const [imagePreview, setImagePreview] = useState<string | null>(initial?.imageUrl ? `${API_HOST}${initial.imageUrl}` : null);
+  const [imagePreview, setImagePreview] = useState<string | null>(resolveEventImageUrl(initial?.imageUrl));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
@@ -345,7 +351,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             <div className="flex items-center gap-4">
               {imagePreview && (
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0">
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" onError={() => setImagePreview(null)} />
                 </div>
               )}
               <div className="flex-1 relative">
@@ -630,6 +636,7 @@ export function Events() {
   // ── Event Submissions state ────────────────────────────────────────────────
   const [submissions, setSubmissions] = useState<EventSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const submissionsRefreshInFlight = useRef(false);
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
@@ -638,16 +645,18 @@ export function Events() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewNotice, setReviewNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const loadSubmissions = async () => {
-    setSubmissionsLoading(true);
+  const loadSubmissions = async (showLoading = true) => {
+    if (submissionsRefreshInFlight.current) return;
+    submissionsRefreshInFlight.current = true;
+    if (showLoading) setSubmissionsLoading(true);
     try {
-      const data = await adminGet<EventSubmission[]>('/admin/submissions');
-      // Keep only event submissions
-      setSubmissions(data.filter(s => s.submissionType === 'EVENT' || (s.challenge && s.challenge.type === 'EVENT')));
+      const data = await adminGet<EventSubmission[]>('/admin/submissions?type=event', { bypassCache: true });
+      setSubmissions(data);
     } catch (err: any) {
       console.error('Failed to load event submissions', err);
     } finally {
-      setSubmissionsLoading(false);
+      submissionsRefreshInFlight.current = false;
+      if (showLoading) setSubmissionsLoading(false);
     }
   };
 
@@ -667,7 +676,8 @@ export function Events() {
       setReviewModal(null);
       setReviewNotes('');
       setReviewNotice({ type: 'success', message: action === 'approved' ? 'Attendance proof approved successfully.' : 'Attendance proof rejected successfully.' });
-      load(); // Refresh event attendees count
+      void load(); // Refresh the attendee count in the background.
+      void loadSubmissions(false);
     } catch (err: any) {
       setReviewNotice({ type: 'error', message: err.message || `Failed to ${action === 'approved' ? 'approve' : 'reject'} submission.` });
     } finally {
@@ -717,6 +727,10 @@ export function Events() {
   useEffect(() => {
     if (activeTab === 'submissions') {
       loadSubmissions();
+      const interval = setInterval(() => {
+        void loadSubmissions(false);
+      }, 5000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -1148,7 +1162,7 @@ export function Events() {
               <div key={event.id} className={`bg-white rounded-2xl border ${event.isFeatured ? 'border-yellow-200 shadow-yellow-500/5 ring-1 ring-yellow-300/60' : 'border-gray-100'} shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden group flex flex-col`}>
                 <div className="h-32 w-full relative shrink-0">
                   <img 
-                    src={event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${API_HOST}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop'} 
+                    src={resolveEventImageUrl(event.imageUrl) || 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop'}
                     alt={event.title}
                     className="w-full h-full object-cover"
                   />
@@ -1300,7 +1314,7 @@ export function Events() {
               </div>
             </div>
             <button 
-              onClick={loadSubmissions} 
+              onClick={() => void loadSubmissions()}
               disabled={submissionsLoading}
               className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline flex items-center gap-1.5 font-semibold shrink-0 bg-emerald-100/70 dark:bg-emerald-800/40 px-3 py-1.5 rounded-lg active:scale-95 transition-all"
             >
