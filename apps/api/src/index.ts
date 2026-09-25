@@ -126,6 +126,37 @@ app.get('/maps/Nagcarlan.geojson', (_req, res, next) => {
   });
 });
 
+app.get('/maps/NagcarlanBarangays.geojson', async (_req, res) => {
+  const query = new URLSearchParams({
+    where: "mun_code='043417000'",
+    outFields: 'brgy_code',
+    returnGeometry: 'true',
+    outSR: '4326',
+    f: 'geojson',
+  });
+
+  try {
+    const response = await fetch(
+      `https://fmbfsd.denr.gov.ph/server/rest/services/Hosted/INREMP_GDSS/FeatureServer/38/query?${query}`,
+      { signal: AbortSignal.timeout(12000) },
+    );
+    if (!response.ok) throw new Error(`Boundary service returned ${response.status}`);
+
+    const data = await response.json() as { features?: unknown[]; error?: { message?: string } };
+    if (data.error || !Array.isArray(data.features) || data.features.length !== 52) {
+      throw new Error(data.error?.message || `Boundary service returned ${data.features?.length ?? 0} of 52 barangays`);
+    }
+
+    res.setHeader('Content-Type', 'application/geo+json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.json(data);
+  } catch (error) {
+    console.error('[NagcarlanBarangaysMap] Boundary data unavailable:', error);
+    return res.status(502).json({ message: 'Barangay map data is temporarily unavailable.' });
+  }
+});
+
 app.get('/api/health', (_req, res) => {
   return res.json({
     status: 'ok',

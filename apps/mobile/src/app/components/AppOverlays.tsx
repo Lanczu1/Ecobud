@@ -2147,6 +2147,9 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
     const markersJson = JSON.stringify(rawMarkers)
       .replace(/</g, '\\u003c')
       .replace(/>/g, '\\u003e');
+    const barangayNamesJson = JSON.stringify(BARANGAYS)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e');
 
     const userLocJson = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
       ? JSON.stringify({ lat: Number(userLocation.latitude), lng: Number(userLocation.longitude) })
@@ -2210,6 +2213,14 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           .eco-pin-inner {
             transform: rotate(45deg); font-size: 14px;
           }
+          .barangay-pin-wrapper { display: flex; align-items: center; justify-content: center; }
+          .barangay-pin {
+            width: 29px; height: 29px; border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg); background: #f97316; border: 2.5px solid #fff;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+            display: flex; align-items: center; justify-content: center;
+          }
+          .barangay-pin-inner { transform: rotate(45deg); color: #fff; font-size: 11px; font-weight: 800; }
           .osm-badge {
             position: absolute; bottom: 8px; left: 8px; z-index: 1000;
             background: rgba(14, 21, 18, 0.88); color: #A7F3D0; padding: 4px 10px;
@@ -2292,6 +2303,36 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           });
 
           osmTileLayer.addTo(map);
+
+          const barangayNames = ${barangayNamesJson};
+          const barangayBoundaryUrl = '${ecobudApiOrigin}/maps/NagcarlanBarangays.geojson';
+          fetch(barangayBoundaryUrl)
+            .then(response => response.ok ? response.json() : Promise.reject(new Error('Barangay boundary data unavailable (' + response.status + ')')))
+            .then(data => {
+              if (!data.features || data.features.length !== barangayNames.length) {
+                throw new Error('Expected ' + barangayNames.length + ' barangay boundaries, received ' + (data.features ? data.features.length : 0));
+              }
+              L.geoJSON(data, {
+                interactive: false,
+                onEachFeature: function(feature, boundary) {
+                  const code = String(feature && feature.properties && feature.properties.brgy_code || '');
+                  const index = Number(code.slice(-3)) - 1;
+                  const name = feature && feature.properties && (feature.properties.BrgyName || barangayNames[index]);
+                  if (!name || !boundary.getBounds) return;
+
+                  const icon = L.divIcon({
+                    className: 'barangay-pin-wrapper',
+                    html: '<div class="barangay-pin"><span class="barangay-pin-inner">B</span></div>',
+                    iconSize: [29, 29],
+                    iconAnchor: [14, 29],
+                    popupAnchor: [0, -27]
+                  });
+                  const marker = L.marker(boundary.getBounds().getCenter(), { icon }).addTo(map);
+                  marker.bindPopup('<strong>Barangay ' + String(name).replace(/[&<>"']/g, function(char) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]); }) + '</strong>', { className: 'custom-popup' });
+                }
+              });
+            })
+            .catch(error => console.warn('[EcoEventsMap] Barangay pins unavailable', error));
 
           const nagcarlanOsmPane = map.createPane('nagcarlanOsmPane');
           nagcarlanOsmPane.style.zIndex = '350';
