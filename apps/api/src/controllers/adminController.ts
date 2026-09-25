@@ -508,7 +508,8 @@ export class AdminController {
         ? (req.auth?.city || null)
         : ((req.query.barangay as string) || null);
 
-      const items = await AdminService.getSubmissions(filterBarangay);
+      const challengeOnly = req.query.type === 'challenge';
+      const items = await AdminService.getSubmissions(filterBarangay, !challengeOnly);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch submissions." });

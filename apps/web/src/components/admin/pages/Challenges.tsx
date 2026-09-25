@@ -694,6 +694,7 @@ export function Challenges() {
   const moderatorBarangay = loggedInUser?.city || loggedInUser?.profile?.city || null;
 
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
+  const submissionsRefreshInFlight = useRef(false);
   const [selectedImage, setSelectedImage] = useState<PreviewModalImage | null>(null);
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
@@ -732,17 +733,22 @@ export function Challenges() {
     }
   };
 
-  const loadSubmissions = async () => {
-    setSubmissionsLoading(true);
+  const loadSubmissions = async (showLoading = true) => {
+    if (submissionsRefreshInFlight.current) return;
+    submissionsRefreshInFlight.current = true;
+    if (showLoading) setSubmissionsLoading(true);
     try {
-      const data = await adminGet<ChallengeSubmission[]>('/admin/submissions');
+      const data = await adminGet<ChallengeSubmission[]>('/admin/submissions?type=challenge', { bypassCache: true });
       // Filter to only challenge submissions; event submissions belong in the Events page.
       setSubmissions(data.filter(isChallengeSubmission));
     } catch (err: any) { 
       console.error('Failed to load submissions', err); 
-      toast.error(err.message || 'Failed to load submissions'); 
+      if (showLoading) toast.error(err.message || 'Failed to load submissions');
     }
-    finally { setSubmissionsLoading(false); }
+    finally {
+      submissionsRefreshInFlight.current = false;
+      if (showLoading) setSubmissionsLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -751,14 +757,8 @@ export function Challenges() {
     if (activeTab === 'submissions') {
       loadSubmissions();
       const interval = setInterval(() => {
-        // Silently reload submissions in the background
-        adminGet('/admin/submissions')
-          .then((res: any) => {
-            const raw = res.data || res.items || res;
-            if (Array.isArray(raw)) setSubmissions(raw.filter(isChallengeSubmission));
-          })
-          .catch(() => {});
-      }, 20000);
+        void loadSubmissions(false);
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [activeTab]);
@@ -770,6 +770,7 @@ export function Challenges() {
       await adminPost(`/admin/submissions/${id}/review`, { status: 'approved_collection' });
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved_collection' } : s));
       toast.success('Before photo approved.');
+      void loadSubmissions(false);
     } catch (err: any) { 
       toast.error(err.message || 'Failed to approve'); 
     }
@@ -783,6 +784,7 @@ export function Challenges() {
       await adminPost(`/admin/submissions/${id}/review`, { status: 'approved' });
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
       toast.success('Submission approved.');
+      void loadSubmissions(false);
     } catch (err: any) { 
       toast.error(err.message || 'Failed to approve submission'); 
     }
@@ -825,15 +827,13 @@ export function Challenges() {
         status: 'rejected',
         notes: rejectReason.trim() || undefined,
       });
-      setSubmissions(prev =>
-        prev.map(s =>
-          s.id === rejectModal.submissionId
-            ? { ...s, status: 'rejected', moderatorNotes: rejectReason.trim() || null }
-            : s
-        )
-      );
+      setSubmissions(prev => prev.map(s => s.id === rejectModal.submissionId
+        ? { ...s, status: 'rejected', moderatorNotes: rejectReason.trim() || null }
+        : s));
       setRejectModal({ open: false, submissionId: '', userName: '' });
       setRejectReason('');
+      toast.success('Submission rejected.');
+      void loadSubmissions(false);
     } catch (err: any) {
       console.error('Failed to reject submission:', err);
       setRejectError(err.message || 'Failed to reject submission. Please try again.');
@@ -1430,7 +1430,7 @@ export function Challenges() {
                 <strong>Submissions Filtered by User & Challenge:</strong> Multiple submissions from the same user are grouped together hierarchically per challenge so you can review consecutive Before & After photos easily.
               </div>
             </div>
-            <button onClick={loadSubmissions} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg">
+            <button onClick={() => void loadSubmissions()} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg">
               <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
@@ -2261,4 +2261,3 @@ export function Challenges() {
     </div>
   );
 }
-
