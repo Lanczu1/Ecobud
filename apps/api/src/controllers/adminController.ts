@@ -537,7 +537,8 @@ export class AdminController {
       if (error.message === 'Submission not found') {
         return res.status(404).json({ message: "Submission not found." });
       }
-      return res.status(500).json({ message: "Failed to review submission." });
+      console.error('Admin submission review failed.', error);
+      return res.status(500).json({ message: error.message || "Failed to review submission." });
     }
   }
 
