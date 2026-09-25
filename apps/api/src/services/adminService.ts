@@ -752,42 +752,50 @@ export class AdminService {
           }
         });
 
-        await prisma.auditLog.create({
-          data: {
-            action: 'SUBMISSION_APPROVED_COLLECTION',
+        // The review is committed at this point. Audit, realtime, and push
+        // notifications must not turn a successful approval into an API error.
+        const followUpResults = await Promise.allSettled([
+          prisma.auditLog.create({
+            data: {
+              action: 'SUBMISSION_APPROVED_COLLECTION',
+              userId: submission.userId,
+              details: JSON.stringify({
+                submissionId: id,
+                challengeTitle: challenge?.title,
+                reviewerId,
+                reservedQuantity: submission.reservedQuantity,
+                notes
+              }),
+              timestamp: new Date()
+            }
+          }),
+          supabaseRealtimeService.publishUserSectionBundle(
+            submission.userId,
+            ['challenges', 'tracker'],
+            {
+              actorRole: 'admin',
+              actorUserId: reviewerId,
+              entityId: submission.challengeInstanceId,
+              reason: 'submission-approved_collection',
+            },
+          ),
+          sendDirectNotification({
             userId: submission.userId,
-            details: JSON.stringify({
-              submissionId: id,
-              challengeTitle: challenge?.title,
-              reviewerId,
-              reservedQuantity: submission.reservedQuantity,
-              notes
-            }),
-            timestamp: new Date()
+            type: 'challenge',
+            message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
+            title: 'Pending After Photo',
+            relatedId: submission.challengeInstanceId,
+            relatedType: 'challenge',
+            priority: 'high',
+            notificationKey: `admin_challenge_collection_approved:${submission.id}`,
+          }),
+        ]);
+
+        for (const result of followUpResults) {
+          if (result.status === 'rejected') {
+            console.error('Preliminary challenge approval follow-up failed after save.', result.reason);
           }
-        });
-
-        await supabaseRealtimeService.publishUserSectionBundle(
-          submission.userId,
-          ['challenges', 'tracker'],
-          {
-            actorRole: 'admin',
-            actorUserId: reviewerId,
-            entityId: submission.challengeInstanceId,
-            reason: 'submission-approved_collection',
-          },
-        );
-
-        await sendDirectNotification({
-          userId: submission.userId,
-          type: 'challenge',
-          message: `Your proof for "${challenge?.title}" was approved! Please submit your After Photo.`,
-          title: 'Pending After Photo',
-          relatedId: submission.challengeInstanceId,
-          relatedType: 'challenge',
-          priority: 'high',
-          notificationKey: `admin_challenge_collection_approved:${submission.id}`,
-        });
+        }
 
         return submission;
       }
@@ -883,49 +891,55 @@ export class AdminService {
         }
       });
 
-      // Create Audit Log
-      await prisma.auditLog.create({
-        data: {
-          action: 'SUBMISSION_APPROVED',
+      // The final review is committed at this point. Audit, realtime, and push
+      // notifications must not turn a successful approval into an API error.
+      const followUpResults = await Promise.allSettled([
+        prisma.auditLog.create({
+          data: {
+            action: 'SUBMISSION_APPROVED',
+            userId: submission.userId,
+            details: JSON.stringify({
+              challengeId: submission.challengeInstanceId,
+              challengeTitle: submission.challengeInstance?.challenge?.title,
+              reviewerId,
+              notes
+            }),
+            timestamp: new Date()
+          }
+        }),
+        supabaseRealtimeService.publishUserSectionBundle(
+          submission.userId,
+          ['challenges', 'tracker'],
+          {
+            actorRole: 'admin',
+            actorUserId: reviewerId,
+            entityId: submission.challengeInstanceId,
+            reason: 'submission-approved',
+          },
+        ),
+        sendDirectNotification({
           userId: submission.userId,
-          details: JSON.stringify({
-            challengeId: submission.challengeInstanceId,
-            challengeTitle: submission.challengeInstance?.challenge?.title,
-            reviewerId,
-            notes
-          }),
-          timestamp: new Date()
-        }
-      });
-
-      await supabaseRealtimeService.publishUserSectionBundle(
-        submission.userId,
-        ['challenges', 'tracker'],
-        {
+          type: 'challenge',
+          message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
+          title: 'Challenge fully approved',
+          relatedId: submission.challengeInstanceId,
+          relatedType: 'challenge',
+          priority: 'high',
+          notificationKey: `admin_challenge_approved:${submission.id}`,
+        }),
+        supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
           actorRole: 'admin',
           actorUserId: reviewerId,
-          entityId: submission.challengeInstanceId,
+          entityId: submission.userId,
           reason: 'submission-approved',
-        },
-      );
+        }),
+      ]);
 
-      await sendDirectNotification({
-        userId: submission.userId,
-        type: 'challenge',
-        message: `Your mission for "${submission.challengeInstance?.challenge?.title}" is officially approved! You can now claim your reward.`,
-        title: 'Challenge fully approved',
-        relatedId: submission.challengeInstanceId,
-        relatedType: 'challenge',
-        priority: 'high',
-        notificationKey: `admin_challenge_approved:${submission.id}`,
-      });
-
-      await supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
-        actorRole: 'admin',
-        actorUserId: reviewerId,
-        entityId: submission.userId,
-        reason: 'submission-approved',
-      });
+      for (const result of followUpResults) {
+        if (result.status === 'rejected') {
+          console.error('Final challenge approval follow-up failed after save.', result.reason);
+        }
+      }
 
       return submission;
     }
