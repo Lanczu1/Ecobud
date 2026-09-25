@@ -30,6 +30,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { resolveMediaUrl } from '../../app/utils/appUtils';
 import { ConfirmDialog } from '../../shared/ui/ConfirmDialog';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { BarangayListingMap, type ListingLocation } from './LagunaBarangayPickerMap';
+import * as Location from 'expo-location';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
@@ -92,6 +94,14 @@ export function SwapListingDetail({
   const [editMeetupLocation, setEditMeetupLocation] = useState(listing.meetupLocation || '');
   const [editMeetupLandmark, setEditMeetupLandmark] = useState(listing.meetupLandmark || '');
   const [editMeetupNotes, setEditMeetupNotes] = useState(listing.meetupNotes || '');
+  const [editMapLocation, setEditMapLocation] = useState<ListingLocation | null>(
+    listing.latitude != null && listing.longitude != null
+      ? { latitude: listing.latitude, longitude: listing.longitude }
+      : null,
+  );
+  const [editCity, setEditCity] = useState(listing.city || 'Nagcarlan');
+  const [editProvince, setEditProvince] = useState(listing.province || 'Laguna');
+  const editLocationRequest = useRef(0);
   const isOwnListing = listing.user.id === currentUserId;
   const isApproved = listing.approvalStatus === 'approved' || (listing as any).approvalStatus === undefined;
   const scrollRef = useRef<ScrollView>(null);
@@ -107,6 +117,11 @@ export function SwapListingDetail({
     setEditMeetupLocation(initialListing.meetupLocation || '');
     setEditMeetupLandmark(initialListing.meetupLandmark || '');
     setEditMeetupNotes(initialListing.meetupNotes || '');
+    setEditMapLocation(initialListing.latitude != null && initialListing.longitude != null
+      ? { latitude: initialListing.latitude, longitude: initialListing.longitude }
+      : null);
+    setEditCity(initialListing.city || 'Nagcarlan');
+    setEditProvince(initialListing.province || 'Laguna');
   }, [initialListing]);
 
   React.useEffect(() => {
@@ -141,6 +156,38 @@ export function SwapListingDetail({
     });
   };
 
+  const handleEditMapLocation = React.useCallback(async (location: ListingLocation) => {
+    const requestId = ++editLocationRequest.current;
+    setEditMapLocation(location);
+    setEditCity('Nagcarlan');
+    setEditProvince('Laguna');
+    setEditMeetupLocation(location.locality || 'Nagcarlan');
+    setEditMeetupLandmark(location.locality || '');
+
+    try {
+      const [address] = await Location.reverseGeocodeAsync({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+      if (!address || requestId !== editLocationRequest.current) return;
+      const name = address.name?.trim();
+      const street = address.street?.trim();
+      const district = address.district?.trim() || location.locality?.trim();
+      const city = address.city?.trim() || 'Nagcarlan';
+      const parts = [name, street].filter((part): part is string => Boolean(part));
+      if (district && !parts.some(part => part.toLowerCase().includes(district.toLowerCase()))) parts.push(district);
+      parts.push(city);
+      setEditMeetupLocation(parts.filter((part, index, all) =>
+        all.findIndex(candidate => candidate.toLowerCase() === part.toLowerCase()) === index,
+      ).join(', '));
+      setEditMeetupLandmark(name || street || district || city);
+      setEditCity(city);
+      setEditProvince(address.subregion?.trim() || address.region?.trim() || 'Laguna');
+    } catch {
+      // Keep the selected locality as the meetup location if geocoding is unavailable.
+    }
+  }, []);
+
   const handleSaveEdit = async () => {
     if (!editTitle.trim() || !editQuantity.trim()) {
       setEditError('Please enter both a title and quantity.');
@@ -157,6 +204,10 @@ export function SwapListingDetail({
         meetupLocation: editMeetupLocation.trim() || undefined,
         meetupLandmark: editMeetupLandmark.trim() || undefined,
         meetupNotes: editMeetupNotes.trim() || undefined,
+        city: editCity.trim() || undefined,
+        province: editProvince.trim() || undefined,
+        latitude: editMapLocation?.latitude,
+        longitude: editMapLocation?.longitude,
       });
       const updatedListing: SwapListing = {
         ...listing,
@@ -167,6 +218,10 @@ export function SwapListingDetail({
         meetupLocation: editMeetupLocation.trim() || undefined,
         meetupLandmark: editMeetupLandmark.trim() || undefined,
         meetupNotes: editMeetupNotes.trim() || undefined,
+        city: editCity.trim() || undefined,
+        province: editProvince.trim() || undefined,
+        latitude: editMapLocation?.latitude,
+        longitude: editMapLocation?.longitude,
       };
       setListing(updatedListing);
       onUpdated?.(updatedListing);
@@ -431,6 +486,17 @@ export function SwapListingDetail({
                       <Text style={[localStyles.meetupInfoSubtitle, { color: theme.colors.textMuted }]}>Landmark: {listing.meetupLandmark}</Text>
                     )}
                   </View>
+                </View>
+              )}
+
+              {listing.meetupMethod === 'public' && Number.isFinite(listing.latitude) && Number.isFinite(listing.longitude) && (
+                <View style={{ marginTop: 12, marginBottom: 8 }}>
+                  <Text style={[localStyles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 8 }]}>Map location</Text>
+                  <BarangayListingMap
+                    interactive={false}
+                    height={220}
+                    selectedLocation={{ latitude: listing.latitude!, longitude: listing.longitude! }}
+                  />
                 </View>
               )}
 
@@ -735,6 +801,16 @@ export function SwapListingDetail({
                   onChangeText={setEditMeetupLocation}
                   placeholder="e.g. SM City Calamba"
                   placeholderTextColor={theme.colors.textMuted}
+                />
+
+                <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Map Pin</Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 8 }}>
+                  Tap the map to move this listing’s location.
+                </Text>
+                <BarangayListingMap
+                  onSelect={handleEditMapLocation}
+                  selectedLocation={editMapLocation}
+                  height={240}
                 />
 
                 <Text style={[localStyles.editFieldLabel, { color: theme.colors.textPrimary }]}>Landmark</Text>

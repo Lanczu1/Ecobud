@@ -125,8 +125,8 @@ export function MarketplaceFeed({
   const meetupOptions: Array<{ key: MeetupMethod | 'all'; label: string; icon: string }> = [
     { key: 'all', label: 'All Meetups', icon: 'options-outline' },
     { key: 'public', label: 'Public Meetup', icon: 'location-outline' },
-    { key: 'pickup', label: 'Door Pickup', icon: 'arrow-down-outline' },
-    { key: 'dropoff', label: 'Door Drop-off', icon: 'arrow-up-outline' },
+    { key: 'pickup', label: 'Pickup', icon: 'arrow-down-outline' },
+    { key: 'dropoff', label: 'Delivery', icon: 'arrow-up-outline' },
   ];
 
   const loadListings = useCallback(async () => {
@@ -560,7 +560,7 @@ export function MarketplaceFeed({
                         <Text style={{ fontSize: 12, fontWeight: '700', color: '#10B981' }}>Available</Text>
                       </View>
                       <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>
-                        {listing.meetupMethod === 'public' ? 'Public Meetup' : listing.meetupMethod === 'pickup' ? 'Door Pickup' : 'Door Drop-off'}
+                        {listing.meetupMethod === 'public' ? 'Public Meetup' : listing.meetupMethod === 'pickup' ? 'Pickup' : 'Delivery'}
                       </Text>
                     </View>
                     <SwapListingCard

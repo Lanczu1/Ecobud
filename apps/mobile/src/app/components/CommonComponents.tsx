@@ -746,6 +746,8 @@ export function OverlayScaffold({
   topRightAccessory,
   topProgressBar,
   compactHeader = false,
+  titleStyle,
+  headerStyle,
   children,
 }: {
   title: string;
@@ -755,6 +757,8 @@ export function OverlayScaffold({
   topRightAccessory?: React.ReactNode;
   topProgressBar?: React.ReactNode;
   compactHeader?: boolean;
+  titleStyle?: StyleProp<TextStyle>;
+  headerStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }) {
   const { theme } = useTheme();
@@ -764,7 +768,7 @@ export function OverlayScaffold({
       {headerImage ? (
         <ImageBackground
           source={{ uri: headerImage }}
-          style={[styles.overlayHeader, compactHeader && styles.overlayHeaderCompact, { backgroundColor: '#0C5E54' }]}
+          style={[styles.overlayHeader, compactHeader && styles.overlayHeaderCompact, headerStyle, { backgroundColor: '#0C5E54' }]}
           imageStyle={{ opacity: 0.4 }}
         >
           <LinearGradient colors={['rgba(7,28,25,0.6)', 'rgba(12,94,84,0.7)', 'rgba(23,160,126,0.9)']} style={StyleSheet.absoluteFill} />
@@ -777,12 +781,12 @@ export function OverlayScaffold({
               </TouchableOpacity>
               {topRightAccessory}
             </View>
-            <Text style={[styles.overlayTitle, compactHeader && styles.overlayTitleCompact]}>{title}</Text>
+            <Text style={[styles.overlayTitle, compactHeader && styles.overlayTitleCompact, titleStyle]}>{title}</Text>
             <Text style={[styles.overlaySubtitle, compactHeader && styles.overlaySubtitleCompact]}>{subtitle}</Text>
           </SafeAreaView>
         </ImageBackground>
       ) : (
-        <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={[styles.overlayHeader, compactHeader && styles.overlayHeaderCompact]}>
+        <LinearGradient colors={['#071C19', '#0C5E54', '#17A07E']} style={[styles.overlayHeader, compactHeader && styles.overlayHeaderCompact, headerStyle]}>
           {topProgressBar && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>{topProgressBar}</View>}
           <SafeAreaView>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -792,7 +796,7 @@ export function OverlayScaffold({
               </TouchableOpacity>
               {topRightAccessory}
             </View>
-            <Text style={[styles.overlayTitle, compactHeader && styles.overlayTitleCompact]}>{title}</Text>
+            <Text style={[styles.overlayTitle, compactHeader && styles.overlayTitleCompact, titleStyle]}>{title}</Text>
             <Text style={[styles.overlaySubtitle, compactHeader && styles.overlaySubtitleCompact]}>{subtitle}</Text>
           </SafeAreaView>
         </LinearGradient>

@@ -6,7 +6,6 @@ import { eventSubmissionUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { GamificationService } from '../services/GamificationService';
 import path from 'path';
-import fs from 'fs';
 
 const eventRoutes = Router();
 const gamificationService = new GamificationService();
@@ -156,21 +155,22 @@ eventRoutes.post(
     const { eventId } = req.params;
     const { qrData } = req.body;
     const userId = req.auth!.userId;
-    console.log('--- EVENT SUBMISSION API ---');
-    console.log('eventId:', eventId);
-    console.log('req.body:', req.body);
-    console.log('qrData from body:', qrData);
 
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: { registrations: true },
-    });
+    const [event, registration, qrCode] = await Promise.all([
+      prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true, isPublished: true, startDatetime: true, endDatetime: true },
+      }),
+      prisma.eventRegistration.findUnique({
+        where: { userId_eventId: { userId, eventId } },
+      }),
+      qrData ? prisma.eventQrCode.findFirst({ where: { qrData } }) : Promise.resolve(null),
+    ]);
 
     if (!event || !event.isPublished) {
       throw new HttpError(404, 'Event not found.');
     }
 
-    const registration = event.registrations.find((r) => r.userId === userId);
     if (!registration) {
       throw new HttpError(400, 'You must join the event before recording attendance.');
     }
@@ -184,12 +184,7 @@ eventRoutes.post(
       throw new HttpError(400, 'Attendance can only be recorded while the event is ongoing.');
     }
 
-    let qrCodeValid = false;
     if (qrData) {
-      const qrCode = await prisma.eventQrCode.findFirst({
-        where: { qrData },
-      });
-
       if (!qrCode) {
         throw new HttpError(400, 'Invalid QR code.');
       }
@@ -201,7 +196,6 @@ eventRoutes.post(
       if (now > new Date(qrCode.expiresAt)) {
         throw new HttpError(400, 'This QR code has expired.');
       }
-      qrCodeValid = true;
     }
 
     if (!req.file) {
@@ -217,39 +211,27 @@ eventRoutes.post(
         req.file.mimetype
       );
 
-      // Clean up local temp file
-      try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-      } catch (e) {
-        console.error('Failed to cleanup temp event submission image:', e);
-      }
-
-      const submission = await prisma.eventSubmission.upsert({
-        where: { userId_eventId: { userId, eventId } },
-        update: { attendanceImageUrl: imageUrl, status: 'pending' },
-        create: {
-          userId,
-          eventId,
-          attendanceImageUrl: imageUrl,
-          status: 'pending',
-        },
-      });
-
-      // We also set the registration status to PENDING_APPROVAL so the app knows it's waiting
-      await prisma.eventRegistration.update({
-        where: { id: registration.id },
-        data: { status: 'PENDING_APPROVAL' },
-      });
+      const [submission] = await Promise.all([
+        prisma.eventSubmission.upsert({
+          where: { userId_eventId: { userId, eventId } },
+          update: { attendanceImageUrl: imageUrl, qrVerified: Boolean(qrData), status: 'pending' },
+          create: {
+            userId,
+            eventId,
+            attendanceImageUrl: imageUrl,
+            qrVerified: Boolean(qrData),
+            status: 'pending',
+          },
+        }),
+        // Preserve the existing review state while writing both independent records together.
+        prisma.eventRegistration.update({
+          where: { id: registration.id },
+          data: { status: 'PENDING_APPROVAL' },
+        }),
+      ]);
 
       return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
     } catch (error: any) {
-      try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-      } catch {}
       throw new HttpError(500, `Failed to upload event attendance proof: ${error.message}`);
     }
   })

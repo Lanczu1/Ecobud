@@ -2239,7 +2239,10 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               <TouchableOpacity
                 key={key}
                 style={trackerStyles.segmentButton}
-                onPress={() => setSegment(key)}
+                onPress={() => {
+                  setSegment(key);
+                  if (key === 'leaderboard') void model.loadLeaderboard();
+                }}
                 activeOpacity={0.8}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -2365,7 +2368,11 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               <Text numberOfLines={1} adjustsFontSizeToFit style={[trackerStyles.surfaceSubtitle, { color: theme.colors.textMuted, flexShrink: 1 }]}>By Eco Points</Text>
             </View>
 
-            {(model.initializing || model.booting || model.refreshing) && leaderboardItems.length === 0 ? (
+            {(leaderboardItems.length === 0 && (
+              model.leaderboardLoading ||
+              (model.leaderboard === null && !model.leaderboardHasLoaded && model.hasUsableInternet) ||
+              model.initializing || model.booting || model.refreshing
+            )) ? (
               <LeaderboardSkeleton />
             ) : leaderboardItems.length === 0 ? (
               <View style={trackerStyles.leaderboardEmpty}>

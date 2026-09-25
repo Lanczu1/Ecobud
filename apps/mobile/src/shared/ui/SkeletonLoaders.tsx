@@ -533,28 +533,45 @@ export function TrackerCardsSkeleton() {
  */
 export function LeaderboardSkeleton() {
   const { theme, isDark } = useTheme();
+  const opacity = useRef(new Animated.Value(0.52)).current;
+  const bone = isDark ? theme.colors.cardBorder : '#E2EBE5';
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.88, duration: 850, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.52, duration: 850, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [opacity]);
+
+  const boneBar = (width: number | `${number}%`, height: number, borderRadius: number = 7) => (
+    <View style={{ width, height, borderRadius, backgroundColor: bone }} />
+  );
 
   return (
-    <View style={{ gap: verticalScale(12), marginTop: verticalScale(10) }}>
+    <Animated.View style={{ gap: verticalScale(12), marginTop: verticalScale(10), opacity }}>
       {/* Podium Top 3 Skeleton */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: verticalScale(20), paddingHorizontal: scale(10) }}>
         {/* 2nd Place */}
         <View style={{ alignItems: 'center', gap: 6 }}>
-          <SkeletonBox width={scale(54)} height={scale(54)} borderRadius={scale(27)} />
-          <SkeletonBox width={scale(60)} height={12} borderRadius={6} />
-          <SkeletonBox width={scale(70)} height={verticalScale(70)} borderRadius={14} />
+          {boneBar(scale(54), scale(54), scale(27))}
+          {boneBar(scale(60), 12, 6)}
+          {boneBar(scale(70), verticalScale(70), 14)}
         </View>
         {/* 1st Place */}
         <View style={{ alignItems: 'center', gap: 6 }}>
-          <SkeletonBox width={scale(68)} height={scale(68)} borderRadius={scale(34)} />
-          <SkeletonBox width={scale(70)} height={14} borderRadius={6} />
-          <SkeletonBox width={scale(80)} height={verticalScale(95)} borderRadius={14} />
+          {boneBar(scale(68), scale(68), scale(34))}
+          {boneBar(scale(70), 14, 6)}
+          {boneBar(scale(80), verticalScale(95), 14)}
         </View>
         {/* 3rd Place */}
         <View style={{ alignItems: 'center', gap: 6 }}>
-          <SkeletonBox width={scale(50)} height={scale(50)} borderRadius={scale(25)} />
-          <SkeletonBox width={scale(55)} height={12} borderRadius={6} />
-          <SkeletonBox width={scale(65)} height={verticalScale(55)} borderRadius={14} />
+          {boneBar(scale(50), scale(50), scale(25))}
+          {boneBar(scale(55), 12, 6)}
+          {boneBar(scale(65), verticalScale(55), 14)}
         </View>
       </View>
 
@@ -570,16 +587,16 @@ export function LeaderboardSkeleton() {
             },
           ]}
         >
-          <SkeletonBox width={scale(24)} height={16} borderRadius={6} />
-          <SkeletonBox width={scale(40)} height={scale(40)} borderRadius={scale(20)} />
+          {boneBar(scale(24), 16, 6)}
+          {boneBar(scale(40), scale(40), scale(20))}
           <View style={{ flex: 1, gap: 4 }}>
-            <SkeletonBox width="60%" height={14} borderRadius={6} />
-            <SkeletonBox width="35%" height={10} borderRadius={5} />
+            {boneBar('60%', 14, 6)}
+            {boneBar('35%', 10, 5)}
           </View>
-          <SkeletonBox width={scale(50)} height={16} borderRadius={6} />
+          {boneBar(scale(50), 16, 6)}
         </View>
       ))}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -616,4 +633,3 @@ const styles = StyleSheet.create({
     borderColor: '#E8F5E9',
   },
 });
-

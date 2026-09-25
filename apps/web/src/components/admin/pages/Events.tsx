@@ -14,22 +14,22 @@ import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const NAGCARLAN_MAP_BOUNDS: [[number, number], [number, number]] = [
-  [14.08556, 121.35773],
-  [14.18883, 121.4861],
+const LAGUNA_MAP_BOUNDS: [[number, number], [number, number]] = [
+  [13.966778, 121.0054681],
+  [14.5815501, 121.6207409],
 ];
-const NAGCARLAN_MAP_CENTER: [number, number] = [
-  (NAGCARLAN_MAP_BOUNDS[0][0] + NAGCARLAN_MAP_BOUNDS[1][0]) / 2,
-  (NAGCARLAN_MAP_BOUNDS[0][1] + NAGCARLAN_MAP_BOUNDS[1][1]) / 2,
+const LAGUNA_MAP_CENTER: [number, number] = [
+  (LAGUNA_MAP_BOUNDS[0][0] + LAGUNA_MAP_BOUNDS[1][0]) / 2,
+  (LAGUNA_MAP_BOUNDS[0][1] + LAGUNA_MAP_BOUNDS[1][1]) / 2,
 ];
 
-function NagcarlanMapLimits() {
+function LagunaMapLimits() {
   const map = useMap();
 
   useEffect(() => {
     const bounds = L.latLngBounds(
-      L.latLng(NAGCARLAN_MAP_BOUNDS[0][0], NAGCARLAN_MAP_BOUNDS[0][1]),
-      L.latLng(NAGCARLAN_MAP_BOUNDS[1][0], NAGCARLAN_MAP_BOUNDS[1][1]),
+      L.latLng(LAGUNA_MAP_BOUNDS[0][0], LAGUNA_MAP_BOUNDS[0][1]),
+      L.latLng(LAGUNA_MAP_BOUNDS[1][0], LAGUNA_MAP_BOUNDS[1][1]),
     );
     map.setMaxBounds(bounds);
     map.options.maxBoundsViscosity = 1;
@@ -40,17 +40,17 @@ function NagcarlanMapLimits() {
   return null;
 }
 
-function NagcarlanOsmLayer() {
+function LagunaOsmLayer() {
   const [data, setData] = useState<GeoJSON.FeatureCollection | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch('/maps/Nagcarlan.geojson')
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('Nagcarlan map data unavailable')))
+    fetch('/maps/Laguna.geojson?v=260722')
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Laguna map data unavailable')))
       .then((geoJson: GeoJSON.FeatureCollection) => {
         if (active) setData(geoJson);
       })
-      .catch(error => console.warn('[EventsMap] Nagcarlan OSM overlay unavailable', error));
+      .catch(error => console.warn('[EventsMap] Laguna OSM overlay unavailable', error));
 
     return () => {
       active = false;
@@ -66,7 +66,7 @@ function NagcarlanOsmLayer() {
       style={feature => {
         const tags = feature?.properties ?? {};
         if (tags.highway) {
-          const majorRoad = ['primary', 'secondary', 'tertiary'].includes(String(tags.highway));
+          const majorRoad = ['motorway', 'trunk', 'primary', 'secondary'].includes(String(tags.highway));
           return { color: majorRoad ? '#b78338' : '#ead8b3', weight: majorRoad ? 2.2 : 1.4, opacity: 0.9 };
         }
         if (tags.waterway) return { color: '#4f9db8', weight: 1.8, opacity: 0.85 };
@@ -442,7 +442,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             </div>
             <div className="h-48 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 relative z-0">
               <MapContainer 
-                center={form.latitude && form.longitude ? [form.latitude, form.longitude] : NAGCARLAN_MAP_CENTER}
+                center={form.latitude && form.longitude ? [form.latitude, form.longitude] : LAGUNA_MAP_CENTER}
                 zoom={12}
                 minZoom={10}
                 maxZoom={18}
@@ -450,12 +450,12 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                 className="w-full h-full"
                 style={{ height: '100%', width: '100%', zIndex: 0 }}
               >
-                <NagcarlanMapLimits />
+                <LagunaMapLimits />
                 <TileLayer
                   attribution='&copy; OpenStreetMap contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                <NagcarlanOsmLayer />
+                <LagunaOsmLayer />
                 <LocationPickerMarker 
                   position={form.latitude && form.longitude ? [form.latitude, form.longitude] : null}
                   onChange={async (lat, lng) => {

@@ -763,16 +763,13 @@ challengeRoutes.post(
   '/:challengeInstanceId/after-photo',
   authenticateRequest,
   requireUserAccess,
+  challengeUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    const { afterProofUrl, submissionId } = req.body;
+    let { afterProofUrl, submissionId } = req.body;
     const requestKey = readIdempotencyKey(req);
     const userId = req.auth!.userId;
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const actualInstanceId = instance?.id || req.params.challengeInstanceId;
-
-    if (!afterProofUrl) {
-      throw new HttpError(400, 'After photo URL is required.');
-    }
 
     let submission;
     if (submissionId) {
@@ -798,10 +795,27 @@ challengeRoutes.post(
       throw new HttpError(403, 'You do not own this challenge submission.');
     }
 
-    if (
-      (requestKey && submission.afterPhotoRequestKey === requestKey) ||
-      submission.afterProofUrl === afterProofUrl
-    ) {
+    if (requestKey && submission.afterPhotoRequestKey === requestKey) {
+      return res.json({
+        message: 'After photo already submitted. Awaiting final admin approval.',
+        submission,
+      });
+    }
+
+    if (req.file) {
+      const ext = req.file.mimetype === 'image/png' ? '.png' : req.file.mimetype === 'image/webp' ? '.webp' : '.jpg';
+      afterProofUrl = await supabaseStorageService.uploadFile(
+        `challenges/proofs/challenge-${actualInstanceId}-${Date.now()}${ext}`,
+        req.file.path,
+        req.file.mimetype,
+      );
+    }
+
+    if (!afterProofUrl) {
+      throw new HttpError(400, 'After photo is required.');
+    }
+
+    if (submission.afterProofUrl === afterProofUrl) {
       return res.json({
         message: 'After photo already submitted. Awaiting final admin approval.',
         submission,

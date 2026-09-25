@@ -58,6 +58,7 @@ model User {
 
   @@index([role, createdAt], map: "users_role_created_at_idx")
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
+  @@index([status, role, points(sort: Desc), createdAt], map: "users_leaderboard_order_idx")
   @@map("users")
 }
 

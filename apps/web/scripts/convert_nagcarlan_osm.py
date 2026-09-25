@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 root_dir = Path(__file__).resolve().parents[1]
-osm_path = root_dir / "map" / "Nagcarlan.osm"
+osm_path = root_dir / "map" / "Nagcarlan v.1.0.osm"
 output_path = root_dir / "public" / "maps" / "Nagcarlan.geojson"
 root = ET.parse(osm_path).getroot()
 nodes = {

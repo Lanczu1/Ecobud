@@ -126,6 +126,15 @@ app.get('/maps/Nagcarlan.geojson', (_req, res, next) => {
   });
 });
 
+app.get('/maps/Laguna.geojson', (_req, res, next) => {
+  res.setHeader('Content-Type', 'application/geo+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(path.resolve(__dirname, '../../web/public/maps/Laguna.geojson'), (error) => {
+    if (error) next(error);
+  });
+});
+
 app.get('/maps/NagcarlanBarangays.geojson', async (_req, res) => {
   const query = new URLSearchParams({
     where: "mun_code='043417000'",

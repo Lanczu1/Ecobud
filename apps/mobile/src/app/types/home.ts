@@ -185,6 +185,9 @@ export interface EcoBudMobileModel {
   setSelectedBadge: (badge: EcoBadge | null) => void;
   openBadgeOverlay: (badge: EcoBadge) => void;
   leaderboard: LeaderboardData | null;
+  leaderboardLoading: boolean;
+  leaderboardHasLoaded: boolean;
+  loadLeaderboard: () => Promise<void>;
   events: EcoEvent[];
   transparency: TransparencyFeed | null;
   todaysCompletedHabits: number;

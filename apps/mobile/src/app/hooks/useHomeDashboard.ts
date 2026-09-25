@@ -150,6 +150,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [rewards, setRewards] = useState<RewardsData | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardHasLoaded, setLeaderboardHasLoaded] = useState(false);
   const [events, setEvents] = useState<EcoEvent[]>([]);
 
 
@@ -308,6 +310,47 @@ export function useHomeDashboard(): EcoBudMobileModel {
     [habitsToday],
   );
 
+  const loadLeaderboard = useCallback(async () => {
+    const token = session?.token;
+    if (!token || !presence.hasUsableInternet || AppState.currentState !== 'active') return;
+    if (secondaryRefreshInFlightRef.current.has('leaderboard')) return;
+    if (Date.now() - lastSecondaryRefreshAtRef.current.leaderboard < SECONDARY_REFRESH_INTERVAL_MS) return;
+
+    secondaryRefreshInFlightRef.current.add('leaderboard');
+    const requestStartedAt = Date.now();
+    setLeaderboardLoading(true);
+    if (leaderboard === null) {
+      try {
+        const cachedRaw = mobileStorage.getItemSync(`ecobud.mobile.leaderboard.${session!.user.id}`);
+        const cached = cachedRaw ? JSON.parse(cachedRaw) as LeaderboardData : null;
+        if (cached && Array.isArray(cached.items) && currentSessionTokenRef.current === token) {
+          setLeaderboard(cached);
+        }
+      } catch { /* Ignore a stale or invalid local leaderboard snapshot. */ }
+    }
+    try {
+      const result = await homeService.getLeaderboard(token);
+      if (currentSessionTokenRef.current === token) {
+        setLeaderboard(result);
+        const cacheKey = `ecobud.mobile.leaderboard.${session!.user.id}`;
+        const serialized = JSON.stringify(result);
+        mobileStorage.setItemSync(cacheKey, serialized);
+        void mobileStorage.setItem(cacheKey, serialized).catch(() => {});
+        if (lastSecondaryRefreshAtRef.current.leaderboard <= requestStartedAt) {
+          lastSecondaryRefreshAtRef.current.leaderboard = Date.now();
+        }
+      }
+    } catch (error) {
+      console.warn('[ECOBUD leaderboard refresh warning]:', error);
+    } finally {
+      if (currentSessionTokenRef.current === token) {
+        setLeaderboardLoading(false);
+        setLeaderboardHasLoaded(true);
+      }
+      secondaryRefreshInFlightRef.current.delete('leaderboard');
+    }
+  }, [session, presence.hasUsableInternet, leaderboard]);
+
   const persistSession = useCallback(async (nextSession: SessionPayload | null) => {
     if (nextSession) {
       await mobileStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
@@ -327,6 +370,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setProfile(null);
     setRewards(null);
     setLeaderboard(null);
+    setLeaderboardLoading(false);
+    setLeaderboardHasLoaded(false);
     setEvents([]);
     setTransparency(null);
     setAssistantMessages([]);
@@ -698,9 +743,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   const syncQueuedOfflineActions = useCallback(
-    async (activeSession: SessionPayload) => {
+    async (activeSession: SessionPayload, refreshAfterSync = true): Promise<boolean> => {
       if (offlineSyncInFlightRef.current) {
-        return;
+        return false;
       }
 
       offlineSyncInFlightRef.current = true;
@@ -711,7 +756,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
           userId: activeSession.user.id,
         });
 
-        if (syncResult.syncedCount > 0) {
+        const hadSyncedMutations = syncResult.syncedCount > 0;
+        if (hadSyncedMutations && refreshAfterSync) {
           await hydrateApp(activeSession, true);
         }
 
@@ -720,8 +766,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
             `Offline sync finished with ${syncResult.failedCount} failed mutation(s).`,
           );
         }
+        return hadSyncedMutations;
       } catch (error) {
         console.warn('Offline sync failed during reconnect.', error);
+        return false;
       } finally {
         offlineSyncInFlightRef.current = false;
       }
@@ -781,25 +829,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
             if (parsed && typeof parsed === 'object' && parsed.token && parsed.user) {
               let activeSession: SessionPayload | null = parsed;
 
-              // Mobile sessions use a 30-day access token and a 90-day absolute
-              // refresh window. Refresh silently on launch while preserving an
-              // existing access token as an offline fallback.
-              if (parsed.refreshToken) {
-                try {
-                  activeSession = await homeService.refreshSession(parsed.refreshToken);
-                  await persistSession(activeSession);
-                } catch (refreshError) {
-                  const status = (refreshError as any)?.status;
-                  if (status === 401 || status === 403) {
-                    await persistSession(null);
-                    activeSession = null;
-                  }
-                }
-              }
-
-              if (!activeSession?.token) {
-                return;
-              }
+              // Keep the saved session available immediately; refresh it and sync
+              // server state in the background so network latency does not block startup.
 
               setSession(activeSession);
 
@@ -823,8 +854,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
                 }
               }
 
-              // Background fetch the latest fresh data without blocking the user
-              void hydrateApp(activeSession, true);
+              void (async () => {
+                if (parsed.refreshToken) {
+                  try {
+                    activeSession = await homeService.refreshSession(parsed.refreshToken);
+                    setSession(activeSession);
+                    await persistSession(activeSession);
+                  } catch (refreshError) {
+                    const status = (refreshError as any)?.status;
+                    if (status === 401 || status === 403) {
+                      setSession(null);
+                      await persistSession(null);
+                      return;
+                    }
+                  }
+                }
+                if (activeSession?.token) void hydrateApp(activeSession, true);
+              })();
             } else {
               await mobileStorage.removeItem(SESSION_STORAGE_KEY);
             }
@@ -837,7 +883,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         console.error('Failed to bootstrap ECOBUD mobile app.', error);
       } finally {
         // Loading animation duration from Loading.json is exactly 3003ms (90 frames @ 29.97fps)
-        const LOTTIE_CYCLE_MS = 3003;
+        const LOTTIE_CYCLE_MS = 0;
         const elapsed = Date.now() - startTime;
         const remainingDelay = Math.max(0, LOTTIE_CYCLE_MS - elapsed);
 
@@ -980,7 +1026,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating]);
 
   useEffect(() => {
-    if (!session?.token || !presence.hasUsableInternet || isHydrating || AppState.currentState !== 'active') return;
+    const trackerIsVisible = activeOverlay === null && activeTab === 'tracker';
+    const leaderboardIsVisible = activeOverlay === 'leaderboard';
+    if (!session?.token || !presence.hasUsableInternet || (isHydrating && !trackerIsVisible && !leaderboardIsVisible) || AppState.currentState !== 'active') return;
     const token = session.token;
     const needed: SecondaryResource[] = activeOverlay === 'leaderboard' ? ['leaderboard']
       : activeOverlay === 'rewards' || activeOverlay === 'streakRewards' || activeOverlay === 'redeemPoints' || activeOverlay === 'coinsHistory' ? ['rewards']
@@ -997,11 +1045,27 @@ export function useHomeDashboard(): EcoBudMobileModel {
           Date.now() - lastSecondaryRefreshAtRef.current[resource] < SECONDARY_REFRESH_INTERVAL_MS) continue;
       secondaryRefreshInFlightRef.current.add(resource);
       const requestStartedAt = Date.now();
+      if (resource === 'leaderboard') setLeaderboardLoading(true);
       void (async () => {
         try {
           if (resource === 'tracker') {
-            const result = await homeService.getTracker(token, tracker?.month);
-            if (currentSessionTokenRef.current === token && lastSecondaryRefreshAtRef.current.tracker <= requestStartedAt) setTracker(result);
+            const requestedMonth = tracker?.month ?? getPhMonthKey();
+            const cacheKey = `ecobud.mobile.tracker.${session!.user.id}.${requestedMonth}`;
+            if (!tracker) {
+              try {
+                const cachedRaw = mobileStorage.getItemSync(cacheKey);
+                const cached = cachedRaw ? JSON.parse(cachedRaw) as TrackerData : null;
+                if (cached && cached.month === requestedMonth && currentSessionTokenRef.current === token) setTracker(cached);
+              } catch { /* Ignore a stale or invalid local tracker snapshot. */ }
+            }
+            const result = await homeService.getTracker(token, requestedMonth);
+            if (currentSessionTokenRef.current === token && lastSecondaryRefreshAtRef.current.tracker <= requestStartedAt) {
+              setTracker(result);
+              const resultCacheKey = `ecobud.mobile.tracker.${session!.user.id}.${result.month}`;
+              const serialized = JSON.stringify(result);
+              mobileStorage.setItemSync(resultCacheKey, serialized);
+              void mobileStorage.setItem(resultCacheKey, serialized).catch(() => {});
+            }
           } else if (resource === 'profile') {
             const result = await homeService.getProfile(token);
             if (currentSessionTokenRef.current === token) setProfile(result);
@@ -1024,6 +1088,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
         } catch (error) {
           console.warn(`[ECOBUD ${resource} refresh warning]:`, error);
         } finally {
+          if (resource === 'leaderboard' && currentSessionTokenRef.current === token) {
+            setLeaderboardLoading(false);
+            setLeaderboardHasLoaded(true);
+          }
           secondaryRefreshInFlightRef.current.delete(resource);
         }
       })();
@@ -1121,14 +1189,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         setSession(nextSession);
         await persistSession(nextSession);
-        await hydrateApp(nextSession);
+        void hydrateApp(nextSession, true);
       } catch (error) {
         setAuthError(error instanceof Error ? error.message : 'Login failed.');
         return;
       } finally {
         setAuthLoading(false);
       }
-    }, 900);
+    }, 0);
   }, [hydrateApp, persistSession, runWithActionLoader]);
 
   const handleGoogleSignIn = useCallback(async () => {
@@ -1298,14 +1366,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
             setSession(nextSession);
             await persistSession(nextSession);
-            await hydrateApp(nextSession);
-
-            if (isNewUser) {
-              setTimeout(() => {
-                setCoachMarksCurrentStep(0);
-                setCoachMarksVisible(true);
-              }, 400);
-            }
+            void hydrateApp(nextSession, true).then(() => {
+              if (isNewUser) {
+                setTimeout(() => {
+                  setCoachMarksCurrentStep(0);
+                  setCoachMarksVisible(true);
+                }, 400);
+              }
+            });
           } finally {
             setAuthLoading(false);
           }
@@ -1345,18 +1413,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const nextSession = await homeService.register(email.trim(), pass, username.trim(), city, otpCode?.trim() || '');
         setSession(nextSession);
         await persistSession(nextSession);
-        await hydrateApp(nextSession);
-        // Automatically trigger tour for newly registered users right after verification loading
-        setTimeout(() => {
-          setCoachMarksCurrentStep(0);
-          setCoachMarksVisible(true);
-        }, 400);
+        void hydrateApp(nextSession, true).then(() => {
+          setTimeout(() => {
+            setCoachMarksCurrentStep(0);
+            setCoachMarksVisible(true);
+          }, 400);
+        });
       } catch (error) {
         setAuthError(error instanceof Error ? error.message : 'Sign up failed.');
       } finally {
         setAuthLoading(false);
       }
-    }, 900);
+    }, 0);
   }, [hydrateApp, persistSession, runWithActionLoader]);
 
   const handleVerifyMfaChallenge = useCallback(async (challengeToken: string, code: string) => {
@@ -1369,7 +1437,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
       setSession(nextSession);
       await persistSession(nextSession);
-      await hydrateApp(nextSession);
+      void hydrateApp(nextSession, true);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Authenticator verification failed.');
     } finally {
@@ -1458,8 +1526,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
             await persistSession(activeSession);
           }
 
-          await hydrateApp(activeSession, true);
-          await syncQueuedOfflineActions(activeSession);
+          const [_, hadSyncedMutations] = await Promise.all([
+            hydrateApp(activeSession, true),
+            syncQueuedOfflineActions(activeSession, false),
+          ]);
+          if (hadSyncedMutations) await hydrateApp(activeSession, true);
         } catch (error) {
           const status = (error as { status?: number } | null)?.status;
           if (status === 401 || status === 403) {
@@ -1946,6 +2017,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setActiveOverlayState('lessonCompleted');
   }, [selectedLesson, setActiveOverlayState]);
 
+  const refreshChallenges = useCallback(async (token: string) => {
+    const fresh = await homeService.getChallenges(token);
+    setChallenges(fresh.items);
+    setIsCycleActive(fresh.isCycleActive ?? true);
+  }, []);
   const handleChallengeProgress = useCallback(
     async (challenge: ChallengeWithProgress, nextProgress: number) => {
       await runWithActionLoader('Updating challenge progress...', async () => {
@@ -1976,7 +2052,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           });
 
           if (mutationMode === 'online') {
-            await hydrateApp(activeSession, true);
+            await refreshChallenges(activeSession.token);
           }
         } catch (error) {
           Alert.alert('Challenge update failed', error instanceof Error ? error.message : 'Please try again.');
@@ -1988,7 +2064,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     [
       applyOfflineChallengeProgress,
       ensureSession,
-      hydrateApp,
+      refreshChallenges,
       runMutationWithOfflineFallback,
       runWithActionLoader,
     ],
@@ -2021,7 +2097,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           });
 
           if (mutationMode === 'online') {
-            await hydrateApp(activeSession, true);
+            setHabitsToday(await homeService.getHabitsToday(activeSession.token));
           }
         } catch (error) {
           Alert.alert('Check-in failed', error instanceof Error ? error.message : 'Please try again.');
@@ -2034,7 +2110,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
       applyOfflineHabitCheckIn,
       ensureSession,
       habitsToday?.dateKey,
-      hydrateApp,
       runMutationWithOfflineFallback,
       runWithActionLoader,
     ],
@@ -2070,7 +2145,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               message: 'Your event slot is reserved. Show up to earn your verified reward.',
               tone: 'success',
             });
-            void hydrateApp(activeSession, true)
+            void homeService.getEvents(activeSession.token).then(setEvents)
               .catch((error) => console.warn('[handleJoinEvent] Unable to refresh events:', error));
             return true;
           }
@@ -2087,7 +2162,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       }, 0);
     },
-    [ensureSession, hydrateApp, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
+    [ensureSession, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
   );
 
   const handleClaimEventReward = useCallback(
@@ -2106,14 +2181,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
           const pointsAwarded = result.pointsAwarded || expReward;
           const coinsAwarded = result.ecoCoinsAwarded || coinReward;
 
-          // Hydrate first (mirrors lesson flow) so dashboard.ecoPoints is
-          // already the NEW value before the overlay shows. The overlay
-          // display logic will subtract earnedPoints to show the PRE-reward
-          // value on the LevelCard — then when the user taps Continue and
-          // the particles land, ECO_POINTS_DROP_ANIMATION triggers hydrateApp
-          // again and the LevelCard counts up to the new total.
-          await hydrateApp(activeSession, true);
-
+          try {
+            setDashboard(await homeService.getDashboard(activeSession.token));
+          } catch (refreshError) {
+            console.warn('[handleClaimEventReward] Dashboard refresh failed:', refreshError);
+          }
           setEarnedPoints(pointsAwarded);
           setEarnedCoins(coinsAwarded);
           setActiveOverlayState('eventApproved');
@@ -2128,7 +2200,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       });
     },
-    [events, ensureSession, runWithActionLoader, hydrateApp, showNotification]
+    [events, ensureSession, runWithActionLoader, showNotification]
   );
 
   const handleAssistantSend = useCallback(
@@ -2426,7 +2498,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               : challenge
           )
         );
-        await hydrateApp(activeSession, true);
+        await refreshChallenges(activeSession.token);
       } catch (error) {
         const activeSession = ensureSession();
         const committed = isUncertainChallengeFailure(error) && await reconcileChallengeMutation(
@@ -2447,7 +2519,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, hydrateApp, reconcileChallengeMutation, runWithActionLoader, showChallengeMessage]);
+  }, [ensureSession, refreshChallenges, reconcileChallengeMutation, runWithActionLoader, showChallengeMessage]);
 
   const handleVerifyChallengeQr = useCallback(async (challengeId: string, qrData: string, latitude?: number, longitude?: number, submissionId?: string) => {
     await runWithActionLoader('Verifying Barangay QR code...', async () => {
@@ -2455,7 +2527,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const activeSession = ensureSession();
         setRefreshing(true);
         await homeService.verifyChallengeQr(activeSession.token, challengeId, qrData, latitude, longitude, submissionId);
-        await hydrateApp(activeSession, true);
+        await refreshChallenges(activeSession.token);
       } catch (error) {
         Alert.alert('QR Verification failed', error instanceof Error ? error.message : 'Please try again.');
         throw error;
@@ -2463,7 +2535,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, hydrateApp, runWithActionLoader]);
+  }, [ensureSession, refreshChallenges, runWithActionLoader]);
 
   const handleSubmitChallengeAfterPhoto = useCallback(async (challengeId: string, afterProofUrl: string, submissionId?: string) => {
     await runWithActionLoader('Submitting after photo for final review...', async () => {
@@ -2471,7 +2543,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const activeSession = ensureSession();
         setRefreshing(true);
         await homeService.submitChallengeAfterPhoto(activeSession.token, challengeId, afterProofUrl, submissionId);
-        await hydrateApp(activeSession, true);
+        await refreshChallenges(activeSession.token);
       } catch (error) {
         const activeSession = ensureSession();
         const committed = isUncertainChallengeFailure(error) && await reconcileChallengeMutation(
@@ -2492,7 +2564,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setRefreshing(false);
       }
     });
-  }, [ensureSession, hydrateApp, reconcileChallengeMutation, runWithActionLoader, showChallengeMessage]);
+  }, [ensureSession, refreshChallenges, reconcileChallengeMutation, runWithActionLoader, showChallengeMessage]);
 
   const triggerTestReward = useCallback((origin?: { x: number; y: number }) => {
     setClaimRewardData({ points: 10, coins: 10, origin });
@@ -2555,7 +2627,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setPendingBadgeQueue((prev) => [...prev, ...res.awardedBadges!]);
       }
 
-      await hydrateApp(activeSession, true);
+      try {
+        setDashboard(await homeService.getDashboard(activeSession.token));
+      } catch (refreshError) {
+        console.warn('[handleClaimChallengeReward] Dashboard refresh failed:', refreshError);
+      }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : '';
       const activeSession = ensureSession();
@@ -2596,7 +2672,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         );
         try {
           const activeSession = ensureSession();
-          await hydrateApp(activeSession, true);
+          await refreshChallenges(activeSession.token);
         } catch {
           // ignore
         }
@@ -2607,7 +2683,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     } finally {
       setRefreshing(false);
     }
-  }, [challenges, ensureSession, hydrateApp, reconcileChallengeMutation, showChallengeMessage]);
+  }, [challenges, ensureSession, refreshChallenges, reconcileChallengeMutation, showChallengeMessage]);
 
   const handleUpdateProfileImage = useCallback(async (uri: string) => {
     await runWithActionLoader('Uploading image...', async () => {
@@ -2799,6 +2875,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setSelectedBadge,
     openBadgeOverlay,
     leaderboard,
+    leaderboardLoading,
+    leaderboardHasLoaded,
+    loadLeaderboard,
     events,
     transparency,
     todaysCompletedHabits,
