@@ -24,7 +24,7 @@ export default function App() {
 
   // Download URL fallback
   const apkDownloadUrl = import.meta.env.VITE_APK_DOWNLOAD_URL || '/downloads/ecobud-beta.apk';
-  const appVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.4';
+  const appVersion = import.meta.env.VITE_APP_VERSION || 'v1.0.5';
   const feedbackUrl = import.meta.env.VITE_FEEDBACK_URL || 'https://forms.gle/';
 
   // Absolute URL for QR code scan on phones
