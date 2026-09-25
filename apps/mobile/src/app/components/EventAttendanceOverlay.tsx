@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { EcoBudMobileModel } from '../types/home';
 import { TopNavbar, PrimaryButton } from './CommonComponents';
 import { useTheme, type ThemeColors } from '../../shared/theme/ecoTheme';
@@ -29,6 +30,17 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
   const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<'select_image' | 'image_preview' | 'qr' | 'uploading' | 'success'>('select_image');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const scanSubmittedRef = useRef(false);
+
+  const prepareAttendanceImage = async (uri: string) => {
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1440 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    return result.uri;
+  };
 
   const event = model.events.find(e => e.id === eventId);
   const session = model.session;
@@ -41,7 +53,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
     });
 
     if (!result.canceled) {
-      setCapturedImage(result.assets[0].uri);
+      setCapturedImage(await prepareAttendanceImage(result.assets[0].uri));
       setMode('image_preview');
     }
   };
@@ -66,13 +78,13 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
     });
 
     if (!result.canceled) {
-      setCapturedImage(result.assets[0].uri);
+      setCapturedImage(await prepareAttendanceImage(result.assets[0].uri));
       setMode('image_preview');
     }
   };
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (mode !== 'qr') return;
+    if (mode !== 'qr' || scanSubmittedRef.current) return;
     if (!capturedImage) {
       showNotification({
         title: 'Photo proof is missing',
@@ -83,6 +95,8 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       return;
     }
 
+    scanSubmittedRef.current = true;
+    setUploadProgress(0);
     setMode('uploading');
     
     try {
@@ -92,7 +106,8 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
         session.token,
         eventId,
         capturedImage,
-        data.trim()
+        data.trim(),
+        setUploadProgress
       );
 
       if (!result.success) throw new Error(result.message || 'Failed to submit attendance');
@@ -106,6 +121,8 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
         tone: 'error',
       });
       setMode('qr');
+      setUploadProgress(0);
+      scanSubmittedRef.current = false;
     }
   };
 
@@ -115,7 +132,9 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
         <TopNavbar model={model} showBack={false} onBack={() => {}} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Submitting Proof & QR...</Text>
+          <Text style={styles.loadingText}>
+            {uploadProgress < 100 ? `Uploading photo ${uploadProgress}%...` : 'Verifying QR & submitting...'}
+          </Text>
         </View>
       </View>
     );

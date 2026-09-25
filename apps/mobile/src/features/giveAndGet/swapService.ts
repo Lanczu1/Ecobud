@@ -148,6 +148,13 @@ export const swapService = {
     if (updates.description !== undefined) body.description = updates.description;
     if (updates.lookingFor !== undefined) body.lookingFor = updates.lookingFor;
     if (updates.meetupMethod !== undefined) body.meetupMethod = updates.meetupMethod;
+    if (updates.meetupLocation !== undefined) body.meetupLocation = updates.meetupLocation;
+    if (updates.meetupLandmark !== undefined) body.meetupLandmark = updates.meetupLandmark;
+    if (updates.meetupNotes !== undefined) body.meetupNotes = updates.meetupNotes;
+    if (updates.city !== undefined) body.city = updates.city;
+    if (updates.province !== undefined) body.province = updates.province;
+    if (updates.latitude !== undefined) body.latitude = updates.latitude;
+    if (updates.longitude !== undefined) body.longitude = updates.longitude;
     await ecobudApi.updateSwapListing(authToken, id, body);
   },
 

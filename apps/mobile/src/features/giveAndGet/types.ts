@@ -111,8 +111,8 @@ export const CONDITION_LABELS: Record<ItemCondition, string> = {
 
 export const MEETUP_LABELS: Record<MeetupMethod, string> = {
   public: 'Public Meetup',
-  pickup: 'Door Pickup',
-  dropoff: 'Door Drop-off',
+  pickup: 'Pickup',
+  dropoff: 'Delivery',
 };
 
 export const CATEGORY_ICON: Record<SwapCategory, string> = {

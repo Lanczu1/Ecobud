@@ -532,7 +532,15 @@ const resolveMimeType = (uri: string): { mimeType: string; fileName: string } =>
   return { mimeType: 'image/jpeg', fileName: 'upload.jpg' };
 };
 
-const uploadFileAsync = async <T>(path: string, token: string, uri: string, extraFields?: Record<string, string>) => {
+const uploadFileAsync = async <T>(
+  path: string,
+  token: string,
+  uri: string,
+  extraFields?: Record<string, string>,
+  idempotencyKey?: string,
+  onProgress?: (progress: number) => void,
+  timeoutMs = 120_000,
+) => {
   try {
     const uploadUrl = `${API_BASE}${path}`;
     const { mimeType, fileName } = resolveMimeType(uri);
@@ -554,7 +562,8 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
         const res = await fetch(uploadUrl, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
+            ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
           },
           body: formData
         });
@@ -581,16 +590,43 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
 
     const uploadType = (FileSystem as any).FileSystemUploadType?.MULTIPART ?? (FileSystem as any).UploadType?.MULTIPART ?? 1;
     
-    const response = await FileSystem.uploadAsync(uploadUrl, uri, {
+    const uploadOptions = {
       httpMethod: 'POST',
       uploadType: uploadType,
       fieldName: 'image',
       mimeType,
       headers: {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
       },
       ...(extraFields ? { parameters: extraFields } : {})
+    };
+    const uploadTask = (FileSystem as any).createUploadTask(
+      uploadUrl,
+      uri,
+      uploadOptions,
+      (progress: { totalBytesSent: number; totalBytesExpectedToSend: number }) => {
+        if (progress.totalBytesExpectedToSend > 0) {
+          onProgress?.(Math.min(100, Math.round((progress.totalBytesSent / progress.totalBytesExpectedToSend) * 100)));
+        }
+      },
+    );
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const response = await Promise.race([
+      uploadTask.uploadAsync(),
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          void uploadTask.cancelAsync().catch(() => {});
+          reject(new EcoBudApiError('Photo upload timed out. Check your connection and try again.', 'timeout'));
+        }, timeoutMs);
+      }),
+    ]).finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
     });
+
+    if (!response) {
+      throw new EcoBudApiError('Photo upload was cancelled. Please try again.', 'offline');
+    }
 
     let data;
     try {
@@ -605,6 +641,7 @@ const uploadFileAsync = async <T>(path: string, token: string, uri: string, extr
 
     return data as T;
   } catch (err: any) {
+    if (err instanceof EcoBudApiError) throw err;
     if (err.message && (err.message.includes('Unexpected ECOBUD API error') || err.message.includes('Active AI challenge'))) {
       throw err;
     }
@@ -757,14 +794,14 @@ export const ecobudApi = {
       token,
       body: { qrData, latitude, longitude, submissionId },
     }),
-  submitChallengeAfterPhoto: (token: string, challengeId: string, afterProofUrl: string, submissionId?: string) =>
-    request<{ message: string; submission: any }>(`/challenges/${challengeId}/after-photo`, {
-      method: 'POST',
+  submitChallengeAfterPhoto: (token: string, challengeId: string, imageUri: string, submissionId?: string) =>
+    uploadFileAsync<{ message: string; submission: any }>(
+      `/challenges/${challengeId}/after-photo`,
       token,
-      idempotencyKey: mutationKey('challenge-after', challengeId, submissionId, afterProofUrl),
-      timeoutMs: 40000,
-      body: { afterProofUrl, submissionId },
-    }),
+      imageUri,
+      submissionId ? { submissionId } : undefined,
+      mutationKey('challenge-after', challengeId, submissionId, imageUri),
+    ),
   claimChallengeReward: (token: string, challengeId: string, submissionId?: string) =>
     request<{ message: string; awardedBadges?: EcoBadge[] }>(`/challenges/${challengeId}/claim`, {
       method: 'POST',
@@ -825,12 +862,15 @@ export const ecobudApi = {
     request<{ items: EcoEvent[] }>('/events', token ? { token } : undefined),
   joinEvent: (token: string, eventId: string) =>
     request(`/events/${eventId}/join`, { method: 'POST', token, body: {} }),
-  submitEventAttendance: (token: string, eventId: string, imageUri: string, qrData: string) => {
+  submitEventAttendance: (token: string, eventId: string, imageUri: string, qrData: string, onProgress?: (progress: number) => void) => {
     return uploadFileAsync<{ success: boolean; message: string }>(
       `/events/${eventId}/submissions`,
       token,
       imageUri,
-      { qrData }
+      { qrData },
+      undefined,
+      onProgress,
+      180_000,
     );
   },
   claimEventReward: (token: string, eventId: string) =>

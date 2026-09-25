@@ -18,6 +18,9 @@ import { hashRecoveryCode, decryptTotpSecret, verifyTotp } from '../security/tot
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
+  pool: true,
+  maxConnections: 2,
+  maxMessages: 100,
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_PASS,
@@ -208,8 +211,10 @@ authRoutes.post(
     const payload = registerSchema.parse(req.body);
     assertAccountNotLocked(payload.email);
     const displayName = payload.name ?? payload.displayName!;
-    const existingUser = await prisma.user.findUnique({ where: { email: payload.email } });
-    const existingProfile = await findProfileByDisplayName(displayName);
+    const [existingUser, existingProfile] = await Promise.all([
+      prisma.user.findUnique({ where: { email: payload.email } }),
+      findProfileByDisplayName(displayName),
+    ]);
 
     if (existingUser) {
       throw new HttpError(409, 'An ECOBUD account already exists for this email.');

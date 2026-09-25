@@ -6,13 +6,19 @@ Set `MISTRAL_API_KEY` in the ignored backend `.env` and optionally set `MISTRAL_
 
 Admin detection settings accept one or more of exactly these classes:
 
-- Plastic Bottle: rigid plastic bottles.
-- Glass Bottle: glass bottles, excluding drinking glasses and cups.
-- Plastic Wrapper: flexible film packaging, including bread bags, snack wrappers, and sachets, empty or containing food.
+- Plastic Bottle: bottles whose main container body is rigid plastic, including clear, colored, tinted, opaque, and spray bottles. Classify the body, not the cap, label, trigger, or pump.
+- Glass Bottle: bottles whose main container body is glass, including clear, colored, tinted, opaque, frosted, thick, and spray bottles. A plastic or metal cap, trigger, or spray pump does not change the class; classify the body. Drinking glasses and cups are excluded.
+- Plastic Wrapper: flexible plastic film or laminated packaging, including bread bags, snack wrappers, sachets, refill pouches, and food pouches. It may be empty or filled, smooth or crumpled, open or sealed, and partly obscured; classify the flexible package, not its contents.
 
 The backend accepts only selected classes whose model-estimated confidence meets the saved threshold. Unselected objects do not contribute to the detection count. If multiple classes are selected, a match to any selected class is sufficient. An empty selection is rejected, with no implicit fallback. Confidence is an AI estimate, not a calibrated guarantee of material identity. Existing moderation and reward amounts remain in place; recognition does not itself award rewards.
 
 The provider prompt and Gemini response schema include only the challenge's selected classes. On nine supplied sample photos (three per class), the pinned Mistral primary accepted all nine matching-class checks and rejected nine checks against a different class at the saved 80% threshold. This is a small validation set, not a general accuracy guarantee; add varied lighting, backgrounds, and non-target objects before relying on an accuracy claim.
+
+Live prompt check on 2026-09-25: the configured primary provider classified all 10 user-supplied glass-bottle photos as `Glass Bottle` and passed them at the 80% threshold (model-reported confidence 98–100%). These were positive glass-bottle examples only; no plastic-bottle or non-bottle negatives were included, so this does not measure false-positive rate or establish overall accuracy. Confidence values are model estimates, not calibrated probabilities.
+
+Live prompt check on 2026-09-25: the configured primary provider classified all 10 user-supplied plastic-bottle photos as `Plastic Bottle` and passed them at the 80% threshold (model-reported confidence 98–99%). These were positive plastic-bottle examples only; this does not measure confusion with glass bottles, wrappers, or non-target objects, and does not establish overall accuracy. Confidence values are model estimates, not calibrated probabilities.
+
+Live prompt check on 2026-09-25: the configured primary provider classified all 10 user-supplied plastic-wrapper photos as `Plastic Wrapper` and passed them at the 80% threshold (model-reported confidence 95–98%). These were positive wrapper examples only; this does not measure confusion with bottles or non-target objects, and does not establish overall accuracy. Confidence values are model estimates, not calibrated probabilities.
 
 The mobile app forwards a signed `analysisToken` with a successful before-photo submission. Tokens expire after 15 minutes and bind the image URL, member, challenge instance, detection count, and saved detection settings. Re-analyze after expiration or an admin settings change. Old app versions must update to submit AI before photos.
 

@@ -27,6 +27,8 @@ import type { SwapCategory, ItemCondition, MeetupMethod } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { BarangayListingMap, type ListingLocation } from './LagunaBarangayPickerMap';
+import * as Location from 'expo-location';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -67,6 +69,9 @@ export function CreateSwapListing({
   const [meetupNotes, setMeetupNotes] = useState('');
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState<ListingLocation | null>(null);
+  const [showLocationMap, setShowLocationMap] = useState(false);
+  const latestLocationRequest = useRef(0);
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(1);
@@ -119,6 +124,61 @@ export function CreateSwapListing({
   const handleFieldFocus = () => {
     if (keyboardTopRef.current !== null) scheduleFocusedFieldScroll();
   };
+
+  const handleLocationSelect = React.useCallback(async (location: ListingLocation) => {
+    const requestId = ++latestLocationRequest.current;
+    setSelectedLocation(location);
+    setCity(location.locality ? 'Nagcarlan' : '');
+    setProvince(location.locality ? 'Laguna' : '');
+
+    setMeetupLocation(location.locality || 'Selected location');
+    setMeetupLandmark('');
+
+    try {
+      const [address] = await Location.reverseGeocodeAsync({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+      if (!address || requestId !== latestLocationRequest.current) return;
+
+      const placeName = address.name?.trim();
+      const street = address.street?.trim();
+      const district = address.district?.trim() || location.locality?.trim();
+      const resolvedCity = address.city?.trim() || 'Nagcarlan';
+      const addressParts = [placeName, street].filter((part): part is string => Boolean(part));
+      if (district && !addressParts.some(part => part.toLowerCase().includes(district.toLowerCase()))) {
+        addressParts.push(district);
+      }
+      addressParts.push(resolvedCity);
+      const formattedLocation = addressParts.filter((part, index, parts) =>
+        parts.findIndex(candidate => candidate.toLowerCase() === part.toLowerCase()) === index,
+      ).join(', ');
+
+      setCity(resolvedCity);
+      setProvince(address.subregion?.trim() || address.region?.trim() || 'Laguna');
+      setMeetupLocation(formattedLocation);
+      setMeetupLandmark(placeName || street || district || resolvedCity);
+    } catch {
+      // Keep the selected Nagcarlan locality when reverse geocoding is unavailable.
+    }
+  }, []);
+  const handleUseCurrentLocation = React.useCallback(async () => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        showNotification({ title: 'Location permission needed', message: 'Allow location access to use your current position for this listing.', tone: 'info' });
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      await handleLocationSelect({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+    } catch {
+      showNotification({ title: 'Location unavailable', message: 'Could not get your current location. Try selecting a point on the map instead.', tone: 'error' });
+    }
+  }, [handleLocationSelect, showNotification]);
 
   React.useEffect(() => {
     Animated.timing(slideAnim, {
@@ -221,6 +281,8 @@ export function CreateSwapListing({
         meetupNotes: meetupNotes.trim() || undefined,
         city: city.trim() || undefined,
         province: province.trim() || undefined,
+        latitude: selectedLocation?.latitude,
+        longitude: selectedLocation?.longitude,
         userId,
       });
       onCreated();
@@ -505,7 +567,12 @@ export function CreateSwapListing({
                   return (
                     <TouchableOpacity
                       key={m.key}
-                      onPress={() => setMeetupMethod(m.key)}
+                      onPress={() => {
+                        setMeetupMethod(m.key);
+                        if (m.key === 'public' && selectedLocation) {
+                          setMeetupLocation((current) => current || selectedLocation.locality || 'Nagcarlan');
+                        }
+                      }}
                       style={[
                         localStyles.meetupCard,
                         isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
@@ -525,6 +592,26 @@ export function CreateSwapListing({
                   );
                 })}
               </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={[localStyles.fieldLabel, { marginBottom: 0 }, isDark && { color: theme.colors.textMuted }]}>Select a location in Nagcarlan</Text>
+                <TouchableOpacity onPress={() => setShowLocationMap(true)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, padding: 7 }}>
+                  <Feather name="maximize-2" size={16} color={theme.colors.primary} />
+                  <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>Full screen</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 10 }}>
+                Tap any point inside Nagcarlan to set the exact listing location.
+              </Text>
+              <BarangayListingMap onSelect={handleLocationSelect} onUseCurrentLocation={handleUseCurrentLocation} selectedLocation={selectedLocation} />
+              {selectedLocation && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10, marginBottom: 8 }}>
+                  <Ionicons name="location" size={17} color="#2563eb" />
+                  <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '700' }}>
+                    {meetupLocation || 'Selected location in Nagcarlan'}
+                  </Text>
+                </View>
+              )}
 
               {meetupMethod === 'public' && (
                 <>
@@ -573,7 +660,10 @@ export function CreateSwapListing({
                 placeholder="e.g., Santa Rosa"
                 placeholderTextColor={theme.colors.textMuted}
                 value={city}
-                onChangeText={setCity}
+                onChangeText={(value) => {
+                  setCity(value);
+                  if (value.trim().toLowerCase() !== 'nagcarlan') setSelectedLocation(null);
+                }}
                 onFocus={handleFieldFocus}
               />
               <Text style={[localStyles.fieldLabel, isDark && { color: theme.colors.textMuted }]}>Province</Text>
@@ -582,7 +672,10 @@ export function CreateSwapListing({
                 placeholder="e.g., Laguna"
                 placeholderTextColor={theme.colors.textMuted}
                 value={province}
-                onChangeText={setProvince}
+                onChangeText={(value) => {
+                  setProvince(value);
+                  if (value.trim().toLowerCase() !== 'laguna') setSelectedLocation(null);
+                }}
                 onFocus={handleFieldFocus}
               />
 
@@ -639,6 +732,40 @@ export function CreateSwapListing({
         </View>
       </KeyboardAvoidingView>
     </View>
+
+        <Modal
+          visible={showLocationMap}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          statusBarTranslucent
+          onRequestClose={() => setShowLocationMap(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: theme.colors.background, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0 }}>
+            <View style={{ minHeight: 58, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border }}>
+              <TouchableOpacity onPress={() => setShowLocationMap(false)} hitSlop={10} style={{ width: 40, height: 44, alignItems: 'flex-start', justifyContent: 'center' }}>
+                <Feather name="x" size={24} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+              <View style={{ alignItems: 'center', flex: 1 }}>
+                <Text style={{ color: theme.colors.textPrimary, fontSize: 17, fontWeight: '800' }}>Choose a location</Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>Tap any point inside Nagcarlan</Text>
+              </View>
+              <View style={{ width: 40 }} />
+            </View>
+            <BarangayListingMap onSelect={handleLocationSelect} onUseCurrentLocation={handleUseCurrentLocation} fullScreen selectedLocation={selectedLocation} />
+            <View style={{ padding: 16, paddingBottom: Platform.OS === 'ios' ? 28 : 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border, backgroundColor: theme.colors.background }}>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 10, textAlign: 'center' }}>
+                {selectedLocation ? (meetupLocation || 'Selected location in Nagcarlan') : 'Tap the map to place the blue pin'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowLocationMap(false)}
+                disabled={!selectedLocation}
+                style={{ minHeight: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: selectedLocation ? theme.colors.primary : theme.colors.surfaceMuted }}
+              >
+                <Text style={{ color: selectedLocation ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted, fontSize: 15, fontWeight: '800' }}>Use this location</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <Modal
           visible={showImageError}

@@ -38,7 +38,6 @@ import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platfo
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { styles } from '../styles/appStyles';
@@ -244,7 +243,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
     // The synchronous SQLite write protects the count from immediate back presses or crashes.
     mobileStorage.setItemSync(storageKey, persistedValue);
-    await mobileStorage.setItem(storageKey, persistedValue);
+    void mobileStorage.setItem(storageKey, persistedValue).catch(() => {});
 
     if (attemptsChallengeIdRef.current === challengeId) {
       const remaining = MAX_AI_ATTEMPTS - attemptsUsed;
@@ -472,9 +471,19 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setCapturedImage(uri);
     setProcessing(true);
     try {
-      const uploadResult = await model.uploadChallengeProofImage(challenge.id, uri);
+      let processedUri = uri;
+      try {
+        const result = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 1280 } }],
+          { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG },
+        );
+        if (result?.uri) processedUri = result.uri;
+      } catch (manipErr) {
+        console.warn('After-photo compression failed; uploading the original image:', manipErr);
+      }
       if (activeOperationRef.current !== operationId) return;
-      await model.handleSubmitChallengeAfterPhoto(challenge.id, uploadResult.proofUrl, challenge.progress?.submissionId);
+      await model.handleSubmitChallengeAfterPhoto(challenge.id, processedUri, challenge.progress?.submissionId);
       if (activeOperationRef.current !== operationId) return;
       handleClose();
     } catch (err: any) {
@@ -1176,8 +1185,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   // Details step (Default)
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
-      <OverlayScaffold title="AI Waste Recognition Challenge" subtitle="Mission Details" onBack={handleClose}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.overlayScroll, { padding: 24 }]}>
+      <OverlayScaffold
+        title="AI Waste Recognition Challenge"
+        subtitle="Mission Details"
+        onBack={handleClose}
+        titleStyle={{ fontSize: responsiveFontSize(28), lineHeight: moderateScale(34) }}
+        headerStyle={{ paddingBottom: verticalScale(8) }}
+      >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.overlayScroll, { padding: 24, paddingTop: 16 }]}>
           <View>
             <Text style={{ fontSize: 24, fontWeight: 'bold', color: isDark ? theme.colors.primary : '#126027', marginBottom: 16 }}>{challenge.title}</Text>
 
@@ -2076,23 +2091,23 @@ function AnimatedMapMarker({ event }: { event: any }) {
   );
 }
 
-const NAGCARLAN_BOUNDS = {
-  minLat: 14.08556,
-  maxLat: 14.18883,
-  minLng: 121.35773,
-  maxLng: 121.48610,
+const LAGUNA_BOUNDS = {
+  minLat: 13.966778,
+  maxLat: 14.5815501,
+  minLng: 121.0054681,
+  maxLng: 121.6207409,
 };
 const PH_BOUNDS = { minLat: 4.5, maxLat: 21.5, minLng: 116, maxLng: 127 };
 
-const DEFAULT_PH_CENTER = {
-  latitude: (NAGCARLAN_BOUNDS.minLat + NAGCARLAN_BOUNDS.maxLat) / 2,
-  longitude: (NAGCARLAN_BOUNDS.minLng + NAGCARLAN_BOUNDS.maxLng) / 2,
-  latitudeDelta: 0.1,
-  longitudeDelta: 0.1,
+const DEFAULT_LAGUNA_CENTER = {
+  latitude: (LAGUNA_BOUNDS.minLat + LAGUNA_BOUNDS.maxLat) / 2,
+  longitude: (LAGUNA_BOUNDS.minLng + LAGUNA_BOUNDS.maxLng) / 2,
+  latitudeDelta: LAGUNA_BOUNDS.maxLat - LAGUNA_BOUNDS.minLat,
+  longitudeDelta: LAGUNA_BOUNDS.maxLng - LAGUNA_BOUNDS.minLng,
 };
 
-function isWithinNagcarlan(lat: number, lng: number) {
-  return lat >= NAGCARLAN_BOUNDS.minLat && lat <= NAGCARLAN_BOUNDS.maxLat && lng >= NAGCARLAN_BOUNDS.minLng && lng <= NAGCARLAN_BOUNDS.maxLng;
+function isWithinLaguna(lat: number, lng: number) {
+  return lat >= LAGUNA_BOUNDS.minLat && lat <= LAGUNA_BOUNDS.maxLat && lng >= LAGUNA_BOUNDS.minLng && lng <= LAGUNA_BOUNDS.maxLng;
 }
 
 function isWithinPhilippines(lat: number, lng: number) {
@@ -2107,21 +2122,21 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
   // Responsive map container height: comfortable top viewport so cards underneath are immediately visible and scrollable
   const mapHeight = Math.max(240, Math.min(screenHeight * 0.38, 320));
 
-  const initialLat = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
+  const initialLat = userLocation && isWithinLaguna(userLocation.latitude, userLocation.longitude)
     ? userLocation.latitude
-    : DEFAULT_PH_CENTER.latitude;
+    : DEFAULT_LAGUNA_CENTER.latitude;
 
-  const initialLng = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
+  const initialLng = userLocation && isWithinLaguna(userLocation.latitude, userLocation.longitude)
     ? userLocation.longitude
-    : DEFAULT_PH_CENTER.longitude;
+    : DEFAULT_LAGUNA_CENTER.longitude;
 
   const phEvents = React.useMemo(() => {
     return (model.events || []).filter((event: any) => 
       event.latitude && event.longitude && isWithinPhilippines(event.latitude, event.longitude)
     );
   }, [model.events]);
-  const nagcarlanEvents = React.useMemo(
-    () => phEvents.filter((event: any) => isWithinNagcarlan(event.latitude, event.longitude)),
+  const lagunaEvents = React.useMemo(
+    () => phEvents.filter((event: any) => isWithinLaguna(event.latitude, event.longitude)),
     [phEvents],
   );
 
@@ -2135,7 +2150,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
   };
 
   const leafletHtml = React.useMemo(() => {
-    const rawMarkers = nagcarlanEvents.map((e: any) => ({
+    const rawMarkers = lagunaEvents.map((e: any) => ({
       id: escapeHtml(String(e.id || '')),
       title: escapeHtml(String(e.title || 'Eco Event')),
       location: escapeHtml(String(e.location || 'Philippines')),
@@ -2147,11 +2162,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
     const markersJson = JSON.stringify(rawMarkers)
       .replace(/</g, '\\u003c')
       .replace(/>/g, '\\u003e');
-    const barangayNamesJson = JSON.stringify(BARANGAYS)
-      .replace(/</g, '\\u003c')
-      .replace(/>/g, '\\u003e');
-
-    const userLocJson = userLocation && isWithinNagcarlan(userLocation.latitude, userLocation.longitude)
+    const userLocJson = userLocation && isWithinLaguna(userLocation.latitude, userLocation.longitude)
       ? JSON.stringify({ lat: Number(userLocation.latitude), lng: Number(userLocation.longitude) })
       : 'null';
 
@@ -2213,14 +2224,6 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           .eco-pin-inner {
             transform: rotate(45deg); font-size: 14px;
           }
-          .barangay-pin-wrapper { display: flex; align-items: center; justify-content: center; }
-          .barangay-pin {
-            width: 29px; height: 29px; border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg); background: #f97316; border: 2.5px solid #fff;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.35);
-            display: flex; align-items: center; justify-content: center;
-          }
-          .barangay-pin-inner { transform: rotate(45deg); color: #fff; font-size: 11px; font-weight: 800; }
           .osm-badge {
             position: absolute; bottom: 8px; left: 8px; z-index: 1000;
             background: rgba(14, 21, 18, 0.88); color: #A7F3D0; padding: 4px 10px;
@@ -2252,11 +2255,11 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       </head>
       <body>
         <div id="map"></div>
-        <div class="osm-badge">Nagcarlan · © OpenStreetMap contributors</div>
+        <div class="osm-badge">Laguna · © OpenStreetMap contributors</div>
         <script>
-          const nagcarlanBounds = L.latLngBounds(
-            L.latLng(${NAGCARLAN_BOUNDS.minLat}, ${NAGCARLAN_BOUNDS.minLng}),
-            L.latLng(${NAGCARLAN_BOUNDS.maxLat}, ${NAGCARLAN_BOUNDS.maxLng})
+          const lagunaBounds = L.latLngBounds(
+            L.latLng(${LAGUNA_BOUNDS.minLat}, ${LAGUNA_BOUNDS.minLng}),
+            L.latLng(${LAGUNA_BOUNDS.maxLat}, ${LAGUNA_BOUNDS.maxLng})
           );
 
           const map = L.map('map', {
@@ -2264,7 +2267,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             zoom: 12,
             minZoom: 10,
             maxZoom: 18,
-            maxBounds: nagcarlanBounds,
+            maxBounds: lagunaBounds,
             maxBoundsViscosity: 1,
             zoomControl: true,
             dragging: true,
@@ -2273,8 +2276,8 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             doubleClickZoom: true,
             tap: true
           });
-          map.fitBounds(nagcarlanBounds, { padding: [4, 4] });
-          map.setMinZoom(map.getBoundsZoom(nagcarlanBounds, true, [4, 4]));
+          map.fitBounds(lagunaBounds, { padding: [4, 4] });
+          map.setMinZoom(map.getBoundsZoom(lagunaBounds, true, [4, 4]));
 
           // Let the map consume one-finger pans and two-finger pinch gestures
           // inside its viewport while leaving page scrolling available outside it.
@@ -2304,49 +2307,19 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 
           osmTileLayer.addTo(map);
 
-          const barangayNames = ${barangayNamesJson};
-          const barangayBoundaryUrl = '${ecobudApiOrigin}/maps/NagcarlanBarangays.geojson';
-          fetch(barangayBoundaryUrl)
-            .then(response => response.ok ? response.json() : Promise.reject(new Error('Barangay boundary data unavailable (' + response.status + ')')))
-            .then(data => {
-              if (!data.features || data.features.length !== barangayNames.length) {
-                throw new Error('Expected ' + barangayNames.length + ' barangay boundaries, received ' + (data.features ? data.features.length : 0));
-              }
-              L.geoJSON(data, {
-                interactive: false,
-                onEachFeature: function(feature, boundary) {
-                  const code = String(feature && feature.properties && feature.properties.brgy_code || '');
-                  const index = Number(code.slice(-3)) - 1;
-                  const name = feature && feature.properties && (feature.properties.BrgyName || barangayNames[index]);
-                  if (!name || !boundary.getBounds) return;
-
-                  const icon = L.divIcon({
-                    className: 'barangay-pin-wrapper',
-                    html: '<div class="barangay-pin"><span class="barangay-pin-inner">B</span></div>',
-                    iconSize: [29, 29],
-                    iconAnchor: [14, 29],
-                    popupAnchor: [0, -27]
-                  });
-                  const marker = L.marker(boundary.getBounds().getCenter(), { icon }).addTo(map);
-                  marker.bindPopup('<strong>Barangay ' + String(name).replace(/[&<>"']/g, function(char) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]); }) + '</strong>', { className: 'custom-popup' });
-                }
-              });
-            })
-            .catch(error => console.warn('[EcoEventsMap] Barangay pins unavailable', error));
-
-          const nagcarlanOsmPane = map.createPane('nagcarlanOsmPane');
-          nagcarlanOsmPane.style.zIndex = '350';
-          nagcarlanOsmPane.style.pointerEvents = 'none';
-          fetch('${ecobudApiOrigin}/maps/Nagcarlan.geojson')
-            .then(response => response.ok ? response.json() : Promise.reject(new Error('Nagcarlan map data unavailable')))
+          const lagunaOsmPane = map.createPane('lagunaOsmPane');
+          lagunaOsmPane.style.zIndex = '350';
+          lagunaOsmPane.style.pointerEvents = 'none';
+          fetch('${ecobudApiOrigin}/maps/Laguna.geojson?v=260722')
+            .then(response => response.ok ? response.json() : Promise.reject(new Error('Laguna map data unavailable')))
             .then(data => {
               L.geoJSON(data, {
-                pane: 'nagcarlanOsmPane',
+                pane: 'lagunaOsmPane',
                 interactive: false,
                 style: feature => {
                   const tags = feature && feature.properties ? feature.properties : {};
                   if (tags.highway) {
-                    const majorRoad = ['primary', 'secondary', 'tertiary'].includes(tags.highway);
+                    const majorRoad = ['motorway', 'trunk', 'primary', 'secondary'].includes(tags.highway);
                     return { color: majorRoad ? '#d8a85c' : '#f4e5bf', weight: majorRoad ? 2.2 : 1.4, opacity: 0.9 };
                   }
                   if (tags.waterway) return { color: '#5baac2', weight: 1.8, opacity: 0.85 };
@@ -2355,7 +2328,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
                 }
               }).addTo(map);
             })
-            .catch(error => console.warn('[EcoEventsMap] Nagcarlan OSM overlay unavailable', error));
+            .catch(error => console.warn('[EcoEventsMap] Laguna OSM overlay unavailable', error));
 
           const userLoc = ${userLocJson};
           if (userLoc) {
@@ -2425,7 +2398,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
       </body>
       </html>
     `;
-  }, [nagcarlanEvents, userLocation, initialLat, initialLng]);
+  }, [lagunaEvents, userLocation, initialLat, initialLng]);
 
   const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null);
 
@@ -2507,12 +2480,12 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
           >
             <Ionicons name="location" size={12} color={isDark ? theme.colors.primary : '#126027'} />
             <Text style={{ fontSize: moderateScale(11), fontWeight: '800', color: isDark ? theme.colors.primary : '#126027' }}>
-              {nagcarlanEvents.length} {nagcarlanEvents.length === 1 ? 'Pin' : 'Pins'}
+              {lagunaEvents.length} {lagunaEvents.length === 1 ? 'Pin' : 'Pins'}
             </Text>
           </View>
         </View>
 
-        {nagcarlanEvents.length === 0 ? (
+        {lagunaEvents.length === 0 ? (
           <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
             <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>
               No mapped events found
@@ -2877,6 +2850,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
             {displayedEvents.map((event) => {
               const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
+              const hasJoined = !!event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
               const capacity = event.capacity || 0;
               const spotsLeft = typeof event.spotsLeft === 'number' ? event.spotsLeft : capacity;
               const joinedCount = Math.max(0, capacity - spotsLeft);
@@ -3023,6 +2997,17 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                     </TouchableOpacity>
 
                     {(() => {
+                      if (activeTab === 'past' && hasJoined) {
+                        return (
+                          <TouchableOpacity
+                            style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
+                            onPress={() => setJoinedEventId(event.id)}
+                          >
+                            <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>View Details</Text>
+                          </TouchableOpacity>
+                        );
+                      }
+
                       if (lc === 'ended' && !event.userStatus) {
                         return (
                           <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
@@ -3084,8 +3069,16 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
                           );
                         } else {
                           return (
-                            <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: '#E0EBE4' }]}>
-                              <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Joined - Starts Soon</Text>
+                            <View style={{ gap: 8 }}>
+                              <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: '#E0EBE4' }]}>
+                                <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Joined - Starts Soon</Text>
+                              </View>
+                              <TouchableOpacity
+                                style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
+                                onPress={() => setJoinedEventId(event.id)}
+                              >
+                                <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>View Details</Text>
+                              </TouchableOpacity>
                             </View>
                           );
                         }
@@ -6273,12 +6266,64 @@ export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
   );
 }
 
+function LeaderboardOverlaySkeleton() {
+  const { theme, isDark } = useTheme();
+  const opacity = React.useRef(new Animated.Value(0.52)).current;
+  const bone = isDark ? theme.colors.cardBorder : '#E5EEE8';
+
+  React.useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.88, duration: 850, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.52, duration: 850, useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [opacity]);
+
+  const bar = (width: number | `${number}%`, height: number, radius = 7) => (
+    <View style={{ width, height, borderRadius: radius, backgroundColor: bone }} />
+  );
+
+  return (
+    <Animated.View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading community ranks"
+      style={{ opacity }}
+    >
+      <View style={{ marginTop: 12, marginBottom: 18, paddingHorizontal: 12, paddingVertical: 18, minHeight: 170, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', borderRadius: 20, backgroundColor: isDark ? theme.colors.surfaceMuted : theme.colors.card }}>
+        {[64, 80, 58].map((size, index) => (
+          <View key={index} style={{ alignItems: 'center', gap: 8, marginBottom: index === 1 ? 16 : 0 }}>
+            {bar(size, size, size / 2)}
+            {bar(index === 1 ? 74 : 62, 12)}
+            {bar(index === 1 ? 72 : 56, index === 1 ? 48 : 34, 12)}
+          </View>
+        ))}
+      </View>
+      <View style={{ gap: 10 }}>
+        {[0, 1, 2, 3, 4].map((row) => (
+          <View key={row} style={{ minHeight: 66, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#E8F5E9', backgroundColor: isDark ? theme.colors.surfaceMuted : '#FFF' }}>
+            {bar(24, 16)}
+            {bar(40, 40, 20)}
+            <View style={{ flex: 1, gap: 7 }}>{bar('62%', 13)}{bar('38%', 10)}</View>
+            {bar(48, 15)}
+          </View>
+        ))}
+      </View>
+    </Animated.View>
+  );
+}
+
 export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [page, setPage] = React.useState(1);
   const itemsPerPage = 10;
   const actualItems = model.leaderboard?.items ?? [];
+  const showLeaderboardSkeleton = actualItems.length === 0 && (
+    model.leaderboardLoading ||
+    (model.activeOverlay === 'leaderboard' && !model.leaderboardHasLoaded && model.hasUsableInternet)
+  );
   const totalPages = Math.max(1, Math.ceil(actualItems.length / itemsPerPage));
 
   const startIndex = (page - 1) * itemsPerPage;
@@ -6333,7 +6378,10 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
             showsVerticalScrollIndicator={false}
           >
-          {isPageOne && top3.length > 0 && (
+          {showLeaderboardSkeleton ? (
+            <LeaderboardOverlaySkeleton />
+          ) : null}
+          {!showLeaderboardSkeleton && isPageOne && top3.length > 0 && (
             <View style={[styles.leaderboardTop3, { marginTop: 12, minHeight: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: isDark ? theme.colors.surfaceMuted : theme.colors.card, borderRadius: 20 }]}>
               {podiumLeaders.map((leader) => {
                 const leaderAvatar = leader.isCurrentUser
@@ -6400,14 +6448,14 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
           )}
 
-          {actualItems.length === 0 && (
+          {!showLeaderboardSkeleton && actualItems.length === 0 && (
             <View style={{ alignItems: 'center', paddingVertical: 48 }}>
               <Ionicons name="podium-outline" size={34} color={theme.colors.textMuted} />
               <Text style={{ color: theme.colors.textPrimary, fontSize: 17, fontWeight: '700', marginTop: 12 }}>No rankings yet</Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 14, marginTop: 4 }}>Earn points to appear on the leaderboard.</Text>
             </View>
           )}
-          <View style={{ marginTop: remainingList.length > 0 ? 18 : 0 }}>
+          {!showLeaderboardSkeleton && remainingList.length > 0 && <View style={{ marginTop: 18 }}>
             {remainingList.map(user => {
               const userAvatar = user.isCurrentUser
                 ? (user.avatarUrl || model.profile?.profile?.avatarUrl || model.session?.user.avatarUrl)
@@ -6468,8 +6516,8 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               );
             })}
-          </View>
-          {totalPages > 1 && (
+          </View>}
+          {!showLeaderboardSkeleton && totalPages > 1 && (
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 12 }}>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous leaderboard page" disabled={page === 1} onPress={() => setPage(page - 1)} style={{ padding: 10, opacity: page === 1 ? 0.4 : 1 }}>
                 <Ionicons name="chevron-back" size={22} color={theme.colors.textPrimary} />
