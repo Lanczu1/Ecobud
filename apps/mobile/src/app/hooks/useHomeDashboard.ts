@@ -52,11 +52,20 @@ const CHATBOT_SIZE_STORAGE_KEY = 'ecobud.mobile.chatbotSize';
 const PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY = 'ecobud.mobile.pushNotificationsEnabled';
 const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
 type FocusedResource = 'lessons' | 'challenges' | 'events';
-const FOCUSED_REFRESH_INTERVAL_MS = 60_000;
+const FOCUSED_REFRESH_INTERVAL_MS = 30_000;
 type SecondaryResource = 'tracker' | 'profile' | 'rewards' | 'leaderboard' | 'transparency';
-const SECONDARY_REFRESH_INTERVAL_MS = 5 * 60_000;
+const SECONDARY_REFRESH_INTERVAL_MS = 60_000;
 
 // --- Internal Utilities ---
+
+const uniqueLessonsById = (items: LessonWithProgress[]): LessonWithProgress[] => {
+  const seen = new Set<string>();
+  return items.filter((lesson) => {
+    if (seen.has(lesson.id)) return false;
+    seen.add(lesson.id);
+    return true;
+  });
+};
 
 function formatChatTime(isoDate: string) {
   return new Date(isoDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -629,7 +638,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         // Step 1: Fetch Home Critical Data first (dashboard, lessons, challenges, habits, events)
         const homeData = await homeService.getHomeCriticalData(existingSession.token);
 
-        const safeLessons = Array.isArray(homeData?.lessons) ? [...homeData.lessons] : [];
+        const safeLessons = uniqueLessonsById(Array.isArray(homeData?.lessons) ? [...homeData.lessons] : []);
         safeLessons.sort((a: any, b: any) => {
           if (a.featured && !b.featured) return -1;
           if (!a.featured && b.featured) return 1;
@@ -721,7 +730,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             if (cached && typeof cached === 'object') {
               setChallenges((curr) => (curr.length === 0 && Array.isArray(cached.challenges) ? cached.challenges : curr));
               setDashboard((curr) => (!curr && cached.dashboard ? cached.dashboard : curr));
-              setLessons((curr) => (curr.length === 0 && Array.isArray(cached.lessons) ? cached.lessons : curr));
+              setLessons((curr) => (curr.length === 0 && Array.isArray(cached.lessons) ? uniqueLessonsById(cached.lessons) : curr));
               setHabitsToday((curr) => (!curr && cached.habitsToday ? cached.habitsToday : curr));
               setEvents((curr) => (curr.length === 0 && Array.isArray(cached.events) ? cached.events : curr));
             }
@@ -843,7 +852,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
                   if (cached && typeof cached === 'object') {
                     if (cached.dashboard) setDashboard(cached.dashboard);
                     if (Array.isArray(cached.lessons) && cached.lessons.length > 0) {
-                      setLessons(cached.lessons);
+                      setLessons(uniqueLessonsById(cached.lessons));
                       setSelectedLessonId(cached.lessons[0]?.id ?? null);
                     }
                     if (Array.isArray(cached.challenges)) setChallenges(cached.challenges);
@@ -999,7 +1008,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             if (resource === 'lessons') {
               const result = await homeService.getLessons(token);
               if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt || !Array.isArray(result)) return;
-              const safeLessons = [...result].sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)));
+              const safeLessons = uniqueLessonsById([...result]).sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)));
               setLessons(safeLessons);
             } else if (resource === 'challenges') {
               const result = await homeService.getChallenges(token);
@@ -1634,6 +1643,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
           }
 
           DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
+          if (signal.reason.startsWith('event-') || signal.reason === 'habit-check-in') {
+            focusedRefreshInFlightRef.current.delete('events');
+            lastFocusedRefreshAtRef.current.events = 0;
+            const activeSession = session;
+            if (activeSession?.token && activeTab === 'home') {
+              void homeService.getEvents(activeSession.token).then((items) => {
+                if (currentSessionTokenRef.current === activeSession.token) setEvents(items);
+              }).catch(() => {});
+            }
+          }
+          if (signal.reason.startsWith('event-') || signal.reason === 'habit-check-in') return;
           queueRealtimeRefresh(`${signal.channel}:${signal.reason}`);
         },
       })

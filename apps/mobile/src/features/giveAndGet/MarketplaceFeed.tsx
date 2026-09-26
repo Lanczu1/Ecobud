@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import {
   View,
   Text,
@@ -15,6 +16,7 @@ import {
   Pressable,
   Platform,
   Keyboard,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -84,6 +86,8 @@ export function MarketplaceFeed({
   const searchBarY = useRef(0);
   const searchFocused = useRef(false);
   const pendingSearchScroll = useRef(false);
+  const loadListingsRef = useRef<() => Promise<void>>(async () => {});
+  const loadMyListingsRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 300);
@@ -194,6 +198,27 @@ export function MarketplaceFeed({
     }
   }, [currentUserId]);
 
+  loadListingsRef.current = loadListings;
+  loadMyListingsRef.current = loadMyListings;
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      if (activeTab === 'browse') void loadListingsRef.current();
+      if (activeTab === 'mylistings') void loadMyListingsRef.current();
+    });
+    return () => subscription.remove();
+  }, [activeTab]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (AppState.currentState !== 'active') return;
+      if (activeTab === 'browse') void loadListingsRef.current();
+      if (activeTab === 'mylistings') void loadMyListingsRef.current();
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [activeTab]);
+
   useEffect(() => {
     if (activeTab === 'browse') loadListings();
   }, [activeTab, loadListings]);
@@ -203,6 +228,14 @@ export function MarketplaceFeed({
       loadMyListings();
     }
   }, [activeTab, loadMyListings]);
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('giveAndGetListingsChanged', () => {
+      if (activeTab === 'browse') void loadListingsRef.current();
+      if (activeTab === 'mylistings') void loadMyListingsRef.current();
+    });
+    return () => subscription.remove();
+  }, [activeTab]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {

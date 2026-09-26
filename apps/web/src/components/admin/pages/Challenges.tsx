@@ -6,7 +6,8 @@ import {
   ChevronDown, ChevronRight, User, Layers, Filter, 
   RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, Info, FileText, CheckSquare
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
@@ -700,6 +701,7 @@ export function Challenges() {
 
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const submissionsRefreshInFlight = useRef(false);
+  const loadChallengesRef = useRef<() => Promise<void>>(async () => {});
   const [selectedImage, setSelectedImage] = useState<PreviewModalImage | null>(null);
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
@@ -724,12 +726,12 @@ export function Challenges() {
     }
   }, [isModerator, moderatorBarangay]);
 
-  const load = async () => {
+  const load = async (fresh = false) => {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
       if (search.trim()) params.set('search', search.trim());
       if (filterStatus !== 'All') params.set('status', filterStatus);
-      const data = await adminGet<{ items: Challenge[]; pagination: typeof pagination }>(`/admin/challenges?${params.toString()}`);
+      const data = await adminGet<{ items: Challenge[]; pagination: typeof pagination }>(`/admin/challenges?${params.toString()}`, { bypassCache: fresh });
       setChallenges(data.items);
       setPagination(data.pagination);
       setError(null);
@@ -741,6 +743,8 @@ export function Challenges() {
       setLoading(false);
     }
   };
+
+  loadChallengesRef.current = load;
 
   const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
     if (submissionsRefreshInFlight.current) return;
@@ -762,9 +766,29 @@ export function Challenges() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 250);
-    return () => clearTimeout(timer);
-  }, [page, search, filterStatus]);
+    const timer = setTimeout(() => void load(true), 250);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && activeTab !== 'submissions') void load(true);
+    }, 30000);
+    const onFocus = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (activeTab === 'submissions') void loadSubmissions(false);
+      else void load(true);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => { clearTimeout(timer); clearInterval(interval); window.removeEventListener('focus', onFocus); };
+  }, [page, search, filterStatus, activeTab]);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    adminRealtimeService.connect({
+      onContentRefresh: () => {
+        clearAdminApiCache('/admin/challenges');
+        void loadChallengesRef.current();
+      },
+    }).then((unsub) => { unsubscribe = unsub; });
+    return () => unsubscribe?.();
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'submissions') {

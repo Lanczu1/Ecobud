@@ -5015,11 +5015,22 @@ function ExpCounter({ targetPoints, compact = false }: { targetPoints: number; c
 
 export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
+  const animationStartedRef = React.useRef(false);
+  const pendingTimeoutsRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const playPopSound = () => {
-    player.seekTo(0);
-    player.play();
+    try {
+      player.seekTo(0);
+      player.play();
+    } catch {
+      // The reward overlay may unmount before a scheduled sound cue runs.
+    }
   };
+
+  React.useEffect(() => () => {
+    pendingTimeoutsRef.current.forEach(clearTimeout);
+    pendingTimeoutsRef.current = [];
+  }, []);
 
   const rewardOriginRef = React.useRef<View>(null);
   const particleLayerRef = React.useRef<View>(null);
@@ -5047,6 +5058,8 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   ).current;
 
   const startPointsAnimation = () => {
+    if (animationStartedRef.current) return;
+    animationStartedRef.current = true;
     triggerSuccessHaptic();
     const originPromise = new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
       const originView = rewardOriginRef.current;
@@ -5061,7 +5074,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
     model.setActiveTab('home', true);
 
-    setTimeout(async () => {
+    pendingTimeoutsRef.current.push(setTimeout(async () => {
       const origin = await originPromise;
       let target = progressLayoutRef.current;
       for (let attempt = 0; (!target || target.width <= 0 || target.height <= 0) && attempt < 30; attempt += 1) {
@@ -5173,18 +5186,16 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
         ]);
       });
 
-      setTimeout(() => playPopSound(), 100);
-      setTimeout(() => playPopSound(), 350);
-      setTimeout(() => playPopSound(), 600);
-      setTimeout(() => playPopSound(), 850);
-      setTimeout(() => playPopSound(), 1100);
+      [100, 350, 600, 850, 1100].forEach((delay) => {
+        pendingTimeoutsRef.current.push(setTimeout(playPopSound, delay));
+      });
 
       Animated.parallel(animations).start(() => {
         model.resetQuiz();
         model.setActiveOverlay(null);
         DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
       });
-    }, 120);
+    }, 120));
   };
 
   React.useEffect(() => {

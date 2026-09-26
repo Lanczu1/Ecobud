@@ -6,6 +6,7 @@ import { TransparencyLedgerService } from './TransparencyLedgerService';
 import { UserActivityService } from './userActivityService';
 import { UserStatsService } from './UserStatsService';
 import { sendDirectNotification } from './notificationService';
+import { apiCache } from '../lib/cache';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -92,6 +93,7 @@ export class GamificationService {
         reason: 'lesson-completed',
       }).catch((error) => console.error('lesson_completion_broadcast_failed', error));
     });
+    apiCache.delete(`user_dashboard_${userId}`);
 
     return result;
   }
@@ -157,6 +159,7 @@ export class GamificationService {
       entityId: challengeInstanceId,
       reason: progressPercentage >= 100 ? 'challenge-unclaimed' : 'challenge-progress-updated',
     });
+    apiCache.delete(`user_dashboard_${userId}`);
 
     return result;
   }
@@ -286,6 +289,7 @@ export class GamificationService {
         reason: 'challenge-completed',
       }).catch((error) => console.error('challenge_completion_broadcast_failed', error));
     });
+    apiCache.delete(`user_dashboard_${userId}`);
 
     return result;
   }
@@ -342,6 +346,8 @@ export class GamificationService {
       entityId: habitId,
       reason: 'habit-check-in',
     });
+    apiCache.delete(`user_dashboard_${userId}`);
+    void supabaseRealtimeService.publishUserEventsRefresh(userId, { entityId: habitId, reason: 'habit-check-in' });
 
     return result;
   }
@@ -412,6 +418,7 @@ export class GamificationService {
           entityId: eventId,
           reason: 'event-attendance-verified',
         }),
+        supabaseRealtimeService.publishUserEventsRefresh(userId, { entityId: eventId, reason: 'event-reward-claimed' }),
         supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
           actorRole: 'moderator',
           entityId: userId,

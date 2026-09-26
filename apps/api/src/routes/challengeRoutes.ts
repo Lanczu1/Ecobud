@@ -17,6 +17,7 @@ import { JWT_SECRET } from '../security/tokenService';
 import { recognizeChallengeImage } from '../services/challengeImageService';
 import { signChallengeAnalysis, detectionSettingsHash, verifyChallengeAnalysis } from '../security/challengeAnalysisToken';
 import { sendDirectNotification } from '../services/notificationService';
+import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 
 import { apiCache } from '../lib/cache';
 
@@ -369,6 +370,10 @@ challengeRoutes.post(
       });
     }
 
+    void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+      actorRole: req.auth!.role, actorUserId: userId, entityId: actualInstanceId, reason: 'challenge-progress-updated',
+    });
+
     return res.json(result);
   }),
 );
@@ -626,6 +631,15 @@ challengeRoutes.post(
 
       return created;
     }, { isolationLevel: 'Serializable' });
+
+    void Promise.all([
+      supabaseRealtimeService.publishUserSectionBundle(req.auth!.userId, ['challenges', 'tracker'], {
+        actorRole: req.auth!.role, actorUserId: req.auth!.userId, entityId: actualInstanceId, reason: 'challenge-proof-submitted',
+      }),
+      supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+        actorRole: req.auth!.role, actorUserId: req.auth!.userId, entityId: submission.id, reason: 'challenge-proof-submitted',
+      }),
+    ]);
 
     res.status(201).json(submission);
 

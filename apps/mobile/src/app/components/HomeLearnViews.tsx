@@ -297,11 +297,19 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
   const completedLessonsCount = model.lessons.filter((l) => l.status === 'completed').length;
   const totalLessonsCount = model.lessons.length;
   const progressPercentage = totalLessonsCount > 0 ? Math.round((completedLessonsCount / totalLessonsCount) * 100) : 0;
-  const lessonRows = React.useMemo<LessonWithProgress[][]>(() => layoutMode === 'grid'
-    ? Array.from({ length: Math.ceil(model.filteredLessons.length / gridColumnCount) }, (_, index) =>
-        model.filteredLessons.slice(index * gridColumnCount, (index + 1) * gridColumnCount))
-    : model.filteredLessons.map((lesson) => [lesson]),
-    [model.filteredLessons, layoutMode, gridColumnCount]);
+  const lessonRows = React.useMemo<LessonWithProgress[][]>(() => {
+    const seenLessonIds = new Set<string>();
+    const visibleLessons = model.filteredLessons.filter((lesson) => {
+      if (seenLessonIds.has(lesson.id)) return false;
+      seenLessonIds.add(lesson.id);
+      return true;
+    });
+
+    return layoutMode === 'grid'
+      ? Array.from({ length: Math.ceil(visibleLessons.length / gridColumnCount) }, (_, index) =>
+          visibleLessons.slice(index * gridColumnCount, (index + 1) * gridColumnCount))
+      : visibleLessons.map((lesson) => [lesson]);
+  }, [model.filteredLessons, layoutMode, gridColumnCount]);
 
   return (
     <FlatList<LessonWithProgress[]>

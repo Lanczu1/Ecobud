@@ -5,6 +5,7 @@ import { HttpError, errorBoundary } from '../http/errorResponder';
 import { eventSubmissionUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { GamificationService } from '../services/GamificationService';
+import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import path from 'path';
 
 const eventRoutes = Router();
@@ -117,6 +118,7 @@ eventRoutes.post(
         eventId: event.id,
       },
     });
+    void supabaseRealtimeService.publishUserEventsRefresh(req.auth!.userId, { entityId: event.id, reason: 'event-joined' });
 
     return res.status(201).json({ alreadyJoined: false, registration });
   }),
@@ -229,6 +231,7 @@ eventRoutes.post(
           data: { status: 'PENDING_APPROVAL' },
         }),
       ]);
+      void supabaseRealtimeService.publishUserEventsRefresh(userId, { entityId: eventId, reason: 'event-attendance-submitted' });
 
       return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
     } catch (error: any) {

@@ -93,8 +93,8 @@ android {
         applicationId 'com.anonymous.ecobudmobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "1.0.5"
+        versionCode 5
+        versionName "1.0.6"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -120,10 +120,13 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            if (!System.getenv('ANDROID_KEYSTORE_PATH') || !System.getenv('ANDROID_KEYSTORE_PASSWORD') || !System.getenv('ANDROID_KEY_ALIAS') || !System.getenv('ANDROID_KEY_PASSWORD')) {
-                throw new GradleException('Release builds require ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD.')
-            }
-            signingConfig signingConfigs.release
+            def isReleaseTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+            def hasKeystoreEnv = System.getenv('ANDROID_KEYSTORE_PATH') &&
+                                 System.getenv('ANDROID_KEYSTORE_PASSWORD') &&
+                                 System.getenv('ANDROID_KEY_ALIAS') &&
+                                 System.getenv('ANDROID_KEY_PASSWORD')
+
+            signingConfig hasKeystoreEnv ? signingConfigs.release : signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

@@ -269,7 +269,7 @@ moderationRoutes.post(
       },
     );
 
-    await supabaseRealtimeService.publishUserSectionBundle(
+  await supabaseRealtimeService.publishUserSectionBundle(
       item.userId,
       ['challenges', 'tracker'],
       {
@@ -278,7 +278,10 @@ moderationRoutes.post(
         entityId: item.challengeInstanceId,
         reason: 'submission-approved',
       },
-    );
+  );
+  void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+    actorRole: req.auth!.role, actorUserId: req.auth!.userId, entityId: item.id, reason: 'challenge-submission-approved',
+  });
 
     await sendDirectNotification({
       userId: item.userId,
@@ -310,7 +313,7 @@ moderationRoutes.post(
       },
     );
 
-    await supabaseRealtimeService.publishUserSectionBundle(
+  await supabaseRealtimeService.publishUserSectionBundle(
       item.userId,
       ['challenges', 'tracker'],
       {
@@ -319,7 +322,10 @@ moderationRoutes.post(
         entityId: item.challengeInstanceId,
         reason: 'submission-rejected',
       },
-    );
+  );
+  void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+    actorRole: req.auth!.role, actorUserId: req.auth!.userId, entityId: item.id, reason: 'challenge-submission-rejected',
+  });
 
     await sendDirectNotification({
       userId: item.userId,
@@ -352,7 +358,7 @@ moderationRoutes.post(
       },
     );
 
-    await supabaseRealtimeService.publishUserSectionBundle(
+  await supabaseRealtimeService.publishUserSectionBundle(
       item.userId,
       ['challenges', 'tracker'],
       {
@@ -361,7 +367,10 @@ moderationRoutes.post(
         entityId: item.challengeInstanceId,
         reason: 'submission-flagged',
       },
-    );
+  );
+  void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+    actorRole: req.auth!.role, actorUserId: req.auth!.userId, entityId: item.id, reason: 'challenge-submission-flagged',
+  });
 
     await sendDirectNotification({
       userId: item.userId,

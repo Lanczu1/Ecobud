@@ -149,9 +149,11 @@ export class AdminService {
     });
 
     apiCache.invalidatePrefix('learn_published_');
+    apiCache.invalidatePrefix('learn_catalog_');
     apiCache.delete('total_lessons_count');
     apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
+    apiCache.invalidatePrefix('admin_activity_trend:');
 
     if (lesson.isPublished) {
       await Promise.all([
@@ -237,9 +239,11 @@ export class AdminService {
     });
 
     apiCache.invalidatePrefix('learn_published_');
+    apiCache.invalidatePrefix('learn_catalog_');
     apiCache.delete('total_lessons_count');
     apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
+    apiCache.invalidatePrefix('admin_activity_trend:');
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('learn', {
@@ -263,6 +267,7 @@ export class AdminService {
     });
 
     apiCache.invalidatePrefix('learn_published_');
+    apiCache.invalidatePrefix('learn_catalog_');
     apiCache.delete('total_lessons_count');
     apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
@@ -290,6 +295,7 @@ export class AdminService {
     });
 
     apiCache.invalidatePrefix('learn_published_');
+    apiCache.invalidatePrefix('learn_catalog_');
     apiCache.delete('total_lessons_count');
     apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
@@ -333,10 +339,12 @@ export class AdminService {
   }
 
   static async resetUserKnowledge(userId: string) {
-    return await prisma.userStats.update({
+    const updated = await prisma.userStats.update({
       where: { userId },
       data: { knowledgePoints: 0 }
     });
+    apiCache.delete(`user_dashboard_${userId}`);
+    return updated;
   }
 
   static async getUsers(options: { page: number; pageSize: number; search?: string; role?: string }) {
@@ -358,6 +366,8 @@ export class AdminService {
       }
     });
 
+    apiCache.delete('admin_dashboard_stats');
+    apiCache.invalidatePrefix('admin_activity_trend:');
     await supabaseRealtimeService.publishAdminSectionRefresh('users', {
       actorRole: 'admin',
       actorUserId: adminId,
@@ -383,6 +393,8 @@ export class AdminService {
       }
     });
 
+    apiCache.delete('admin_dashboard_stats');
+    apiCache.invalidatePrefix('admin_activity_trend:');
     await supabaseRealtimeService.publishAdminSectionRefresh('users', {
       actorRole: 'admin',
       actorUserId: adminId,
@@ -471,6 +483,7 @@ export class AdminService {
     apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
+
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('challenges', {
         actorRole: 'admin',
@@ -496,6 +509,7 @@ export class AdminService {
     apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
+
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('challenges', {
         actorRole: 'admin',
@@ -519,6 +533,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
+
 
     await Promise.all([
       supabaseRealtimeService.publishGlobalSectionRefresh('challenges', {
@@ -552,9 +567,10 @@ export class AdminService {
       if (day) day.userIds.add(userId);
     };
 
-    // Fetch the seven-day window once per data source. The former version
-    // executed five database reads for every day (35 reads) just for this
-    // chart, which saturated the connection pool on small instances.
+    const cachedTrend = apiCache.get<any[]>(`admin_activity_trend:${days[0].start.toISOString().slice(0, 10)}`);
+    if (cachedTrend) return cachedTrend;
+
+    // Fetch the seven-day window once per data source rather than once per day.
     const [presenceRows, userRows, lessonRows, submissionRows, habitRows] = await Promise.all([
       prisma.presenceSession.findMany({
         where: { user: { role: 'user' }, OR: [{ lastSeenAt: range }, { connectedAt: range }, { updatedAt: range }] },
@@ -593,13 +609,15 @@ export class AdminService {
     submissionRows.forEach((row) => { addActivity(row.userId, row.createdAt); addActivity(row.userId, row.updatedAt); });
     habitRows.forEach((row) => addActivity(row.userId, row.createdAt));
 
-    return days.map(({ start, userIds, signups }) => ({
+    const result = days.map(({ start, userIds, signups }) => ({
       active: userIds.size,
       date: start.toISOString(),
       dateLabel: start.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
       day: start.toLocaleDateString('en-US', { weekday: 'short' }),
       signups,
     }));
+    apiCache.set(`admin_activity_trend:${days[0].start.toISOString().slice(0, 10)}`, result, 60);
+    return result;
   }
 
   static async getDashboardStats() {
@@ -667,6 +685,11 @@ export class AdminService {
         activityTrend,
       };
     });
+  }
+
+  static invalidateDashboardStats() {
+    apiCache.delete('admin_dashboard_stats');
+    apiCache.invalidatePrefix('admin_activity_trend:');
   }
 
   static async getSubmissions(
@@ -819,6 +842,7 @@ export class AdminService {
           }
         });
 
+        this.invalidateDashboardStats();
         const { user, ...submissionResponse } = submission;
         const safeSubmission = {
           ...submissionResponse,
@@ -902,13 +926,14 @@ export class AdminService {
           });
         });
 
+        this.invalidateDashboardStats();
         const { user, ...submissionResponse } = updated;
         const safeSubmission = {
           ...submissionResponse,
           user: user ? { id: user.id, name: user.name, email: user.email, profile: user.profile } : null,
         };
 
-        runSubmissionFollowUps('Challenge rejection', [
+      runSubmissionFollowUps('Challenge rejection', [
           () => prisma.auditLog.create({
           data: {
             action: 'SUBMISSION_REJECTED',
@@ -965,6 +990,7 @@ export class AdminService {
         }
       });
 
+      this.invalidateDashboardStats();
       const { user, ...submissionResponse } = submission;
       const safeSubmission = {
         ...submissionResponse,
@@ -978,7 +1004,7 @@ export class AdminService {
 
       // The final review is committed at this point. Audit, realtime, and push
       // notifications must not turn a successful approval into an API error.
-      runSubmissionFollowUps('Final challenge approval', [
+        runSubmissionFollowUps('Final challenge approval', [
         () => prisma.auditLog.create({
           data: {
             action: 'SUBMISSION_APPROVED',
@@ -1066,6 +1092,7 @@ export class AdminService {
         return updatedSubmission;
       });
 
+      this.invalidateDashboardStats();
       runSubmissionFollowUps(`Event attendance ${status}`, [
         () => prisma.auditLog.create({
           data: {
@@ -1089,6 +1116,8 @@ export class AdminService {
           scope: 'moderation',
           title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
         }),
+        () => supabaseRealtimeService.publishUserEventsRefresh(submission.userId, { entityId: submission.eventId, reason: 'event-attendance-reviewed' }),
+        () => supabaseRealtimeService.publishAdminSectionRefresh('dashboard', { actorRole: 'moderator', actorUserId: reviewerId, entityId: submission.eventId, reason: 'event-attendance-reviewed' }),
       ]);
 
       return {
@@ -1115,9 +1144,11 @@ export class AdminService {
   }
 
   static async deleteSubmission(id: string, _reviewerContext?: ReviewerContext) {
-    return await prisma.challengeSubmission.delete({
+    const submission = await prisma.challengeSubmission.delete({
       where: { id },
     });
+    this.invalidateDashboardStats();
+    return submission;
   }
 
   static async deleteEventSubmission(id: string, _reviewerContext?: ReviewerContext) {
@@ -1128,9 +1159,11 @@ export class AdminService {
         data: { status: 'REGISTERED' }
       });
     }
-    return await prisma.eventSubmission.delete({
+    const submission = await prisma.eventSubmission.delete({
       where: { id },
     });
+    this.invalidateDashboardStats();
+    return submission;
   }
 
   static async getAuditLogs() {
@@ -1155,7 +1188,8 @@ export class AdminService {
   // Event Management
   static async getAllEvents(page = 1, pageSize = 25, search?: string) {
     const where: any = search ? { title: { contains: search, mode: 'insensitive' } } : {};
-    const [events, total] = await Promise.all([prisma.event.findMany({
+    return apiCache.getOrSet(`admin_events:${page}:${pageSize}:${search || ''}`, 15, async () => {
+      const [events, total] = await Promise.all([prisma.event.findMany({
       where,
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -1169,12 +1203,10 @@ export class AdminService {
           select: { id: true, name: true, email: true }
         }
       }
-    }), prisma.event.count({ where })]);
-    const items = events.map(({ _count, ...event }) => ({
-      ...event,
-      registrationCount: _count.registrations,
-    }));
-    return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+      }), prisma.event.count({ where })]);
+      const items = events.map(({ _count, ...event }) => ({ ...event, registrationCount: _count.registrations }));
+      return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
+    });
   }
 
   static async createEvent(data: {
@@ -1192,7 +1224,7 @@ export class AdminService {
     isFeatured?: boolean;
     managedById: string;
   }) {
-    return await prisma.event.create({
+    const event = await prisma.event.create({
       data: {
         title: data.title,
         description: data.description,
@@ -1213,6 +1245,14 @@ export class AdminService {
         managedBy: { select: { id: true, name: true, email: true } }
       }
     });
+    apiCache.invalidatePrefix('admin_events:');
+    await supabaseRealtimeService.publishGlobalSectionRefresh('events', {
+      actorRole: 'admin', actorUserId: data.managedById, entityId: event.id, reason: 'event-created',
+    });
+    void prisma.eventRegistration.findMany({ where: { eventId: event.id }, select: { userId: true } }).then((rows) =>
+      Promise.all(rows.map((row) => supabaseRealtimeService.publishUserEventsRefresh(row.userId, { entityId: event.id, reason: 'event-created' })))
+    ).catch(() => {});
+    return event;
   }
 
   static async updateEvent(id: string, data: Partial<{
@@ -1244,7 +1284,7 @@ export class AdminService {
       updateData.ecoCoinsReward = data.coinReward;
       delete updateData.coinReward;
     }
-    return await prisma.event.update({
+    const event = await prisma.event.update({
       where: { id },
       data: updateData,
       include: {
@@ -1252,10 +1292,23 @@ export class AdminService {
         managedBy: { select: { id: true, name: true, email: true } }
       }
     });
+    apiCache.invalidatePrefix('admin_events:');
+    await supabaseRealtimeService.publishGlobalSectionRefresh('events', {
+      actorRole: 'admin', entityId: id, reason: 'event-updated',
+    });
+    void prisma.eventRegistration.findMany({ where: { eventId: id }, select: { userId: true } }).then((rows) =>
+      Promise.all(rows.map((row) => supabaseRealtimeService.publishUserEventsRefresh(row.userId, { entityId: id, reason: 'event-updated' })))
+    ).catch(() => {});
+    return event;
   }
 
   static async deleteEvent(id: string) {
-    return await prisma.event.delete({ where: { id } });
+    const event = await prisma.event.delete({ where: { id } });
+    apiCache.invalidatePrefix('admin_events:');
+    await supabaseRealtimeService.publishGlobalSectionRefresh('events', {
+      actorRole: 'admin', entityId: id, reason: 'event-deleted',
+    });
+    return event;
   }
 
   static async getEventQr(eventId: string) {

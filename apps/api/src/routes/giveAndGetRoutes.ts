@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { parseAdminPagination } from '../utils/adminPagination';
 import { prisma } from '../prismaClient';
-import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
+import { authenticateRequest, requireModeratorAccess, type AuthenticatedRequest } from '../http/authentication';
 import { sendDirectNotification } from '../services/notificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 
@@ -134,7 +134,7 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
 });
 
 // Approve a swap listing
-router.patch('/swap-listings/:id/approve', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.patch('/swap-listings/:id/approve', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
     const listing = await prisma.swapListing.update({
       where: { id: req.params.id },
@@ -147,6 +147,12 @@ router.patch('/swap-listings/:id/approve', authenticateRequest, requireModerator
       scope: 'moderation',
       title: 'Listing Approved',
     });
+    supabaseRealtimeService.publishSwapEvent({
+      actorUserId: req.auth!.userId,
+      targetUserId: listing.userId,
+      eventType: 'listing',
+      listingId: listing.id,
+    }).catch(() => {});
 
     void sendDirectNotification({
       userId: listing.userId,
@@ -167,7 +173,7 @@ router.patch('/swap-listings/:id/approve', authenticateRequest, requireModerator
 });
 
 // Reject a swap listing
-router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
     const { reason } = req.body;
     const listing = await prisma.swapListing.update({
@@ -181,6 +187,12 @@ router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorA
       scope: 'moderation',
       title: 'Listing Rejected',
     });
+    supabaseRealtimeService.publishSwapEvent({
+      actorUserId: req.auth!.userId,
+      targetUserId: listing.userId,
+      eventType: 'listing',
+      listingId: listing.id,
+    }).catch(() => {});
 
     void sendDirectNotification({
       userId: listing.userId,
@@ -201,7 +213,7 @@ router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorA
 });
 
 // Report a swap listing (user-facing, but routed through admin for moderation)
-router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
     const { reason } = req.body;
     const listing = await prisma.swapListing.update({
@@ -212,6 +224,7 @@ router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorA
         reportReason: reason || 'Reported by user',
       },
     });
+    supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: listing.userId, eventType: 'listing', listingId: listing.id }).catch(() => {});
     res.json(listing);
   } catch (error) {
     console.error('Error reporting swap listing:', error);
@@ -220,9 +233,15 @@ router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorA
 });
 
 // Delete a swap listing (admin)
-router.delete('/swap-listings/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.delete('/swap-listings/:id', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
-    await prisma.swapListing.delete({ where: { id: req.params.id } });
+    const listing = await prisma.swapListing.delete({ where: { id: req.params.id }, select: { userId: true } });
+    supabaseRealtimeService.publishSwapEvent({
+      actorUserId: req.auth!.userId,
+      targetUserId: listing.userId,
+      eventType: 'listing',
+      listingId: req.params.id,
+    }).catch(() => {});
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting swap listing:', error);

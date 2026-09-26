@@ -44,10 +44,10 @@ interface CacheEntry<T> {
 
 const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
-const CACHE_TTL_MS = 60_000; // Mutations clear the cache; keep lesson reads warm.
+const CACHE_TTL_MS = 15_000;
 
 export function invalidateAdminApiPath(path: string) {
-  memoryCache.delete(path);
+  clearAdminApiCache(path);
 }
 
 export function clearAdminApiCache(pathPrefix?: string) {
@@ -80,28 +80,27 @@ export async function adminGet<T>(path: string, options?: { bypassCache?: boolea
     }
   }
 
-  // Request deduplication: if identical path is already in flight, reuse the same promise
-  if (inFlightRequests.has(path)) {
+  // Request deduplication: if identical path is already in flight, reuse it unless a fresh read was requested.
+  if (inFlightRequests.has(path) && !options?.bypassCache) {
     return inFlightRequests.get(path)!;
   }
 
   const fetchPromise = (async () => {
-    try {
-      const res = await fetch(`${API_BASE}${path}`, {
-        method: 'GET',
-        headers: authHeaders(),
-        cache: 'no-store',
-      });
-      const data = await handleResponse<T>(res);
-      memoryCache.set(path, { data, timestamp: Date.now() });
-      return data;
-    } finally {
-      inFlightRequests.delete(path);
-    }
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'GET',
+      headers: authHeaders(),
+      cache: 'no-store',
+    });
+    return handleResponse<T>(res);
   })();
-
   inFlightRequests.set(path, fetchPromise);
-  return fetchPromise;
+  try {
+    const data = await fetchPromise;
+    if (inFlightRequests.get(path) === fetchPromise) memoryCache.set(path, { data, timestamp: Date.now() });
+    return data;
+  } finally {
+    if (inFlightRequests.get(path) === fetchPromise) inFlightRequests.delete(path);
+  }
 }
 
 export async function adminPost<T>(path: string, body: unknown): Promise<T> {

@@ -3,79 +3,63 @@ export interface PresenceData {
 }
 
 export interface AdminRealtimeHandlers {
+  onContentRefresh?: () => void;
   onUsersRefresh?: () => void;
   onStatsRefresh?: () => void;
   onRedeemRefresh?: () => void;
   onPresenceChange?: (presence: PresenceData) => void;
 }
 
+/** Shared foreground refresh loop for admin screens that do not own a query cache. */
 class AdminRealtimeService {
-  private subscribers: Set<AdminRealtimeHandlers> = new Set();
-  private timer: any = null;
+  private subscribers = new Set<AdminRealtimeHandlers>();
+  private timer: ReturnType<typeof setInterval> | null = null;
   private isNotifying = false;
 
   async connect(handlers: AdminRealtimeHandlers): Promise<() => void> {
     this.subscribers.add(handlers);
-    if (this.subscribers.size === 1) {
-      this.start();
-    }
+    if (this.subscribers.size === 1) this.start();
 
     return () => {
       this.subscribers.delete(handlers);
-      if (this.subscribers.size === 0) {
-        this.stop();
-      }
+      if (this.subscribers.size === 0) this.stop();
     };
   }
 
   private start() {
-    // Periodic refresh at the same pace as presence updates.
     this.timer = setInterval(() => {
-      this.notifyAll();
-    }, 60000);
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('visibilitychange', this.handleVisibility);
-      window.addEventListener('focus', this.handleFocus);
-      window.addEventListener('online', this.handleOnline);
-    }
+      if (document.visibilityState === 'visible') this.notifyAll();
+    }, 30_000);
+    window.addEventListener('visibilitychange', this.handleVisibility);
+    window.addEventListener('focus', this.handleFocus);
+    window.addEventListener('online', this.handleOnline);
   }
 
   private stop() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('visibilitychange', this.handleVisibility);
-      window.removeEventListener('focus', this.handleFocus);
-      window.removeEventListener('online', this.handleOnline);
-    }
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    window.removeEventListener('visibilitychange', this.handleVisibility);
+    window.removeEventListener('focus', this.handleFocus);
+    window.removeEventListener('online', this.handleOnline);
   }
 
   private handleVisibility = () => {
-    if (document.visibilityState === 'visible') {
-      this.notifyAll({ refreshUsers: false });
-    }
+    if (document.visibilityState === 'visible') this.notifyAll();
   };
 
-  private handleFocus = () => {
-    this.notifyAll({ refreshUsers: false });
-  };
+  private handleFocus = () => this.notifyAll();
+  private handleOnline = () => this.notifyAll();
 
-  private handleOnline = () => {
-    this.notifyAll({ refreshUsers: false });
-  };
-
-  notifyAll(options: { refreshUsers?: boolean } = {}) {
+  notifyAll() {
     if (this.isNotifying) return;
     this.isNotifying = true;
     try {
       this.subscribers.forEach((sub) => {
         try {
-          if (options.refreshUsers !== false) sub.onUsersRefresh?.();
+          sub.onUsersRefresh?.();
           sub.onStatsRefresh?.();
           sub.onRedeemRefresh?.();
+          sub.onContentRefresh?.();
         } catch (err) {
           console.error('AdminRealtimeService subscriber notification error:', err);
         }
