@@ -17,7 +17,10 @@ class RedemptionError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-async function redeemWithRetry(userId: string, itemId: string) {
+async function redeemWithRetry(userId: string, itemId: string): Promise<{
+  id: string;
+  alreadyRequested?: boolean;
+}> {
   for (let attempt = 0; ; attempt += 1) {
     try {
       // Include eligibility reads in the transaction so competing requests
