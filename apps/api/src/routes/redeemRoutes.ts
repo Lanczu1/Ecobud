@@ -169,12 +169,13 @@ router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) =>
     if (req.query.status === 'inactive') where.isActive = false;
     if (req.query.status === 'outOfStock') where.stock = 0;
     if (typeof req.query.search === 'string' && req.query.search.trim()) where.title = { contains: req.query.search.trim().slice(0, 100), mode: 'insensitive' };
-    const [items, total] = await Promise.all([prisma.redeemItem.findMany({
+    const items = await prisma.redeemItem.findMany({
       where,
       skip,
       take: pageSize,
       orderBy: { createdAt: 'desc' },
-    }), prisma.redeemItem.count({ where })]);
+    });
+    const total = await prisma.redeemItem.count({ where });
     res.json({ items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching redeem items:', error);
@@ -185,13 +186,18 @@ router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) =>
 // Get redeem items stats
 router.get('/stats', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
-    const [total, active, inactive, outOfStock] = await Promise.all([
-      prisma.redeemItem.count(),
-      prisma.redeemItem.count({ where: { isActive: true } }),
-      prisma.redeemItem.count({ where: { isActive: false } }),
-      prisma.redeemItem.count({ where: { stock: 0 } }),
-    ]);
-    res.json({ total, active, inactive, outOfStock });
+    const [row] = await prisma.$queryRaw<Array<{
+      total: bigint;
+      active: bigint;
+      inactive: bigint;
+      outOfStock: bigint;
+    }>>`SELECT
+      COUNT(*)::bigint AS total,
+      COUNT(*) FILTER (WHERE is_active = true)::bigint AS active,
+      COUNT(*) FILTER (WHERE is_active = false)::bigint AS inactive,
+      COUNT(*) FILTER (WHERE stock = 0)::bigint AS "outOfStock"
+    FROM "RedeemItem"`;
+    res.json({ total: Number(row.total), active: Number(row.active), inactive: Number(row.inactive), outOfStock: Number(row.outOfStock) });
   } catch (error) {
     console.error('Error fetching redeem stats:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -214,12 +220,13 @@ router.get('/requests', authenticateRequest, requireModeratorAccess, async (req,
       ];
     }
 
-    const [requests, total] = await Promise.all([prisma.redeemRequest.findMany({
+    const requests = await prisma.redeemRequest.findMany({
       where,
       skip,
       take: pageSize,
       orderBy: { createdAt: 'desc' },
-    }), prisma.redeemRequest.count({ where })]);
+    });
+    const total = await prisma.redeemRequest.count({ where });
     res.json({ items: requests, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching redeem requests:', error);
@@ -230,15 +237,29 @@ router.get('/requests', authenticateRequest, requireModeratorAccess, async (req,
 // Get redemption request stats (admin)
 router.get('/requests/stats', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
-    const [total, pending, approved, rejected, readyToClaim, claimed] = await Promise.all([
-      prisma.redeemRequest.count(),
-      prisma.redeemRequest.count({ where: { status: 'pending' } }),
-      prisma.redeemRequest.count({ where: { status: 'approved' } }),
-      prisma.redeemRequest.count({ where: { status: 'rejected' } }),
-      prisma.redeemRequest.count({ where: { status: 'ready_to_claim' } }),
-      prisma.redeemRequest.count({ where: { status: 'claimed' } }),
-    ]);
-    res.json({ total, pending, approved, rejected, readyToClaim, claimed });
+    const [row] = await prisma.$queryRaw<Array<{
+      total: bigint;
+      pending: bigint;
+      approved: bigint;
+      rejected: bigint;
+      readyToClaim: bigint;
+      claimed: bigint;
+    }>>`SELECT
+      COUNT(*)::bigint AS total,
+      COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
+      COUNT(*) FILTER (WHERE status = 'approved')::bigint AS approved,
+      COUNT(*) FILTER (WHERE status = 'rejected')::bigint AS rejected,
+      COUNT(*) FILTER (WHERE status = 'ready_to_claim')::bigint AS "readyToClaim",
+      COUNT(*) FILTER (WHERE status = 'claimed')::bigint AS claimed
+    FROM "RedeemRequest"`;
+    res.json({
+      total: Number(row.total),
+      pending: Number(row.pending),
+      approved: Number(row.approved),
+      rejected: Number(row.rejected),
+      readyToClaim: Number(row.readyToClaim),
+      claimed: Number(row.claimed),
+    });
   } catch (error) {
     console.error('Error fetching redeem request stats:', error);
     res.status(500).json({ message: 'Internal server error' });

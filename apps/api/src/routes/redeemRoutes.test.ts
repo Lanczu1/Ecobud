@@ -5,7 +5,8 @@ import { Prisma } from '@prisma/client';
 
 const { db } = vi.hoisted(() => ({ db: {
   $transaction: vi.fn(),
-  redeemItem: { findUnique: vi.fn(), updateMany: vi.fn() },
+  $queryRaw: vi.fn(),
+  redeemItem: { findUnique: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   redeemRequest: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   userStats: { updateMany: vi.fn() },
   user: { findUnique: vi.fn() },
@@ -34,6 +35,9 @@ beforeEach(() => {
   db.redeemRequest.findFirst.mockResolvedValue(null);
   db.redeemRequest.findMany.mockResolvedValue([]);
   db.redeemRequest.count.mockResolvedValue(0);
+  db.redeemItem.findMany.mockResolvedValue([]);
+  db.redeemItem.count.mockResolvedValue(0);
+  db.$queryRaw.mockResolvedValue([{ total: 0n, pending: 0n, approved: 0n, rejected: 0n, readyToClaim: 0n, claimed: 0n, active: 0n, inactive: 0n, outOfStock: 0n }]);
   db.userStats.updateMany.mockResolvedValue({ count: 1 });
   db.redeemItem.updateMany.mockResolvedValue({ count: 1 });
   db.user.findUnique.mockResolvedValue({ name: 'Member' });
@@ -93,6 +97,13 @@ describe('admin redemption request filters', () => {
     await request(app).get('/requests?status=active').expect(200);
     expect(db.redeemRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: { not: 'claimed' } } }));
     expect(db.redeemRequest.count).toHaveBeenCalledWith({ where: { status: { not: 'claimed' } } });
+  });
+
+  it('aggregates request status totals in a single query', async () => {
+    db.$queryRaw.mockResolvedValueOnce([{ total: 8n, pending: 1n, approved: 2n, rejected: 1n, readyToClaim: 3n, claimed: 1n }]);
+    const response = await request(app).get('/requests/stats').expect(200);
+    expect(response.body).toEqual({ total: 8, pending: 1, approved: 2, rejected: 1, readyToClaim: 3, claimed: 1 });
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
   });
 });
 
