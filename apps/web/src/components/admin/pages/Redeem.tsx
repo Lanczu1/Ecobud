@@ -274,7 +274,9 @@ export function Redeem() {
     try {
       if (!silent) setRequestsLoading(true);
       const params = new URLSearchParams({ page: String(requestPage), pageSize: '25' });
-      if (requestFilterRef.current !== 'all') params.set('status', requestFilterRef.current);
+      if (requestFilterRef.current === 'archive') params.set('status', 'claimed');
+      else if (requestFilterRef.current === 'all') params.set('status', 'active');
+      else params.set('status', requestFilterRef.current);
       if (search.trim()) params.set('search', search.trim());
       const [reqsData, statsData] = await Promise.all([
         adminGet<{ items: RedeemRequest[]; pagination: typeof requestPagination }>(`/redeem/requests?${params.toString()}`),
@@ -595,11 +597,11 @@ export function Redeem() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {[
-                { key: 'all', label: 'All' },
+                { key: 'all', label: 'Active' },
                 { key: 'pending', label: 'Pending', icon: <Clock className="w-3 h-3" /> },
                 { key: 'ready_to_claim', label: 'Ready', icon: <CheckCircle className="w-3 h-3" /> },
                 { key: 'rejected', label: 'Rejected', icon: <XCircle className="w-3 h-3" /> },
-                { key: 'claimed', label: 'Claimed', icon: <Eye className="w-3 h-3" /> },
+                { key: 'archive', label: 'Archive', icon: <Eye className="w-3 h-3" /> },
               ].map(f => (
                 <button key={f.key} onClick={() => { setRequestFilter(f.key); setRequestPage(1); }}
                   className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border active:scale-95 transition-all duration-200 ${requestFilter === f.key ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-green-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
@@ -703,7 +705,7 @@ export function Redeem() {
       {/* ═══ CUSTOM REJECT MODAL ═══ */}
       {rejectModal.open && createPortal(
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn" 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn"
           onClick={() => {
             if (processingId !== rejectModal.requestId) {
               setRejectModal({ open: false, requestId: '' });
@@ -713,7 +715,7 @@ export function Redeem() {
           }}
         >
           <div 
-            className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal" 
+            className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-xl max-h-[min(88vh,760px)] shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-modal flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -744,7 +746,7 @@ export function Redeem() {
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               {/* Context card */}
               <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-xs space-y-1.5">
                 <div className="flex justify-between items-center">
@@ -836,12 +838,14 @@ export function Redeem() {
       )}
 
       {/* ═══ APPROVE MODAL ═══ */}
-      {approveModal.open && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setApproveModal({ open: false, requestId: '' })}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-modal border border-gray-100 dark:border-gray-800" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-2">Approve Request</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Set the claim location. A claim code and deadline will be generated automatically.</p>
-            <div className="space-y-3">
+      {approveModal.open && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setApproveModal({ open: false, requestId: '' })}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-xl max-h-[min(88vh,760px)] shadow-2xl animate-modal border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-green-50/50 dark:bg-green-950/20">
+              <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white">Approve Request</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Set the claim location. A claim code and deadline will be generated automatically.</p>
+            </div>
+            <div className="p-6 space-y-3 flex-1 overflow-y-auto">
               <div>
                 <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Claim Location</label>
                 <input type="text" value={approveLocation} onChange={e => setApproveLocation(e.target.value)}
@@ -855,7 +859,7 @@ export function Redeem() {
                 <p>• Instructions: Present code, valid ID, claim within period</p>
               </div>
             </div>
-            <div className="flex gap-3 mt-5">
+            <div className="flex gap-3 p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
               <button onClick={() => setApproveModal({ open: false, requestId: '' })}
                 className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all duration-200">Cancel</button>
               <button onClick={handleApprove} disabled={processingId === approveModal.requestId}
@@ -865,7 +869,8 @@ export function Redeem() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══ CREATE/EDIT MODAL ═══ */}

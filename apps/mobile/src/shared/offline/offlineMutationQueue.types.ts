@@ -3,7 +3,8 @@ export type OfflineMutationType =
   | 'lesson-complete'
   | 'challenge-progress'
   | 'habit-check-in'
-  | 'event-join';
+  | 'event-join'
+  | 'redeem-item';
 
 export interface OfflineLessonMutationPayload {
   lessonId: string;
@@ -23,12 +24,20 @@ export interface OfflineEventJoinPayload {
   eventId: string;
 }
 
+export interface OfflineRedeemItemPayload {
+  itemId: string;
+  coinCost: number;
+  itemTitle: string;
+  itemImage?: string | null;
+}
+
 export interface OfflineMutationPayloadMap {
   'lesson-seen': OfflineLessonMutationPayload;
   'lesson-complete': OfflineLessonMutationPayload;
   'challenge-progress': OfflineChallengeProgressPayload;
   'habit-check-in': OfflineHabitCheckInPayload;
   'event-join': OfflineEventJoinPayload;
+  'redeem-item': OfflineRedeemItemPayload;
 }
 
 export type OfflineMutationPayload =

@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 const { db } = vi.hoisted(() => ({ db: {
   $transaction: vi.fn(),
   redeemItem: { findUnique: vi.fn(), updateMany: vi.fn() },
-  redeemRequest: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  redeemRequest: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   userStats: { updateMany: vi.fn() },
   user: { findUnique: vi.fn() },
   rewardTransaction: { create: vi.fn() },
@@ -32,6 +32,8 @@ beforeEach(() => {
   db.$transaction.mockImplementation(async (run) => run(db));
   db.redeemItem.findUnique.mockResolvedValue({ id: 'item', isActive: true, stock: 1, coinCost: 100, title: 'Reward', imageUrl: null });
   db.redeemRequest.findFirst.mockResolvedValue(null);
+  db.redeemRequest.findMany.mockResolvedValue([]);
+  db.redeemRequest.count.mockResolvedValue(0);
   db.userStats.updateMany.mockResolvedValue({ count: 1 });
   db.redeemItem.updateMany.mockResolvedValue({ count: 1 });
   db.user.findUnique.mockResolvedValue({ name: 'Member' });
@@ -48,9 +50,19 @@ describe('redemption reservations', () => {
   it('rechecks duplicate eligibility after a transaction conflict', async () => {
     db.$transaction.mockImplementationOnce(async () => { throw conflict(); });
     db.redeemRequest.findFirst.mockResolvedValue({ id: 'competing-request' });
-    await request(app).post('/redeem').send({ itemId: 'item' }).expect(400);
+    const response = await request(app).post('/redeem').send({ itemId: 'item' }).expect(200);
+    expect(response.body.alreadyRequested).toBe(true);
     expect(db.$transaction).toHaveBeenCalledTimes(2);
     expect(db.redeemRequest.create).not.toHaveBeenCalled();
+  });
+  it('blocks duplicate requests while an earlier request is awaiting review or pickup', async () => {
+    db.redeemRequest.findFirst.mockResolvedValue({ id: 'existing-request', status: 'approved' });
+    const response = await request(app).post('/redeem').send({ itemId: 'item' }).expect(200);
+    expect(response.body.alreadyRequested).toBe(true);
+    expect(db.redeemRequest.findFirst).toHaveBeenCalledWith({
+      where: { userId: 'member', itemId: 'item', status: { in: ['pending', 'approved', 'ready_to_claim'] } },
+    });
+    expect(db.userStats.updateMany).not.toHaveBeenCalled();
   });
   it('bounds retries and returns a recoverable conflict', async () => {
     db.$transaction.mockRejectedValue(conflict());
@@ -67,6 +79,20 @@ describe('redemption reservations', () => {
     db.redeemItem.findUnique.mockResolvedValue({ id: 'item', isActive: true, stock: -1, coinCost: 100 });
     await request(app).post('/redeem').send({ itemId: 'item' }).expect(201);
     expect(db.redeemItem.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('admin redemption request filters', () => {
+  it('lists claimed requests in the archive filter', async () => {
+    await request(app).get('/requests?status=claimed').expect(200);
+    expect(db.redeemRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'claimed' } }));
+    expect(db.redeemRequest.count).toHaveBeenCalledWith({ where: { status: 'claimed' } });
+  });
+
+  it('excludes claimed requests from the active filter', async () => {
+    await request(app).get('/requests?status=active').expect(200);
+    expect(db.redeemRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: { not: 'claimed' } } }));
+    expect(db.redeemRequest.count).toHaveBeenCalledWith({ where: { status: { not: 'claimed' } } });
   });
 });
 

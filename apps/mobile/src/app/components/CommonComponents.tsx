@@ -1018,9 +1018,11 @@ export function ProfileMetric({ label, value }: { label: string; value: string }
 export function BottomTabBar({
   activeTab,
   onChange,
+  onTargetLayout,
 }: {
   activeTab: AppTab;
   onChange: (tab: AppTab) => void;
+  onTargetLayout?: (tab: 'home' | 'profile', target: { x: number; y: number }) => void;
 }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -1136,6 +1138,9 @@ export function BottomTabBar({
                 triggerSelectionHaptic();
                 onChange(item.key);
               }}
+              onLayout={onTargetLayout && (item.key === 'home' || item.key === 'profile')
+                ? (target) => onTargetLayout(item.key as 'home' | 'profile', target)
+                : undefined}
               isNarrow={isNarrow}
               isVeryNarrow={isVeryNarrow}
               isCenterAction={item.key === 'challenges'}
@@ -1151,6 +1156,7 @@ function TabItem({
   item,
   isActive,
   onPress,
+  onLayout,
   isNarrow = false,
   isVeryNarrow = false,
   isCenterAction = false,
@@ -1158,6 +1164,7 @@ function TabItem({
   item: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap };
   isActive: boolean;
   onPress: () => void;
+  onLayout?: (target: { x: number; y: number }) => void;
   isNarrow?: boolean;
   isVeryNarrow?: boolean;
   isCenterAction?: boolean;
@@ -1181,11 +1188,18 @@ function TabItem({
   const fontSize = isVeryNarrow ? 8.5 : isNarrow ? 9.5 : 11;
   const activeColor = isDark ? theme.colors.primary : theme.colors.primaryDark;
   const inactiveColor = isDark ? theme.colors.textMuted : '#8A959F';
+  const tabRef = useRef<any>(null);
   const centerDiameter = iconSize * 3;
   const centerIconSize = Math.round(iconSize * 1.35);
 
   return (
     <TouchableOpacity
+      ref={tabRef}
+      onLayout={() => {
+        tabRef.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
+          if (width > 0 && height > 0) onLayout?.({ x: x + width / 2, y: y + height / 2 });
+        });
+      }}
       onPress={onPress}
       activeOpacity={0.75}
       style={styles.bottomBarItem}

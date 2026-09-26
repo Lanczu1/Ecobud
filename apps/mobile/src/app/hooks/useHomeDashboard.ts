@@ -123,6 +123,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [learnCategory, setLearnCategory] = useState<string>('All Categories');
   const [assistantInput, setAssistantInput] = useState('');
   const [claimRewardData, setClaimRewardData] = useState<{ points: number; coins: number; origin?: { x: number; y: number } } | null>(null);
+  const [claimRewardTargets, setClaimRewardTargets] = useState<{ home: { x: number; y: number } | null; profile: { x: number; y: number } | null }>({ home: null, profile: null });
+  const [claimingChallengeId, setClaimingChallengeId] = useState<string | null>(null);
+  const setClaimRewardTarget = useCallback((tab: 'home' | 'profile', target: { x: number; y: number }) => {
+    const measuredTarget = { x: Math.round(target.x), y: Math.round(target.y) };
+    setClaimRewardTargets((current) => current[tab]?.x === measuredTarget.x && current[tab]?.y === measuredTarget.y
+      ? current
+      : { ...current, [tab]: measuredTarget });
+  }, []);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantNotice, setAssistantNotice] = useState<AssistantNotice | null>(null);
   const [assistantQuickReplies, setAssistantQuickReplies] = useState<string[]>([
@@ -138,6 +146,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [actionOverlayVisible, setActionOverlayVisible] = useState(false);
   const [actionOverlayLabel, setActionOverlayLabel] = useState('Preparing EcoBud...');
   const actionOverlayTicket = React.useRef(0);
+  const eventRewardClaimInFlightRef = React.useRef(new Set<string>());
+  const eventJoinInFlightRef = React.useRef(new Set<string>());
   const realtimeRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const offlineSyncInFlightRef = React.useRef(false);
   const isHydratingRef = React.useRef(false);
@@ -2166,88 +2176,109 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const handleJoinEvent = useCallback(
     async (eventId: string) => {
-      return runWithActionLoader('Reserving your event slot...', async () => {
-        try {
-          const activeSession = ensureSession();
-          setRefreshing(true);
-          const mutationMode = await runMutationWithOfflineFallback({
-            mutation: {
-              userId: activeSession.user.id,
-              type: 'event-join',
-              payload: { eventId },
-              dedupeKey: `event-join:${eventId}`,
-            },
-            onlineAction: async () => {
-              await homeService.joinEvent(activeSession.token, eventId);
-            },
-            offlineAlertTitle: 'Join request saved offline',
-            offlineAlertMessage:
-              'Your event join request will sync automatically when you reconnect. Final slot confirmation happens on the server.',
-          });
+      if (eventJoinInFlightRef.current.has(eventId)) return false;
+      eventJoinInFlightRef.current.add(eventId);
 
-          if (mutationMode === 'online') {
-            setEvents((current) => current.map((event) =>
-              event.id === eventId ? { ...event, userStatus: 'joined' } : event,
-            ));
-            showNotification({
-              title: 'You are in!',
-              message: 'Your event slot is reserved. Show up to earn your verified reward.',
-              tone: 'success',
+      try {
+        return await runWithActionLoader('Reserving your event slot...', async () => {
+          try {
+            const activeSession = ensureSession();
+            setRefreshing(true);
+            const mutationMode = await runMutationWithOfflineFallback({
+              mutation: {
+                userId: activeSession.user.id,
+                type: 'event-join',
+                payload: { eventId },
+                dedupeKey: `event-join:${eventId}`,
+              },
+              onlineAction: async () => {
+                await homeService.joinEvent(activeSession.token, eventId);
+              },
+              offlineAlertTitle: 'Join request saved offline',
+              offlineAlertMessage:
+                'Your event join request will sync automatically when you reconnect. Final slot confirmation happens on the server.',
             });
-            void homeService.getEvents(activeSession.token).then(setEvents)
-              .catch((error) => console.warn('[handleJoinEvent] Unable to refresh events:', error));
-            return true;
+
+            if (mutationMode === 'online') {
+              setEvents((current) => current.map((event) =>
+                event.id === eventId ? { ...event, userStatus: 'joined' } : event,
+              ));
+              showNotification({
+                title: 'You are in!',
+                message: 'Your event slot is reserved. Show up to earn your verified reward.',
+                tone: 'success',
+              });
+              void homeService.getEvents(activeSession.token).then(setEvents)
+                .catch((error) => console.warn('[handleJoinEvent] Unable to refresh events:', error));
+              return true;
+            }
+            return false;
+          } catch (error) {
+            showNotification({
+              title: 'Unable to join event',
+              message: error instanceof Error ? error.message : 'Please try again.',
+              tone: 'error',
+            });
+            return false;
+          } finally {
+            setRefreshing(false);
           }
-          return false;
-        } catch (error) {
-          showNotification({
-            title: 'Unable to join event',
-            message: error instanceof Error ? error.message : 'Please try again.',
-            tone: 'error',
-          });
-          return false;
-        } finally {
-          setRefreshing(false);
-        }
-      }, 0);
+        }, 0);
+      } finally {
+        eventJoinInFlightRef.current.delete(eventId);
+      }
     },
     [ensureSession, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
   );
 
   const handleClaimEventReward = useCallback(
     async (eventId: string) => {
-      await runWithActionLoader('Claiming reward...', async () => {
-        try {
-          const activeSession = ensureSession();
-          setRefreshing(true);
+      if (eventRewardClaimInFlightRef.current.has(eventId)) return;
+      eventRewardClaimInFlightRef.current.add(eventId);
 
-          const event = events.find((e) => e.id === eventId);
-          const expReward = event?.expReward ?? 0;
-          const coinReward = event?.ecoCoinsReward ?? 0;
-
-          const result = await homeService.claimEventReward(activeSession.token, eventId);
-
-          const pointsAwarded = result.pointsAwarded || expReward;
-          const coinsAwarded = result.ecoCoinsAwarded || coinReward;
-
+      try {
+        await runWithActionLoader('Claiming reward...', async () => {
           try {
-            setDashboard(await homeService.getDashboard(activeSession.token));
-          } catch (refreshError) {
-            console.warn('[handleClaimEventReward] Dashboard refresh failed:', refreshError);
+            const activeSession = ensureSession();
+            setRefreshing(true);
+
+            const event = events.find((e) => e.id === eventId);
+            const expReward = event?.expReward ?? 0;
+            const coinReward = event?.ecoCoinsReward ?? 0;
+            const result = await homeService.claimEventReward(activeSession.token, eventId);
+
+            const pointsAwarded = result.pointsAwarded ?? expReward;
+            const coinsAwarded = result.ecoCoinsAwarded ?? coinReward;
+
+            setEvents((current) => current.map((item) => item.id === eventId
+              ? { ...item, userStatus: 'reward_claimed' }
+              : item));
+            setEarnedPoints(pointsAwarded);
+            setEarnedCoins(coinsAwarded);
+            setDashboard((current) => current ? {
+              ...current,
+              ecoPoints: current.ecoPoints + pointsAwarded,
+              ecoCoins: current.ecoCoins + coinsAwarded,
+            } : current);
+            setActiveOverlayState('eventApproved');
+
+            void Promise.all([
+              homeService.getDashboard(activeSession.token).then(setDashboard),
+              homeService.getEvents(activeSession.token).then(setEvents),
+            ]).catch((refreshError) => console.warn('[handleClaimEventReward] Reward data refresh failed:', refreshError));
+          } catch (error: any) {
+            showNotification({
+              title: 'Reward not claimed',
+              message: error.message || 'Failed to claim reward.',
+              tone: 'error',
+            });
+          } finally {
+            setRefreshing(false);
           }
-          setEarnedPoints(pointsAwarded);
-          setEarnedCoins(coinsAwarded);
-          setActiveOverlayState('eventApproved');
-        } catch (error: any) {
-          showNotification({
-            title: 'Reward not claimed',
-            message: error.message || 'Failed to claim reward.',
-            tone: 'error',
-          });
-        } finally {
-          setRefreshing(false);
-        }
-      });
+        });
+      } finally {
+        eventRewardClaimInFlightRef.current.delete(eventId);
+      }
     },
     [events, ensureSession, runWithActionLoader, showNotification]
   );
@@ -2621,6 +2652,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const handleClaimChallengeReward = useCallback(async (challengeId: string, origin?: { x: number; y: number }, submissionId?: string) => {
+    if (claimingChallengeId) return;
     const challenge = challenges.find((c) =>
       c.id === challengeId || c.cycle?.instanceId === challengeId || (c as any).instanceId === challengeId
     );
@@ -2628,6 +2660,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       return;
     }
 
+    setClaimingChallengeId(challengeId);
     setRefreshing(true);
     try {
       const activeSession = ensureSession();
@@ -2639,15 +2672,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
       const totalExp = (targetSub && targetSub.expAwarded) || challenge.expReward;
       const totalCoins = (targetSub && targetSub.ecoCoinsAwarded !== undefined) ? targetSub.ecoCoinsAwarded : challenge.ecoCoinReward;
 
-      setEarnedPoints(totalExp);
-      setEarnedCoins(totalCoins);
-
       const res = await homeService.claimChallengeReward(activeSession.token, challengeId, submissionId);
+      const pointsAwarded = res?.pointsAwarded ?? totalExp;
+      const ecoCoinsAwarded = res?.ecoCoinsAwarded ?? totalCoins;
 
       const validOrigin = origin && origin.x > 0 && origin.y > 0 ? origin : undefined;
-      setClaimRewardData({ points: totalExp, coins: totalCoins, origin: validOrigin });
+      setEarnedPoints(pointsAwarded);
+      setEarnedCoins(ecoCoinsAwarded);
+      setClaimRewardData({ points: pointsAwarded, coins: ecoCoinsAwarded, origin: validOrigin });
       setCompletionCelebrationType('claim');
       setActiveOverlayState('claimParticles');
+      if (!res?.alreadyCompleted) {
+        setDashboard((current) => current ? {
+          ...current,
+          ecoPoints: current.ecoPoints + pointsAwarded,
+          ecoCoins: current.ecoCoins + ecoCoinsAwarded,
+        } : current);
+      }
       setChallenges((prev) =>
         prev.map((c) =>
           c.id === challengeId || c.cycle?.instanceId === challengeId || (c as any).instanceId === challengeId
@@ -2676,11 +2717,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setPendingBadgeQueue((prev) => [...prev, ...res.awardedBadges!]);
       }
 
-      try {
-        setDashboard(await homeService.getDashboard(activeSession.token));
-      } catch (refreshError) {
-        console.warn('[handleClaimChallengeReward] Dashboard refresh failed:', refreshError);
-      }
+      void Promise.resolve()
+        .then(() => homeService.getDashboard(activeSession.token))
+        .then(setDashboard)
+        .catch((refreshError) => console.warn('[handleClaimChallengeReward] Dashboard refresh failed:', refreshError));
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : '';
       const activeSession = ensureSession();
@@ -2731,8 +2771,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
     } finally {
       setRefreshing(false);
+      setClaimingChallengeId(null);
     }
-  }, [challenges, ensureSession, refreshChallenges, reconcileChallengeMutation, showChallengeMessage]);
+  }, [challenges, claimingChallengeId, ensureSession, refreshChallenges, reconcileChallengeMutation, showChallengeMessage]);
 
   const handleUpdateProfileImage = useCallback(async (uri: string) => {
     await runWithActionLoader('Uploading image...', async () => {
@@ -2900,6 +2941,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     learnCategory,
     assistantInput,
     claimRewardData,
+    claimRewardTargets,
+    setClaimRewardTarget,
+    claimingChallengeId,
     assistantMessages,
     assistantQuickReplies,
     assistantNotice,
@@ -2963,6 +3007,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleCheckUsernameAvailability,
     handleLogout,
     refreshEverything,
+    syncQueuedOfflineActions,
 
     openLesson,
     triggerTestReward,

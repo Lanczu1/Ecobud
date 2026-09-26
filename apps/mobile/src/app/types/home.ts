@@ -139,6 +139,7 @@ export interface EcoBudMobileModel {
   isHydrating: boolean;
   hasOnboarded: boolean;
   session: SessionPayload | null;
+  hasUsableInternet: boolean;
   actionOverlayVisible: boolean;
   actionOverlayLabel: string;
   activeTab: AppTab;
@@ -197,6 +198,9 @@ export interface EcoBudMobileModel {
   isUserOnline: boolean;
   notificationCount: number;
   claimRewardData: { points: number; coins: number; origin?: { x: number; y: number } } | null;
+  claimRewardTargets: { home: { x: number; y: number } | null; profile: { x: number; y: number } | null };
+  setClaimRewardTarget: (tab: 'home' | 'profile', target: { x: number; y: number }) => void;
+  claimingChallengeId: string | null;
   triggerTestReward: (origin?: { x: number; y: number }) => void;
   challengesViewMode: 'Discover' | 'My Tasks' | 'History';
   setChallengesViewMode: (mode: 'Discover' | 'My Tasks' | 'History') => void;

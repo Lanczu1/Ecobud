@@ -6,6 +6,7 @@ import type {
   OfflineHabitCheckInPayload,
   OfflineLessonMutationPayload,
   OfflineMutationRecord,
+  OfflineRedeemItemPayload,
 } from './offlineMutationQueue.types';
 
 const RETRY_DELAYS_MS = [600, 1_200, 2_400] as const;
@@ -70,6 +71,18 @@ const executeMutation = async (
     case 'event-join': {
       const payload = mutation.payload as OfflineEventJoinPayload;
       return ecobudApi.joinEvent(token, payload.eventId);
+    }
+    case 'redeem-item': {
+      const payload = mutation.payload as OfflineRedeemItemPayload;
+      try {
+        return await ecobudApi.redeemItem(token, payload.itemId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        if (message.includes('active request') || message.includes('pending request')) {
+          return { success: true, alreadyRequested: true };
+        }
+        throw error;
+      }
     }
   }
 };

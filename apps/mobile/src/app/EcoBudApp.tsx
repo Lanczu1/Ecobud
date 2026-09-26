@@ -101,6 +101,12 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     setHideMarketplaceChrome(hidden);
   }, []);
 
+  const handleChatbotPositionChange = useCallback((position: Parameters<typeof model.setChatbotPosition>[0]) => {
+    void model.setChatbotPosition(position);
+  }, [model.setChatbotPosition]);
+  const handleOpenAssistant = useCallback(() => model.setActiveOverlay('assistant'), [model.setActiveOverlay]);
+  const handleDisableChatbot = useCallback(() => void model.setChatbotEnabled(false), [model.setChatbotEnabled]);
+
   const handleSearchKeyboardChange = useCallback((keyboardHeight: number, searchScreenY?: number) => {
     setSearchKeyboardHeight(keyboardHeight);
     pendingSearchY.current = keyboardHeight > 0 && searchScreenY !== undefined
@@ -219,7 +225,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
-          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} />
+          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} />
         )}
         {Boolean(
           model.isChatbotEnabled &&
@@ -233,10 +239,10 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           <ChatbotFAB
             size={model.chatbotSize}
             position={model.chatbotPosition}
-            performanceMode={model.activeTab === 'marketplace' ? 'reduced' : 'default'}
-            onPositionChange={(pos) => void model.setChatbotPosition(pos)}
-            onPress={() => model.setActiveOverlay('assistant')}
-            onLongPress={() => void model.setChatbotEnabled(false)}
+            performanceMode={model.activeTab === 'marketplace' || (model.activeTab === 'challenges' && model.challengesViewMode === 'History') ? 'reduced' : 'default'}
+            onPositionChange={handleChatbotPositionChange}
+            onPress={handleOpenAssistant}
+            onLongPress={handleDisableChatbot}
           />
         )}
       </SafeAreaView>

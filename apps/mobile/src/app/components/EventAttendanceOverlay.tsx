@@ -6,11 +6,13 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EcoBudMobileModel } from '../types/home';
 import { TopNavbar, PrimaryButton } from './CommonComponents';
 import { useTheme, type ThemeColors } from '../../shared/theme/ecoTheme';
@@ -25,6 +27,8 @@ interface EventAttendanceOverlayProps {
 
 export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttendanceOverlayProps) {
   const { theme } = useTheme();
+  const { height: screenHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { showNotification } = useInAppNotification();
   const styles = React.useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [permission, requestPermission] = useCameraPermissions();
@@ -158,16 +162,22 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
     return (
       <View style={styles.overlayContainer}>
         <TopNavbar model={model} showBack={true} onBack={() => setMode('image_preview')} />
-        <View style={{ flex: 1 }}>
-          <CameraView 
-            style={StyleSheet.absoluteFill} 
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={handleBarCodeScanned}
-          />
-          <View style={[StyleSheet.absoluteFill, styles.qrOverlay]} pointerEvents="none">
-            <View style={styles.qrCutout} />
-            <Text style={styles.qrText}>Step 2: Scan the Event QR Code</Text>
+        <View style={styles.qrScannerContainer}>
+          <View style={styles.qrEventHeader}>
+            <Text style={styles.qrEventEyebrow}>Scanning QR for</Text>
+            <Text style={styles.qrEventTitle} numberOfLines={2}>{event?.title || 'Event check-in'}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={handleBarCodeScanned}
+            />
+            <View style={[StyleSheet.absoluteFill, styles.qrOverlay]} pointerEvents="none">
+              <View style={styles.qrCutout} />
+              <Text style={styles.qrText}>Align the event QR code inside the frame</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -175,27 +185,51 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
   }
 
   if (mode === 'image_preview') {
+    const previewMaxHeight = Math.min(screenHeight * 0.52, 560);
     return (
       <View style={styles.overlayContainer}>
         <TopNavbar model={model} showBack={true} onBack={() => setMode('select_image')} />
-        <View style={styles.content}>
+        <View style={[styles.content, styles.previewContent, { paddingBottom: Math.max(insets.bottom + 12, 24) }]}>
+          <View style={styles.stepHeader}>
+            <View style={styles.stepLabelRow}>
+              <View style={styles.stepIcon}>
+                <Ionicons name="image-outline" size={17} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.stepLabel}>ATTENDANCE PROOF</Text>
+              <Text style={styles.stepCount}>STEP 1 OF 2</Text>
+            </View>
+            <View style={styles.stepTrack}>
+              <View style={styles.stepTrackActive} />
+              <View style={styles.stepTrackInactive} />
+            </View>
+          </View>
+
           <Text style={styles.titleText}>Verify with Image</Text>
-          <Text style={styles.descText}>Does this picture clearly show you at the event?</Text>
+          <Text style={styles.descText}>Make sure this photo clearly shows you at {event?.title || 'the event'}.</Text>
           
-          <View style={styles.imagePreviewContainer}>
+          <View style={[styles.imagePreviewContainer, { maxHeight: previewMaxHeight }]}>
             {capturedImage && <Image source={{ uri: capturedImage }} style={styles.imagePreview} />}
+            <View style={styles.photoBadge}>
+              <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+              <Text style={styles.photoBadgeText}>Photo selected</Text>
+            </View>
+            <View style={styles.photoCaption}>
+              <Text style={styles.photoCaptionTitle}>Your event photo</Text>
+              <Text style={styles.photoCaptionHint}>You can retake or choose another photo.</Text>
+            </View>
           </View>
           
-          <View style={{ gap: 12, marginTop: 'auto', marginBottom: 40 }}>
-            <PrimaryButton label="Next: Scan QR" onPress={async () => {
+          <View style={styles.previewActions}>
+            <PrimaryButton label="Continue to QR scan" onPress={async () => {
               if (!permission?.granted) {
                 const res = await requestPermission();
                 if (res?.granted) setMode('qr');
               } else {
                 setMode('qr');
               }
-            }} />
-            <TouchableOpacity style={styles.reselectButton} onPress={() => setMode('select_image')} accessibilityRole="button">
+            }} style={styles.continueButton} />
+            <TouchableOpacity style={styles.reselectButton} onPress={() => setMode('select_image')} accessibilityRole="button" accessibilityLabel="Retake or choose another photo">
+              <Ionicons name="camera-reverse-outline" size={19} color={theme.colors.primary} />
               <Text style={styles.reselectText}>Retake/Reselect</Text>
             </TouchableOpacity>
           </View>
@@ -238,7 +272,12 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  previewContent: {
+    paddingBottom: 0,
   },
   centerContent: {
     flex: 1,
@@ -247,17 +286,63 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 24,
   },
   titleText: {
-    fontSize: 24,
+    fontSize: 27,
     fontWeight: '800',
     color: colors.textPrimary,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   descText: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.textMuted,
-    marginBottom: 24,
+    marginBottom: 14,
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  stepHeader: {
+    marginBottom: 18,
+  },
+  stepLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  stepIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepLabel: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+  },
+  stepCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  stepTrack: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  stepTrackActive: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+  },
+  stepTrackInactive: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.surfaceMuted,
   },
   optionsContainer: {
     gap: 16,
@@ -275,10 +360,27 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     elevation: 2,
   },
   reselectButton: {
-    padding: 16, borderRadius: 18, alignItems: 'center',
-    backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.cardBorder,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  reselectText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  reselectText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+  previewActions: {
+    gap: 10,
+    marginTop: 14,
+    paddingBottom: 0,
+  },
+  continueButton: {
+    minHeight: 56,
+    borderRadius: 16,
+  },
   optionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -314,17 +416,92 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 24,
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.62)',
+  },
+  qrScannerContainer: {
+    flex: 1,
+  },
+  qrEventHeader: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  qrEventEyebrow: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  qrEventTitle: {
+    color: colors.textPrimary,
+    fontSize: 21,
+    fontWeight: '800',
   },
   imagePreviewContainer: {
     flex: 1,
-    marginTop: 16,
-    borderRadius: 16,
+    flexBasis: 200,
+    minHeight: 180,
+    marginTop: 2,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
   imagePreview: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
-  }
+  },
+  photoBadge: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 11,
+    backgroundColor: 'rgba(13, 31, 22, 0.78)',
+  },
+  photoBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  photoCaption: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 32,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(13, 31, 22, 0.72)',
+  },
+  photoCaptionTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  photoCaptionHint: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 12,
+    lineHeight: 17,
+  },
 });

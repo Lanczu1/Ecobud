@@ -50,6 +50,8 @@ import { AiThinkingBubble } from './AiThinkingBubble';
 import { EcoBadge, EcoBudMobileModel } from '../types/home';
 import { BARANGAYS } from '../../shared/constants/barangays';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
+import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue';
+import type { OfflineMutationRecord } from '../../shared/offline/offlineMutationQueue.types';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
 import { RejectionModal } from './RejectionModal';
 import {
@@ -108,7 +110,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     return 'details';
   };
 
-  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'capture_after'>(getInitialStep);
+  const [step, setStep] = React.useState<'details' | 'capture' | 'result' | 'capture_after' | 'preview_after'>(getInitialStep);
   const [processing, setProcessing] = React.useState(false);
   const [mockResult, setMockResult] = React.useState<{
     passed: boolean;
@@ -468,7 +470,6 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const processAfterImage = async (uri: string) => {
     const operationId = ++activeOperationRef.current;
-    setCapturedImage(uri);
     setProcessing(true);
     try {
       let processedUri = uri;
@@ -483,13 +484,29 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
         console.warn('After-photo compression failed; uploading the original image:', manipErr);
       }
       if (activeOperationRef.current !== operationId) return;
-      await model.handleSubmitChallengeAfterPhoto(challenge.id, processedUri, challenge.progress?.submissionId);
+      setCapturedImage(processedUri);
+      setStep('preview_after');
+    } catch (err: any) {
+      if (activeOperationRef.current !== operationId) return;
+      console.error('Failed to prepare after photo', err);
+      Alert.alert('Photo Error', 'Could not prepare the After photo. Please try again.');
+    } finally {
+      if (activeOperationRef.current === operationId) setProcessing(false);
+    }
+  };
+
+  const submitAfterImage = async () => {
+    if (!capturedImage) return;
+    const operationId = ++activeOperationRef.current;
+    setProcessing(true);
+    try {
+      await model.handleSubmitChallengeAfterPhoto(challenge.id, capturedImage, challenge.progress?.submissionId);
       if (activeOperationRef.current !== operationId) return;
       handleClose();
     } catch (err: any) {
       if (activeOperationRef.current !== operationId) return;
       console.error('Failed to submit after proof', err);
-      setCapturedImage(null);
+      Alert.alert('Submission Error', err?.message || 'After photo was not submitted. Please try again.');
     } finally {
       if (activeOperationRef.current === operationId) setProcessing(false);
     }
@@ -570,7 +587,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   // If user is in capture or result, step back to details rather than immediately closing
   React.useEffect(() => {
     const onBackPress = () => {
-      if (step === 'capture' || step === 'result' || step === 'capture_after') {
+      if (step === 'capture' || step === 'result' || step === 'capture_after' || step === 'preview_after') {
         returnToDetails();
         return true;
       }
@@ -1032,12 +1049,14 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     );
   }
 
-  if (step === 'capture' || step === 'capture_after') {
+  if (step === 'capture' || step === 'capture_after' || step === 'preview_after') {
+    const isAfterPhoto = step === 'capture_after' || step === 'preview_after';
+    const isAfterPreview = step === 'preview_after';
     return (
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
         <OverlayScaffold
-          title={step === 'capture_after' ? "Take After Picture" : "AI Recognition Submission Page"}
-          subtitle={step === 'capture_after' ? "Weekend Step" : "AI Recognition"}
+          title={isAfterPhoto ? "Take After Picture" : "AI Recognition Submission Page"}
+          subtitle={isAfterPhoto ? (isAfterPreview ? "Review your photo" : "Weekend Step") : "AI Recognition"}
           onBack={returnToDetails}
         >
           <View style={{ flex: 1, padding: 24, alignItems: 'center' }}>
@@ -1156,13 +1175,38 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.8)', justifyContent: 'center', alignItems: 'center', opacity: processFadeAnim }]}>
                     <ActivityIndicator size="large" color="#10B981" />
                     <Text style={{ marginTop: 24, fontSize: 18, fontWeight: 'bold', color: '#126027' }}>
-                      {step === 'capture_after' ? 'Uploading After Photo...' : 'Analyzing Image with Gemini AI...'}
+                      {step === 'capture_after' ? 'Preparing After Photo...' : isAfterPreview ? 'Submitting After Photo...' : 'Analyzing Image with Gemini AI...'}
                     </Text>
                   </Animated.View>
                 )}
               </View>
 
-              {!processing && (
+              {!processing && isAfterPreview && (
+                <View style={{ width: '100%', gap: 12 }}>
+                  <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', fontSize: 14, marginBottom: 4 }}>
+                    Check that your After photo is clear before submitting it for review.
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Retake After photo"
+                    style={[styles.primaryButton, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F3F4F6', borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#D1D5DB', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
+                    onPress={() => { setCapturedImage(null); resetCameraSession(); setStep('capture_after'); }}
+                  >
+                    <Ionicons name="camera" size={20} color={isDark ? theme.colors.textPrimary : '#14532D'} />
+                    <Text style={[styles.primaryButtonText, { color: isDark ? theme.colors.textPrimary : '#14532D' }]}>Retake Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Submit After photo for review"
+                    style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
+                    onPress={submitAfterImage}
+                  >
+                    <Text style={styles.primaryButtonText}>Submit After Photo</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {!processing && !isAfterPreview && (
                 <View style={{ width: '100%', gap: 16 }}>
                   <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleCapture}>
                     <Ionicons name="camera" size={20} color="#FFF" />
@@ -1500,29 +1544,17 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isTablet = width >= 600;
+  const claimOrigin = model.claimRewardData?.origin;
+  const homeTarget = model.claimRewardTargets.home;
+  const profileTarget = model.claimRewardTargets.profile;
+  const particleSize = 30;
+  const particleOffset = particleSize / 2;
+  const originX = claimOrigin ? claimOrigin.x - particleOffset : width / 2 - particleOffset;
+  const originY = claimOrigin ? claimOrigin.y - particleOffset : height / 2 - particleOffset;
+  const topDestinationY = Math.max(insets.top, height * 0.08) - particleOffset;
+  const sideInset = width * 0.12;
 
-  // Use real measured layout from LevelCard's progress bar (mirrors EventApprovedOverlay)
-  const layout = model.progressBarLayout;
-  const topSafeArea = insets.top || 44;
-  const fallbackY =
-    topSafeArea +
-    verticalScale(64) +
-    verticalScale(38) +
-    verticalScale(52) +
-    verticalScale(68) +
-    verticalScale(114) +
-    verticalScale(218);
-  const targetProgressBarX = layout
-    ? layout.x + layout.width * 0.5 - 15
-    : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
-  const targetProgressBarY = layout ? layout.y + layout.height * 0.5 - 15 : fallbackY - 15;
-
-  // Centered origin for challenges claim particles overlay
-  const originX = width / 2 - 15;
-  const originY = height / 2 - 40;
-
-  const numParticles = 32;
+  const numParticles = 24;
   const particleAnims = React.useRef(
     Array.from({ length: numParticles }, () => ({
       pos: new Animated.ValueXY({ x: originX, y: originY }),
@@ -1540,63 +1572,39 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
 
     const animations = particleAnims.map((particle, index) => {
       const isCoin = index % 2 !== 0;
-      const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
-      const radius = 70 + Math.random() * 50;
-      const burstX = originX + Math.cos(angle) * radius;
-      const burstY = originY + Math.sin(angle) * radius;
-
-      // Target positions:
-      // Leaves fly all the way to the far left edge (dulo ng left: off-screen or far left)
-      // Coins fly all the way to the far right edge (dulo ng right: off-screen or far right)
+      const cornerSpread = width * 0.035;
       const targetLeft = {
-        x: -50,
-        y: targetProgressBarY + (Math.random() * 80 - 40),
+        x: (homeTarget?.x ?? sideInset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
+        y: (homeTarget?.y ?? topDestinationY + particleOffset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
       };
       const targetRight = {
-        x: width + 50,
-        y: targetProgressBarY + (Math.random() * 80 - 40),
+        x: (profileTarget?.x ?? width - sideInset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
+        y: (profileTarget?.y ?? topDestinationY + particleOffset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
       };
 
-      const delay = index * 60;
+      const delay = index * 16;
+      const destination = isCoin ? targetRight : targetLeft;
 
       return Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.spring(particle.pos, {
-            toValue: { x: burstX, y: burstY },
-            tension: 80,
-            friction: 6,
-            useNativeDriver: true,
-          }),
-          Animated.timing(particle.scale, {
-            toValue: 1.5,
-            duration: 250,
-            useNativeDriver: true,
-          }),
-          Animated.timing(particle.opacity, {
-            toValue: 1,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.delay(120),
-        Animated.parallel([
           Animated.timing(particle.pos, {
-            toValue: isCoin ? targetRight : targetLeft,
-            duration: 650,
-            easing: Easing.bezier(0.25, 1, 0.5, 1),
+            toValue: destination,
+            duration: 820,
+            easing: Easing.inOut(Easing.cubic),
             useNativeDriver: true,
           }),
           Animated.timing(particle.scale, {
-            toValue: 0.4,
-            duration: 650,
+            toValue: 1,
+            duration: 420,
             useNativeDriver: true,
           }),
           Animated.sequence([
-            Animated.delay(450),
+            Animated.timing(particle.opacity, { toValue: 1, duration: 140, useNativeDriver: true }),
+            Animated.delay(420),
             Animated.timing(particle.opacity, {
               toValue: 0,
-              duration: 200,
+              duration: 260,
               useNativeDriver: true,
             }),
           ]),
@@ -1605,14 +1613,15 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     });
 
     const timers = [
-      setTimeout(() => playPopSound(), 100),
-      setTimeout(() => playPopSound(), 350),
-      setTimeout(() => playPopSound(), 600),
-      setTimeout(() => playPopSound(), 850),
-      setTimeout(() => playPopSound(), 1100),
+      setTimeout(() => playPopSound(), 80),
+      setTimeout(() => playPopSound(), 250),
+      setTimeout(() => playPopSound(), 420),
+      setTimeout(() => playPopSound(), 590),
+      setTimeout(() => playPopSound(), 760),
     ];
 
-    Animated.parallel(animations).start(() => {
+    Animated.parallel(animations).start(({ finished }) => {
+      if (!finished) return;
       setActiveOverlay(null);
       DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
     });
@@ -1620,10 +1629,14 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => {
       timers.forEach((t) => clearTimeout(t));
     };
-  }, [originX, originY, particleAnims, setActiveOverlay, targetProgressBarX, targetProgressBarY, width]);
+  }, [homeTarget?.x, homeTarget?.y, originX, originY, particleAnims, profileTarget?.x, profileTarget?.y, setActiveOverlay, sideInset, topDestinationY, width]);
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent', zIndex: 10000 }]} pointerEvents="none">
+    <View
+      accessibilityViewIsModal
+      style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent', zIndex: 10000 }]}
+      pointerEvents="auto"
+    >
       {particleAnims.map((particle, index) => (
         <Animated.View
           key={index}
@@ -2801,14 +2814,36 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     if (activeTab === 'browse') return lc !== 'ended' && !hasJoined;
     return lc === 'ended';
   }).slice().sort((a, b) => {
-    if (a.isFeatured && !b.isFeatured) return -1;
-    if (!a.isFeatured && b.isFeatured) return 1;
     const lcA = getEventLifecycleStatus(a.startDatetime, a.endDatetime);
     const lcB = getEventLifecycleStatus(b.startDatetime, b.endDatetime);
-    const isAOpen = lcA === 'upcoming';
-    const isBOpen = lcB === 'upcoming';
-    if (isAOpen && !isBOpen) return -1;
-    if (!isAOpen && isBOpen) return 1;
+    if (activeTab === 'joined') {
+      const canRecordA = lcA === 'ongoing' && a.userStatus === 'joined';
+      const canRecordB = lcB === 'ongoing' && b.userStatus === 'joined';
+      const canClaimA = a.userStatus === 'attended';
+      const canClaimB = b.userStatus === 'attended';
+      const hasPriorityActionA = canRecordA || canClaimA;
+      const hasPriorityActionB = canRecordB || canClaimB;
+      if (hasPriorityActionA && !hasPriorityActionB) return -1;
+      if (!hasPriorityActionA && hasPriorityActionB) return 1;
+
+      const awaitingApprovalA = a.userStatus === 'pending_approval';
+      const awaitingApprovalB = b.userStatus === 'pending_approval';
+      if (awaitingApprovalA && !awaitingApprovalB) return -1;
+      if (!awaitingApprovalA && awaitingApprovalB) return 1;
+
+      const isAOngoing = lcA === 'ongoing';
+      const isBOngoing = lcB === 'ongoing';
+      if (isAOngoing && !isBOngoing) return -1;
+      if (!isAOngoing && isBOngoing) return 1;
+    }
+    if (a.isFeatured && !b.isFeatured) return -1;
+    if (!a.isFeatured && b.isFeatured) return 1;
+    if (activeTab !== 'joined') {
+      const isAOpen = lcA === 'upcoming';
+      const isBOpen = lcB === 'upcoming';
+      if (isAOpen && !isBOpen) return -1;
+      if (!isAOpen && isBOpen) return 1;
+    }
     return new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime();
   });
 
@@ -4262,20 +4297,16 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           elevation: 8,
         };
 
-        if (isCompleted) {
-          return (
-            <View style={barStyle}>
-              <PrimaryButton label="Lesson Completed" onPress={() => {}} disabled />
-            </View>
-          );
-        }
-
-        const primaryLabel = hasPages && !isOnLastPage
-          ? 'Next Page'
-          : lesson.hasQuiz ? 'Start Quiz' : 'Complete Lesson';
+        const primaryLabel = isCompleted
+          ? (hasPages && !isOnLastPage ? 'Next Page' : 'Lesson Completed')
+          : hasPages && !isOnLastPage
+            ? 'Next Page'
+            : lesson.hasQuiz ? 'Start Quiz' : 'Complete Lesson';
         const handlePrimaryAction = () => {
           if (hasPages && !isOnLastPage) {
             handleNextPage();
+          } else if (isCompleted) {
+            return;
           } else if (lesson.hasQuiz) {
             doSave();
             void model.handleUpdateLessonProgress(lesson.id, 80);
@@ -4317,14 +4348,15 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 accessibilityRole="button"
                 accessibilityLabel={primaryLabel}
                 onPress={handlePrimaryAction}
+                disabled={isCompleted && (!hasPages || isOnLastPage)}
                 activeOpacity={0.86}
-                style={{ flex: 1, minHeight: 54, paddingHorizontal: 18, borderRadius: 15, backgroundColor: isDark ? theme.colors.primary : '#126027', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, shadowColor: isDark ? '#000' : '#126027', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 }}
+                style={{ flex: 1, minHeight: 54, paddingHorizontal: 18, borderRadius: 15, backgroundColor: isCompleted && (!hasPages || isOnLastPage) ? (isDark ? theme.colors.surfaceMuted : '#E7ECE9') : isDark ? theme.colors.primary : '#126027', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, shadowColor: isDark ? '#000' : '#126027', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3 }}
               >
-                <Text style={{ color: isDark ? '#0E1512' : '#FFFFFF', fontSize: 15, fontWeight: '800' }}>{primaryLabel}</Text>
+                <Text style={{ color: isCompleted && (!hasPages || isOnLastPage) ? theme.colors.textMuted : isDark ? '#0E1512' : '#FFFFFF', fontSize: 15, fontWeight: '800' }}>{primaryLabel}</Text>
                 <Ionicons
                   name={primaryLabel === 'Next Page' ? 'arrow-forward' : primaryLabel === 'Start Quiz' ? 'help-circle-outline' : 'checkmark-circle-outline'}
                   size={19}
-                  color={isDark ? '#0E1512' : '#FFFFFF'}
+                  color={isCompleted && (!hasPages || isOnLastPage) ? theme.colors.textMuted : isDark ? '#0E1512' : '#FFFFFF'}
                 />
               </TouchableOpacity>
             </View>
@@ -5578,6 +5610,8 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
 export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
+  const animationStartedRef = React.useRef(false);
+  const [continueStarted, setContinueStarted] = React.useState(false);
 
   const playPopSound = () => {
     player.seekTo(0);
@@ -5624,6 +5658,9 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   ).current;
 
   const startPointsAnimation = () => {
+    if (animationStartedRef.current) return;
+    animationStartedRef.current = true;
+    setContinueStarted(true);
     model.setActiveTab('home', true);
 
     setTimeout(() => {
@@ -5973,13 +6010,14 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
         maxWidth: 480,
         alignSelf: 'center',
         paddingHorizontal: scale(20),
-        paddingBottom: verticalScale(36),
+        paddingBottom: insets.bottom + verticalScale(36),
         backgroundColor: 'transparent',
         alignItems: 'center',
         opacity: btnOpacity,
       }}>
         <TouchableOpacity
           activeOpacity={0.88}
+          disabled={continueStarted}
           onPress={startPointsAnimation}
           style={{
             width: '100%',
@@ -8319,6 +8357,8 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [redeeming, setRedeeming] = React.useState<string | null>(null);
+  const [queuedRedeemItemIds, setQueuedRedeemItemIds] = React.useState<string[]>([]);
+  const [queuedRedeemMutations, setQueuedRedeemMutations] = React.useState<OfflineMutationRecord<'redeem-item'>[]>([]);
   const [activeTab, setActiveTab] = React.useState<'shop' | 'requests'>('shop');
   const [confirmation, setConfirmation] = React.useState<
     | { type: 'redeem'; item: any }
@@ -8363,7 +8403,53 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }, [token]);
 
+  const updateQueuedRedeems = React.useCallback((update: (ids: string[]) => string[]) => {
+    setQueuedRedeemItemIds((current) => {
+      const next = update(current);
+      return next;
+    });
+  }, []);
+
+  const syncQueuedRedemptions = React.useCallback(async () => {
+    const userId = model.session?.user?.id;
+    if (!token || !userId) return;
+    const pending = await offlineMutationQueue.listPending(userId).catch(() => []);
+    const pendingRedeems = pending.filter((mutation) => mutation.type === 'redeem-item');
+    setQueuedRedeemMutations(pendingRedeems as OfflineMutationRecord<'redeem-item'>[]);
+    const pendingIds = pendingRedeems.map((mutation) => (mutation.payload as { itemId: string }).itemId);
+    updateQueuedRedeems(() => [...new Set(pendingIds)]);
+    if (pendingIds.length === 0 || !model.hasUsableInternet) return;
+
+    let syncedCount = 0;
+    for (const mutation of pendingRedeems as OfflineMutationRecord<'redeem-item'>[]) {
+      try {
+        await ecobudApi.redeemItem(token, mutation.payload.itemId);
+        await offlineMutationQueue.markSynced(mutation.id);
+        syncedCount += 1;
+      } catch (error: any) {
+        const message = String(error?.message ?? '').toLowerCase();
+        if (message.includes('active request') || message.includes('pending request')) {
+          await offlineMutationQueue.markSynced(mutation.id);
+          syncedCount += 1;
+          continue;
+        }
+        await offlineMutationQueue.markFailed(mutation.id, error?.message || 'Redemption sync failed.');
+      }
+    }
+    const remaining = await offlineMutationQueue.listPending(userId).catch(() => []);
+    const remainingRedeems = remaining.filter((mutation) => mutation.type === 'redeem-item') as OfflineMutationRecord<'redeem-item'>[];
+    const remainingIds = remainingRedeems.map((mutation) => mutation.payload.itemId);
+    setQueuedRedeemMutations(remainingRedeems);
+    updateQueuedRedeems(() => [...new Set(remainingIds)]);
+    if (syncedCount > 0) {
+      await loadItems(true);
+      setActiveTab('requests');
+      setFeedback({ type: 'success', title: 'Request submitted', message: 'Your saved redemption is now waiting for admin approval.' });
+    }
+  }, [loadItems, model.hasUsableInternet, model.session?.user?.id, token, updateQueuedRedeems]);
+
   React.useEffect(() => { loadItems(); }, [loadItems]);
+  React.useEffect(() => { void syncQueuedRedemptions(); }, [syncQueuedRedemptions]);
 
   // Real-time synchronization:
   // 1. Listen for notification & redeem refresh events
@@ -8382,11 +8468,13 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
 
     const interval = setInterval(() => {
       loadItems(true);
+      void syncQueuedRedemptions();
     }, 6000);
 
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         loadItems(true);
+        void syncQueuedRedemptions();
       }
     });
 
@@ -8397,7 +8485,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
       clearInterval(interval);
       appStateSub.remove();
     };
-  }, [loadItems]);
+  }, [loadItems, syncQueuedRedemptions]);
 
   const onPullRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -8422,8 +8510,34 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
 
     try {
       if (current.type === 'redeem') {
-        await ecobudApi.redeemItem(token, current.item.id);
+        if (!model.hasUsableInternet) {
+          if (!model.session?.user?.id) throw new Error('Please sign in again before saving this redemption.');
+          await offlineMutationQueue.enqueue({
+            userId: model.session.user.id,
+            type: 'redeem-item',
+            payload: {
+              itemId: current.item.id,
+              coinCost: current.item.coinCost,
+              itemTitle: current.item.title,
+              itemImage: current.item.imageUrl ?? null,
+            },
+            dedupeKey: `redeem-item:${current.item.id}`,
+          });
+          updateQueuedRedeems((currentIds) => currentIds.includes(current.item.id) ? currentIds : [...currentIds, current.item.id]);
+          setDisplayCoins((balance) => balance - current.item.coinCost);
+          setActiveTab('requests');
+          setFeedback({ type: 'success', title: 'Request saved', message: `${current.item.title} will submit automatically when you reconnect.` });
+          return;
+        }
+        const result = await ecobudApi.redeemItem(token, current.item.id);
         setDisplayCoins(prev => prev - current.item.coinCost);
+        setMyRequests((currentRequests) => result?.request
+          ? [result.request, ...currentRequests.filter((request) => request.id !== result.request.id)]
+          : currentRequests);
+        setActiveTab('requests');
+        setItems((currentItems) => currentItems.map((item) => item.id === current.item.id
+          ? { ...item, pendingRequest: true }
+          : item));
         DeviceEventEmitter.emit('ECO_POINTS_DROP_ANIMATION');
         setFeedback({
           type: 'success',
@@ -8603,6 +8717,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
               {items.map((item) => {
                 const canAfford = displayCoins >= item.coinCost;
                 const isRedeeming = redeeming === item.id;
+                const hasPendingRequest = Boolean(item.pendingRequest) || myRequests.some((request) => request.itemId === item.id && ['pending', 'approved', 'ready_to_claim'].includes(request.status)) || queuedRedeemItemIds.includes(item.id);
                 return (
                   <View key={item.id} style={{ backgroundColor: theme.colors.card, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.cardBorder, overflow: 'hidden' }}>
                     {item.imageUrl ? (
@@ -8630,9 +8745,9 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                       </View>
                       <TouchableOpacity
                         onPress={() => handleRedeem(item)}
-                        disabled={!canAfford || isRedeeming}
+                        disabled={!canAfford || isRedeeming || hasPendingRequest}
                         style={{
-                          backgroundColor: canAfford 
+                          backgroundColor: hasPendingRequest ? (isDark ? '#3D2C0C' : '#FEF3C7') : canAfford
                             ? (isDark ? theme.colors.primary : '#126027') 
                             : (isDark ? theme.colors.surfaceMuted : '#E5E7EB'),
                           borderRadius: 20,
@@ -8645,8 +8760,8 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                           <ActivityIndicator size="small" color={isDark ? '#0E1512' : '#FFF'} />
                         ) : (
                           <View style={{ alignItems: 'center' }}>
-                            <Text style={{ color: canAfford ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted, fontWeight: '700', fontSize: 14 }}>
-                              {canAfford ? 'Redeem' : 'Not Enough Coins'}
+                            <Text style={{ color: hasPendingRequest ? (isDark ? '#FBBF24' : '#92400E') : canAfford ? (isDark ? '#0E1512' : '#FFF') : theme.colors.textMuted, fontWeight: '700', fontSize: 14 }}>
+                              {hasPendingRequest ? 'Pending Review' : canAfford ? 'Redeem' : 'Not Enough Coins'}
                             </Text>
                             {!canAfford && (
                               <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginTop: 2 }}>
@@ -8774,6 +8889,30 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                   </Text>
                 </View>
               ))}
+              {queuedRedeemItemIds.map((itemId) => {
+                const queuedMutation = queuedRedeemMutations.find((mutation) => (mutation.payload as { itemId: string }).itemId === itemId);
+                const item = items.find((candidate) => candidate.id === itemId) ?? (queuedMutation ? {
+                  id: queuedMutation.payload.itemId,
+                  title: queuedMutation.payload.itemTitle,
+                  coinCost: queuedMutation.payload.coinCost,
+                  imageUrl: queuedMutation.payload.itemImage,
+                } : null);
+                if (!item) return null;
+                return (
+                  <View key={`queued-${itemId}`} style={{ backgroundColor: theme.colors.card, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.cardBorder, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="gift-outline" size={24} color={isDark ? theme.colors.primary : '#126027'} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textPrimary }}>{item.title}</Text>
+                      <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 3 }}>Saved offline · will sync when connected</Text>
+                    </View>
+                    <View style={{ backgroundColor: '#F59E3622', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 }}>
+                      <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '700' }}>Pending</Text>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )
         )}
