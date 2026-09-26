@@ -819,7 +819,7 @@ export const ecobudApi = {
       mutationKey('challenge-after', challengeId, submissionId, imageUri),
     ),
   claimChallengeReward: (token: string, challengeId: string, submissionId?: string) =>
-    request<{ message: string; awardedBadges?: EcoBadge[] }>(`/challenges/${challengeId}/claim`, {
+    request<{ message: string; awardedBadges?: EcoBadge[]; pointsAwarded?: number; ecoCoinsAwarded?: number; alreadyCompleted?: boolean }>(`/challenges/${challengeId}/claim`, {
       method: 'POST',
       token,
       idempotencyKey: mutationKey('challenge-claim', challengeId, submissionId),

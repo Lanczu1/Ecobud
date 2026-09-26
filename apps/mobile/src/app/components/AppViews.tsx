@@ -9,6 +9,7 @@ import {
   ScrollView,
   FlatList,
   RefreshControl,
+  ActivityIndicator,
   ImageBackground,
   Pressable,
   Easing,
@@ -727,10 +728,11 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
   const isPending = currentStatus === 'pending';
   const isApproved = currentStatus === 'approved' || currentStatus === 'unclaimed';
   const isApprovedCollection = currentStatus === 'approved_collection';
+  const isClaiming = model.claimingChallengeId === challenge.id;
   const shouldPulse = isAI && !isCompleted && !isPending && !isApproved;
 
   const handlePress = (e: any) => {
-    if (isPending || isCompleted) {
+    if (isPending || isCompleted || isClaiming) {
       return;
     }
     const originX = e?.nativeEvent?.pageX;
@@ -739,6 +741,11 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
       ? { x: originX, y: originY }
       : undefined;
 
+    if (isApproved) {
+      void model.handleClaimChallengeReward(challenge.id, origin, challenge.progress?.submissionId);
+      return;
+    }
+
     setIsPressing(true);
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 0.85, duration: 100, useNativeDriver: true }),
@@ -746,11 +753,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
       Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true })
     ]).start(() => {
       setIsPressing(false);
-      if (currentStatus === 'approved' || currentStatus === 'unclaimed') {
-        void model.handleClaimChallengeReward(challenge.id, origin, challenge.progress?.submissionId);
-      } else {
-        model.openChallengeMission(challenge);
-      }
+      model.openChallengeMission(challenge);
     });
   };
 
@@ -759,7 +762,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
       <TouchableOpacity 
         activeOpacity={0.8}
         onPress={handlePress}
-        disabled={isPressing || isPending || isCompleted}
+        disabled={isPressing || isPending || isCompleted || isClaiming}
         style={
           isApproved 
             ? [styles.featuredProgramBtn, { backgroundColor: '#F59E0B', borderColor: '#D97706' }] 
@@ -776,7 +779,7 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
               : isPending
                 ? 'PENDING APPROVAL'
                 : isApproved
-                  ? (isPressing ? 'CLAIMING...' : 'CLAIM REWARD')
+                  ? (isClaiming ? 'CLAIMING...' : 'CLAIM REWARD')
                   : isAI
                     ? (model.viewedMissionIds.includes(challenge.id) ? (isPressing ? 'CONTINUING...' : 'CONTINUE MISSION') : (isPressing ? 'STARTING...' : 'START MISSION'))
                     : 'MARK AS COMPLETE'}
@@ -1151,7 +1154,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
     const upcoming = challengeItemsRef.current.slice(lastVisibleIndex + 1, lastVisibleIndex + 3);
     const urls = upcoming.flatMap((item) => item.kind === 'discover'
       ? item.row.map((challenge) => challenge.imageUrl)
-      : [item.group.challenge.imageUrl])
+      : item.kind === 'myTask' ? [item.group.challenge.imageUrl] : [])
       .filter((url): url is string => Boolean(url))
       .filter((url) => !prefetchedChallengeUrlsRef.current.has(url))
       .slice(0, 4);
@@ -1179,9 +1182,9 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
         data={challengeItems}
         onViewableItemsChanged={prefetchUpcomingChallenges}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
-        initialNumToRender={5}
-        maxToRenderPerBatch={5}
-        windowSize={5}
+        initialNumToRender={viewMode === 'History' ? 3 : 5}
+        maxToRenderPerBatch={viewMode === 'History' ? 3 : 5}
+        windowSize={viewMode === 'History' ? 3 : 5}
         removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 + keyboardHeight }}
@@ -1747,7 +1750,8 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
             const renderGroup = () => {
                 const { challenge, submissions, totalQuantity, totalEarnedExp, totalEarnedCoins, unclaimedCount, claimedCount } = group;
                 const isImageMission = !challenge.type || challenge.type === 'AI Image Recognition Challenge' || challenge.type === 'GENERAL';
-                const isExpanded = expandedTaskGroups[`history-${challenge.id}`] !== false; // default true
+                const historyGroupKey = `history-${challenge.id}`;
+                const isExpanded = expandedTaskGroups[historyGroupKey] === true;
 
                 return (
                   <View 
@@ -1767,7 +1771,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                 >
                   {/* Group Header Card (Click to expand/collapse) */}
                   <Pressable 
-                    onPress={() => toggleTaskGroup(`history-${challenge.id}`)}
+                    onPress={() => setExpandedTaskGroups((prev) => ({ ...prev, [historyGroupKey]: !isExpanded }))}
                     style={({ pressed }) => [
                       { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
                     ]}
@@ -1848,6 +1852,8 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
 
                       {submissions.map((item, subIndex) => {
                         const quantity = item.detectedQuantity || item.reservedQuantity || 1;
+                        const claimId = challenge.cycle?.instanceId ?? challenge.id;
+                        const isClaiming = model.claimingChallengeId === claimId;
 
                         return (
                           <View 
@@ -1924,6 +1930,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
 
                               {item.isApproved ? (
                                 <TouchableOpacity
+                                  disabled={isClaiming}
                                   style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                                   onPress={(e) => {
                                     // Claims in History may belong to an older cycle. Use that
@@ -1933,11 +1940,11 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                                     const origin = (typeof originX === 'number' && typeof originY === 'number' && originX > 0 && originY > 0)
                                       ? { x: originX, y: originY }
                                       : undefined;
-                                    void model.handleClaimChallengeReward(challenge.cycle?.instanceId ?? challenge.id, origin, item.sub?.id);
+                                    void model.handleClaimChallengeReward(claimId, origin, item.sub?.id);
                                   }}
                                 >
-                                  <Ionicons name="gift" size={14} color="#FFFFFF" />
-                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>CLAIM REWARD</Text>
+                                  {isClaiming ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="gift" size={14} color="#FFFFFF" />}
+                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>{isClaiming ? 'CLAIMING...' : 'CLAIM REWARD'}</Text>
                                 </TouchableOpacity>
                               ) : (
                                 <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>

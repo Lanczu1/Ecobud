@@ -82,6 +82,18 @@ export function notificationTime(date: string) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+const notificationDayGroup = (date: string): 'Today' | 'Yesterday' | 'Earlier' => {
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return 'Earlier';
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfValue = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  const dayDifference = Math.round((startOfToday.getTime() - startOfValue.getTime()) / 86_400_000);
+  if (dayDifference <= 0) return 'Today';
+  if (dayDifference === 1) return 'Yesterday';
+  return 'Earlier';
+};
+
 export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -276,6 +288,12 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   };
 
   const hasUnread = unreadCount > 0;
+  const groupedInAll = filter === 'all';
+  const groupChallengesInAll = groupedInAll;
+  const dayGroups = React.useMemo(() => items.map((item, index) => ({
+    current: notificationDayGroup(item.createdAt),
+    previous: index > 0 ? notificationDayGroup(items[index - 1].createdAt) : null,
+  })), [items]);
 
   return (
     <FlatList
@@ -500,30 +518,39 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
           categoryThemeColors[n.type as NotificationType] ?? categoryThemeColors.system;
         const iconName =
           iconMap[n.type as NotificationType] ?? 'information-circle';
-        const groupedInAll = filter === 'all';
-        const isFirstInGroup = index === 0;
-        const isLastInGroup = index === items.length - 1;
+        const isChallenge = n.type === 'challenge';
+        const previousIsChallenge = index > 0 && items[index - 1].type === 'challenge' && notificationDayGroup(items[index - 1].createdAt) === notificationDayGroup(n.createdAt);
+        const nextIsChallenge = index < items.length - 1 && items[index + 1].type === 'challenge' && notificationDayGroup(items[index + 1].createdAt) === notificationDayGroup(n.createdAt);
+        const inChallengeGroup = groupChallengesInAll && isChallenge;
+        const continuesChallengeGroup = inChallengeGroup && previousIsChallenge;
+        const endsChallengeGroup = inChallengeGroup && !nextIsChallenge;
+        const dayGroup = dayGroups[index];
 
 
-        return (
+        return <React.Fragment key={n.id}>
+          {dayGroup?.previous !== dayGroup?.current && (
+            <View style={inboxStyles.dayGroupHeader}>
+              <Text style={[inboxStyles.dayGroupLabel, { color: c.textSecondary }]}>{dayGroup?.current}</Text>
+              <View style={[inboxStyles.dayGroupRule, { backgroundColor: c.border }]} />
+            </View>
+          )}
           <TouchableOpacity
-            key={n.id}
             accessibilityRole="button"
-            accessibilityLabel={`${n.isRead ? 'Read' : 'Unread'} notification: ${n.title}. ${n.message}`}
+            accessibilityLabel={`${n.isRead ? 'Read' : 'New'} notification: ${n.title}. ${n.message}`}
             onPress={() => void open(n)}
             activeOpacity={0.75}
             style={[
               inboxStyles.card,
               {
-                backgroundColor: groupedInAll ? c.card : n.isRead ? c.card : c.surface,
-                borderColor: groupedInAll ? c.border : n.isRead ? c.border : 'rgba(34, 197, 94, 0.4)',
-                marginBottom: groupedInAll ? (isLastInGroup ? verticalScale(10) : 0) : verticalScale(10),
-                borderTopWidth: groupedInAll && !isFirstInGroup ? 0 : 1,
-                borderBottomWidth: groupedInAll && !isLastInGroup ? StyleSheet.hairlineWidth : 1,
-                borderTopLeftRadius: groupedInAll && !isFirstInGroup ? 0 : moderateScale(18),
-                borderTopRightRadius: groupedInAll && !isFirstInGroup ? 0 : moderateScale(18),
-                borderBottomLeftRadius: groupedInAll && !isLastInGroup ? 0 : moderateScale(18),
-                borderBottomRightRadius: groupedInAll && !isLastInGroup ? 0 : moderateScale(18),
+                backgroundColor: n.isRead ? c.card : c.surface,
+                borderColor: n.isRead ? c.border : 'rgba(34, 197, 94, 0.4)',
+                marginBottom: inChallengeGroup ? (endsChallengeGroup ? verticalScale(10) : 0) : verticalScale(10),
+                borderTopWidth: continuesChallengeGroup ? 0 : 1,
+                borderBottomWidth: inChallengeGroup && !endsChallengeGroup ? StyleSheet.hairlineWidth : 1,
+                borderTopLeftRadius: continuesChallengeGroup ? 0 : moderateScale(18),
+                borderTopRightRadius: continuesChallengeGroup ? 0 : moderateScale(18),
+                borderBottomLeftRadius: inChallengeGroup && !endsChallengeGroup ? 0 : moderateScale(18),
+                borderBottomRightRadius: inChallengeGroup && !endsChallengeGroup ? 0 : moderateScale(18),
               },
             ]}
           >
@@ -547,6 +574,11 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
                 >
                   {n.title}
                 </Text>
+                {!n.isRead && (
+                  <View style={inboxStyles.newBadge}>
+                    <Text style={inboxStyles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
                 <Text style={[inboxStyles.cardTime, { color: c.textMuted }]}>
                   {notificationTime(n.createdAt)}
                 </Text>
@@ -568,7 +600,7 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
               <View style={[inboxStyles.unreadDot, { backgroundColor: c.primary }]} />
             )}
           </TouchableOpacity>
-        );
+        </React.Fragment>;
       }}
       ListFooterComponent={failedOffset !== null ? (
         <View style={[inboxStyles.errorBanner, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
@@ -598,6 +630,35 @@ const inboxStyles = StyleSheet.create({
   container: {
     paddingHorizontal: scale(18),
     paddingTop: verticalScale(12),
+  },
+  dayGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(10),
+    marginTop: verticalScale(8),
+    marginBottom: verticalScale(8),
+  },
+  dayGroupLabel: {
+    fontSize: responsiveFontSize(12),
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  dayGroupRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  newBadge: {
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: moderateScale(6),
+    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    alignSelf: 'center',
+  },
+  newBadgeText: {
+    color: '#15803D',
+    fontSize: responsiveFontSize(9),
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   hero: {
     minHeight: verticalScale(82),

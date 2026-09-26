@@ -29,8 +29,8 @@ async function redeemWithRetry(userId: string, itemId: string) {
         if (item.stock !== -1 && item.stock <= 0) throw new RedemptionError(400, 'Item is out of stock');
         if (item.coinCost < 0) throw new RedemptionError(400, 'Invalid item coin cost');
 
-        const existing = await tx.redeemRequest.findFirst({ where: { userId, itemId, status: 'pending' } });
-        if (existing) throw new RedemptionError(400, 'You already have a pending request for this item');
+        const existing = await tx.redeemRequest.findFirst({ where: { userId, itemId, status: { in: ['pending', 'approved', 'ready_to_claim'] } } });
+        if (existing) return { ...existing, alreadyRequested: true };
 
         const debit = await tx.userStats.updateMany({
           where: { userId, ecoCoins: { gte: item.coinCost } },
@@ -90,6 +90,10 @@ router.post('/redeem', authenticateRequest, requireUserAccess, async (req: Authe
     if (!itemId) return res.status(400).json({ message: 'Item ID is required' });
 
     const request = await redeemWithRetry(userId, itemId);
+
+    if (request.alreadyRequested) {
+      return res.json({ success: true, alreadyRequested: true, request, message: 'An active redemption request already exists.' });
+    }
 
     // Notify admin in real-time
     void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
@@ -197,7 +201,8 @@ router.get('/requests', authenticateRequest, requireModeratorAccess, async (req,
     const { status } = req.query;
     const { page, pageSize, skip } = parseAdminPagination(req.query);
     const where: any = {};
-    if (status && status !== 'all') where.status = status;
+    if (status === 'active') where.status = { not: 'claimed' };
+    else if (status && status !== 'all') where.status = status;
     if (typeof req.query.search === 'string' && req.query.search.trim()) {
       const search = req.query.search.trim().slice(0, 100);
       where.OR = [
