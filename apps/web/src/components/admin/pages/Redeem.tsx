@@ -403,7 +403,8 @@ export function Redeem() {
   };
 
   const filteredRequests = requests.filter(r => {
-    if (requestFilter !== 'all' && r.status !== requestFilter) return false;
+    const expectedStatus = requestFilter === 'archive' ? 'claimed' : requestFilter;
+    if (requestFilter !== 'all' && r.status !== expectedStatus) return false;
     if (search) {
       const q = search.toLowerCase();
       return r.userName.toLowerCase().includes(q) || r.itemTitle.toLowerCase().includes(q);
