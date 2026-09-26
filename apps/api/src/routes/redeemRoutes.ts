@@ -196,7 +196,7 @@ router.get('/stats', authenticateRequest, requireModeratorAccess, async (req, re
       COUNT(*) FILTER (WHERE is_active = true)::bigint AS active,
       COUNT(*) FILTER (WHERE is_active = false)::bigint AS inactive,
       COUNT(*) FILTER (WHERE stock = 0)::bigint AS "outOfStock"
-    FROM "RedeemItem"`;
+    FROM redeem_items`;
     res.json({ total: Number(row.total), active: Number(row.active), inactive: Number(row.inactive), outOfStock: Number(row.outOfStock) });
   } catch (error) {
     console.error('Error fetching redeem stats:', error);
@@ -251,7 +251,7 @@ router.get('/requests/stats', authenticateRequest, requireModeratorAccess, async
       COUNT(*) FILTER (WHERE status = 'rejected')::bigint AS rejected,
       COUNT(*) FILTER (WHERE status = 'ready_to_claim')::bigint AS "readyToClaim",
       COUNT(*) FILTER (WHERE status = 'claimed')::bigint AS claimed
-    FROM "RedeemRequest"`;
+    FROM redeem_requests`;
     res.json({
       total: Number(row.total),
       pending: Number(row.pending),
