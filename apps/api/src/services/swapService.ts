@@ -1,4 +1,5 @@
 import { prisma } from '../prismaClient';
+import { apiCache } from '../lib/cache';
 import { supabaseStorageService } from './supabaseStorageService';
 import path from 'path';
 import fs from 'fs';
@@ -196,6 +197,7 @@ export const swapService = {
       },
       include: profileInclude,
     });
+    apiCache.delete(`user_dashboard_${input.userId}`);
     return formatListing(row);
   },
 
@@ -236,6 +238,7 @@ export const swapService = {
     }
 
     await prisma.swapListing.update({ where: { id }, data: sanitizedData });
+    apiCache.delete(`user_dashboard_${listing.userId}`);
   },
 
   async deleteListing(id: string, userId: string, role: string) {
@@ -252,6 +255,7 @@ export const swapService = {
       where: { id },
       data: { isActive: false },
     });
+    apiCache.delete(`user_dashboard_${listing.userId}`);
   },
 
   async sendSwapRequest(listingId: string, fromUserId: string, message?: string) {
@@ -342,8 +346,18 @@ export const swapService = {
       orderBy: { createdAt: 'desc' },
     });
 
-    const results = await Promise.all(
-      rows.map(async (row) => {
+    const unreadCounts = await prisma.swapMessage.groupBy({
+      by: ['swapRequestId'],
+      where: {
+        swapRequestId: { in: rows.map((row) => row.id) },
+        senderId: { not: userId },
+        read: false,
+      },
+      _count: { _all: true },
+    });
+    const unreadByConversation = new Map(unreadCounts.map((item) => [item.swapRequestId, item._count._all]));
+
+    const results = rows.map((row) => {
         const listing = formatListing(row.listing);
         const otherUserRaw =
           row.user1Id === userId
@@ -356,26 +370,17 @@ export const swapService = {
             ? formatMessage(row.messages[0])
             : undefined;
 
-        const unreadCount = await prisma.swapMessage.count({
-          where: {
-            swapRequestId: row.id,
-            NOT: { senderId: userId },
-            read: false,
-          },
-        });
-
         return {
           id: row.id,
           swapRequestId: row.swapRequestId,
           listing,
           otherUser,
           lastMessage,
-          unreadCount,
+          unreadCount: unreadByConversation.get(row.id) ?? 0,
           status: row.status,
           meetupMethod: listing.meetupMethod,
         };
-      })
-    );
+      });
 
     return results;
   },

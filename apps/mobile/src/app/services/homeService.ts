@@ -162,19 +162,15 @@ export const homeService = {
    * Keeps network bandwidth lean and reduces time-to-interactive.
    */
   async getHomeCriticalData(token: string) {
-    const [
-      dashboard,
-      lessons,
-      challenges,
-      habitsToday,
-      events,
-    ] = await Promise.all([
+    const [dashboard, ...contentResults] = await Promise.all([
       fallbackUnlessAuthError(this.getDashboard(token), null),
       fallbackUnlessAuthError(this.getLessons(token), []),
       fallbackUnlessAuthError(this.getChallenges(token), { items: [], isCycleActive: true }),
       fallbackUnlessAuthError(this.getHabitsToday(token), null),
       fallbackUnlessAuthError(this.getEvents(token), []),
     ]);
+
+    const [lessons, challenges, habitsToday, events] = contentResults;
 
     return {
       dashboard: dashboard || null,

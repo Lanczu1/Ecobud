@@ -2,11 +2,11 @@ import { createHmac } from 'crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AccessRole } from '../security/tokenService';
 
-export type RealtimeSection = 'learn' | 'challenges' | 'tracker' | 'swap';
 export type AdminRealtimeSection = 'dashboard' | 'users';
+export type RealtimeSection = 'learn' | 'challenges' | 'events' | 'tracker' | 'swap';
 type RealtimeActorRole = AccessRole | 'system';
 
-type SwapEventType = 'request' | 'message' | 'status';
+type SwapEventType = 'request' | 'message' | 'status' | 'listing';
 
 interface SwapEventInput {
   actorUserId: string;
@@ -36,16 +36,19 @@ interface RealtimeChannelMap {
   adminUsers?: string;
   globalChallenges: string;
   globalLearn: string;
+  globalEvents: string;
   presenceMembers?: string;
   userChallenges: string;
   userLearn: string;
   userNotice: string;
+  userEvents: string;
   userSwap: string;
   userTracker: string;
 }
 
 const GLOBAL_CHANNELS = {
   challenges: 'ecobud:global:challenges',
+  events: 'ecobud:global:events',
   learn: 'ecobud:global:learn',
 } as const;
 
@@ -143,11 +146,13 @@ class SupabaseRealtimeService {
 
     const channels: RealtimeChannelMap = {
       globalChallenges: GLOBAL_CHANNELS.challenges,
+      globalEvents: GLOBAL_CHANNELS.events,
       globalLearn: GLOBAL_CHANNELS.learn,
       presenceMembers: PRESENCE_CHANNELS.members,
       userChallenges: this.buildUserChannel(userId, 'challenges'),
       userLearn: this.buildUserChannel(userId, 'learn'),
       userNotice: this.buildUserChannel(userId, 'notice'),
+      userEvents: this.buildUserChannel(userId, 'events'),
       userSwap: this.buildUserChannel(userId, 'swap'),
       userTracker: this.buildUserChannel(userId, 'tracker'),
     };
@@ -165,8 +170,9 @@ class SupabaseRealtimeService {
   }
 
   async publishGlobalSectionRefresh(section: RealtimeSection, input: RealtimeSignalInput) {
-    const channel =
-      section === 'learn' ? GLOBAL_CHANNELS.learn : GLOBAL_CHANNELS.challenges;
+    const channel = section === 'learn' ? GLOBAL_CHANNELS.learn
+      : section === 'events' ? GLOBAL_CHANNELS.events
+      : GLOBAL_CHANNELS.challenges;
 
     return this.publish(channel, 'refresh', {
       actorRole: input.actorRole ?? 'system',
@@ -214,12 +220,23 @@ class SupabaseRealtimeService {
     });
   }
 
+  async publishUserEventsRefresh(userId: string, input: RealtimeSignalInput) {
+    return this.publish(this.buildUserChannel(userId, 'events'), 'refresh', {
+      actorRole: input.actorRole ?? 'system',
+      actorUserId: input.actorUserId ?? null,
+      audience: 'user',
+      channel: 'events',
+      entityId: input.entityId ?? null,
+      reason: input.reason,
+      userId,
+    });
+  }
+
   async publishAdminSectionRefresh(
     section: AdminRealtimeSection,
     input: RealtimeSignalInput,
   ) {
-    const channel =
-      section === 'dashboard' ? ADMIN_CHANNELS.dashboard : ADMIN_CHANNELS.users;
+    const channel = section === 'dashboard' ? ADMIN_CHANNELS.dashboard : ADMIN_CHANNELS.users;
 
     return this.publish(channel, 'refresh', {
       actorRole: input.actorRole ?? 'system',

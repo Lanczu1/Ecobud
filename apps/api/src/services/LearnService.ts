@@ -101,6 +101,36 @@ export class LearnService {
     });
   }
 
+  async getPublishedLessonCatalog(userId: string) {
+    return apiCache.getOrSet(`learn_catalog_${userId}`, 15, async () => {
+      const lessons = await this.database.lesson.findMany({
+        where: { OR: [{ isPublished: true }, { scheduledAt: { lte: new Date() } }] },
+        orderBy: [{ featured: 'desc' }, { createdAt: 'asc' }, { title: 'asc' }],
+        select: {
+          id: true, title: true, description: true, category: true, difficulty: true,
+          imageUrl: true, videoUrl: true, isPublished: true, featured: true,
+          createdAt: true, pointsReward: true, durationMinutes: true,
+          progress: { where: { userId }, take: 1, select: { status: true, progress: true, videoTimestamp: true, updatedAt: true } },
+          _count: { select: { pages: true, quizQuestions: true } },
+        },
+      });
+      return lessons.map((lesson) => ({
+        id: lesson.id, title: lesson.title, description: lesson.description, content: '',
+        category: lesson.category, difficulty: lesson.difficulty || undefined,
+        imageUrl: lesson.imageUrl, videoUrl: lesson.videoUrl,
+        is_published: lesson.isPublished, featured: lesson.featured,
+        created_at: lesson.createdAt.toISOString(), pointsReward: lesson.pointsReward,
+        durationMinutes: lesson.durationMinutes,
+        progress: lesson.progress[0]?.progress ?? 0,
+        status: lesson.progress[0]?.status ?? 'not_started',
+        videoTimestamp: lesson.progress[0]?.videoTimestamp ?? 0,
+        progressUpdatedAt: lesson.progress[0]?.updatedAt.toISOString() ?? null,
+        hasQuiz: lesson._count.quizQuestions > 0,
+        pageCount: lesson._count.pages, questionCount: lesson._count.quizQuestions,
+      }));
+    });
+  }
+
   async markLessonSeen(userId: string, lessonId: string) {
     const lesson = await this.database.lesson.findFirst({
       where: {
@@ -156,6 +186,7 @@ export class LearnService {
     };
 
     apiCache.delete(`learn_published_${userId}`);
+    apiCache.delete(`learn_catalog_${userId}`);
     await this.userActivityService.touchUserActivity(userId);
     await Promise.all([
       supabaseRealtimeService.publishUserSectionRefresh(userId, 'learn', {
@@ -241,6 +272,7 @@ export class LearnService {
     }
 
     apiCache.delete(`learn_published_${userId}`);
+    apiCache.delete(`learn_catalog_${userId}`);
     apiCache.delete(`user_dashboard_${userId}`);
 
     return {
@@ -320,6 +352,7 @@ export class LearnService {
       });
 
     apiCache.delete(`learn_published_${userId}`);
+    apiCache.delete(`learn_catalog_${userId}`);
 
     return {
       lessonId,

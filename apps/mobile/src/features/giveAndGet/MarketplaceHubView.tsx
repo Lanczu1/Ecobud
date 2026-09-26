@@ -174,7 +174,11 @@ export function MarketplaceHubView({
             if (!revision || revision <= connectedAt) return;
             if (revision <= (seenRevisions['swap'] ?? 0)) return;
             seenRevisions['swap'] = revision;
-            loadConversations();
+            if (payload?.eventType === 'listing') {
+              DeviceEventEmitter.emit('giveAndGetListingsChanged');
+            } else {
+              loadConversations();
+            }
             if (payload?.eventType === 'message' && payload?.swapRequestId) {
               DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
             }

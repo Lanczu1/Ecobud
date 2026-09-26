@@ -69,6 +69,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     const interval = setInterval(() => { if (AppState.currentState === 'active') refresh(); }, 30000);
     const app = AppState.addEventListener('change', state => { if (state === 'active') { refresh(); void register(); } });
     const changed = DeviceEventEmitter.addListener('notificationsChanged', refresh);
+    const inboxChanged = DeviceEventEmitter.addListener('notificationsInboxRefresh', refresh);
     const subscriptions: { remove(): void }[] = [];
     if (nativePush && pushEnabled) {
       try {
@@ -90,7 +91,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     }
     return () => {
       alive = false;
-      clearInterval(interval); app.remove(); changed.remove(); subscriptions.forEach(subscription => subscription.remove());
+      clearInterval(interval); app.remove(); changed.remove(); inboxChanged.remove(); subscriptions.forEach(subscription => subscription.remove());
       if (deviceToken) void ecobudApi.unregisterPush(token, deviceToken).catch(() => {});
     };
   }, [token, pushEnabled]);

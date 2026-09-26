@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
-import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
@@ -533,13 +534,14 @@ export function LearningContent() {
   const [openingLessonId, setOpeningLessonId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const loadRef = useRef<() => Promise<void>>(async () => {});
 
-  const load = async () => {
+  const load = async (fresh = false) => {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
       if (search.trim()) params.set('search', search.trim());
       if (filterStatus !== 'All') params.set('status', filterStatus);
-      const data = await adminGet<{ items: Lesson[]; pagination: typeof pagination }>(`/admin/lessons?${params.toString()}`);
+      const data = await adminGet<{ items: Lesson[]; pagination: typeof pagination }>(`/admin/lessons?${params.toString()}`, { bypassCache: fresh });
       setLessons(data.items);
       setPagination(data.pagination);
       setError(null);
@@ -553,9 +555,18 @@ export function LearningContent() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 250);
+    const timer = setTimeout(() => void load(true), 250);
     return () => clearTimeout(timer);
   }, [page, search, filterStatus]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadRef.current();
+    }, 30000);
+    const onFocus = () => { if (document.visibilityState === 'visible') void loadRef.current(); };
+    window.addEventListener('focus', onFocus);
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', onFocus); };
+  }, []);
 
   const filtered = useMemo(() =>
     lessons.filter(c => {
@@ -574,6 +585,19 @@ export function LearningContent() {
     const updated = await adminPutForm<Lesson>(`/admin/lessons/${editing.id}`, form);
     setLessons(prev => prev.map(l => l.id === updated.id ? updated : l));
   };
+
+  loadRef.current = load;
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    adminRealtimeService.connect({
+      onContentRefresh: () => {
+        clearAdminApiCache('/admin/lessons');
+        void loadRef.current();
+      },
+    }).then((unsub) => { unsubscribe = unsub; });
+    return () => unsubscribe?.();
+  }, []);
 
   const openEdit = async (lessonId: string) => {
     setOpeningLessonId(lessonId);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Users, Trophy, BookOpen, Coins, AlertCircle } from 'lucide-react';
-import { adminGet, getCachedAdminData } from '../../utils/adminApi';
+import { adminGet, getCachedAdminData, clearAdminApiCache } from '../../utils/adminApi';
 import { adminRealtimeService } from '../../services/adminRealtimeService';
 
 interface DashboardStats {
@@ -59,6 +59,7 @@ export function Dashboard() {
     let unsubscribe: (() => void) | undefined;
     adminRealtimeService.connect({
       onStatsRefresh: () => {
+        clearAdminApiCache('/admin/stats');
         loadStats(false);
       },
     }).then((unsub) => {

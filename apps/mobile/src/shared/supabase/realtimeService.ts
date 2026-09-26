@@ -5,7 +5,7 @@ import { isSupabaseRealtimeEnabled, supabaseClient } from './supabaseClient';
 type RealtimeSignalChannel = 'learn' | 'challenges' | 'tracker';
 
 interface RealtimeSignal {
-  channel: RealtimeSignalChannel;
+  channel: RealtimeSignalChannel | 'events';
   reason: string;
   revision: number;
   updatedAt: string;
@@ -167,6 +167,21 @@ export const realtimeService = {
           seenRevisions,
           handlers.onSignal,
         ),
+        realtimeSession.channels.globalEvents
+          ? bindBroadcast<RealtimeSignal>(realtimeSession.channels.globalEvents, 'refresh', connectedAt, seenRevisions, handlers.onSignal)
+          : null,
+        realtimeSession.channels.userEvents
+          ? bindBroadcast<RealtimeSignal>(realtimeSession.channels.userEvents, 'refresh', connectedAt, seenRevisions, (signal) => handlers.onSignal?.({ ...signal, channel: 'events' }))
+          : null,
+        realtimeSession.channels.adminDashboard
+          ? bindBroadcast<RealtimeSignal>(
+              realtimeSession.channels.adminDashboard,
+              'refresh',
+              connectedAt,
+              seenRevisions,
+              handlers.onSignal,
+            )
+          : null,
         bindBroadcast<RealtimeNotice>(
           realtimeSession.channels.userNotice,
           'notice',

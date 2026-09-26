@@ -46,6 +46,12 @@ router.post('/listings', authenticateRequest, async (req: AuthenticatedRequest, 
       userId: req.auth!.userId,
       ...req.body,
     });
+    supabaseRealtimeService.publishSwapEvent({
+      actorUserId: req.auth!.userId,
+      targetUserId: req.auth!.userId,
+      eventType: 'listing',
+      listingId: listing.id,
+    }).catch(() => {});
     res.status(201).json(listing);
   } catch (error: any) {
     console.error('Error creating swap listing:', error);
@@ -56,7 +62,16 @@ router.post('/listings', authenticateRequest, async (req: AuthenticatedRequest, 
 // Update listing (with IDOR protection)
 router.patch('/listings/:id', authenticateRequest, async (req: AuthenticatedRequest, res) => {
   try {
+    const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { userId: true } });
     await swapService.updateListing(req.params.id, req.auth!.userId, req.auth!.role, req.body);
+    if (listing?.userId) {
+      supabaseRealtimeService.publishSwapEvent({
+        actorUserId: req.auth!.userId,
+        targetUserId: listing.userId,
+        eventType: 'listing',
+        listingId: req.params.id,
+      }).catch(() => {});
+    }
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error updating swap listing:', error);
@@ -68,7 +83,16 @@ router.patch('/listings/:id', authenticateRequest, async (req: AuthenticatedRequ
 // Delete listing (with IDOR protection)
 router.delete('/listings/:id', authenticateRequest, async (req: AuthenticatedRequest, res) => {
   try {
+    const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { userId: true } });
     await swapService.deleteListing(req.params.id, req.auth!.userId, req.auth!.role);
+    if (listing?.userId) {
+      supabaseRealtimeService.publishSwapEvent({
+        actorUserId: req.auth!.userId,
+        targetUserId: listing.userId,
+        eventType: 'listing',
+        listingId: req.params.id,
+      }).catch(() => {});
+    }
     res.status(204).send();
   } catch (error: any) {
     console.error('Error deleting swap listing:', error);

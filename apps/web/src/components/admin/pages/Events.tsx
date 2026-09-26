@@ -8,7 +8,8 @@ import {
   CheckCircle2, XCircle, ShieldCheck, RefreshCw
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
@@ -627,6 +628,7 @@ export function Events() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const eventsRefreshInFlight = useRef(false);
+  const loadEventsRef = useRef<() => Promise<void>>(async () => {});
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -637,6 +639,9 @@ export function Events() {
   const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
   const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>('events');
+  const adminUser = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
+  }, []);
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
@@ -661,7 +666,9 @@ export function Events() {
     submissionsRefreshInFlight.current = true;
     if (showLoading) setSubmissionsLoading(true);
     try {
-      const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?type=event&page=${page}&pageSize=25`);
+      const params = new URLSearchParams({ type: 'event', page: String(page), pageSize: '25' });
+      if (adminUser?.role === 'moderator' && adminUser.city) params.set('barangay', adminUser.city);
+      const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?${params.toString()}`, { bypassCache: true });
       setSubmissions(data.items.filter(submission =>
         submission.submissionType === 'EVENT' || submission.challenge?.type === 'EVENT'
       ));
@@ -699,13 +706,13 @@ export function Events() {
     }
   };
 
-  const load = async () => {
+  const load = async (fresh = false) => {
     if (eventsRefreshInFlight.current) return;
     eventsRefreshInFlight.current = true;
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
       if (search.trim()) params.set('search', search.trim());
-      const data = await adminGet<{ items: AdminEvent[]; pagination: typeof eventPagination }>(`/admin/events?${params.toString()}`);
+      const data = await adminGet<{ items: AdminEvent[]; pagination: typeof eventPagination }>(`/admin/events?${params.toString()}`, { bypassCache: fresh });
       setEvents(data.items);
       setEventPagination(data.pagination);
       setError(null);
@@ -718,6 +725,8 @@ export function Events() {
       setLoading(false);
     }
   };
+
+  loadEventsRef.current = () => load(true);
 
   const handleToggleFeatured = async (event: AdminEvent) => {
     setTogglingFeatured(event.id);
@@ -736,10 +745,22 @@ export function Events() {
 
   useEffect(() => {
     if (activeTab !== 'events') return;
-    const initial = setTimeout(() => void load(), 250);
-    const interval = setInterval(() => void load(), 30000);
+    const initial = setTimeout(() => void load(true), 250);
+    const interval = setInterval(() => void load(true), 30000);
     return () => { clearTimeout(initial); clearInterval(interval); };
   }, [activeTab, page, search]);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    adminRealtimeService.connect({
+      onContentRefresh: () => {
+        clearAdminApiCache('/admin/events');
+        if (activeTab === 'events') void loadEventsRef.current();
+        if (activeTab === 'submissions') void loadSubmissions(false);
+      },
+    }).then((unsub) => { unsubscribe = unsub; });
+    return () => unsubscribe?.();
+  }, [activeTab]);
 
   // Fetch submissions when switching to submissions tab or initially
   useEffect(() => {
@@ -750,7 +771,7 @@ export function Events() {
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [activeTab, submissionsPage]);
+  }, [activeTab, submissionsPage, subSearch, subStatusFilter]);
 
   // Load report details only for the event the admin expands.
   useEffect(() => {

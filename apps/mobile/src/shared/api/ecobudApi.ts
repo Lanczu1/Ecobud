@@ -122,11 +122,13 @@ export interface RealtimeChannelMap {
   adminPresence?: string;
   adminUsers?: string;
   globalChallenges: string;
+  globalEvents?: string;
   globalLearn: string;
   presenceMembers?: string;
   userChallenges: string;
   userLearn: string;
   userNotice: string;
+  userEvents?: string;
   userSwap?: string;
   userTracker: string;
 }
@@ -450,6 +452,7 @@ const request = async <T>(path: string, options: RequestOptions = {}): Promise<T
     const dedupeKey = `${path}:${options.token ?? ''}`;
     const existing = inFlightRequests.get(dedupeKey);
     if (existing) {
+      // Share work across services without letting an older request block a refresh.
       return existing as Promise<T>;
     }
 

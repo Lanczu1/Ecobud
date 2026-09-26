@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import {
@@ -28,7 +28,8 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { adminGet, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
 
@@ -1149,6 +1150,8 @@ export function GiveAndGetHub() {
   const [listings, setListings] = useState<SwapListingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SwapStats | null>(null);
+  const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean) => Promise<void>>(async () => {});
+  const fetchInFlightRef = useRef(false);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [reportModal, setReportModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [detailsModalListing, setDetailsModalListing] = useState<SwapListingItem | null>(null);
@@ -1170,7 +1173,9 @@ export function GiveAndGetHub() {
     title: '',
   });
 
-  const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search) => {
+  const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search, fresh = false) => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
       setLoading(true);
       const params = new URLSearchParams({ page: String(pageToLoad), pageSize: '25' });
@@ -1178,8 +1183,8 @@ export function GiveAndGetHub() {
       if (statusToLoad === 'reported') params.set('reported', 'true');
       if (searchToLoad.trim()) params.set('search', searchToLoad.trim());
       const [listingsData, statsData] = await Promise.all([
-        adminGet<{ items: SwapListingItem[]; pagination: typeof pagination }>(`/give-and-get/swap-listings?${params.toString()}`),
-        adminGet<SwapStats>('/give-and-get/swap-listings/stats'),
+        adminGet<{ items: SwapListingItem[]; pagination: typeof pagination }>(`/give-and-get/swap-listings?${params.toString()}`, { bypassCache: fresh }),
+        adminGet<SwapStats>('/give-and-get/swap-listings/stats', { bypassCache: fresh }),
       ]);
       setListings(listingsData.items);
       setPagination(listingsData.pagination);
@@ -1189,12 +1194,38 @@ export function GiveAndGetHub() {
       toast.error(error.message || 'Failed to fetch swap listings');
     } finally {
       setLoading(false);
+      fetchInFlightRef.current = false;
     }
   };
 
+  fetchListingsRef.current = (nextPage, status, nextSearch, fresh = true) => fetchListings(nextPage, status, nextSearch, fresh);
+
   useEffect(() => {
-    const timer = setTimeout(() => void fetchListings(page, filterStatus, search), 300);
+    const timer = setTimeout(() => void fetchListings(page, filterStatus, search, true), 300);
     return () => clearTimeout(timer);
+  }, [page, filterStatus, search]);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    adminRealtimeService.connect({
+      onContentRefresh: () => {
+        clearAdminApiCache('/give-and-get/swap-listings');
+        void fetchListingsRef.current(page, filterStatus, search, true);
+      },
+    }).then((unsub) => { unsubscribe = unsub; });
+    return () => unsubscribe?.();
+  }, [page, filterStatus, search]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void fetchListings(page, filterStatus, search);
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+    };
   }, [page, filterStatus, search]);
 
   const handleApprove = async (id: string) => {
