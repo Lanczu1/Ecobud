@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { parseAdminPagination } from '../utils/adminPagination';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess, requireUserAccess, type AuthenticatedRequest } from '../http/authentication';
@@ -155,10 +156,19 @@ router.post('/upload', authenticateRequest, requireModeratorAccess, redeemUpload
 // Get all redeem items (admin view)
 router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
-    const items = await prisma.redeemItem.findMany({
+    const { page, pageSize, skip } = parseAdminPagination(req.query);
+    const where: any = {};
+    if (req.query.status === 'active') where.isActive = true;
+    if (req.query.status === 'inactive') where.isActive = false;
+    if (req.query.status === 'outOfStock') where.stock = 0;
+    if (typeof req.query.search === 'string' && req.query.search.trim()) where.title = { contains: req.query.search.trim().slice(0, 100), mode: 'insensitive' };
+    const [items, total] = await Promise.all([prisma.redeemItem.findMany({
+      where,
+      skip,
+      take: pageSize,
       orderBy: { createdAt: 'desc' },
-    });
-    res.json(items);
+    }), prisma.redeemItem.count({ where })]);
+    res.json({ items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching redeem items:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -185,14 +195,24 @@ router.get('/stats', authenticateRequest, requireModeratorAccess, async (req, re
 router.get('/requests', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
     const { status } = req.query;
+    const { page, pageSize, skip } = parseAdminPagination(req.query);
     const where: any = {};
     if (status && status !== 'all') where.status = status;
+    if (typeof req.query.search === 'string' && req.query.search.trim()) {
+      const search = req.query.search.trim().slice(0, 100);
+      where.OR = [
+        { userName: { contains: search, mode: 'insensitive' } },
+        { itemTitle: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
-    const requests = await prisma.redeemRequest.findMany({
+    const [requests, total] = await Promise.all([prisma.redeemRequest.findMany({
       where,
+      skip,
+      take: pageSize,
       orderBy: { createdAt: 'desc' },
-    });
-    res.json(requests);
+    }), prisma.redeemRequest.count({ where })]);
+    res.json({ items: requests, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching redeem requests:', error);
     res.status(500).json({ message: 'Internal server error' });

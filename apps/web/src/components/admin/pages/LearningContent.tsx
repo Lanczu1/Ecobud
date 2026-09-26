@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
-import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
 
@@ -520,8 +521,10 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function LearningContent() {
-  const [lessons, setLessons] = useState<Lesson[]>(() => getCachedAdminData<Lesson[]>('/admin/lessons') || []);
-  const [loading, setLoading] = useState(() => !getCachedAdminData<Lesson[]>('/admin/lessons'));
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -533,8 +536,12 @@ export function LearningContent() {
 
   const load = async () => {
     try {
-      const data = await adminGet<Lesson[]>('/admin/lessons');
-      setLessons(data);
+      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      if (search.trim()) params.set('search', search.trim());
+      if (filterStatus !== 'All') params.set('status', filterStatus);
+      const data = await adminGet<{ items: Lesson[]; pagination: typeof pagination }>(`/admin/lessons?${params.toString()}`);
+      setLessons(data.items);
+      setPagination(data.pagination);
       setError(null);
     } catch (err: any) {
       if (lessons.length === 0) {
@@ -545,7 +552,10 @@ export function LearningContent() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => void load(), 250);
+    return () => clearTimeout(timer);
+  }, [page, search, filterStatus]);
 
   const filtered = useMemo(() =>
     lessons.filter(c => {
@@ -671,10 +681,10 @@ export function LearningContent() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center animate-reveal delay-160">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search content..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+          <input type="text" placeholder="Search content..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
         </div>
         {['All', 'Published', 'Auto Publish', 'Draft'].map(f => (
-          <button key={f} onClick={() => setFilterStatus(f)} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
+          <button key={f} onClick={() => { setFilterStatus(f); setPage(1); }} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
         ))}
       </div>
 
@@ -747,6 +757,8 @@ export function LearningContent() {
             </div>
           ))}
       </div>
+
+      <AdminPagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} onPageChange={setPage} />
 
       {!loading && filtered.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">

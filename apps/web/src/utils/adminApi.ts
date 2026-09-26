@@ -44,7 +44,11 @@ interface CacheEntry<T> {
 
 const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
-const CACHE_TTL_MS = 20_000; // 20 seconds TTL
+const CACHE_TTL_MS = 60_000; // Mutations clear the cache; keep lesson reads warm.
+
+export function invalidateAdminApiPath(path: string) {
+  memoryCache.delete(path);
+}
 
 export function clearAdminApiCache(pathPrefix?: string) {
   if (!pathPrefix) {

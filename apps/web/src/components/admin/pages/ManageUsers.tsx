@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet, adminPost, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, clearAdminApiCache, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
+import { AdminPagination } from '../AdminPagination';
 
 interface AdminUser {
   id: string;
@@ -57,8 +58,10 @@ function UserAvatar({ user }: { user: AdminUser }) {
 }
 
 export function ManageUsers() {
-  const [users, setUsers] = useState<AdminUser[]>(() => getCachedAdminData<AdminUser[]>('/admin/users') || []);
-  const [loading, setLoading] = useState(() => !getCachedAdminData<AdminUser[]>('/admin/users'));
+  const [userPage, setUserPage] = useState(1);
+  const [userPagination, setUserPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -66,10 +69,13 @@ export function ManageUsers() {
 
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const loadUsers = async () => {
+  const loadUsers = async (page = userPage, query = search, tab = viewTab) => {
     try {
-      const data = await adminGet<AdminUser[]>('/admin/users');
-      setUsers(data);
+      const params = new URLSearchParams({ page: String(page), pageSize: '25', role: tab === 'Members' ? 'user' : 'staff' });
+      if (query.trim()) params.set('search', query.trim());
+      const data = await adminGet<{ items: AdminUser[]; pagination: typeof userPagination }>(`/admin/users?${params.toString()}`, { bypassCache: true });
+      setUsers(data.items);
+      setUserPagination(data.pagination);
       setError(null);
     } catch (err: any) {
       if (users.length === 0) {
@@ -79,14 +85,15 @@ export function ManageUsers() {
       setLoading(false);
     }
   };
+  const loadUsersRef = useRef(loadUsers);
+  loadUsersRef.current = loadUsers;
 
   useEffect(() => {
-    loadUsers();
-
     let unsubscribe: () => void;
     adminRealtimeService.connect({
       onUsersRefresh: () => {
-        loadUsers();
+        clearAdminApiCache('/admin/users');
+        void loadUsersRef.current();
       },
       onPresenceChange: (presence) => {
         const now = new Date().toISOString();
@@ -107,6 +114,15 @@ export function ManageUsers() {
       if (unsubscribe) unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [search, viewTab]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => void loadUsers(userPage, search, viewTab), 300);
+    return () => clearTimeout(timer);
+  }, [userPage, search, viewTab]);
 
   const toast = useToast();
 
@@ -146,7 +162,7 @@ export function ManageUsers() {
       return matchTab && matchStatus && matchSearch;
     }), [users, search, filterStatus, viewTab]);
 
-  const tabUsers = users.filter(u => viewTab === 'Members' ? u.role === 'user' : (u.role === 'admin' || u.role === 'moderator'));
+  const tabUsers = users;
   const totalOnline = tabUsers.filter(u => u.isOnlineNow).length;
   const totalOffline = tabUsers.filter(u => !u.isOnlineNow).length;
 
@@ -365,6 +381,7 @@ export function ManageUsers() {
             ) : 'No users match your search.'}
           </div>
         )}
+        {!loading && <AdminPagination page={userPagination.page} totalPages={userPagination.totalPages} total={userPagination.total} onPageChange={setUserPage} />}
       </div>
     </div>
   );

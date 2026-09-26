@@ -70,7 +70,14 @@ const readMetroHost = () => {
 const resolveApiBase = () => {
   const envApiBase = readEnvApiBase();
   if (envApiBase) {
+    if (!__DEV__ && !envApiBase.startsWith('https://')) {
+      throw new Error('Production ECOBUD API URL must use HTTPS.');
+    }
     return envApiBase;
+  }
+
+  if (!__DEV__) {
+    throw new Error('Set EXPO_PUBLIC_API_BASE_URL to the HTTPS ECOBUD API URL for production builds.');
   }
 
   const metroHost = readMetroHost();
@@ -686,6 +693,11 @@ export const ecobudApi = {
       method: 'POST',
       body: { refreshToken },
     }),
+  logout: (refreshToken: string) =>
+    request<void>('/auth/logout', {
+      method: 'POST',
+      body: { refreshToken },
+    }),
   sendOTP: (email: string) =>
     request<{ success: boolean; message: string }>('/auth/send-otp', {
       method: 'POST',
@@ -715,8 +727,8 @@ export const ecobudApi = {
     }),
   fetchDashboard: (token: string) =>
     request<DashboardData>('/home/dashboard', { token }),
-  fetchLessons: (token: string) =>
-    request<LessonWithProgress[]>('/learn/lessons', { token }),
+  fetchLessons: (token: string, lessonId?: string) =>
+    request<LessonWithProgress[]>(`/learn/lessons${lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : ''}`, { token }),
   markLessonSeen: (token: string, lessonId: string) =>
     request<{ lessonId: string; status: LessonWithProgress['status']; progress: number }>('/learn/seen', {
       method: 'POST',

@@ -21,12 +21,20 @@ function runSubmissionFollowUps(label: string, tasks: Array<() => Promise<unknow
 }
 
 export class AdminService {
-  static async getAllLessons() {
-    return apiCache.getOrSet('admin_lessons_list', 30, async () => {
+  static async getAllLessons(page = 1, pageSize = 25, search?: string, status?: string) {
+    const where: any = {};
+    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (status === 'Published') where.isPublished = true;
+    if (status === 'Draft') { where.isPublished = false; where.scheduledAt = null; }
+    if (status === 'Auto Publish') { where.isPublished = false; where.scheduledAt = { not: null }; }
+    return apiCache.getOrSet(`admin_lessons_list:${page}:${pageSize}:${status || 'All'}:${search || ''}`, 30, async () => {
       const startedAt = Date.now();
 
       try {
-        const lessons = await prisma.lesson.findMany({
+        const [lessons, total] = await Promise.all([prisma.lesson.findMany({
+          where,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
           orderBy: { createdAt: 'desc' },
           // The table view does not need lesson bodies, transcripts, pages, or
           // quiz answers. Those can be very large and made every list refresh
@@ -56,11 +64,11 @@ export class AdminService {
             },
             _count: { select: { quizQuestions: true, pages: true } },
           }
-        });
+        }), prisma.lesson.count({ where })]);
 
         console.log(`[PERF] getAllLessons DB: ${Date.now() - startedAt}ms`);
 
-        return lessons;
+        return { items: lessons, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
       } catch (error) {
         console.error(`[PERF] getAllLessons failed after ${Date.now() - startedAt}ms`);
         throw error;
@@ -142,7 +150,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('admin_lessons_list');
+    apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
 
     if (lesson.isPublished) {
@@ -230,7 +238,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('admin_lessons_list');
+    apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
 
     await Promise.all([
@@ -256,7 +264,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('admin_lessons_list');
+    apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
 
     await Promise.all([
@@ -283,7 +291,7 @@ export class AdminService {
 
     apiCache.invalidatePrefix('learn_published_');
     apiCache.delete('total_lessons_count');
-    apiCache.delete('admin_lessons_list');
+    apiCache.invalidatePrefix('admin_lessons_list:');
     apiCache.delete('admin_dashboard_stats');
 
     await Promise.all([
@@ -331,8 +339,8 @@ export class AdminService {
     });
   }
 
-  static async getUsers() {
-    return presenceQueryService.getAdminUsers();
+  static async getUsers(options: { page: number; pageSize: number; search?: string; role?: string }) {
+    return presenceQueryService.getAdminUsers(options);
   }
 
   static async blockUser(userId: string, adminId: string) {
@@ -386,12 +394,19 @@ export class AdminService {
   }
 
   // Challenge Management
-  static async getAllChallenges() {
-    return apiCache.getOrSet('admin_challenges_list', 30, async () => {
-      return await prisma.challenge.findMany({
-        include: { instances: { orderBy: { startDate: 'desc' } } },
-        orderBy: { createdAt: 'desc' }
-      });
+  static async getAllChallenges(page = 1, pageSize = 25, search?: string, status?: string) {
+    const now = new Date();
+    const where: any = {};
+    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (status === 'Expired') where.endDate = { lt: now };
+    if (status === 'Active') { where.active = true; where.OR = [{ endDate: null }, { endDate: { gte: now } }]; }
+    if (status === 'Inactive') { where.active = false; where.OR = [{ endDate: null }, { endDate: { gte: now } }]; }
+    return apiCache.getOrSet(`admin_challenges_list:${page}:${pageSize}:${status || 'All'}:${search || ''}`, 30, async () => {
+      const [items, total] = await Promise.all([
+        prisma.challenge.findMany({ where, skip: (page - 1) * pageSize, take: pageSize, orderBy: { createdAt: 'desc' } }),
+        prisma.challenge.count({ where }),
+      ]);
+      return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
     });
   }
 
@@ -453,7 +468,7 @@ export class AdminService {
       }
     });
 
-    apiCache.delete('admin_challenges_list');
+    apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
     await Promise.all([
@@ -478,7 +493,7 @@ export class AdminService {
       data
     });
 
-    apiCache.delete('admin_challenges_list');
+    apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
     await Promise.all([
@@ -502,7 +517,7 @@ export class AdminService {
       where: { id }
     });
 
-    apiCache.delete('admin_challenges_list');
+    apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
     await Promise.all([
@@ -588,7 +603,7 @@ export class AdminService {
   }
 
   static async getDashboardStats() {
-    return apiCache.getOrSet('admin_dashboard_stats', 15, async () => {
+    return apiCache.getOrSet('admin_dashboard_stats', 60, async () => {
       const snapshotDate = new Date();
       const startOfToday = new Date(snapshotDate);
       startOfToday.setHours(0, 0, 0, 0);
@@ -657,7 +672,12 @@ export class AdminService {
   static async getSubmissions(
     filterBarangay?: string | null,
     submissionType: 'all' | 'challenge' | 'event' = 'all',
+    page = 1,
+    pageSize = 25,
   ) {
+    const skip = (page - 1) * pageSize;
+    const readSkip = submissionType === 'all' ? 0 : skip;
+    const readTake = submissionType === 'all' ? skip + pageSize : pageSize;
     const barangay = filterBarangay?.trim() || undefined;
     const where = barangay
       ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
@@ -665,21 +685,42 @@ export class AdminService {
     const challengeSubs = submissionType === 'event' ? [] : await prisma.challengeSubmission.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: {
+      skip: readSkip,
+      take: readTake,
+      select: {
+        id: true,
+        userId: true,
+        challengeInstanceId: true,
+        proofText: true,
+        proofUrl: true,
+        afterProofUrl: true,
+        status: true,
+        moderatorNotes: true,
+        detectedQuantity: true,
+        reservedQuantity: true,
+        createdAt: true,
+        rewardAwarded: true,
         user: {
           select: {
             id: true,
             name: true,
-            profile: true
+            profile: { select: { displayName: true, avatarUrl: true, city: true } }
           }
         },
-        challengeInstance: { include: { challenge: true } }
+        challengeInstance: {
+          select: {
+            challengeId: true,
+            challenge: { select: { id: true, title: true, type: true, quantityUnit: true, collectionPointName: true } },
+          }
+        }
       }
     });
 
     const eventSubs = submissionType === 'challenge' ? [] : await prisma.eventSubmission.findMany({
       where,
       orderBy: { submittedAt: 'desc' },
+      skip: readSkip,
+      take: readTake,
       select: {
         id: true,
         userId: true,
@@ -732,8 +773,13 @@ export class AdminService {
     ];
 
     unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    return unified;
+    const [challengeTotal, eventTotal] = await Promise.all([
+      submissionType === 'event' ? 0 : prisma.challengeSubmission.count({ where }),
+      submissionType === 'challenge' ? 0 : prisma.eventSubmission.count({ where }),
+    ]);
+    const items = submissionType === 'all' ? unified.slice(skip, skip + pageSize) : unified;
+    const total = challengeTotal + eventTotal;
+    return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
   static async reviewSubmission(id: string, reviewerId: string, status: 'approved' | 'rejected' | 'approved_collection', notes?: string, reviewerContext?: ReviewerContext) {
@@ -1107,8 +1153,12 @@ export class AdminService {
   }
 
   // Event Management
-  static async getAllEvents() {
-    const events = await prisma.event.findMany({
+  static async getAllEvents(page = 1, pageSize = 25, search?: string) {
+    const where: any = search ? { title: { contains: search, mode: 'insensitive' } } : {};
+    const [events, total] = await Promise.all([prisma.event.findMany({
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       orderBy: [
         { isFeatured: 'desc' },
         { startDatetime: 'asc' },
@@ -1119,11 +1169,12 @@ export class AdminService {
           select: { id: true, name: true, email: true }
         }
       }
-    });
-    return events.map(({ _count, ...event }) => ({
+    }), prisma.event.count({ where })]);
+    const items = events.map(({ _count, ...event }) => ({
       ...event,
       registrationCount: _count.registrations,
     }));
+    return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
   static async createEvent(data: {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { AdminPagination } from '../AdminPagination';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
 
@@ -71,6 +72,10 @@ const statusLabels: Record<string, string> = {
 
 export function Redeem() {
   const [mainTab, setMainTab] = useState<'items' | 'requests'>('items');
+  const [itemPage, setItemPage] = useState(1);
+  const [requestPage, setRequestPage] = useState(1);
+  const [itemPagination, setItemPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [requestPagination, setRequestPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [items, setItems] = useState<RedeemItem[]>([]);
@@ -119,11 +124,15 @@ export function Redeem() {
   const fetchItems = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
+      const params = new URLSearchParams({ page: String(itemPage), pageSize: '25' });
+      if (filterStatus !== 'all') params.set('status', filterStatus);
+      if (search.trim()) params.set('search', search.trim());
       const [itemsData, statsData] = await Promise.all([
-        adminGet<RedeemItem[]>('/redeem'),
+        adminGet<{ items: RedeemItem[]; pagination: typeof itemPagination }>(`/redeem?${params.toString()}`),
         adminGet<RedeemStats>('/redeem/stats'),
       ]);
-      setItems(itemsData);
+      setItems(itemsData.items);
+      setItemPagination(itemsData.pagination);
       setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch redeem items', error);
@@ -131,7 +140,7 @@ export function Redeem() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [toast]);
+  }, [toast, itemPage, filterStatus, search]);
 
   // Track main tab and filter via refs for realtime events
   const mainTabRef = useRef(mainTab);
@@ -264,11 +273,15 @@ export function Redeem() {
   const fetchRequests = useCallback(async (silent = false) => {
     try {
       if (!silent) setRequestsLoading(true);
+      const params = new URLSearchParams({ page: String(requestPage), pageSize: '25' });
+      if (requestFilterRef.current !== 'all') params.set('status', requestFilterRef.current);
+      if (search.trim()) params.set('search', search.trim());
       const [reqsData, statsData] = await Promise.all([
-        adminGet<RedeemRequest[]>(`/redeem/requests${requestFilterRef.current !== 'all' ? `?status=${requestFilterRef.current}` : ''}`),
+        adminGet<{ items: RedeemRequest[]; pagination: typeof requestPagination }>(`/redeem/requests?${params.toString()}`),
         adminGet<RequestStats>('/redeem/requests/stats'),
       ]);
-      setRequests(reqsData);
+      setRequests(reqsData.items);
+      setRequestPagination(reqsData.pagination);
       setRequestStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch requests', error);
@@ -276,14 +289,15 @@ export function Redeem() {
     } finally {
       if (!silent) setRequestsLoading(false);
     }
-  }, [toast]);
+  }, [toast, requestPage, search]);
 
   // Initial fetch and filter change
   useEffect(() => {
-    fetchItems();
-    if (mainTab === 'requests') {
-      fetchRequests();
-    }
+    const timer = setTimeout(() => {
+      if (mainTab === 'items') void fetchItems();
+      if (mainTab === 'requests') void fetchRequests();
+    }, 250);
+    return () => clearTimeout(timer);
   }, [mainTab, requestFilter, fetchItems, fetchRequests]);
 
   // Real-time synchronization & automatic periodic background refresh
@@ -291,8 +305,8 @@ export function Redeem() {
     // 1. Subscribe to adminRealtimeService
     const unsubscribe = adminRealtimeService.connect({
       onRedeemRefresh: () => {
-        fetchItems(true);
-        fetchRequests(true);
+        if (mainTabRef.current === 'items') fetchItems(true);
+        if (mainTabRef.current === 'requests') fetchRequests(true);
       },
       onStatsRefresh: () => {
         fetchItems(true);
@@ -302,13 +316,13 @@ export function Redeem() {
       },
     });
 
-    // 2. High-responsiveness polling interval (every 5 seconds) to ensure immediate sync of approvals and postings
+    // Periodic refresh for whichever tab is currently visible.
     const interval = setInterval(() => {
-      fetchItems(true);
+      if (mainTabRef.current === 'items') fetchItems(true);
       if (mainTabRef.current === 'requests') {
         fetchRequests(true);
       }
-    }, 5000);
+    }, 30000);
 
     return () => {
       unsubscribe.then(unsub => unsub?.());
@@ -469,7 +483,7 @@ export function Redeem() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 flex gap-3 items-center animate-reveal delay-160">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" placeholder="Search items..." value={search} onChange={e => setSearch(e.target.value)}
+              <input type="text" placeholder="Search items..." value={search} onChange={e => { setSearch(e.target.value); setItemPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
             </div>
             {[
@@ -478,7 +492,7 @@ export function Redeem() {
               { key: 'inactive', label: 'Inactive', icon: <XCircle className="w-3 h-3" /> },
               { key: 'outOfStock', label: 'Out of Stock', icon: <Package className="w-3 h-3" /> },
             ].map(f => (
-              <button key={f.key} onClick={() => setFilterStatus(f.key)}
+              <button key={f.key} onClick={() => { setFilterStatus(f.key); setItemPage(1); }}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border font-medium active:scale-95 transition-all ${filterStatus === f.key ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-green-300'}`}>
                 {f.icon}{f.label}
               </button>
@@ -546,6 +560,7 @@ export function Redeem() {
               <Gift className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3 opacity-40" /><p className="text-gray-500 dark:text-gray-400 font-medium">No redeem items found</p>
             </div>
           )}
+          <AdminPagination page={itemPagination.page} totalPages={itemPagination.totalPages} total={itemPagination.total} onPageChange={setItemPage} />
         </>
       )}
 
@@ -575,7 +590,7 @@ export function Redeem() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between animate-reveal delay-160">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" placeholder="Search by user or item..." value={search} onChange={e => setSearch(e.target.value)}
+              <input type="text" placeholder="Search by user or item..." value={search} onChange={e => { setSearch(e.target.value); setRequestPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -586,7 +601,7 @@ export function Redeem() {
                 { key: 'rejected', label: 'Rejected', icon: <XCircle className="w-3 h-3" /> },
                 { key: 'claimed', label: 'Claimed', icon: <Eye className="w-3 h-3" /> },
               ].map(f => (
-                <button key={f.key} onClick={() => setRequestFilter(f.key)}
+                <button key={f.key} onClick={() => { setRequestFilter(f.key); setRequestPage(1); }}
                   className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border active:scale-95 transition-all duration-200 ${requestFilter === f.key ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-green-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                   {f.icon}{f.label}
                 </button>
@@ -681,6 +696,7 @@ export function Redeem() {
               ))}
             </div>
           )}
+          <AdminPagination page={requestPagination.page} totalPages={requestPagination.totalPages} total={requestPagination.total} onPageChange={setRequestPage} />
         </>
       )}
 

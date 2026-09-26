@@ -7,6 +7,7 @@ import { supabaseStorageService } from "../services/supabaseStorageService";
 import { prisma } from "../prismaClient";
 import fs from "fs";
 import path from "path";
+import { parseAdminPagination } from '../utils/adminPagination';
 
 const safelyDeleteUpload = async (url?: string | null) => {
   if (!url) return;
@@ -29,7 +30,10 @@ const safelyDeleteUpload = async (url?: string | null) => {
 export class AdminController {
   static async getLessons(req: AuthenticatedRequest, res: Response) {
     try {
-      const lessons = await AdminService.getAllLessons();
+      const { page, pageSize } = parseAdminPagination(req.query);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const lessons = await AdminService.getAllLessons(page, pageSize, search, status);
       return res.status(200).json(lessons);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to retrieve lessons." });
@@ -359,7 +363,12 @@ export class AdminController {
 
   static async getUsers(req: AuthenticatedRequest, res: Response) {
     try {
-      const users = await AdminService.getUsers();
+      const { page, pageSize } = parseAdminPagination(req.query);
+      const role = req.query.role === 'user' || req.query.role === 'admin' || req.query.role === 'moderator' || req.query.role === 'staff'
+        ? req.query.role
+        : undefined;
+      const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
+      const users = await AdminService.getUsers({ page, pageSize, search, role });
       return res.status(200).json(users);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to retrieve users." });
@@ -389,7 +398,10 @@ export class AdminController {
   // Challenges
   static async getChallenges(req: AuthenticatedRequest, res: Response) {
     try {
-      const items = await AdminService.getAllChallenges();
+      const { page, pageSize } = parseAdminPagination(req.query);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const items = await AdminService.getAllChallenges(page, pageSize, search, status);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch challenges." });
@@ -510,7 +522,8 @@ export class AdminController {
 
       const requestedType = req.query.type;
       const submissionType = requestedType === 'challenge' || requestedType === 'event' ? requestedType : 'all';
-      const items = await AdminService.getSubmissions(filterBarangay, submissionType);
+      const { page, pageSize } = parseAdminPagination(req.query);
+      const items = await AdminService.getSubmissions(filterBarangay, submissionType, page, pageSize);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch submissions." });
@@ -624,7 +637,9 @@ export class AdminController {
   // Events
   static async getEvents(req: AuthenticatedRequest, res: Response) {
     try {
-      const items = await AdminService.getAllEvents();
+      const { page, pageSize } = parseAdminPagination(req.query);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
+      const items = await AdminService.getAllEvents(page, pageSize, search);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch events." });

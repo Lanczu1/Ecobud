@@ -29,6 +29,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
 
 interface SwapListingItem {
@@ -211,7 +212,7 @@ function SwapListingCard({
               <img
                 src={images[activeImgIdx] || images[0]}
                 alt={listing.title || 'Listing image'}
-                className="w-full h-full object-cover cursor-pointer transition-transform duration-300 hover:scale-105"
+                className="w-full h-full object-cover cursor-pointer transition-transform duration-300 hover:scale-105" loading="lazy" decoding="async"
                 onClick={() => onPreviewImages(images, activeImgIdx, listing.title)}
               />
 
@@ -291,7 +292,7 @@ function SwapListingCard({
                   }`}
                   title={`Photo ${idx + 1}`}
                 >
-                  <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 </button>
               );
             })}
@@ -1143,6 +1144,8 @@ function ReportListingModal({
 export function GiveAndGetHub() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [listings, setListings] = useState<SwapListingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SwapStats | null>(null);
@@ -1167,14 +1170,19 @@ export function GiveAndGetHub() {
     title: '',
   });
 
-  const fetchListings = async () => {
+  const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({ page: String(pageToLoad), pageSize: '25' });
+      if (['pending', 'approved', 'rejected'].includes(statusToLoad)) params.set('status', statusToLoad);
+      if (statusToLoad === 'reported') params.set('reported', 'true');
+      if (searchToLoad.trim()) params.set('search', searchToLoad.trim());
       const [listingsData, statsData] = await Promise.all([
-        adminGet<SwapListingItem[]>('/give-and-get/swap-listings'),
+        adminGet<{ items: SwapListingItem[]; pagination: typeof pagination }>(`/give-and-get/swap-listings?${params.toString()}`),
         adminGet<SwapStats>('/give-and-get/swap-listings/stats'),
       ]);
-      setListings(listingsData);
+      setListings(listingsData.items);
+      setPagination(listingsData.pagination);
       setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch swap listings', error);
@@ -1185,8 +1193,9 @@ export function GiveAndGetHub() {
   };
 
   useEffect(() => {
-    fetchListings();
-  }, []);
+    const timer = setTimeout(() => void fetchListings(page, filterStatus, search), 300);
+    return () => clearTimeout(timer);
+  }, [page, filterStatus, search]);
 
   const handleApprove = async (id: string) => {
     try {
@@ -1386,7 +1395,7 @@ export function GiveAndGetHub() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredListings.map(listing => (
             <SwapListingCard
               key={listing.id}
@@ -1401,6 +1410,8 @@ export function GiveAndGetHub() {
           ))}
         </div>
       )}
+
+      <AdminPagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} onPageChange={setPage} />
 
       {!loading && filteredListings.length === 0 && (
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-12 text-center">

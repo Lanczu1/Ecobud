@@ -6,7 +6,8 @@ import {
   ChevronDown, ChevronRight, User, Layers, Filter, 
   RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, Info, FileText, CheckSquare
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
 
@@ -659,8 +660,10 @@ function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: Chall
 }
 
 export function Challenges() {
-  const [challenges, setChallenges] = useState<Challenge[]>(() => getCachedAdminData<Challenge[]>('/admin/challenges') || []);
-  const [loading, setLoading] = useState(() => !getCachedAdminData<Challenge[]>('/admin/challenges'));
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -679,6 +682,8 @@ export function Challenges() {
   // ── Submissions tab state ────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>('challenges');
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
+  const [submissionsPage, setSubmissionsPage] = useState(1);
+  const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const userJson = localStorage.getItem('ecobud_admin_user');
   const loggedInUser = useMemo(() => {
@@ -721,8 +726,12 @@ export function Challenges() {
 
   const load = async () => {
     try {
-      const data = await adminGet<Challenge[]>('/admin/challenges');
-      setChallenges(data);
+      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      if (search.trim()) params.set('search', search.trim());
+      if (filterStatus !== 'All') params.set('status', filterStatus);
+      const data = await adminGet<{ items: Challenge[]; pagination: typeof pagination }>(`/admin/challenges?${params.toString()}`);
+      setChallenges(data.items);
+      setPagination(data.pagination);
       setError(null);
     } catch (err: any) {
       if (challenges.length === 0) {
@@ -733,14 +742,15 @@ export function Challenges() {
     }
   };
 
-  const loadSubmissions = async (showLoading = true) => {
+  const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
     if (submissionsRefreshInFlight.current) return;
     submissionsRefreshInFlight.current = true;
     if (showLoading) setSubmissionsLoading(true);
     try {
-      const data = await adminGet<ChallengeSubmission[]>('/admin/submissions?type=challenge', { bypassCache: true });
+      const data = await adminGet<{ items: ChallengeSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?type=challenge&page=${page}&pageSize=25`, { bypassCache: true });
       // Filter to only challenge submissions; event submissions belong in the Events page.
-      setSubmissions(data.filter(isChallengeSubmission));
+      setSubmissions(data.items.filter(isChallengeSubmission));
+      setSubmissionsPagination(data.pagination);
     } catch (err: any) { 
       console.error('Failed to load submissions', err); 
       if (showLoading) toast.error(err.message || 'Failed to load submissions');
@@ -751,17 +761,20 @@ export function Challenges() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => void load(), 250);
+    return () => clearTimeout(timer);
+  }, [page, search, filterStatus]);
 
   useEffect(() => {
     if (activeTab === 'submissions') {
       loadSubmissions();
       const interval = setInterval(() => {
         void loadSubmissions(false);
-      }, 5000);
+      }, 30000);
       return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, submissionsPage]);
 
   // Preliminary approval: approves Before Photo and prompts user to take After Photo
   const handlePreliminaryApprove = async (id: string) => {
@@ -1292,10 +1305,10 @@ export function Challenges() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center animate-reveal delay-160">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search challenges..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+          <input type="text" placeholder="Search challenges..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
         </div>
         {['All', 'Active', 'Inactive', 'Expired'].map(f => (
-          <button key={f} onClick={() => setFilterStatus(f)} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
+          <button key={f} onClick={() => { setFilterStatus(f); setPage(1); }} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
         ))}
       </div>
 
@@ -1395,6 +1408,7 @@ export function Challenges() {
               ))}
           </tbody>
         </table>
+        <AdminPagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} onPageChange={setPage} />
           {!loading && filtered.length === 0 && (
             <div className="text-center py-12 text-gray-400">
               {challenges.length === 0 ? 'No challenges yet. Create your first one!' : 'No challenges match your search.'}
@@ -1406,6 +1420,7 @@ export function Challenges() {
         /* ─── SUBMISSIONS TAB (HIERARCHICAL USER -> CHALLENGE -> SUBMISSION) ─── */
         <div className="space-y-6">
           {/* Submissions stats */}
+          <AdminPagination page={submissionsPagination.page} totalPages={submissionsPagination.totalPages} total={submissionsPagination.total} onPageChange={setSubmissionsPage} />
           <div className="grid grid-cols-4 gap-4">
             {[
               { label: 'Pending Review', value: submissions.filter(s => s.status === 'pending').length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-100 dark:border-orange-800' },

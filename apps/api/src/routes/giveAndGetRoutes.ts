@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { parseAdminPagination } from '../utils/adminPagination';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
 import { sendDirectNotification } from '../services/notificationService';
@@ -81,19 +82,23 @@ router.patch('/:id/status', authenticateRequest, requireModeratorAccess, async (
 router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
     const { status, reported } = req.query;
+    const { page, pageSize, skip } = parseAdminPagination(req.query);
     const where: any = {};
     if (status && status !== 'all') where.approvalStatus = status;
     if (reported === 'true') where.isReported = true;
+    if (typeof req.query.search === 'string' && req.query.search.trim()) where.title = { contains: req.query.search.trim().slice(0, 100), mode: 'insensitive' };
 
-    const listings = await prisma.swapListing.findMany({
+    const [listings, total] = await Promise.all([prisma.swapListing.findMany({
       where,
+      skip,
+      take: pageSize,
       include: {
         user: {
           select: { name: true, email: true },
         },
       },
       orderBy: { createdAt: 'desc' },
-    });
+    }), prisma.swapListing.count({ where })]);
 
     const formatted = listings.map(listing => ({
       id: listing.id,
@@ -121,7 +126,7 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
       quantity: listing.quantity,
     }));
 
-    res.json(formatted);
+    res.json({ items: formatted, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching swap listings for admin:', error);
     res.status(500).json({ message: 'Internal server error' });

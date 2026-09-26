@@ -29,10 +29,10 @@ class AdminRealtimeService {
   }
 
   private start() {
-    // Periodic refresh every 25 seconds to preserve network/database bandwidth
+    // Periodic refresh at the same pace as presence updates.
     this.timer = setInterval(() => {
       this.notifyAll();
-    }, 25000);
+    }, 60000);
 
     if (typeof window !== 'undefined') {
       window.addEventListener('visibilitychange', this.handleVisibility);
@@ -55,25 +55,25 @@ class AdminRealtimeService {
 
   private handleVisibility = () => {
     if (document.visibilityState === 'visible') {
-      this.notifyAll();
+      this.notifyAll({ refreshUsers: false });
     }
   };
 
   private handleFocus = () => {
-    this.notifyAll();
+    this.notifyAll({ refreshUsers: false });
   };
 
   private handleOnline = () => {
-    this.notifyAll();
+    this.notifyAll({ refreshUsers: false });
   };
 
-  notifyAll() {
+  notifyAll(options: { refreshUsers?: boolean } = {}) {
     if (this.isNotifying) return;
     this.isNotifying = true;
     try {
       this.subscribers.forEach((sub) => {
         try {
-          sub.onUsersRefresh?.();
+          if (options.refreshUsers !== false) sub.onUsersRefresh?.();
           sub.onStatsRefresh?.();
           sub.onRedeemRefresh?.();
         } catch (err) {
