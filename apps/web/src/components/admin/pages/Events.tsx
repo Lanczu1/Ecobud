@@ -8,7 +8,8 @@ import {
   CheckCircle2, XCircle, ShieldCheck, RefreshCw
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, getCachedAdminData, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST } from '../../../utils/adminApi';
+import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -621,8 +622,10 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function Events() {
-  const [events, setEvents] = useState<AdminEvent[]>(() => getCachedAdminData<AdminEvent[]>('/admin/events') || []);
-  const [loading, setLoading] = useState(() => !getCachedAdminData<AdminEvent[]>('/admin/events'));
+  const [page, setPage] = useState(1);
+  const [eventPagination, setEventPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [events, setEvents] = useState<AdminEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const eventsRefreshInFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -641,6 +644,8 @@ export function Events() {
 
   // ── Event Submissions state ────────────────────────────────────────────────
   const [submissions, setSubmissions] = useState<EventSubmission[]>([]);
+  const [submissionsPage, setSubmissionsPage] = useState(1);
+  const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const submissionsRefreshInFlight = useRef(false);
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
@@ -651,15 +656,16 @@ export function Events() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewNotice, setReviewNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const loadSubmissions = async (showLoading = true) => {
+  const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
     if (submissionsRefreshInFlight.current) return;
     submissionsRefreshInFlight.current = true;
     if (showLoading) setSubmissionsLoading(true);
     try {
-      const data = await adminGet<EventSubmission[]>('/admin/submissions?type=event', { bypassCache: true });
-      setSubmissions(data.filter(submission =>
+      const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?type=event&page=${page}&pageSize=25`);
+      setSubmissions(data.items.filter(submission =>
         submission.submissionType === 'EVENT' || submission.challenge?.type === 'EVENT'
       ));
+      setSubmissionsPagination(data.pagination);
     } catch (err: any) {
       console.error('Failed to load event submissions', err);
     } finally {
@@ -697,8 +703,11 @@ export function Events() {
     if (eventsRefreshInFlight.current) return;
     eventsRefreshInFlight.current = true;
     try {
-      const data = await adminGet<AdminEvent[]>('/admin/events', { bypassCache: true });
-      setEvents(data);
+      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      if (search.trim()) params.set('search', search.trim());
+      const data = await adminGet<{ items: AdminEvent[]; pagination: typeof eventPagination }>(`/admin/events?${params.toString()}`);
+      setEvents(data.items);
+      setEventPagination(data.pagination);
       setError(null);
     } catch (err: any) {
       if (events.length === 0) {
@@ -727,10 +736,10 @@ export function Events() {
 
   useEffect(() => {
     if (activeTab !== 'events') return;
-    void load();
-    const interval = setInterval(() => void load(), 5000);
-    return () => clearInterval(interval);
-  }, [activeTab]);
+    const initial = setTimeout(() => void load(), 250);
+    const interval = setInterval(() => void load(), 30000);
+    return () => { clearTimeout(initial); clearInterval(interval); };
+  }, [activeTab, page, search]);
 
   // Fetch submissions when switching to submissions tab or initially
   useEffect(() => {
@@ -738,26 +747,26 @@ export function Events() {
       loadSubmissions();
       const interval = setInterval(() => {
         void loadSubmissions(false);
-      }, 5000);
+      }, 30000);
       return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, submissionsPage]);
 
-  // Fetch report data for all events when switching to reports tab
+  // Load report details only for the event the admin expands.
   useEffect(() => {
-    if (activeTab === 'reports') {
-      events.forEach(async (event) => {
-        if (!reportDataCache[event.id]) {
-          try {
-            const data = await adminGet<EventReportData>(`/reports/events/${event.id}`);
-            setReportDataCache(prev => ({ ...prev, [event.id]: data }));
-          } catch {
-            // Silently fail - will show dashes
-          }
-        }
+    if (activeTab !== 'reports' || !expandedReport || reportDataCache[expandedReport]) return;
+    let active = true;
+    setReportLoading(expandedReport);
+    void adminGet<EventReportData>(`/reports/events/${expandedReport}`)
+      .then(data => {
+        if (active) setReportDataCache(prev => ({ ...prev, [expandedReport]: data }));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setReportLoading(null);
       });
-    }
-  }, [activeTab, events]);
+    return () => { active = false; setReportLoading(current => current === expandedReport ? null : current); };
+  }, [activeTab, expandedReport, reportDataCache]);
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter(sub => {
@@ -1143,7 +1152,7 @@ export function Events() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center animate-reveal delay-160">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search events..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
+          <input type="text" placeholder="Search events..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
         </div>
         {['All', 'Upcoming', 'Past', 'Full'].map(f => (
           <button key={f} onClick={() => setFilterStatus(f)} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
@@ -1290,6 +1299,7 @@ export function Events() {
           <p className="text-gray-400">{events.length === 0 ? 'No events yet. Create your first one!' : 'No events match your search.'}</p>
         </div>
       )}
+      <AdminPagination page={eventPagination.page} totalPages={eventPagination.totalPages} total={eventPagination.total} onPageChange={setPage} />
         </>
       )}
 
@@ -1302,7 +1312,7 @@ export function Events() {
               { label: 'Pending Review', value: submissions.filter(s => s.status === 'pending').length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-100 dark:border-orange-800' },
               { label: 'Approved Attendance', value: submissions.filter(s => s.status === 'approved').length, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-100 dark:border-green-800' },
               { label: 'Rejected', value: submissions.filter(s => s.status === 'rejected').length, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-100 dark:border-red-800' },
-              { label: 'Total Submissions', value: submissions.length, color: 'text-gray-900 dark:text-white', bg: 'bg-white dark:bg-gray-900', border: 'border-gray-100 dark:border-gray-800' },
+              { label: 'Total Submissions', value: submissionsPagination.total, color: 'text-gray-900 dark:text-white', bg: 'bg-white dark:bg-gray-900', border: 'border-gray-100 dark:border-gray-800' },
             ].map((s, idx) => {
               const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
               return (
@@ -1313,6 +1323,7 @@ export function Events() {
               );
             })}
           </div>
+          <AdminPagination page={submissionsPagination.page} totalPages={submissionsPagination.totalPages} total={submissionsPagination.total} onPageChange={setSubmissionsPage} />
 
           {/* Info Banner */}
           <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-2xl p-4 flex items-center justify-between gap-3 animate-reveal delay-160">
@@ -1582,10 +1593,10 @@ export function Events() {
           {/* Reports Stats */}
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: 'Total Events', value: events.length, color: 'text-gray-900 dark:text-white' },
-              { label: 'With Reports', value: Object.keys(reportDataCache).length, color: 'text-green-600 dark:text-green-400' },
-              { label: 'Total Participants', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalRegistered, 0), color: 'text-blue-600 dark:text-blue-400' },
-              { label: 'Total Rewards Given', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalCoinsAwarded + d.stats.totalExpAwarded, 0), color: 'text-purple-600 dark:text-purple-400' },
+              { label: 'Total Events', value: eventPagination.total, color: 'text-gray-900 dark:text-white' },
+              { label: 'Loaded Reports', value: Object.keys(reportDataCache).length, color: 'text-green-600 dark:text-green-400' },
+              { label: 'Participants in Loaded Reports', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalRegistered, 0), color: 'text-blue-600 dark:text-blue-400' },
+              { label: 'Rewards in Loaded Reports', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalCoinsAwarded + d.stats.totalExpAwarded, 0), color: 'text-purple-600 dark:text-purple-400' },
             ].map((s, idx) => {
               const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
               return (
@@ -1694,6 +1705,9 @@ export function Events() {
                         </tr>
 
                         {/* Expanded Details Row */}
+                        {isExpanded && !reportData && (
+                          <tr><td colSpan={9} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">{reportLoading === event.id ? 'Loading report details…' : 'Report details are not available.'}</td></tr>
+                        )}
                         {isExpanded && reportData && (
                           <tr>
                             <td colSpan={9} className="px-6 py-0 bg-gray-50/80 dark:bg-gray-950/70 border-y border-gray-100 dark:border-gray-800">

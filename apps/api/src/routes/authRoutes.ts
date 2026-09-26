@@ -612,4 +612,25 @@ authRoutes.post(
   }),
 );
 
+authRoutes.post(
+  '/logout',
+  authLimiter,
+  errorBoundary(async (req, res) => {
+    const { refreshToken } = z.object({ refreshToken: z.string().min(1).max(16384) }).parse(req.body);
+    let refreshSession;
+    try {
+      refreshSession = TokenService.verifyRefresh(refreshToken);
+    } catch {
+      return res.status(204).end();
+    }
+
+    // Refresh JWTs are stateless, so invalidate the account's current sessions.
+    await prisma.user.updateMany({
+      where: { id: refreshSession.userId, sessionVersion: refreshSession.sessionVersion },
+      data: { sessionVersion: { increment: 1 } },
+    });
+    return res.status(204).end();
+  }),
+);
+
 export { authRoutes };

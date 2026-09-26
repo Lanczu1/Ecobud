@@ -1461,6 +1461,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const handleLogout = useCallback(async () => {
     await runWithActionLoader('Signing you out...', async () => {
+      if (session?.refreshToken) {
+        try {
+          await homeService.logout(session.refreshToken);
+        } catch (err) {
+          console.warn('[handleLogout] Server session revocation failed:', err);
+        }
+      }
+
       try {
         await presence.disconnectPresence({
           clearSessionId: true,
@@ -1487,7 +1495,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       setActiveTabState('home');
       void persistSession(null);
     });
-  }, [clearAppData, persistSession, presence, runWithActionLoader]);
+  }, [clearAppData, persistSession, presence, runWithActionLoader, session?.refreshToken]);
 
   const refreshEverything = useCallback(async () => {
     if (!session) {
@@ -1677,6 +1685,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
         if (mutationMode === 'online') {
           // Intentionally omitting hydrateApp here to avoid race conditions with updateLessonProgress
         }
+        // Lesson bodies, pages, and quiz questions are lazy-loaded so the
+        // initial home fetch stays small. Merge them into the cached summary.
+        const detail = await homeService.getLessons(activeSession.token, lessonId);
+        if (!detail[0]) throw new Error('Lesson details could not be loaded.');
+        setLessons((current) => current.map((lesson) =>
+          lesson.id === lessonId ? { ...lesson, ...detail[0] } : lesson,
+        ));
       } catch (error) {
         Alert.alert('Unable to open lesson', error instanceof Error ? error.message : 'Please try again.');
         return;

@@ -6,8 +6,20 @@ interface CacheEntry<T> {
 class MemoryCache {
   private store = new Map<string, CacheEntry<any>>();
   private pending = new Map<string, Promise<any>>();
+  private readonly maxEntries = 500;
 
   set<T>(key: string, value: T, ttlSeconds: number): void {
+    if (!this.store.has(key) && this.store.size >= this.maxEntries) {
+      const now = Date.now();
+      for (const [storedKey, entry] of this.store) {
+        if (entry.expiresAt <= now) this.store.delete(storedKey);
+      }
+      while (this.store.size >= this.maxEntries) {
+        const oldestKey = this.store.keys().next().value;
+        if (oldestKey === undefined) break;
+        this.store.delete(oldestKey);
+      }
+    }
     const expiresAt = Date.now() + ttlSeconds * 1000;
     this.store.set(key, { value, expiresAt });
   }

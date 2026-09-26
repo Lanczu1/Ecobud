@@ -35,6 +35,7 @@ export const homeService = {
 
   refreshSession: (refreshToken: string) =>
     ecobudApi.refreshSession(refreshToken),
+  logout: (refreshToken: string) => ecobudApi.logout(refreshToken),
 
   googleLogin: (payload: { accessToken: string; email: string; displayName?: string; avatarUrl?: string; city?: string }) =>
     ecobudApi.googleLogin(payload),
@@ -59,8 +60,8 @@ export const homeService = {
   getDashboard: (token: string) =>
     ecobudApi.fetchDashboard(token),
 
-  getLessons: (token: string) =>
-    ecobudApi.fetchLessons(token).then((res: any) => (Array.isArray(res) ? res : res?.items || [])),
+  getLessons: (token: string, lessonId?: string) =>
+    ecobudApi.fetchLessons(token, lessonId).then((res: any) => (Array.isArray(res) ? res : res?.items || [])),
 
   getChallenges: (token: string) =>
     ecobudApi.fetchChallenges(token).then((res: any) => ({

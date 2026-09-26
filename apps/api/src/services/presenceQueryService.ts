@@ -131,12 +131,24 @@ export class PresenceQueryService {
     };
   }
 
-  async getAdminUsers(snapshotDate: Date = new Date()): Promise<AdminPresenceUser[]> {
-    const [users, presenceSummaryRows] = await Promise.all([
+  async getAdminUsers(options: { page: number; pageSize: number; search?: string; role?: string }, snapshotDate: Date = new Date()) {
+    const { page, pageSize, search, role } = options;
+    const where: Prisma.UserWhereInput = {
+      ...(role === 'staff' ? { role: { in: ['admin', 'moderator'] as any } } : role ? { role: role as any } : {}),
+      ...(search ? { OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { profile: { is: { displayName: { contains: search, mode: 'insensitive' } } } },
+      ] } : {}),
+    };
+    const [users, total] = await Promise.all([
       this.database.user.findMany({
+        where,
         orderBy: {
           createdAt: 'desc',
         },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
         select: {
           id: true,
           name: true,
@@ -155,12 +167,14 @@ export class PresenceQueryService {
           },
         },
       }),
-      this.getPresenceSummaryRows(snapshotDate),
+      this.database.user.count({ where }),
     ]);
+
+    const presenceSummaryRows = await this.getPresenceSummaryRows(snapshotDate, users.map((user) => user.id));
 
     const presenceMap = this.buildPresenceMap(presenceSummaryRows);
 
-    return users.map((user) => {
+    const items = users.map((user) => {
       const summary = presenceMap.get(user.id);
       const isStaff = user.role !== 'user';
 
@@ -183,6 +197,11 @@ export class PresenceQueryService {
         connectionState: isStaff ? null : (summary?.connectionState ?? null),
       };
     });
+
+    return {
+      items,
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    };
   }
 
   async getActiveUsersCountForRange(startOfDay: Date, endOfDay: Date): Promise<number> {
@@ -266,7 +285,9 @@ export class PresenceQueryService {
     return this.getActiveUsersCountForRange(startOfDay, endOfDay);
   }
 
-  private async getPresenceSummaryRows(snapshotDate: Date) {
+  private async getPresenceSummaryRows(snapshotDate: Date, userIds?: string[]) {
+    if (userIds && userIds.length === 0) return [];
+    const userFilter = userIds ? Prisma.sql`WHERE ps.user_id IN (${Prisma.join(userIds)})` : Prisma.empty;
     return this.database.$queryRaw<PresenceAggregateRow[]>(Prisma.sql`
       SELECT
         ps.user_id AS "userId",
@@ -305,6 +326,7 @@ export class PresenceQueryService {
         )[1]::text AS "appState"
       FROM presence_sessions ps
       INNER JOIN users u ON ps.user_id = u.id
+      ${userFilter}
       GROUP BY ps.user_id
     `);
   }
