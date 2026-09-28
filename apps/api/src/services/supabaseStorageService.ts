@@ -43,12 +43,20 @@ class SupabaseStorageService {
       if (!exists) {
         const { error: createError } = await this.client.storage.createBucket(this.bucketName, {
           public: true,
-          fileSizeLimit: 52428800, // 50MB (Supabase Free Tier max limit)
+          fileSizeLimit: 50000000,
         });
         if (createError) {
           console.error('[SupabaseStorage] Failed to create public bucket:', createError.message);
         } else {
           console.log(`[SupabaseStorage] Bucket "${this.bucketName}" created successfully with public access.`);
+        }
+      } else {
+        const { error: updateError } = await this.client.storage.updateBucket(this.bucketName, {
+          public: buckets.find((bucket) => bucket.name === this.bucketName)?.public ?? true,
+          fileSizeLimit: 50000000,
+        });
+        if (updateError) {
+          console.error('[SupabaseStorage] Failed to update bucket size limit:', updateError.message);
         }
       }
     } catch (e) {
