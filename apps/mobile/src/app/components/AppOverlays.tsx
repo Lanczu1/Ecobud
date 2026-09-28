@@ -3393,8 +3393,25 @@ export const markLessonVideoWatchedLocally = (userId: string, lessonId: string, 
 };
 // ──────────────────────────────────────────────────────────────────────────────
 
+const lessonTranscriptCache = new Map<string, string>();
+const lessonPagesCache = new Map<string, Array<{ id: string; title: string; description: string; content: string; order: number }>>();
+
 export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
+  const selectedLessonId = model.selectedLesson?.id;
+  const selectedTranscript = model.selectedLesson?.transcript?.trim();
+  const selectedPages = model.selectedLesson?.pages ?? [];
+
+  if (selectedLessonId && selectedTranscript) {
+    lessonTranscriptCache.set(selectedLessonId, selectedTranscript);
+  }
+  if (selectedLessonId && selectedPages.length > 0) {
+    lessonPagesCache.set(selectedLessonId, selectedPages);
+  }
+  const transcript = selectedTranscript || (selectedLessonId ? lessonTranscriptCache.get(selectedLessonId) : null);
+  const lessonPages = selectedPages.length > 0
+    ? selectedPages
+    : (selectedLessonId ? lessonPagesCache.get(selectedLessonId) : undefined) ?? [];
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
   const lessonScrollRef = React.useRef<ScrollView>(null);
   const lessonCardY = React.useRef(0);
@@ -3402,20 +3419,18 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const pageIndexTouchedRef = React.useRef(false);
   const pageAnim = React.useRef(new Animated.Value(1)).current;
 
-  const maxAllowedProgress = model.selectedLesson?.hasQuiz ? 80 : 99;
-  const numPages = model.selectedLesson?.pages?.length ?? 0;
+  const maxAllowedProgress = 80;
+  const numPages = lessonPages.length;
   const visiblePageIndex = Math.min(currentPageIndex, Math.max(0, numPages - 1));
   const videoProgressLimit = getVideoProgressLimit(!!model.selectedLesson?.hasQuiz, numPages);
 
   const isVideoWatchedInitial = React.useMemo(() => {
     if (!model.selectedLesson?.videoUrl) return true;
-    if (model.selectedLesson?.status === 'completed') return true;
     return isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id);
   }, [model.selectedLesson?.id, model.selectedLesson?.status, model.selectedLesson?.videoUrl, model.session?.user.id]);
 
   const [videoCollapsed, setVideoCollapsed] = React.useState(() => {
     if (!model.selectedLesson?.videoUrl) return false;
-    if (model.selectedLesson?.status === 'completed') return true;
     return isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id);
   });
 
@@ -3425,7 +3440,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const handleNextPage = () => {
     const lesson = model.selectedLesson;
-    const pageCount = lesson?.pages?.length ?? 0;
+    const pageCount = lessonPages.length;
     const nextPageIndex = Math.min(visiblePageIndex + 1, Math.max(0, pageCount - 1));
     if (lesson && pageCount > 0) {
       const videoContribution = lesson.videoUrl
@@ -3595,12 +3610,19 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       : Math.max(model.selectedLesson?.progress ?? 0, 0);
 
   const localSavedWatched = isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id);
+  const pageStageProgress = numPages > 0
+    ? Math.floor((model.selectedLesson?.videoUrl ? 70 : 0) + (maxAllowedProgress - (model.selectedLesson?.videoUrl ? 70 : 0)) * (currentPageIndex / numPages))
+    : 70;
 
   const initialProgress = model.selectedLesson?.status === 'completed'
     ? 100
-    : localRestoredProgress !== null
-      ? (localSavedWatched ? Math.max(videoProgressLimit, localRestoredProgress) : localRestoredProgress)
-      : (localSavedWatched ? Math.max(videoProgressLimit, serverProgress) : serverProgress);
+    : model.selectedLesson?.videoUrl
+      ? localSavedWatched
+        ? pageStageProgress
+        : Math.min(videoProgressLimit, localRestoredProgress ?? serverProgress)
+      : numPages > 0
+        ? pageStageProgress
+        : localRestoredProgress ?? serverProgress;
 
 
 
@@ -3614,13 +3636,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       setDisplayProgress(Math.round(value));
     });
 
-    const targetValue = model.selectedLesson?.status === 'completed'
-      ? 100
-      : Math.max(
-        initialProgress,
-        localRestoredProgress ?? 0,
-        model.selectedLesson?.progress ?? 0,
-      );
+    const targetValue = initialProgress;
 
     Animated.timing(animatedProgress, {
       toValue: targetValue,
@@ -3636,6 +3652,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   const maxWatchedTimeRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
   const lastKnownPlayerTimeRef = React.useRef(model.selectedLesson?.videoTimestamp ?? 0);
   const lastSaveTime = React.useRef(Date.now());
+  const videoCompletionHandledRef = React.useRef<string | null>(null);
   // null = not yet sought for this lesson, lessonId = already sought
   const initialSeekDoneForLessonRef = React.useRef<string | null>(null);
   // Kept separately from the progress percentage: a saved position can arrive
@@ -3667,6 +3684,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       }
       maxWatchedTimeRef.current = initialTs;
       lastKnownPlayerTimeRef.current = initialTs;
+      videoCompletionHandledRef.current = null;
       cachedDurationRef.current = 0;
       pendingRestoreTimestampRef.current = initialTs;
       hasSavedOnExit.current = false;
@@ -3676,7 +3694,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       initialSeekDoneForLessonRef.current = null;
       // Restore collapsed state for the newly opened lesson
       const nl = model.selectedLesson;
-      setVideoCollapsed(!nl?.videoUrl ? false : nl.status === 'completed' || isLessonVideoWatchedLocally(model.session?.user.id, nl?.id));
+      setVideoCollapsed(!nl?.videoUrl ? false : isLessonVideoWatchedLocally(model.session?.user.id, nl?.id));
     }
     return () => { cancelled = true; };
   }, [model.selectedLesson?.id, model.selectedLesson?.videoTimestamp, model.session?.user.id]);
@@ -3691,7 +3709,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }
 
     const userId = model.session?.user.id;
-    const isVideoDone = Boolean((userId && isLessonVideoWatchedLocally(userId, lesson.id)) || videoCollapsed);
+    const isVideoDone = Boolean(userId && isLessonVideoWatchedLocally(userId, lesson.id));
     const limit = getVideoProgressLimit(!!lesson.hasQuiz, lesson.pages?.length ?? 0);
 
     // Prefer live player duration, fall back to our cached value
@@ -3771,40 +3789,38 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   });
 
-  useEventListener(player, 'playToEnd', () => {
+  const completeVideoPlayback = (duration: number) => {
+    const lesson = lessonRef.current;
+    const userId = model.session?.user.id;
+    if (!lesson?.id || videoCompletionHandledRef.current === lesson.id) return;
+
+    videoCompletionHandledRef.current = lesson.id;
+    if (userId) {
+      markLessonVideoWatchedLocally(userId, lesson.id, videoProgressLimit, duration);
+      writeLocalLessonPageIndex(userId, lesson.id, 0);
+    }
+    pageIndexTouchedRef.current = true;
+    setCurrentPageIndex(0);
+    if (lesson.status !== 'completed') {
+      animatedProgress.setValue(videoProgressLimit);
+      setDisplayProgress(videoProgressLimit);
+    }
     setVideoPlaying(false);
+    setVideoCollapsed(true);
+    cachedDurationRef.current = duration;
+    maxWatchedTimeRef.current = duration;
+    lastKnownPlayerTimeRef.current = duration;
+    doSave();
+  };
+
+  useEventListener(player, 'playToEnd', () => {
     let pDur = 0;
     try { pDur = player?.duration ?? 0; } catch {}
     const duration = getVideoDurationForProgress(
       cachedDurationRef.current || pDur,
       model.selectedLesson?.durationMinutes,
     );
-    const lesson = lessonRef.current;
-    const limit = videoProgressLimit;
-    const wasAlreadyWatched = Boolean(
-      (model.session?.user.id && lesson?.id && isLessonVideoWatchedLocally(model.session.user.id, lesson.id))
-      || videoCollapsed,
-    );
-    if (model.session?.user.id && lesson?.id) {
-      markLessonVideoWatchedLocally(model.session.user.id, lesson.id, limit, duration);
-    }
-    if (lesson?.id && model.session?.user.id && !wasAlreadyWatched) {
-      pageIndexTouchedRef.current = true;
-      setCurrentPageIndex(0);
-      writeLocalLessonPageIndex(model.session.user.id, lesson.id, 0);
-    }
-    // Always mark video done in UI when playback reaches the end
-    if (model.selectedLesson?.status !== 'completed') {
-      animatedProgress.setValue(limit);
-      setDisplayProgress(limit);
-    }
-    setVideoCollapsed(true);
-    if (duration > 0) {
-      cachedDurationRef.current = duration;
-      maxWatchedTimeRef.current = duration;
-      lastKnownPlayerTimeRef.current = duration;
-    }
-    doSave();
+    if (duration > 0) completeVideoPlayback(duration);
   });
 
   useEventListener(player, 'sourceLoad', ({ duration }: { duration: number }) => {
@@ -3977,6 +3993,13 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
         maxWatchedTimeRef.current = curTime;
       }
 
+      // Some Android player builds miss playToEnd; finish when natural playback
+      // reaches the final second after passing the forward-seek guard.
+      if (curTime >= curDuration - 1 && maxWatchedTimeRef.current >= curDuration - 3) {
+        completeVideoPlayback(curDuration);
+        return;
+      }
+
       progressDataRef.current = { time: maxWatchedTimeRef.current, duration: curDuration };
 
       // `timeUpdate` is emitted by the native player even on longer media
@@ -4019,11 +4042,14 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const [showConfetti, setShowConfetti] = React.useState(false);
-  const videoIsComplete = !model.selectedLesson?.videoUrl
+  const hasLessonVideo = Boolean(model.selectedLesson?.videoUrl);
+  const videoIsComplete = !hasLessonVideo
     || videoCollapsed
     || isVideoWatchedInitial
     || isLessonVideoWatchedLocally(model.session?.user.id, model.selectedLesson?.id)
     || model.selectedLesson?.status === 'completed';
+  const showLessonPages = !hasLessonVideo || videoIsComplete;
+  const showVideoTranscript = Boolean(transcript) && (!hasLessonVideo || !videoIsComplete);
 
   React.useEffect(() => {
     if (displayProgress >= maxAllowedProgress && initialProgress < maxAllowedProgress && !showConfetti) {
@@ -4185,8 +4211,8 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 )
               ) : null}
               {/* Pages - only unlocked after video completes */}
-              {model.selectedLesson.pages && model.selectedLesson.pages.length > 0 ? (
-                videoIsComplete ? (
+              {lessonPages.length > 0 ? (
+                showLessonPages ? (
                   <Animated.View onLayout={({ nativeEvent }) => { pageSectionY.current = lessonCardY.current + moderateScale(18) + nativeEvent.layout.y; }} style={{
                     marginTop: 24,
                     backgroundColor: isDark ? theme.colors.surface : '#FAFCFB',
@@ -4198,10 +4224,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                     transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }]
                   }}>
                     <Text style={{ textAlign: 'center', marginTop: 0, color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
-                      Page {visiblePageIndex + 1} of {model.selectedLesson.pages.length}
+                      Page {visiblePageIndex + 1} of {lessonPages.length}
                     </Text>
                     <Text style={[styles.lessonBodyText, { marginTop: 12, color: theme.colors.textPrimary }]}>
-                      {model.selectedLesson.pages[visiblePageIndex].content}
+                      {lessonPages[visiblePageIndex].content}
                     </Text>
                   </Animated.View>
                 ) : (
@@ -4224,7 +4250,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 )
               ) : null}
 
-              {model.selectedLesson.transcript && (!model.selectedLesson.videoUrl || !videoCollapsed) ? (
+              {showVideoTranscript ? (
                 <View style={{
                   backgroundColor: isDark ? theme.colors.surface : '#F8FAF9',
                   padding: 20,
@@ -4247,7 +4273,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                     borderLeftColor: theme.colors.primary,
                     paddingLeft: 16
                   }}>
-                    {model.selectedLesson.transcript.split('\n').map((paragraph, index) => {
+                    {transcript.split('\n').map((paragraph, index) => {
                       if (!paragraph.trim()) return null;
                       return (
                         <Text key={index} style={{
@@ -4273,8 +4299,8 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       {model.selectedLesson && (() => {
         const lesson = model.selectedLesson;
         const hasVideo = !!lesson.videoUrl;
-        const hasPages = !!(lesson.pages && lesson.pages.length > 0);
-        const pageCount = lesson.pages?.length ?? 0;
+        const hasPages = lessonPages.length > 0;
+        const pageCount = lessonPages.length;
         const isCompleted = lesson.status === 'completed';
         const isOnLastPage = !hasPages || visiblePageIndex === pageCount - 1;
         const canGoBack = hasPages && visiblePageIndex > 0;
@@ -4371,10 +4397,9 @@ export function QuizOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const currentQuestion = model.quizQuestions[model.currentQuestionIndex];
   const totalQuestions = model.quizQuestions.length;
-  const progress = Math.max(
-    model.selectedLesson?.progress ?? 0,
-    getQuizLessonProgress(Object.keys(model.quizAnswers).length, totalQuestions),
-  );
+  const progress = model.quizCompleted || model.selectedLesson?.status === 'completed'
+    ? 100
+    : getQuizLessonProgress(Object.keys(model.quizAnswers).length, totalQuestions);
   const quizProgressAnim = React.useRef(new Animated.Value(progress)).current;
   const [displayQuizProgress, setDisplayQuizProgress] = React.useState(progress);
 

@@ -1,5 +1,7 @@
-export function getVideoProgressLimit(hasQuiz: boolean, pageCount = 0): number {
-  return pageCount > 0 ? 70 : (hasQuiz ? 80 : 99);
+export function getVideoProgressLimit(_hasQuiz: boolean, _pageCount = 0): number {
+  // Video completion is always the first learning milestone. Lesson pages
+  // raise progress to 80, and quiz completion owns the final 80–100 range.
+  return 70;
 }
 
 /**
