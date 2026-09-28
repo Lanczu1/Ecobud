@@ -67,6 +67,25 @@ const uniqueLessonsById = (items: LessonWithProgress[]): LessonWithProgress[] =>
   });
 };
 
+const mergeLessonDetails = (current: LessonWithProgress[], incoming: LessonWithProgress[]): LessonWithProgress[] =>
+  incoming.map((lesson) => {
+    const previous = current.find((item) => item.id === lesson.id);
+    if (!previous) return lesson;
+
+    const quizQuestions = lesson.quizQuestions?.length
+      ? lesson.quizQuestions
+      : previous.quizQuestions ?? lesson.quizQuestions ?? [];
+    return {
+      ...previous,
+      ...lesson,
+      content: lesson.content?.trim() ? lesson.content : previous.content,
+      transcript: lesson.transcript?.trim() ? lesson.transcript : previous.transcript,
+      pages: lesson.pages?.length ? lesson.pages : previous.pages ?? lesson.pages ?? [],
+      quizQuestions,
+      hasQuiz: Boolean(lesson.hasQuiz || previous.hasQuiz || quizQuestions.length),
+    };
+  });
+
 function formatChatTime(isoDate: string) {
   return new Date(isoDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
@@ -672,7 +691,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             }
           } catch { /* Ignore invalid local records. */ }
         }
-        setLessons(safeLessons);
+        setLessons((current) => mergeLessonDetails(current, safeLessons));
         const safeChallenges = Array.isArray(homeData?.challenges) ? homeData.challenges : [];
         setChallenges(safeChallenges);
         setIsCycleActive(homeData?.isCycleActive ?? true);
@@ -1019,7 +1038,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
               const result = await homeService.getLessons(token);
               if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt || !Array.isArray(result)) return;
               const safeLessons = uniqueLessonsById([...result]).sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)));
-              setLessons(safeLessons);
+              setLessons((current) => mergeLessonDetails(current, safeLessons));
             } else if (resource === 'challenges') {
               const result = await homeService.getChallenges(token);
               if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt) return;

@@ -3,7 +3,7 @@
     "name": "ECO-BUD",
     "slug": "eco-bud",
     "scheme": "ecobud",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "android": {
