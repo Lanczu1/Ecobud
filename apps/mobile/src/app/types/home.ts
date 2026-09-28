@@ -194,7 +194,6 @@ export interface EcoBudMobileModel {
   transparency: TransparencyFeed | null;
   todaysCompletedHabits: number;
   userDisplayName: string;
-  hasUsableInternet: boolean;
   isUserOnline: boolean;
   notificationCount: number;
   claimRewardData: { points: number; coins: number; origin?: { x: number; y: number } } | null;
@@ -230,6 +229,7 @@ export interface EcoBudMobileModel {
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
   handleLogout: () => Promise<void>;
   refreshEverything: () => Promise<void>;
+  syncQueuedOfflineActions: (activeSession: SessionPayload, refreshAfterSync?: boolean) => Promise<boolean>;
   openChallengeMission: (challenge: ChallengeWithProgress) => void;
   openLesson: (lessonId: string) => Promise<void>;
   handleCompleteLesson: () => Promise<void>;
