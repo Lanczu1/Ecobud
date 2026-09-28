@@ -96,12 +96,12 @@ const mediaFileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   return cb(new Error('Invalid media file type. Only standard images and MP4/WebM videos are allowed.'));
 };
 
-// Match the storage bucket's 50MB limit before accepting a file.
+// Supabase Free projects cap uploads at 50,000,000 bytes.
 export const uploadMiddleware = secureUpload({
   storage: tempStorage,
   fileFilter: mediaFileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024,
+    fileSize: 50_000_000,
   },
 });
 

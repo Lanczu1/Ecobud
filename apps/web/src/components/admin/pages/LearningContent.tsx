@@ -136,6 +136,12 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
 
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
+    if (file && file.size > 50_000_000) {
+      setErr('Video exceeds the 50 MB upload limit. Compress it and try again.');
+      e.target.value = '';
+      return;
+    }
+    setErr('');
     setVideoFile(file);
     if (file) {
       const video = document.createElement('video');

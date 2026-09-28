@@ -64,15 +64,6 @@ export class AdminController {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     if (files && files['video'] && files['video'][0]) {
       const videoFile = files['video'][0];
-      // Trigger transcription only if not already provided (using local temp file)
-      if (!transcript) {
-        try {
-          transcript = await TranscriptionService.transcribeVideo(videoFile.path);
-        } catch (err) {
-          console.error('Transcription failed, saving without transcript', err);
-        }
-      }
-
       try {
         const ext = path.extname(videoFile.originalname) || '.mp4';
         videoUrl = await supabaseStorageService.uploadFile(
@@ -82,6 +73,7 @@ export class AdminController {
         );
       } catch (err) {
         console.error('Failed to upload lesson video to Supabase:', err);
+        return res.status(502).json({ message: 'Failed to upload lesson video to storage. Check the storage file size limit and try again.' });
       } finally {
         if (fs.existsSync(videoFile.path)) {
           try { fs.unlinkSync(videoFile.path); } catch {}
@@ -178,12 +170,6 @@ export class AdminController {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     if (files && files['video'] && files['video'][0]) {
       const videoFile = files['video'][0];
-      if (!updateData.transcript) {
-        try {
-          updateData.transcript = await TranscriptionService.transcribeVideo(videoFile.path);
-        } catch (err) {}
-      }
-
       try {
         const ext = path.extname(videoFile.originalname) || '.mp4';
         const newVideoUrl = await supabaseStorageService.uploadFile(
@@ -197,6 +183,7 @@ export class AdminController {
         }
       } catch (err) {
         console.error('Failed to upload updated video to Supabase:', err);
+        return res.status(502).json({ message: 'Failed to upload lesson video to storage. Check the storage file size limit and try again.' });
       } finally {
         if (fs.existsSync(videoFile.path)) {
           try { fs.unlinkSync(videoFile.path); } catch {}
