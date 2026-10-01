@@ -351,7 +351,7 @@ export function FireStreak({
             },
           ]}
         >
-          {streakCount} Day{streakCount !== 1 ? 's' : ''}
+          {streakCount} Challenge{streakCount !== 1 ? 's' : ''}
         </Text>
 
         {/* Floating spark particles (orange/gold palette) */}

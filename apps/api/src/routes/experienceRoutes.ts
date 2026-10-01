@@ -297,6 +297,9 @@ experienceRoutes.get(
     return res.json({
       points: user?.points ?? 0,
       badges: badges.map((badge) => {
+        if (badge.name === 'Challenge Champion') {
+          return { ...badge, unlocked: unlockedBadgeIds.has(badge.id), currentProgress: challengeCount, targetProgress: 100 };
+        }
         if (badge.name === 'Giveaway Master') {
           return {
             ...badge,

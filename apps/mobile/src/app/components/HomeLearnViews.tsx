@@ -188,6 +188,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
             <UnifiedProgressCard
               ecoPoints={ecoPoints}
               currentStreak={currentStreak}
+              streakActive={model.dashboard?.streakSummary?.active ?? false}
               leaderboard={model.leaderboard}
               onOpenRoadmap={() => model.setActiveOverlay('ecoLevels')}
               onOpenStreak={() => model.setActiveOverlay('streakUnlocked')}

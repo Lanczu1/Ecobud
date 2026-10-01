@@ -3,11 +3,13 @@ import { HttpError } from '../http/errorResponder';
 import { prisma } from '../prismaClient';
 import { apiCache } from '../lib/cache';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
+import { StreakService } from './StreakService';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
 export interface HomeDashboardPayload {
   streak: number;
+  streakSummary: Awaited<ReturnType<StreakService['summary']>>;
   ecoPoints: number;
   ecoCoins: number;
   weeklyGoal: number;
@@ -49,7 +51,7 @@ export class UserStatsService {
       ]);
 
       const resolvedStreak = resolveLiveStreak(
-        stats.currentStreak,
+        user?.currentStreak ?? 0,
         user?.lastActionDate
       );
 
@@ -57,6 +59,7 @@ export class UserStatsService {
 
       return {
         streak: resolvedStreak,
+        streakSummary: await new StreakService(this.database).summary(userId),
         ecoPoints: stats.ecoPoints,
         ecoCoins: stats.ecoCoins,
         weeklyGoal: weeklyGoal.weeklyGoal,

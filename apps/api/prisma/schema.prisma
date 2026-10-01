@@ -26,6 +26,11 @@ model User {
   points                       Int                       @default(0)
   currentStreak                Int                       @default(0) @map("streak_count")
   lastActionDate               DateTime?                 @map("last_action_date")
+  lastChallengeAt              DateTime?                 @map("last_challenge_at")
+  streakRestoredAt             DateTime?                 @map("streak_restored_at")
+  streakRestoreMonth           String?                   @map("streak_restore_month")
+  streakRestoresUsed           Int                       @default(0) @map("streak_restores_used")
+  streakMilestones             StreakMilestone[]
   createdAt                    DateTime                  @default(now()) @map("created_at")
   updatedAt                    DateTime                  @updatedAt @map("updated_at")
   reviewedChallengeSubmissions ChallengeSubmission[]     @relation("ModeratedChallengeSubmissions")
@@ -60,6 +65,15 @@ model User {
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
   @@index([status, role, points(sort: Desc), createdAt], map: "users_leaderboard_order_idx")
   @@map("users")
+}
+
+model StreakMilestone {
+  userId String
+  challenges Int
+  awardedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, challenges])
 }
 
 model MfaLoginChallenge {

@@ -6,7 +6,7 @@ import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '..
 import { errorBoundary, HttpError } from '../http/errorResponder';
 import { getOrCreateActiveInstance, getOrCreateActiveInstancesBatch } from '../services/cycleManagerService';
 import { GamificationService } from '../services/GamificationService';
-import { resolveLiveStreak } from '../utils/gamificationUtils';
+import { StreakService } from '../services/StreakService';
 import { challengeUploadMiddleware, analyzeUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { spawn } from 'child_process';
@@ -917,18 +917,15 @@ challengeRoutes.get(
   authenticateRequest,
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    const user = await prisma.user.findUnique({
-      where: { id: req.auth!.userId },
-      select: {
-        currentStreak: true,
-        lastActionDate: true,
-      },
-    });
+    return res.json(await new StreakService().summary(req.auth!.userId));
+  }),
+);
 
-    return res.json({
-      currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
-      lastActionDate: user?.lastActionDate ?? null,
-    });
+challengeRoutes.post('/streaks/restore', authenticateRequest, requireUserAccess,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const summary = await new StreakService().restore(req.auth!.userId);
+    await supabaseRealtimeService.publishUserSectionRefresh(req.auth!.userId, 'tracker', { reason: 'streak-restored' }).catch(() => {});
+    return res.json(summary);
   }),
 );
 

@@ -490,6 +490,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 
         <SummaryCards
           currentStreak={getDisplayStreak(model)}
+          streakActive={model.dashboard?.streakSummary?.active ?? false}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
           onPressRewards={() => model.setActiveOverlay('streakRewards')}
           onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
@@ -2207,6 +2208,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
             >
               <SummaryCards
                 currentStreak={getDisplayStreak(model)}
+                streakActive={model.dashboard?.streakSummary?.active ?? false}
                 ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
                 onPressRewards={() => model.setActiveOverlay('streakRewards')}
                 onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
@@ -2293,7 +2295,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               <View style={{ alignItems: 'center' }}>
                 {(() => {
                   const currentStreak = getDisplayStreak(model);
-                  const isStreakActive = currentStreak >= 3;
+                  const isStreakActive = model.dashboard?.streakSummary?.active ?? false;
                   
                   return isStreakActive ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
@@ -2304,7 +2306,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                     </View>
                   ) : (
                     <Text style={{ fontSize: 12, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 6 }}>
-                      Count {currentStreak}/3 to show the streak
+                      {currentStreak} completed challenges. {currentStreak > 0 ? 'Streak inactive.' : 'Complete a challenge to start.'}
                     </Text>
                   );
                 })()}

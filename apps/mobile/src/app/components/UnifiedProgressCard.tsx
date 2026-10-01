@@ -16,6 +16,7 @@ import { type LeaderboardData } from '../../shared/api/ecobudApi';
 export interface UnifiedProgressCardProps {
   ecoPoints: number;
   currentStreak: number;
+  streakActive?: boolean;
   leaderboard?: LeaderboardData | null;
   onOpenRoadmap: () => void;
   onOpenStreak: () => void;
@@ -67,6 +68,7 @@ export function getLevelFromPoints(points: number) {
 export function UnifiedProgressCard({
   ecoPoints,
   currentStreak,
+  streakActive = false,
   leaderboard,
   onOpenRoadmap,
   onOpenStreak,
@@ -220,12 +222,12 @@ export function UnifiedProgressCard({
             }}
             style={styles.streakChip}
           >
-            <Text style={styles.streakFlameIcon}>🔥</Text>
+            <Ionicons name="flame" size={28} color={streakActive ? '#C2410C' : '#52685A'} />
             <View>
               <Text style={styles.streakChipNumber}>
-                {visibleStreak} {visibleStreak === 1 ? 'Day' : 'Days'}
+                {visibleStreak}
               </Text>
-              <Text style={styles.streakChipSub}>Streak</Text>
+              <Text style={styles.streakChipSub}>{streakActive ? 'Challenges' : 'Inactive streak'}</Text>
             </View>
           </TouchableOpacity>
 

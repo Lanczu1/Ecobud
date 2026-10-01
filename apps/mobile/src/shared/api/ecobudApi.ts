@@ -144,8 +144,18 @@ export interface PresenceSyncRequest {
   connectionState: PresenceConnectionState;
 }
 
+export interface StreakSummary {
+  currentStreak: number;
+  active: boolean;
+  restoresRemaining: number;
+  canRestore: boolean;
+  lastChallengeAt: string | null;
+  milestones: { challenges: number; points: number; ecoCoins: number; badge: string | null; awarded: boolean }[];
+}
+
 export interface DashboardData {
   streak: number;
+  streakSummary?: StreakSummary;
   ecoPoints: number;
   ecoCoins: number;
   weeklyGoal: number;
@@ -730,6 +740,8 @@ export const ecobudApi = {
     }),
   fetchDashboard: (token: string) =>
     request<DashboardData>('/home/dashboard', { token }),
+  fetchStreak: (token: string) => request<StreakSummary>('/challenges/streaks/summary', { token }),
+  restoreStreak: (token: string) => request<StreakSummary>('/challenges/streaks/restore', { method: 'POST', token }),
   fetchLessons: (token: string, lessonId?: string) =>
     request<LessonWithProgress[]>(`/learn/lessons${lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : ''}`, { token }),
   markLessonSeen: (token: string, lessonId: string) =>
