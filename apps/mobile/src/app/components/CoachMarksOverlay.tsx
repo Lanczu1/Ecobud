@@ -127,7 +127,7 @@ export function CoachMarksOverlay({
       targetTab: 'tracker',
       title: 'Maintain Your Streak!',
       titleIcon: '🔥',
-      description: 'Track your daily activity! Log your eco-actions every day to build your streak and earn bonus XP rewards.',
+      description: 'Complete challenges to grow your streak and earn milestone rewards. After 7 inactive days, restore the flame up to 3 times per month.',
       pose: 'left_point',
       mascotPosition: 'left',
       cardVerticalAlign: 'bottom',

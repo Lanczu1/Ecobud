@@ -35,11 +35,10 @@ export function getPhMonthKey(date: Date = new Date()): string {
 }
 
 /**
- * The visible streak only ignites when it reaches a threshold of 3 days.
- * If the actual streak is less than 3, it returns 0.
+ * Challenge counts remain visible while the flame is inactive.
  */
 export function getVisibleStreak(actualStreak: number): number {
-  return actualStreak >= 3 ? actualStreak - 2 : 0;
+  return Math.max(0, actualStreak);
 }
 
 // ─── Eco Level System ────────────────────────────────────────────────────────

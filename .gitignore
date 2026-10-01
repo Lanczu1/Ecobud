@@ -83,3 +83,5 @@ apps/api/ecobud-project-firebase-adminsdk-*.json
 
 # Local Android signing keys
 **/debug.keystore
+
+*.sql

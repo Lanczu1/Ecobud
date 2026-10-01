@@ -58,13 +58,13 @@ import {
   formatLongDate,
   formatEventDateTag,
   getEcoLevel,
-  getVisibleStreak,
   shortHash,
   getEventLifecycleStatus,
   resolveMediaUrl,
 } from '../utils/appUtils';
 import { triggerSuccessHaptic, triggerImpactMedium, triggerSelectionHaptic } from '../utils/haptics';
 import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
+import { ChallengeStreakOverlay } from './ChallengeStreakOverlay';
 import {
   TopNavbar,
   OverlayScaffold,
@@ -1717,9 +1717,9 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
     case 'claimParticles':
       return <ClaimParticlesOverlay model={model} />;
     case 'streakUnlocked':
-      return <StreakUnlockedOverlay model={model} />;
+      return <ChallengeStreakOverlay model={model} />;
     case 'streakRewards':
-      return <StreakRewardsOverlay model={model} />;
+      return <ChallengeStreakOverlay model={model} />;
     case 'badgeUnlocked':
       return <BadgeUnlockedOverlay model={model} />;
     case 'eventApproved':
@@ -4273,7 +4273,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                     borderLeftColor: theme.colors.primary,
                     paddingLeft: 16
                   }}>
-                    {transcript.split('\n').map((paragraph, index) => {
+                    {(transcript ?? '').split('\n').map((paragraph, index) => {
                       if (!paragraph.trim()) return null;
                       return (
                         <Text key={index} style={{
@@ -7022,323 +7022,6 @@ function FireRainParticle({ particle }: { particle: FireRainParticleProps }) {
         elevation: 4,
       }}
     />
-  );
-}
-
-export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
-  const scale = React.useRef(new Animated.Value(0.5)).current;
-  const opacity = React.useRef(new Animated.Value(0)).current;
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
-  const buttonPulseAnim = React.useRef(new Animated.Value(1)).current;
-  const particles = React.useMemo(() => generateFireRainParticles(20), []);
-
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, {
-        toValue: 1,
-        friction: 6,
-        tension: 80,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 350,
-        useNativeDriver: true,
-      })
-    ]).start();
-
-    // Pulse animation for the glowing container background
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.1, duration: 1500, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.95, duration: 1500, useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Pulse animation for the button
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(buttonPulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
-        Animated.timing(buttonPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-      ])
-    ).start();
-
-    return () => {
-      pulseAnim.stopAnimation();
-      buttonPulseAnim.stopAnimation();
-    };
-  }, [scale, opacity, pulseAnim, buttonPulseAnim]);
-
-  const closeOverlay = () => {
-    Animated.parallel([
-      Animated.spring(scale, {
-        toValue: 0.5,
-        friction: 6,
-        tension: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      })
-    ]).start(() => {
-      model.setActiveOverlay(null);
-    });
-  };
-
-  const streakVal = model.dashboard?.streak ?? 3;
-
-  return (
-    <View style={StyleSheet.absoluteFill}>
-      <Animated.View style={{ flex: 1, opacity: opacity as any, justifyContent: 'center', alignItems: 'center' }}>
-        
-        {/* Deep, premium dark gradient background */}
-        <LinearGradient
-          colors={['rgba(7, 28, 25, 0.96)', 'rgba(12, 18, 17, 0.99)']}
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Fire Sparks Rain/Shower Effect */}
-        <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
-          {particles.map((particle) => (
-            <FireRainParticle key={particle.id} particle={particle} />
-          ))}
-        </View>
-
-        <Animated.View 
-          style={{ 
-            transform: [{ scale: scale as any }], 
-            alignItems: 'center', 
-            width: '90%', 
-            zIndex: 10 
-          }}
-        >
-          {/* Lottie Fire Animation (Fire.lottie) */}
-          <View style={{ width: 180, height: 180, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-            <LottieView
-              source={require('../../../assets/Fire.lottie')}
-              autoPlay
-              loop
-              style={{ width: 180, height: 180 }}
-            />
-          </View>
-
-          {/* Active Streak Label Badge */}
-          <View style={{
-            backgroundColor: '#FF6D00',
-            paddingHorizontal: 16,
-            paddingVertical: 6,
-            borderRadius: 100,
-            marginBottom: 24,
-            shadowColor: '#FF6D00',
-            shadowOpacity: 0.4,
-            shadowRadius: 10,
-            elevation: 4,
-          }}>
-            <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 13, letterSpacing: 1.5 }}>
-              {streakVal}-DAY STREAK
-            </Text>
-          </View>
-
-          {/* Achievement Titles */}
-          <Text style={{ 
-            fontSize: 36, 
-            fontWeight: '900', 
-            color: '#FFF', 
-            textAlign: 'center', 
-            marginBottom: 12,
-            textShadowColor: 'rgba(244, 144, 0, 0.3)',
-            textShadowOffset: { width: 0, height: 3 },
-            textShadowRadius: 10 
-          }}>
-            Streak Unlocked!
-          </Text>
-          
-          <Text style={{ 
-            fontSize: 16, 
-            color: '#A7F3D0', 
-            textAlign: 'center', 
-            lineHeight: 24, 
-            marginBottom: 32, 
-            paddingHorizontal: 16,
-            opacity: 0.9 
-          }}>
-            Outstanding job! You've successfully completed habit actions {streakVal} days in a row. Keep completing daily actions to watch your streak grow and earn bigger rewards.
-          </Text>
-
-          {/* Clean, boxless rewards row */}
-          <View style={{ 
-            flexDirection: 'row', 
-            justifyContent: 'center', 
-            gap: 24, 
-            width: '100%', 
-            marginBottom: 36 
-          }}>
-            {/* Reward 1 */}
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <Ionicons name="leaf" size={24} color="#34D399" />
-              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '800' }}>+50 XP</Text>
-            </View>
-
-            {/* Reward 2 */}
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <Image source={require('../../../assets/coin.png')} style={{ width: 22, height: 22, resizeMode: 'contain' }} />
-              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '800' }}>+10 Coins</Text>
-            </View>
-          </View>
-
-          <Animated.View style={{ transform: [{ scale: buttonPulseAnim as any }], width: '100%' }}>
-            <PrimaryButton 
-              label="Keep it up!" 
-              onPress={closeOverlay} 
-            />
-          </Animated.View>
-        </Animated.View>
-      </Animated.View>
-    </View>
-  );
-}
-
-export function StreakRewardsOverlay({ model }: { model: EcoBudMobileModel }) {
-  const currentStreak = getVisibleStreak(model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0);
-
-  const scaleAnim = React.useRef(new Animated.Value(0.5)).current;
-  const opacityAnim = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      })
-    ]).start();
-  }, [scaleAnim, opacityAnim]);
-
-  const closeOverlay = () => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 0.5,
-        friction: 6,
-        tension: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      })
-    ]).start(() => {
-      model.setActiveOverlay(null);
-    });
-  };
-
-  const rewards = [
-    { day: 7, text: '5 Coins + 25 EXP' },
-    { day: 14, text: '10 Coins + 40 EXP' },
-    { day: 21, text: '15 Coins + 50 EXP' },
-    { day: 30, text: '25 Coins + 100 EXP' },
-    { day: 40, text: '30 Coins + 120 EXP' },
-    { day: 50, text: '50 Coins + 200 EXP' },
-    { day: 60, text: '60 Coins + 250 EXP' },
-    { day: 70, text: '70 Coins + 300 EXP' },
-    { day: 80, text: '80 Coins + 350 EXP' },
-    { day: 90, text: '90 Coins + 400 EXP' },
-    { day: 100, text: '150 Coins + 1,000 EXP + 100-Day Badge' },
-  ];
-
-  return (
-    <Animated.View style={[StyleSheet.absoluteFill, { zIndex: 9999, justifyContent: 'center', alignItems: 'center', opacity: opacityAnim }]}>
-      <TouchableOpacity 
-        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} 
-        activeOpacity={1} 
-        onPress={closeOverlay} 
-      />
-      <Animated.View style={{
-        width: '90%',
-        maxHeight: '85%',
-        backgroundColor: '#0C5E54',
-        borderRadius: 24,
-        padding: 24,
-        shadowColor: '#000',
-        shadowOpacity: 0.5,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: 10 },
-        elevation: 10,
-        transform: [{ scale: scaleAnim }],
-      }}>
-        <View style={{ marginBottom: 20 }}>
-          <Text style={{ fontSize: 24, fontWeight: '900', color: '#FFF', textAlign: 'center' }}>Streak Rewards</Text>
-          <Text style={{ fontSize: 14, color: '#A7F3D0', textAlign: 'center', marginTop: 8 }}>Keep your streak going to unlock more rewards!</Text>
-        </View>
-
-        <View style={{ alignItems: 'center', marginBottom: 20 }}>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFF' }}>Your Streak: {currentStreak} Days</Text>
-        </View>
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
-          <View style={{ gap: 12 }}>
-            {rewards.map((reward, index) => {
-              const isUnlocked = currentStreak >= reward.day;
-              const isMilestone = reward.day === 100;
-              return (
-                <View
-                  key={index}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: isUnlocked ? 'rgba(74, 222, 128, 0.15)' : 'rgba(255,255,255,0.05)',
-                    padding: 12,
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderColor: isUnlocked ? '#4ADE80' : 'rgba(255,255,255,0.1)',
-                  }}
-                >
-                  <View style={{ width: 32, alignItems: 'center', justifyContent: 'center' }}>
-                    {isUnlocked ? (
-                      <Ionicons name="checkmark-circle" size={18} color="#4ADE80" />
-                    ) : isMilestone ? (
-                      <Ionicons name="trophy" size={18} color="#FBBF24" />
-                    ) : (
-                      <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.4)" />
-                    )}
-                  </View>
-                  <View style={{ width: 70 }}>
-                    <Text style={{ color: isUnlocked ? '#4ADE80' : '#A7F3D0', fontWeight: '800', fontSize: 14 }}>
-                      Day {reward.day}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: isUnlocked ? '#FFF' : 'rgba(255,255,255,0.7)', fontWeight: '600', fontSize: 14, flexWrap: 'wrap' }}>
-                      {reward.text}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
-
-        <View style={{ marginTop: 24 }}>
-          <PrimaryButton label="Got it" onPress={closeOverlay} />
-        </View>
-      </Animated.View>
-    </Animated.View>
   );
 }
 

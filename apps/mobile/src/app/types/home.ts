@@ -87,6 +87,7 @@ export interface HeaderProps {
 
 export interface SummaryCardsProps {
   currentStreak: number;
+  streakActive?: boolean;
   ecoPoints: number;
   onPressRewards?: () => void;
   onOpenStreakOverlay?: () => void;

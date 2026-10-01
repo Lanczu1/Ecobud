@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../prismaClient', () => ({ prisma: {} }));
 vi.mock('./notificationService', () => ({ sendDirectNotification: vi.fn() }));
 vi.mock('./supabaseRealtimeService', () => ({ supabaseRealtimeService: {
-  publishUserSectionRefresh: vi.fn(), publishAdminSectionBundle: vi.fn(),
+  publishUserSectionRefresh: vi.fn(), publishAdminSectionBundle: vi.fn(), publishUserEventsRefresh: vi.fn(),
 } }));
 import { GamificationService } from './GamificationService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 
 const db = {
   $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
   event: { findUnique: vi.fn() },
   eventRegistration: { findUnique: vi.fn(), updateMany: vi.fn() },
   user: { findUnique: vi.fn(), update: vi.fn() },
@@ -27,7 +28,7 @@ beforeEach(() => {
   db.eventRegistration.findUnique.mockResolvedValue({ id: 'registration', eventId: 'event', userId: 'member', status: 'ATTENDED' });
   db.eventRegistration.updateMany.mockResolvedValue({ count: 1 });
   db.user.findUnique.mockResolvedValue({ id: 'member', points: 20, currentStreak: 0, lastActionDate: null });
-  db.user.update.mockResolvedValue({ id: 'member', points: 120, currentStreak: 1 });
+  db.user.update.mockResolvedValue({ id: 'member', points: 120, currentStreak: 0 });
   db.userStats.findUnique.mockResolvedValue({ knowledgePoints: 0 });
   db.userStats.update.mockResolvedValue({ knowledgePoints: 0 });
   db.userBadge.findMany.mockResolvedValue([]);
@@ -38,6 +39,7 @@ beforeEach(() => {
 describe('event reward claims', () => {
   it('awards the configured points and coins with history and a ledger entry', async () => {
     const result = await service.markEventAttendance('event', 'registration');
+    expect(result.streak).toBe(0);
     expect(result).toMatchObject({ alreadyCompleted: false, pointsAwarded: 100, ecoCoinsAwarded: 10, pointsTotal: 120 });
     expect(db.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ points: { increment: 100 } }) }));
     expect(db.userStats.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { ecoCoins: { increment: 10 } } }));

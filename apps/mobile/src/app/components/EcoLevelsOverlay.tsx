@@ -25,7 +25,7 @@ export const ECO_LEVELS_ROADMAP = [
     subtitle: 'The journey begins with a single seed',
     badgeColor: '#10B981',
     perks: [
-      'Daily habit tracker & streak logging',
+      'Habit tracker & challenge streaks',
       'Learn & Grow Eco Academy courses',
       'Basic Eco Coins rewards',
     ],

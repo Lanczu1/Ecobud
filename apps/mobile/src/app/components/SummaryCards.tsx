@@ -7,32 +7,14 @@ import { type SummaryCardsProps } from '../types/home';
 import { getVisibleStreak } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
-export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, onOpenStreakOverlay, lastSevenDays, completedDays, style }: SummaryCardsProps) {
+export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, onPressRewards, onOpenStreakOverlay, style }: SummaryCardsProps) {
 
-  // Visual placeholder for streak progress if real data is not provided
   const visibleStreak = getVisibleStreak(currentStreak);
-  const cycleDay = visibleStreak > 0 ? (visibleStreak - 1) % 7 + 1 : 0;
-  const maxVisualStreak = cycleDay;
-  const todayIndex = cycleDay === 0 ? 0 : cycleDay - 1;
-
-  const isStreakActive = currentStreak >= 3;
-
-  const dots = lastSevenDays && completedDays
-    ? lastSevenDays.map((date, index) => {
-        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        return {
-          done: completedDays.includes(dateKey),
-          isToday: index === lastSevenDays.length - 1,
-        };
-      })
-    : Array.from({ length: 7 }).map((_, i) => ({
-        isToday: i === todayIndex,
-        done: i < maxVisualStreak,
-      }));
+  const isStreakActive = streakActive;
 
   return (
     <LinearGradient
-      colors={['#0B5F58', '#169070', '#22A77B']}
+      colors={isStreakActive ? ['#0B5F58', '#12684E'] : ['#3F4F46', '#52685A']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.streakCard, { marginBottom: verticalScale(20) }, style]}
@@ -63,9 +45,9 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, onOpenS
             <Text style={styles.streakTagline} numberOfLines={2}>
               {!isStreakActive
                 ? currentStreak === 0
-                  ? 'Log a habit to start your streak!'
-                  : `${3 - currentStreak} more days to unlock your streak!`
-                : 'Keep your eco habits growing!'}
+                  ? 'Complete a challenge to start.'
+                  : 'Count saved. Restore your streak.'
+                : 'Build your streak with challenges.'}
             </Text>
           </View>
         </View>
@@ -80,7 +62,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, onOpenS
             >
               {visibleStreak}
             </Text>
-            <Text style={styles.streakUnit}>{visibleStreak === 1 ? 'Streak' : 'Streaks'}</Text>
+            <Text style={styles.streakUnit}>Challenges</Text>
           </View>
           {onPressRewards && (
             <TouchableOpacity
@@ -93,18 +75,7 @@ export function SummaryCards({ currentStreak, ecoPoints, onPressRewards, onOpenS
           )}
         </View>
 
-        <View style={styles.streakDotsRow}>
-          {dots.map((dot, index) => (
-            <View
-              key={index}
-              style={[
-                styles.streakDot,
-                dot.done && styles.streakDotDone,
-                dot.isToday && styles.streakDotToday,
-              ]}
-            />
-          ))}
-        </View>
+        <Text style={{ color: '#FFFFFF', marginTop: 16, fontSize: 13 }}>Reward milestones: 3 · 10 · 30 · 100 challenges</Text>
       </LinearGradient>
   );
 }

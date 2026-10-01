@@ -7,6 +7,7 @@ import { UserActivityService } from './userActivityService';
 import { UserStatsService } from './UserStatsService';
 import { sendDirectNotification } from './notificationService';
 import { apiCache } from '../lib/cache';
+import { STREAK_MILESTONES } from '../utils/streakRules';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -169,6 +170,7 @@ export class GamificationService {
     // ledger entry. On the hosted database that can exceed Prisma's default
     // 5-second interactive transaction window, which rolls the claim back.
     const result = await this.database.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
       let submission: any = null;
       let effectiveInstanceId = challengeInstanceId;
 
@@ -274,6 +276,7 @@ export class GamificationService {
         ecoCoinsAwarded: totalEcoCoinsAwarded,
         metadata: {
           challengeId: challenge.id,
+          streakEligible: userChallenge?.status !== 'COMPLETED',
           difficulty: challenge.difficulty,
           detectedQuantity: 1,
           submissionId: submission?.id,
@@ -439,6 +442,7 @@ export class GamificationService {
 
 
   private async awardAction(tx: DatabaseSession, action: AwardActionInput) {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${action.userId} FOR UPDATE`;
     const user = await tx.user.findUnique({
       where: { id: action.userId },
     });
@@ -448,7 +452,31 @@ export class GamificationService {
     }
 
     const now = new Date();
-    const nextStreak = this.resolveStreak(user.lastActionDate, now, user.currentStreak);
+    const isChallenge = Boolean(action.metadata?.challengeId) && action.metadata?.streakEligible !== false;
+    const nextStreak = user.currentStreak + (isChallenge ? 1 : 0);
+    const milestoneBadges = [];
+    if (isChallenge) {
+      const awarded = await tx.streakMilestone.findMany({ where: { userId: user.id } });
+      for (const milestone of STREAK_MILESTONES) {
+        if (nextStreak < milestone.challenges || awarded.some(item => item.challenges === milestone.challenges)) continue;
+        await tx.streakMilestone.create({ data: { userId: user.id, challenges: milestone.challenges } });
+        action.pointsAwarded += milestone.points;
+        action.ecoCoinsAwarded = (action.ecoCoinsAwarded ?? 0) + milestone.ecoCoins;
+        await tx.rewardTransaction.createMany({ data: [
+          { userId: user.id, type: 'exp', amount: milestone.points },
+          ...(milestone.ecoCoins > 0 ? [{ userId: user.id, type: 'eco_coins' as const, amount: milestone.ecoCoins }] : []),
+        ] });
+        if (milestone.badge) {
+          const badge = await tx.badge.upsert({ where: { name: milestone.badge }, update: {}, create: {
+            id: 'challenge-champion', name: milestone.badge, description: 'Complete 100 eco challenges.',
+            iconUrl: 'trophy', requiredPoints: 2147483647, accentColor: '#15803D',
+          } });
+          await tx.userBadge.upsert({ where: { userId_badgeId: { userId: user.id, badgeId: badge.id } }, update: {}, create: { userId: user.id, badgeId: badge.id } });
+          milestoneBadges.push(badge);
+          apiCache.delete('system_badges_list');
+        }
+      }
+    }
 
       const updatedUser = await tx.user.update({
         where: { id: user.id },
@@ -456,6 +484,7 @@ export class GamificationService {
           points: { increment: action.pointsAwarded },
           currentStreak: nextStreak,
           lastActionDate: now,
+          ...(isChallenge ? { lastChallengeAt: now } : {}),
         },
       });
 
@@ -499,6 +528,7 @@ export class GamificationService {
       );
 
       const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
+      awardedBadges.push(...milestoneBadges);
 
       // Fire push notifications for every newly unlocked badge (fire-and-forget, outside transaction)
       if (awardedBadges.length > 0) {
@@ -538,42 +568,6 @@ export class GamificationService {
       };
   }
 
-  private resolveStreak(
-    lastActionDate: Date | null,
-    actionDate: Date,
-    currentStreak: number,
-  ) {
-    if (!lastActionDate) {
-      return 1;
-    }
-
-    const getPhDate = (date: Date) => {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(date);
-    };
-
-    const actionDay = getPhDate(actionDate);
-    const lastDay = getPhDate(lastActionDate);
-
-    if (actionDay === lastDay) {
-      return currentStreak;
-    }
-
-    const previousDate = new Date(actionDate.getTime());
-    previousDate.setDate(previousDate.getDate() - 1);
-    const previousDay = getPhDate(previousDate);
-
-    if (lastDay === previousDay) {
-      return currentStreak + 1;
-    }
-
-    return 1;
-  }
-
   private async unlockBadges(tx: DatabaseSession, userId: string, totalPoints: number) {
     const [existingBadges, matchingBadges] = await Promise.all([
       tx.userBadge.findMany({
@@ -583,6 +577,7 @@ export class GamificationService {
       tx.badge.findMany({
         where: {
           requiredPoints: { lte: totalPoints },
+          name: { not: 'Challenge Champion' },
         },
         orderBy: { requiredPoints: 'asc' },
       }),
