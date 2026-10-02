@@ -82,6 +82,22 @@ const grant = async () => { await send().expect(200); return (await verify(maile
 const complete = (resetToken: string, password = 'NewPassword456') => request(app).post(`${base}/complete`).send({ resetToken, password });
 
 describe('isolated password reset', () => {
+  it.each([false, true])('explicitly blocks Google-linked reset requests even with a pending code: %s', async (pending) => {
+    if (pending) await send().expect(200);
+    const original = new Map([...rows].map(([key, value]) => [key, { ...value }]));
+    user.googleIdentityId = 'google-id';
+    vi.clearAllMocks();
+    const response = await send(' ' + user.email.toUpperCase() + ' ').expect(403);
+    expect(response.body.message).toBe('This account uses Google sign-in. Please use Continue with Google.');
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+    expect(mocks.db.otpCode.findUnique).not.toHaveBeenCalled();
+    expect(mocks.db.otpCode.create).not.toHaveBeenCalled();
+    expect(mocks.db.otpCode.updateMany).not.toHaveBeenCalled();
+    expect(mocks.db.otpCode.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.db.user.updateMany).not.toHaveBeenCalled();
+    expect(rows).toEqual(original);
+  });
+
   it('allows only one verification and one reset when requests arrive together', async () => {
     await send().expect(200); const code = mailedCode();
     const verified = await Promise.all([verify(code), verify(code)]);
@@ -124,10 +140,9 @@ describe('isolated password reset', () => {
     expect(rows.get(user.email)).toEqual(signup);
     expect(rows.get(change.email)).toEqual(change);
   });
-  it.each(['unknown', 'google', 'suspended', 'admin'])('does not expose or reset an ineligible %s account', async (kind) => {
+  it.each(['unknown', 'suspended', 'admin'])('does not expose or reset an ineligible %s account', async (kind) => {
     const email = user.email;
     if (kind === 'unknown') user = null;
-    if (kind === 'google') user.googleIdentityId = 'google-id';
     if (kind === 'suspended') user.status = 'suspended';
     if (kind === 'admin') user.role = 'admin';
     const response = await send(email).expect(200);
