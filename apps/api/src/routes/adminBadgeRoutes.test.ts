@@ -26,7 +26,16 @@ it('validates unlock thresholds before writing', async () => {
 it('creates point badges', async () => {
   db.badge.create.mockResolvedValue({ id: 'new', ...body });
   expect((await request(app).post('/badges').set('x-role', 'admin').send(body)).status).toBe(201);
-  expect(db.badge.create).toHaveBeenCalledWith({ data: body });
+  expect(db.badge.create).toHaveBeenCalledWith({ data: { ...body, awardType: 'points', targetCount: 1, bonusPoints: 0 } });
+});
+it('stores milestone counts separately from bonus points', async () => {
+  db.badge.create.mockResolvedValue({ id: 'new' });
+  expect((await request(app).post('/badges').set('x-role', 'admin').send({ ...body, awardType: 'lessons_completed', targetCount: 5, bonusPoints: 50 })).status).toBe(201);
+  expect(db.badge.create).toHaveBeenCalledWith({ data: { ...body, awardType: 'lessons_completed', targetCount: 5, bonusPoints: 50, requiredPoints: 2147483647 } });
+});
+it('rejects invalid milestone targets', async () => {
+  expect((await request(app).post('/badges').set('x-role', 'admin').send({ ...body, awardType: 'events_completed', targetCount: 0 })).status).toBe(400);
+  expect(db.badge.create).not.toHaveBeenCalled();
 });
 it('protects system milestone rules', async () => {
   db.badge.findUnique.mockResolvedValue({ id: 'system', ...body, name: 'Giveaway Master', requiredPoints: 999999 });

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const db = vi.hoisted(() => ({ $transaction: vi.fn(), swapRequest: { findUnique: vi.fn(), updateMany: vi.fn(), count: vi.fn() }, swapConversation: { updateMany: vi.fn() }, badge: { findFirst: vi.fn() }, userBadge: { createMany: vi.fn() } }));
+const db = vi.hoisted(() => ({ $transaction: vi.fn(), $queryRaw: vi.fn(), swapRequest: { findUnique: vi.fn(), updateMany: vi.fn(), count: vi.fn() }, swapConversation: { updateMany: vi.fn() }, badge: { findFirst: vi.fn(), findMany: vi.fn() }, userBadge: { createMany: vi.fn() } }));
 vi.mock('../prismaClient', () => ({ prisma: db }));
 vi.mock('./notificationService', () => ({ sendDirectNotification: vi.fn(async () => {}) }));
 import { swapService } from './swapService';
 const listing = { approvalStatus: 'approved', lookingFor: 'giveaway' };
 const request = { id: 'request', listingId: 'listing', fromUserId: 'receiver', toUserId: 'owner', status: 'accepted', listing };
 beforeEach(() => {
-  vi.resetAllMocks(); db.$transaction.mockImplementation(async run => run(db));
+  vi.resetAllMocks(); db.badge.findMany.mockResolvedValue([]); db.$transaction.mockImplementation(async run => run(db));
   db.swapRequest.findUnique.mockResolvedValue(request); db.swapRequest.updateMany.mockResolvedValue({ count: 1 });
   db.swapRequest.count.mockResolvedValue(1); db.userBadge.createMany.mockResolvedValue({ count: 1 });
   db.badge.findFirst.mockResolvedValue({ id: 'badge', name: 'Reuse Partner' });

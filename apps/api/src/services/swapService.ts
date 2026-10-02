@@ -1,5 +1,6 @@
 import { prisma } from '../prismaClient';
 import { awardContentBadge } from './contentBadgeService';
+import { awardMilestoneBadges } from './badgeMilestoneService';
 import { sendDirectNotification } from './notificationService';
 import { HttpError } from '../http/errorResponder';
 import { apiCache } from '../lib/cache';
@@ -324,11 +325,24 @@ export const swapService = {
     }
     if (status === 'completed' && (swapReq.status !== 'accepted' || swapReq.listing.approvalStatus !== 'approved')) throw new HttpError(400, 'Only an accepted exchange on an approved listing can be completed.');
     const awarded = await prisma.$transaction(async tx => {
+      if (status === 'completed') {
+        for (const participant of [...new Set([swapReq.fromUserId, swapReq.toUserId])].sort()) {
+          await tx.$queryRaw`SELECT id FROM users WHERE id = ${participant} FOR UPDATE`;
+        }
+      }
       const updated = await tx.swapRequest.updateMany({ where: { id: requestId, status: swapReq.status }, data: { status } });
       if (!updated.count) throw new HttpError(409, 'Exchange changed. Refresh and try again.');
       await tx.swapConversation.updateMany({ where: { swapRequestId: requestId }, data: { status } });
       if (status !== 'completed') return [];
       const rewards = await awardContentBadge(tx, 'exchange', swapReq.listingId, [swapReq.fromUserId, swapReq.toUserId]);
+      for (const participant of new Set([swapReq.fromUserId, swapReq.toUserId])) {
+        const milestone = await awardMilestoneBadges(tx, participant);
+        if (milestone.bonusPoints) {
+          const user = await tx.user.update({ where: { id: participant }, data: { points: { increment: milestone.bonusPoints } } });
+          await tx.userStats.upsert({ where: { userId: participant }, update: { ecoPoints: user.points }, create: { userId: participant, ecoPoints: user.points } });
+        }
+        rewards.push(...milestone.badges.map(badge => ({ userId: participant, badge })));
+      }
       if (swapReq.listing.lookingFor.toLowerCase() === 'giveaway') {
         const count = await tx.swapRequest.count({ where: { toUserId: swapReq.toUserId, status: 'completed', listing: { lookingFor: { equals: 'giveaway', mode: 'insensitive' } } } });
         if (count >= 10) {

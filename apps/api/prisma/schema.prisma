@@ -425,6 +425,8 @@ model HabitCheckIn {
 }
 
 model Badge {
+  targetCount    Int         @default(1)
+  bonusPoints    Int         @default(0)
   awardType      String      @default("points")
   active         Boolean     @default(true)
   lessonId       String?     @unique

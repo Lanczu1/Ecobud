@@ -9,6 +9,7 @@ import { sendDirectNotification } from './notificationService';
 import { apiCache } from '../lib/cache';
 import { STREAK_MILESTONES } from '../utils/streakRules';
 import { awardContentBadge } from './contentBadgeService';
+import { awardMilestoneBadges } from './badgeMilestoneService';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -469,6 +470,8 @@ export class GamificationService {
       }
     }
 
+      const milestones = await awardMilestoneBadges(tx, user.id);
+      action.pointsAwarded += milestones.bonusPoints;
       const updatedUser = await tx.user.update({
         where: { id: user.id },
         data: {
@@ -518,7 +521,7 @@ export class GamificationService {
         action.knowledgePointsAwarded ?? 0,
       );
 
-      const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
+      const awardedBadges = [...milestones.badges, ...await this.unlockBadges(tx, user.id, updatedUser.points)];
       for (const [type, key] of [['lesson', 'lessonId'], ['challenge', 'challengeId'], ['event', 'eventId']]) {
         const sourceId = action.metadata?.[key];
         if (typeof sourceId === 'string') {
