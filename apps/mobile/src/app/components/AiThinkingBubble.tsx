@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
-  Text,
-  Animated,
   Easing,
   StyleSheet,
   StyleProp,
   ViewStyle,
 } from 'react-native';
+import { Text } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../shared/theme/ecoTheme';
 import { moderateScale, responsiveFontSize, scale, verticalScale } from '../utils/responsive';

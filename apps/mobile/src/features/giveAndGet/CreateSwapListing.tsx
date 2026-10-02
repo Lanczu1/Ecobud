@@ -1,10 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View,
-  Text,
-  TextInput,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
   Image,
   Alert,
@@ -12,12 +9,13 @@ import {
   Keyboard,
   Platform,
   ActivityIndicator,
-  Modal,
-  Animated,
   Easing,
   Dimensions,
   StatusBar,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';

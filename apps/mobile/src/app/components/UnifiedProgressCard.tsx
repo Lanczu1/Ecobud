@@ -1,17 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
-  Text,
   View,
-  TouchableOpacity,
   type LayoutChangeEvent,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
 import { getVisibleStreak } from '../utils/appUtils';
 import { type LeaderboardData } from '../../shared/api/ecobudApi';
+import { StreakFlame } from './StreakFlame';
+import { isStreakFlameActive } from '../../shared/api/streakSummary';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
 
 export interface UnifiedProgressCardProps {
   ecoPoints: number;
@@ -65,6 +67,26 @@ export function getLevelFromPoints(points: number) {
   return { currentLevelObj, nextLevelObj };
 }
 
+const AnimatedPointsCount = React.memo(function AnimatedPointsCount({ value }: { value: number }) {
+  const [display, setDisplay] = useState(value);
+  useEffect(() => {
+    let frame = 0;
+    let startedAt: number | null = null;
+    const start = display;
+    const duration = 800;
+    if (start === value) return;
+    const tick = (now: number) => {
+      if (startedAt === null) startedAt = now;
+      const progress = Math.min((now - startedAt) / duration, 1);
+      setDisplay(Math.floor(start + (value - start) * (1 - (1 - progress) ** 2)));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <Text style={styles.pointsNumber}>{display}</Text>;
+});
+
 export function UnifiedProgressCard({
   ecoPoints,
   currentStreak,
@@ -75,48 +97,20 @@ export function UnifiedProgressCard({
   onOpenLeaderboard,
   onProgressBarMeasured,
 }: UnifiedProgressCardProps) {
-  const [displayPoints, setDisplayPoints] = useState(ecoPoints);
+  const { preferences } = useAccessibility();
+  const largeText = preferences.size === 'Large';
   const progressBarRef = useRef<View>(null);
-
-  // Smooth number counting animation
-  useEffect(() => {
-    let animationFrameId: number;
-    let startTime: number | null = null;
-    const duration = 800;
-    const startValue = displayPoints;
-    const targetValue = ecoPoints;
-
-    if (startValue === targetValue) return;
-
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / duration, 1);
-      const easeProgress = 1 - (1 - progress) * (1 - progress);
-      const currentVal = Math.floor(startValue + (targetValue - startValue) * easeProgress);
-      setDisplayPoints(currentVal);
-
-      if (progress < 1) {
-        animationFrameId = requestAnimationFrame(step);
-      } else {
-        setDisplayPoints(targetValue);
-      }
-    };
-
-    animationFrameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [ecoPoints]);
-
-  const { currentLevelObj, nextLevelObj } = getLevelFromPoints(displayPoints);
+  const { currentLevelObj, nextLevelObj } = getLevelFromPoints(ecoPoints);
   const isMaxLevel = currentLevelObj.level === 10;
 
   let progressPercent = 100;
   let pointsToNext = 0;
 
   if (!isMaxLevel) {
-    const pointsInCurrentLevel = displayPoints - currentLevelObj.points;
+    const pointsInCurrentLevel = ecoPoints - currentLevelObj.points;
     const pointsNeededForNextLevel = nextLevelObj.points - currentLevelObj.points;
     progressPercent = Math.min(100, Math.max(0, (pointsInCurrentLevel / pointsNeededForNextLevel) * 100));
-    pointsToNext = Math.max(0, nextLevelObj.points - displayPoints);
+    pointsToNext = Math.max(0, nextLevelObj.points - ecoPoints);
   }
 
   const nextPerk = LEVEL_PERKS[nextLevelObj.level] || 'Exclusive perks & badges';
@@ -181,7 +175,7 @@ export function UnifiedProgressCard({
 
         {/* Total Points Display */}
         <View style={styles.pointsRow}>
-          <Text style={styles.pointsNumber}>{displayPoints}</Text>
+          <AnimatedPointsCount value={ecoPoints} />
           <Text style={styles.pointsUnit}>Eco Points</Text>
         </View>
 
@@ -212,7 +206,7 @@ export function UnifiedProgressCard({
         </View>
 
         {/* 3. Inline Stats Row: Streak Pill & Weekly Leaderboard Strip */}
-        <View style={styles.inlineStatsRow}>
+        <View style={[styles.inlineStatsRow, largeText && { flexDirection: 'column', alignItems: 'stretch' }]}>
           {/* Streak Chip */}
           <TouchableOpacity
             activeOpacity={0.82}
@@ -222,12 +216,12 @@ export function UnifiedProgressCard({
             }}
             style={styles.streakChip}
           >
-            <Ionicons name="flame" size={28} color={streakActive ? '#C2410C' : '#52685A'} />
+            <StreakFlame count={currentStreak} active={streakActive} size={36} />
             <View>
               <Text style={styles.streakChipNumber}>
                 {visibleStreak}
               </Text>
-              <Text style={styles.streakChipSub}>{streakActive ? 'Challenges' : 'Inactive streak'}</Text>
+              <Text style={styles.streakChipSub}>{isStreakFlameActive(currentStreak, streakActive) ? 'Challenges' : currentStreak < 3 ? 'Building streak' : 'Inactive streak'}</Text>
             </View>
           </TouchableOpacity>
 
@@ -238,7 +232,7 @@ export function UnifiedProgressCard({
               triggerImpactLight();
               onOpenLeaderboard();
             }}
-            style={styles.leaderboardStrip}
+            style={[styles.leaderboardStrip, largeText && { flex: 0, width: '100%' }]}
           >
             <View style={styles.leaderboardIconCircle}>
               <Ionicons name="trophy" size={scale(13)} color="#F59E0B" />

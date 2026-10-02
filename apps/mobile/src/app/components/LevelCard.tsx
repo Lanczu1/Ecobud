@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
@@ -57,10 +58,10 @@ export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCa
     const step = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / duration, 1);
-      
+
       // Easing function (easeOutQuad) for smoother finish
       const easeProgress = 1 - (1 - progress) * (1 - progress);
-      
+
       const currentVal = Math.floor(startValue + (targetValue - startValue) * easeProgress);
       setDisplayPoints(currentVal);
 
@@ -115,7 +116,7 @@ export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCa
           <MaterialCommunityIcons name="leaf" size={60} color="rgba(255,255,255,0.05)" style={styles.bgLeaf1} />
           <MaterialCommunityIcons name="leaf" size={90} color="rgba(255,255,255,0.03)" style={styles.bgLeaf2} />
           <MaterialCommunityIcons name="leaf" size={40} color="rgba(255,255,255,0.06)" style={styles.bgLeaf3} />
-          
+
           <View style={styles.header}>
             <View style={styles.iconCircle}>
               <MaterialCommunityIcons name={currentLevelObj.icon as any} size={22} color="#34D399" />

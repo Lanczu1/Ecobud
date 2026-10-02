@@ -38,6 +38,7 @@ const Events = lazy(() => import('./components/admin/pages/Events').then((m) => 
 const GiveAndGetHub = lazy(() => import('./components/admin/pages/GiveAndGetHub').then((m) => ({ default: m.GiveAndGetHub })));
 const Redeem = lazy(() => import('./components/admin/pages/Redeem').then((m) => ({ default: m.Redeem })));
 const Reports = lazy(() => import('./components/admin/pages/Reports').then((m) => ({ default: m.Reports })));
+const Announcements = lazy(() => import('./components/admin/pages/Announcements').then((m) => ({ default: m.Announcements })));
 
 function SectionFallback() {
   return (
@@ -67,6 +68,7 @@ function renderSection(section: AdminSection, role?: string) {
           case 'Give and Get Hub': return <GiveAndGetHub />;
           case 'Redeem':          return <Redeem />;
           case 'Reports':          return <Reports />;
+          case 'Announcements':    return <Announcements />;
           default:                 return <Dashboard />;
         }
       })()}

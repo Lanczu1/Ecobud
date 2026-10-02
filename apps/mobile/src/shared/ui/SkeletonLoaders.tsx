@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, StyleProp, ViewStyle, useWindowDimensions, Easing } from 'react-native';
+import { View, StyleSheet, StyleProp, ViewStyle, useWindowDimensions, Easing } from 'react-native';
+import { Animated } from '../accessibility/animations';
 import { moderateScale, responsiveFontSize, scale, verticalScale } from '../../app/utils/responsive';
 import { useTheme } from '../theme/ecoTheme';
 
@@ -367,7 +368,7 @@ export function LearnViewSkeleton() {
           >
             {/* Aspect Ratio 16/9 Card Image Banner */}
             <View style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: boneBg }} />
-            
+
             {/* Card Body */}
             <View style={{ padding: moderateScale(16) }}>
               <View style={{ height: 14, width: 60, borderRadius: 7, backgroundColor: boneBg, marginBottom: 8 }} />

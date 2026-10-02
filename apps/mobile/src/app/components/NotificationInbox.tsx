@@ -1,8 +1,6 @@
 import React from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   ScrollView,
   FlatList,
   ActivityIndicator,
@@ -10,6 +8,7 @@ import {
   DeviceEventEmitter,
   StyleSheet,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

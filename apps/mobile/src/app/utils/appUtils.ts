@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { AppTab } from '../types/home';
 import { useCallback, useRef } from 'react';
-import { Animated } from 'react-native';
+
+import { Animated } from '../../shared/accessibility/animations';
 
 // EcoBud is a Philippines (Asia/Manila, UTC+8) product. All habit/tracker
 // "day" keys must be computed in PHT, not UTC, so the calendar highlights the
@@ -119,7 +120,7 @@ export function getEventLifecycleStatus(startDatetime: string, endDatetime: stri
   const now = new Date();
   const start = new Date(startDatetime);
   const end = new Date(endDatetime);
-  
+
   if (now < start) return 'upcoming';
   if (now > end) return 'ended';
   return 'ongoing';

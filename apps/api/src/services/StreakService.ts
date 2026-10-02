@@ -29,7 +29,7 @@ export class StreakService {
       const now = new Date();
       const status = streakStatus(user, now);
       if (status.active) return this.summary(userId, tx);
-      if (!status.canRestore) throw new HttpError(400, user.currentStreak === 0 ? 'Complete a challenge to start your streak.' : 'You have used all 3 restores this month.');
+      if (!status.canRestore) throw new HttpError(400, user.currentStreak < 3 ? 'Complete 3 challenges to unlock your streak.' : 'You have used all 3 restores this month.');
       await tx.user.update({ where: { id: userId }, data: {
         streakRestoredAt: now,
         streakRestoreMonth: streakMonth(now),

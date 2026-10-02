@@ -1,4 +1,5 @@
 import type { NotificationPage } from '../../app/types/notifications';
+import { parseStreakSummary } from './streakSummary';
 import Constants from 'expo-constants';
 import { NativeModules, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -740,8 +741,8 @@ export const ecobudApi = {
     }),
   fetchDashboard: (token: string) =>
     request<DashboardData>('/home/dashboard', { token }),
-  fetchStreak: (token: string) => request<StreakSummary>('/challenges/streaks/summary', { token }),
-  restoreStreak: (token: string) => request<StreakSummary>('/challenges/streaks/restore', { method: 'POST', token }),
+  fetchStreak: (token: string) => request<unknown>('/challenges/streaks/summary', { token }).then(parseStreakSummary),
+  restoreStreak: (token: string) => request<unknown>('/challenges/streaks/restore', { method: 'POST', token }).then(parseStreakSummary),
   fetchLessons: (token: string, lessonId?: string) =>
     request<LessonWithProgress[]>(`/learn/lessons${lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : ''}`, { token }),
   markLessonSeen: (token: string, lessonId: string) =>

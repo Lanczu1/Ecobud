@@ -1,13 +1,11 @@
 import React, { useRef, useState, memo } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   StyleSheet,
-  Pressable,
-  Animated,
   ScrollView,
 } from 'react-native';
+import { Text, TouchableOpacity, Pressable } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
@@ -233,8 +231,8 @@ function SwapListingCardComponent({
         </View>
 
         <View style={[localStyles.userRow, { borderTopColor: theme.colors.border }]}>
-          <TouchableOpacity 
-            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }} 
+          <TouchableOpacity
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
             onPress={(e) => {
               e.stopPropagation();
               setShowProfileModal(true);

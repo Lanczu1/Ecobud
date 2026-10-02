@@ -1,0 +1,7 @@
+run,presented_frame_samples,average_presented_fps,median_presentation_interval_ms,p95_presentation_interval_ms
+installed-debug-before.txt,120,26.2,33.11,55.1
+optimized-release-after-1.txt,120,67.9,11.03,22.07
+optimized-release-hardware-2.txt,120,70.6,11.03,22.05
+optimized-release-software-1.txt,120,71.6,11.03,22.04
+optimized-release-software-2.txt,120,70.6,11.03,22.05
+optimized-release-software-3.txt,120,72.5,11.02,22.03

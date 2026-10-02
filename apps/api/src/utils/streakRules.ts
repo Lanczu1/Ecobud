@@ -18,7 +18,7 @@ export function streakStatus(user: {
   streakRestoresUsed: number;
 }, now = new Date()) {
   const lastActivity = Math.max(user.lastChallengeAt?.getTime() ?? 0, user.streakRestoredAt?.getTime() ?? 0);
-  const active = user.currentStreak > 0 && lastActivity > 0 && now.getTime() - lastActivity < 7 * 24 * 60 * 60 * 1000;
+  const active = user.currentStreak >= 3 && lastActivity > 0 && now.getTime() - lastActivity < 7 * 24 * 60 * 60 * 1000;
   const restoresRemaining = Math.max(0, 3 - (user.streakRestoreMonth === streakMonth(now) ? user.streakRestoresUsed : 0));
-  return { active, restoresRemaining, canRestore: user.currentStreak > 0 && !active && restoresRemaining > 0 };
+  return { active, restoresRemaining, canRestore: user.currentStreak >= 3 && !active && restoresRemaining > 0 };
 }

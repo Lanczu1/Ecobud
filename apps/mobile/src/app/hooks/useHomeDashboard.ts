@@ -1,5 +1,7 @@
 import { getQuizLessonProgress, getVideoProgressLimit, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { useNotifications } from './useNotifications';
+import { takeUnseenBadges } from '../utils/badgeUnlockQueue';
+import { type MascotDock, parseMascotDock } from '../utils/mascotDock';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
 import { homeService } from '../services/homeService';
@@ -67,9 +69,13 @@ const uniqueLessonsById = (items: LessonWithProgress[]): LessonWithProgress[] =>
   });
 };
 
-const mergeLessonDetails = (current: LessonWithProgress[], incoming: LessonWithProgress[]): LessonWithProgress[] =>
-  incoming.map((lesson) => {
-    const previous = current.find((item) => item.id === lesson.id);
+const mergeLessonDetails = (current: LessonWithProgress[], incoming: LessonWithProgress[]): LessonWithProgress[] => {
+  const previousById = new Map<string, LessonWithProgress>();
+  for (const lesson of current) {
+    if (!previousById.has(lesson.id)) previousById.set(lesson.id, lesson);
+  }
+  return incoming.map((lesson) => {
+    const previous = previousById.get(lesson.id);
     if (!previous) return lesson;
 
     const quizQuestions = lesson.quizQuestions?.length
@@ -85,6 +91,7 @@ const mergeLessonDetails = (current: LessonWithProgress[], incoming: LessonWithP
       hasQuiz: Boolean(lesson.hasQuiz || previous.hasQuiz || quizQuestions.length),
     };
   });
+};
 
 function formatChatTime(isoDate: string) {
   return new Date(isoDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -205,6 +212,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [earnedCoins, setEarnedCoins] = useState(0);
   const [pendingStreakUnlock, setPendingStreakUnlock] = useState(false);
   const [pendingBadgeQueue, setPendingBadgeQueue] = useState<EcoBadge[]>([]);
+  const queuedBadgeIdsRef = useRef(new Set<string>());
+  const enqueueUnlockedBadges = useCallback((badges: EcoBadge[]) => {
+    const unseen = takeUnseenBadges(badges, queuedBadgeIdsRef.current);
+    if (unseen.length > 0) setPendingBadgeQueue((prev) => [...prev, ...unseen]);
+  }, []);
   const [newlyUnlockedBadges, setNewlyUnlockedBadges] = useState<EcoBadge[]>([]);
   const [selectedBadge, setSelectedBadge] = useState<EcoBadge | null>(null);
   const [completionCelebrationType, setCompletionCelebrationType] = useState<'quiz' | 'lesson' | 'claim'>('lesson');
@@ -213,7 +225,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [coachMarksReplay, setCoachMarksReplay] = useState(false);
   const setSpotlightTargetRect = coachMarkSpotlightStore.set;
 
-  const [progressBarLayout, setProgressBarLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [progressBarLayout, setProgressBarLayoutState] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const setProgressBarLayout = useCallback<React.Dispatch<React.SetStateAction<typeof progressBarLayout>>>((update) => {
+    setProgressBarLayoutState((current) => {
+      const next = typeof update === 'function' ? update(current) : update;
+      if (current === next || (current && next && current.x === next.x && current.y === next.y && current.width === next.width && current.height === next.height)) return current;
+      return next;
+    });
+  }, []);
 
   const [isChatbotEnabled, setIsChatbotEnabled] = useState(() => {
     try {
@@ -232,8 +251,20 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return syncVal;
       }
     } catch { }
-    return 'medium';
+    return 'small';
   });
+
+  const [chatbotDock, setChatbotDockState] = useState<MascotDock | null>(() => {
+    try {
+      return parseMascotDock(mobileStorage.getItemSync('ecobud.mobile.chatbotDock'));
+    } catch { return null; }
+  });
+  const setChatbotDock = useCallback((dock: MascotDock | null) => {
+    setChatbotDockState(dock);
+    const value = JSON.stringify(dock);
+    try { mobileStorage.setItemSync('ecobud.mobile.chatbotDock', value); } catch {}
+    void mobileStorage.setItem('ecobud.mobile.chatbotDock', value).catch(() => {});
+  }, []);
 
   const [chatbotPosition, setChatbotPositionState] = useState<
     'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right'
@@ -419,6 +450,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setSelectedBadge(null);
     setNewlyUnlockedBadges([]);
     setPendingBadgeQueue([]);
+    queuedBadgeIdsRef.current.clear();
     setPendingStreakUnlock(false);
     setTabHistory(['home']);
     previousStreakRef.current = null;
@@ -967,13 +999,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
       if (previousUnlockedBadgeIdsRef.current !== null) {
         const newBadges = currentUnlocked.filter((b) => !previousUnlockedBadgeIdsRef.current!.has(b.id));
         if (newBadges.length > 0) {
-          setPendingBadgeQueue((prev) => [...prev, ...newBadges]);
+          enqueueUnlockedBadges(newBadges);
         }
       }
 
       previousUnlockedBadgeIdsRef.current = currentUnlockedIds;
     }
-  }, [rewards?.badges]);
+  }, [rewards?.badges, enqueueUnlockedBadges]);
 
   // Trigger badge overlay when activeOverlay finishes/is null
   useEffect(() => {
@@ -2731,7 +2763,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       );
       if (res?.awardedBadges && res.awardedBadges.length > 0) {
         setNewlyUnlockedBadges(res.awardedBadges);
-        setPendingBadgeQueue((prev) => [...prev, ...res.awardedBadges!]);
+        enqueueUnlockedBadges(res.awardedBadges);
       }
 
       void Promise.resolve()
@@ -3073,6 +3105,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     chatbotSize,
     setChatbotSize,
     chatbotPosition,
+    chatbotDock,
+    setChatbotDock,
     setChatbotPosition,
     pushNotificationsEnabled,
     setPushNotificationsEnabled,

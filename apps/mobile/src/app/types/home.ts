@@ -35,7 +35,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'badgeUnlocked' | 'settings' | 'editProfile' | 'coinsHistory' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'badgeUnlocked' | 'settings' | 'editProfile' | 'coinsHistory' | 'accessibility' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -296,6 +296,8 @@ export interface EcoBudMobileModel {
   setChatbotSize: (size: 'small' | 'medium' | 'large') => Promise<void>;
   /** Mascot position preference: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right' */
   chatbotPosition: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right';
+  chatbotDock: import('../utils/mascotDock').MascotDock | null;
+  setChatbotDock: (dock: import('../utils/mascotDock').MascotDock | null) => void;
   setChatbotPosition: (position: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right') => Promise<void>;
   /** Whether push notifications are enabled or disabled by the user */
   pushNotificationsEnabled: boolean;

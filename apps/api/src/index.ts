@@ -1,4 +1,5 @@
 import { notificationRoutes } from './routes/notificationRoutes';
+import { announcementAdminRoutes, announcementResidentRoutes } from './routes/announcementRoutes';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationService';
 import 'dotenv/config';
 import cors from 'cors';
@@ -198,6 +199,8 @@ app.use('/api/transparency', transparencyRoutes);
 app.use('/api/experience', experienceRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/announcements', announcementAdminRoutes);
+app.use('/api/announcements', announcementResidentRoutes);
 app.use('/api/give-and-get', giveAndGetRoutes);
 app.use('/api/swap', swapRoutes);
 app.use('/api/redeem', redeemRoutes);

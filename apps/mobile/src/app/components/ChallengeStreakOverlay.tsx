@@ -1,12 +1,19 @@
 import React from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import LottieView from 'lottie-react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Pressable, Text } from '../../shared/accessibility/primitives';
 import { ecobudApi, type StreakSummary } from '../../shared/api/ecobudApi';
+import { isStreakFlameActive, isStreakSummary, parseStreakSummary } from '../../shared/api/streakSummary';
+import { useTheme } from '../../shared/theme/ThemeContext';
 import type { EcoBudMobileModel } from '../types/home';
+import { StreakFlame } from './StreakFlame';
 
 export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) {
-  const [summary, setSummary] = React.useState<StreakSummary | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const { theme, isDark } = useTheme();
+  const colors = theme.colors;
+  const cached = model.dashboard?.streakSummary;
+  const [summary, setSummary] = React.useState<StreakSummary | null>(() => isStreakSummary(cached) ? cached : null);
+  const [loading, setLoading] = React.useState(() => !isStreakSummary(cached));
   const [restoring, setRestoring] = React.useState(false);
   const [error, setError] = React.useState('');
   const [focused, setFocused] = React.useState<string | null>(null);
@@ -17,56 +24,100 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
     setError('');
     try {
       if (!token) throw new Error('Sign in to view your challenge streak.');
-      setSummary(await ecobudApi.fetchStreak(token));
+      setSummary(parseStreakSummary(await ecobudApi.fetchStreak(token)));
     } catch (cause) {
+      setSummary(null);
       setError(cause instanceof Error ? cause.message : 'Unable to load your streak.');
     } finally { setLoading(false); }
   }, [token]);
-  React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    let mounted = true;
+    async function refresh() {
+      try {
+        if (!token) throw new Error('Sign in to view your challenge streak.');
+        const latest = parseStreakSummary(await ecobudApi.fetchStreak(token));
+        if (mounted) setSummary(latest);
+      } catch (cause) {
+        if (mounted) setError(cause instanceof Error ? cause.message : 'Unable to load your streak.');
+      } finally { if (mounted) setLoading(false); }
+    }
+    void refresh();
+    return () => { mounted = false; };
+  }, [token]);
 
   const restore = async () => {
     if (!token || restoring) return;
     setRestoring(true);
     setError('');
     try {
-      setSummary(await ecobudApi.restoreStreak(token));
+      setSummary(parseStreakSummary(await ecobudApi.restoreStreak(token)));
       await model.refreshEverything();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to restore your streak. Try again.');
     } finally { setRestoring(false); }
   };
-  const next = summary?.milestones.find(item => !item.awarded);
+  const data = isStreakSummary(summary) ? summary : null;
+  const next = data?.milestones.find(item => !item.awarded);
+  const active = data ? isStreakFlameActive(data.currentStreak, data.active) : false;
+  const building = (data?.currentStreak ?? 0) < 3;
+  const target = next?.challenges ?? 100;
+  const progress = Math.min(1, (data?.currentStreak ?? 0) / target);
+  const accent = colors.primary;
+  const buttonColors = { backgroundColor: isDark ? '#34D399' : '#166534' };
+  const buttonTextColor = isDark ? '#0B110E' : '#FFFFFF';
+  const focusStyle = (name: string) => focused === name ? { borderColor: isDark ? '#FBBF24' : '#C2410C' } : null;
+
   return (
     <Modal transparent animationType="fade" visible onRequestClose={close}>
-      <View style={styles.backdrop}>
-        <View style={styles.panel} accessibilityViewIsModal>
-          <View style={styles.heading}>
-            <Text style={styles.title}>Challenge streak</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close streak rewards" onPress={close} onFocus={() => setFocused('close')} onBlur={() => setFocused(null)} style={[styles.close, focused === 'close' && styles.focus]}><Text style={styles.closeText}>Close</Text></Pressable>
+      <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
+        <View style={[styles.panel, { backgroundColor: colors.card }]} accessibilityViewIsModal>
+          <View style={[styles.heading, { borderBottomColor: colors.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>Challenge streak</Text>
+              <Text style={[styles.caption, { color: colors.textSecondary }]}>Rewards for completed challenges</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close streak rewards" onPress={close} onFocus={() => setFocused('close')} onBlur={() => setFocused(null)} style={[styles.close, { backgroundColor: colors.surfaceMuted }, focusStyle('close')]}><Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>Close</Text></Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.content}>
-            {loading ? <ActivityIndicator color="#166534" accessibilityLabel="Loading streak rewards" /> : null}
-            {error ? <View accessibilityRole="alert"><Text style={styles.error}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} onFocus={() => setFocused('reload')} onBlur={() => setFocused(null)} style={[styles.secondary, focused === 'reload' && styles.focus]}><Text style={styles.buttonText}>Reload streak</Text></Pressable></View> : null}
-            {summary && !loading ? <>
-              <View style={styles.progress}>
-                {summary.active ? <LottieView source={require('../../../assets/Fire.lottie')} autoPlay loop style={styles.flame} /> : <Image source={require('../../../assets/Unfire.png')} style={styles.flame} resizeMode="contain" />}
-                <Text style={styles.count}>{summary.currentStreak}</Text>
-                <Text style={styles.subtitle}>completed challenges</Text>
-                <Text style={styles.status}>{summary.currentStreak === 0 ? 'Complete your first challenge to start.' : summary.active ? 'Your streak is active.' : 'Your streak is inactive. Your count is saved.'}</Text>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            {loading ? <View style={styles.loading}><ActivityIndicator color={accent} accessibilityLabel="Loading streak rewards" /><Text style={[styles.body, { color: colors.textSecondary }]}>Loading your progress…</Text></View> : null}
+            {error ? <View accessibilityRole="alert" style={styles.errorBox}><Text style={[styles.body, { color: isDark ? '#FCA5A5' : '#991B1B' }]}>{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} onFocus={() => setFocused('reload')} onBlur={() => setFocused(null)} style={[styles.button, buttonColors, focusStyle('reload')]}><Text style={[styles.buttonText, { color: buttonTextColor }]}>Reload streak</Text></Pressable></View> : null}
+            {data && !loading ? <>
+              <View style={[styles.hero, { backgroundColor: colors.surfaceMuted }]}>
+                <View style={styles.heroTop}>
+                  <StreakFlame count={data.currentStreak} active={data.active} size={88} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.count, { color: colors.textPrimary }]}>{data.currentStreak}</Text>
+                    <Text style={[styles.countLabel, { color: colors.textSecondary }]}>challenges completed</Text>
+                  </View>
+                </View>
+                <Text style={[styles.heroTitle, { color: colors.textPrimary }]}>{building ? 'A little effort lights the flame' : active ? 'Your streak is burning' : 'Your progress is safe'}</Text>
+                <Text style={[styles.body, { color: colors.textSecondary }]}>{building ? `${3 - data.currentStreak} more ${3 - data.currentStreak === 1 ? 'challenge' : 'challenges'} to ignite your streak.` : active ? 'Keep completing challenges to reach your next reward.' : 'The flame has cooled. Restore it or complete a challenge.'}</Text>
+                <View style={styles.progressHeading}>
+                  <Text style={[styles.captionStrong, { color: accent }]}>{next ? `Next reward: ${target} challenges` : 'All milestones earned'}</Text>
+                  <Text style={[styles.caption, { color: colors.textSecondary }]}>{Math.min(data.currentStreak, target)} / {target}</Text>
+                </View>
+                <View accessibilityRole="progressbar" accessibilityLabel="Progress toward the next challenge milestone" accessibilityValue={{ min: 0, max: target, now: Math.min(data.currentStreak, target) }} style={[styles.progressTrack, { backgroundColor: colors.border }]}><View style={{ width: `${progress * 100}%`, height: '100%', backgroundColor: accent, borderRadius: 4 }} /></View>
               </View>
-              <Text style={styles.body}>Only completed challenges count. Learn activities and eco events do not add to this streak.</Text>
-              <Text style={styles.section}>{next ? summary.currentStreak >= next.challenges ? 'Milestone bonus ready on your next completion' : `${next.challenges - summary.currentStreak} more to reach ${next.challenges} challenges` : 'All milestones earned'}</Text>
-              {summary.milestones.map(item => <View key={item.challenges} style={styles.reward}>
-                <View style={styles.rewardHeading}><Text style={styles.milestone}>{item.challenges} challenges</Text><Text style={styles.rewardStatus}>{item.awarded ? 'Awarded' : summary.currentStreak >= item.challenges ? 'On next completion' : 'Locked'}</Text></View>
-                <Text style={styles.body}>{item.points.toLocaleString()} bonus points{item.ecoCoins > 0 ? ` + ${item.ecoCoins} eco coins` : ''}{item.badge ? ` + ${item.badge} badge` : ''}</Text>
-              </View>)}
-              <Text style={styles.body}>Rewards are added automatically once per milestone, on top of the challenge reward.</Text>
-              <View style={styles.restore}>
-                <Text style={styles.section}>Restore Streak</Text>
-                <Text style={styles.body}>After 7 days without a completed challenge, the flame turns gray. Restore brings back its color for 7 days. It adds no challenges or rewards.</Text>
-                <Text style={styles.status}>{summary.restoresRemaining} of 3 restores left this month</Text>
-                {!summary.active && summary.currentStreak > 0 ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: !summary.canRestore || restoring, busy: restoring }} disabled={!summary.canRestore || restoring} onPress={() => void restore()} onFocus={() => setFocused('restore')} onBlur={() => setFocused(null)} style={[styles.button, (!summary.canRestore || restoring) && styles.disabled, focused === 'restore' && styles.focus]}><Text style={styles.buttonText}>{restoring ? 'Restoring…' : summary.canRestore ? 'Restore Streak' : 'No restores left this month'}</Text></Pressable> : null}
-                <Text style={styles.body}>Completing a challenge also reactivates the flame. Restores reset each month in Philippine time.</Text>
+
+              <View style={styles.sectionHeading}><Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Milestone rewards</Text><Text style={[styles.caption, { color: colors.textSecondary }]}>Awarded automatically, once each</Text></View>
+              {data.milestones.map(item => {
+                const isNext = item.challenges === next?.challenges;
+                return <View key={item.challenges} style={[styles.reward, { borderColor: isNext ? accent : colors.border, backgroundColor: isNext ? colors.cardAlt : colors.card }]}>
+                  <View style={[styles.checkpoint, { backgroundColor: item.awarded ? accent : colors.surfaceMuted }]}><Text style={[styles.checkpointText, { color: item.awarded ? buttonTextColor : colors.textPrimary }]}>{item.awarded ? '✓' : item.challenges}</Text></View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                    <View style={styles.rewardHeading}><Text style={[styles.milestone, { color: colors.textPrimary }]}>{item.challenges} challenges</Text><Text style={[styles.rewardStatus, { color: item.awarded || isNext ? accent : colors.textSecondary }]}>{item.awarded ? 'Earned' : isNext ? 'Up next' : 'Locked'}</Text></View>
+                    <View style={styles.rewardAmounts}><Text style={[styles.body, { color: colors.textSecondary }]}>{item.points.toLocaleString()} points</Text>{item.ecoCoins > 0 ? <Text style={[styles.body, { color: colors.textSecondary }]}>+ {item.ecoCoins} eco coins</Text> : null}</View>
+                    {item.badge ? <Text style={[styles.captionStrong, { color: accent }]}>{item.badge} badge</Text> : null}
+                  </View>
+                </View>;
+              })}
+              <Text style={[styles.note, { color: colors.textSecondary }]}>Only completed challenges count. Milestone bonuses are added on top of each challenge’s reward.</Text>
+
+              <View style={[styles.restoreSection, { borderTopColor: colors.border }]}>
+                <View style={styles.rewardHeading}><Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Keep the flame alive</Text><Text style={[styles.captionStrong, { color: accent }]}>{data.restoresRemaining} / 3 restores</Text></View>
+                <Text style={[styles.body, { color: colors.textSecondary }]}>After 7 days without a challenge, the flame turns gray. Your count stays saved.</Text>
+                {!building && !active ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: !data.canRestore || restoring, busy: restoring }} disabled={!data.canRestore || restoring} onPress={() => void restore()} onFocus={() => setFocused('restore')} onBlur={() => setFocused(null)} style={[styles.button, data.canRestore ? buttonColors : { backgroundColor: isDark ? '#A8B3AE' : '#52685A' }, focusStyle('restore')]}><Text style={[styles.buttonText, { color: buttonTextColor }]}>{restoring ? 'Restoring…' : data.canRestore ? 'Restore Streak' : 'No restores left this month'}</Text></Pressable> : null}
+                <Text style={[styles.note, { color: colors.textSecondary }]}>{building ? 'Restore unlocks when you reach 3 challenges.' : 'Restore brings back the flame for 7 days. It adds no challenges or rewards.'} Your 3 restores reset each month.</Text>
               </View>
             </> : null}
           </ScrollView>
@@ -77,29 +128,35 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-  panel: { width: '100%', maxWidth: 460, maxHeight: '90%', backgroundColor: '#F7FCF8', borderRadius: 24, padding: 20 },
-  heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  title: { fontSize: 23, fontWeight: '800', color: '#14532D', flex: 1 },
-  close: { minHeight: 44, minWidth: 44, justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', padding: 4 },
-  focus: { borderWidth: 2, borderColor: '#C2410C' },
-  closeText: { color: '#166534', fontWeight: '700' },
-  content: { paddingBottom: 16, gap: 12 },
-  progress: { alignItems: 'center', paddingVertical: 12 },
-  flame: { width: 72, height: 72 },
-  count: { fontSize: 48, fontWeight: '900', color: '#14532D' },
-  subtitle: { fontSize: 16, color: '#334B3C' },
-  status: { fontSize: 14, color: '#334B3C', marginTop: 8, fontWeight: '600' },
-  body: { fontSize: 14, color: '#334B3C', lineHeight: 21 },
-  section: { fontSize: 17, fontWeight: '700', color: '#14532D', marginTop: 8 },
-  reward: { borderBottomWidth: 1, borderBottomColor: '#CADCCE', paddingVertical: 12, gap: 6 },
-  rewardHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
-  milestone: { fontSize: 16, fontWeight: '700', color: '#14532D' },
-  rewardStatus: { fontSize: 13, color: '#334B3C' },
-  restore: { gap: 10, marginTop: 8 },
-  button: { backgroundColor: '#166534', minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', padding: 12 },
-  secondary: { backgroundColor: '#166534', minHeight: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  disabled: { backgroundColor: '#52685A' },
-  error: { color: '#991B1B', fontSize: 14, lineHeight: 21 },
+  backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  panel: { width: '100%', maxWidth: 460, maxHeight: '90%', borderRadius: 24, overflow: 'hidden' },
+  heading: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, gap: 12, borderBottomWidth: 1 },
+  title: { fontSize: 22, fontWeight: '800' },
+  close: { minHeight: 44, minWidth: 56, padding: 8, borderWidth: 2, borderColor: 'transparent', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: 20, paddingBottom: 24, gap: 10 },
+  hero: { padding: 18, borderRadius: 18, gap: 8, marginBottom: 10 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  count: { fontSize: 48, fontWeight: '900', lineHeight: 54 },
+  countLabel: { fontSize: 13, lineHeight: 18 },
+  heroTitle: { fontSize: 18, fontWeight: '700', lineHeight: 25 },
+  body: { fontSize: 14, lineHeight: 21 },
+  caption: { fontSize: 12, lineHeight: 18 },
+  captionStrong: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  progressHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 6, marginTop: 10 },
+  progressTrack: { height: 7, width: '100%', borderRadius: 4, overflow: 'hidden' },
+  sectionHeading: { gap: 2, marginBottom: 4 },
+  sectionTitle: { fontSize: 17, fontWeight: '700' },
+  reward: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
+  checkpoint: { width: 38, height: 38, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  checkpointText: { fontSize: 14, fontWeight: '800' },
+  rewardHeading: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 6 },
+  milestone: { fontSize: 14, fontWeight: '700', lineHeight: 20 },
+  rewardStatus: { fontSize: 12, fontWeight: '600', lineHeight: 20 },
+  rewardAmounts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 8 },
+  note: { fontSize: 12, lineHeight: 19 },
+  restoreSection: { borderTopWidth: 1, paddingTop: 18, marginTop: 10, gap: 10 },
+  button: { minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', padding: 12, borderWidth: 2, borderColor: 'transparent' },
+  buttonText: { fontSize: 15, fontWeight: '700' },
+  loading: { minHeight: 160, gap: 12, alignItems: 'center', justifyContent: 'center' },
+  errorBox: { gap: 12, paddingVertical: 12 },
 });

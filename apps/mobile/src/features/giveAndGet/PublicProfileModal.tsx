@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, Modal, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -42,7 +44,7 @@ export function PublicProfileModal({ visible, onClose, user }: PublicProfileModa
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
             <Ionicons name="close" size={24} color={theme.colors.textMuted} />
           </TouchableOpacity>
-          
+
           <View style={styles.avatarContainer}>
             {user.avatarUrl ? (
               <Image source={{ uri: getValidImageUrl(user.avatarUrl) }} style={styles.avatarImage} />
@@ -52,14 +54,14 @@ export function PublicProfileModal({ visible, onClose, user }: PublicProfileModa
               </View>
             )}
           </View>
-          
+
           <View style={styles.nameRow}>
             <Text style={[styles.userName, { color: theme.colors.textPrimary }]}>{user.displayName}</Text>
             {user.isVerified && (
               <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
             )}
           </View>
-          
+
           <View style={styles.infoRow}>
             <Ionicons name="person-circle-outline" size={16} color={theme.colors.textMuted} />
             <Text style={[styles.infoText, { color: theme.colors.textMuted }]}>EcoBud Community Member</Text>

@@ -1,5 +1,6 @@
 import React from 'react';
-import { BackHandler, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Linking, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from '../accessibility/primitives';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ecoTheme';
 import { AppVersionInfo, checkForMandatoryUpdate, getInstalledAppVersion } from './appVersion';

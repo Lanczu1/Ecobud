@@ -1,8 +1,10 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, View} from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import LottieView from 'lottie-react-native';
+import { StreakFlame } from './StreakFlame';
+import { isStreakFlameActive } from '../../shared/api/streakSummary';
 import { type SummaryCardsProps } from '../types/home';
 import { getVisibleStreak } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
@@ -10,7 +12,7 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../util
 export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, onPressRewards, onOpenStreakOverlay, style }: SummaryCardsProps) {
 
   const visibleStreak = getVisibleStreak(currentStreak);
-  const isStreakActive = streakActive;
+  const isStreakActive = isStreakFlameActive(currentStreak, streakActive);
 
   return (
     <LinearGradient
@@ -21,24 +23,12 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
     >
         <View style={styles.streakGlow} />
         <View style={styles.streakHeader}>
-          <TouchableOpacity 
+          <TouchableOpacity
             activeOpacity={onOpenStreakOverlay ? 0.7 : 1}
             onPress={onOpenStreakOverlay}
             style={styles.flameCircle}
           >
-            {isStreakActive ? (
-              <LottieView
-                source={require('../../../assets/Fire.lottie')}
-                autoPlay
-                loop
-                style={{ width: scale(42), height: scale(42) }}
-              />
-            ) : (
-              <Image
-                source={require('../../../assets/Unfire.png')}
-                style={{ width: scale(34), height: scale(34), resizeMode: 'contain' }}
-              />
-            )}
+            <StreakFlame count={currentStreak} active={streakActive} size={scale(42)} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.streakLabel}>YOUR ECO STREAK</Text>
@@ -46,7 +36,7 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
               {!isStreakActive
                 ? currentStreak === 0
                   ? 'Complete a challenge to start.'
-                  : 'Count saved. Restore your streak.'
+                  : currentStreak < 3 ? `${3 - currentStreak} more ${3 - currentStreak === 1 ? 'challenge' : 'challenges'} to ignite your streak.` : 'Count saved. Restore your streak.'
                 : 'Build your streak with challenges.'}
             </Text>
           </View>

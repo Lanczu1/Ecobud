@@ -2,22 +2,19 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DeviceEventEmitter } from 'react-native';
 import {
   View,
-  Text,
-  TextInput,
   ScrollView,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Animated,
   Easing,
   ActivityIndicator,
-  Modal,
-  Pressable,
   Platform,
   Keyboard,
   AppState,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TextInput, TouchableOpacity, Pressable } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

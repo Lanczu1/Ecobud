@@ -1,20 +1,20 @@
 import React from 'react';
 import {
   View,
-  Text,
-  Pressable,
   Image,
   StyleSheet,
-  Animated,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Text, Pressable } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { FastImage } from '../../shared/ui/FastImage';
 import { Ionicons } from '@expo/vector-icons';
 import { type ChallengeWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { resolveMediaUrl } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useTheme } from '../../shared/theme/ecoTheme';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
 
 export interface DiscoverChallengeCardProps {
   challenge: ChallengeWithProgress;
@@ -30,6 +30,8 @@ export const DiscoverChallengeCard = React.forwardRef<View, DiscoverChallengeCar
   isTablet,
 }, ref) {
   const { theme, isDark } = useTheme();
+  const { preferences } = useAccessibility();
+  const largeText = preferences.size === 'Large';
   const category = ((challenge as any).category || 'General').toUpperCase();
   const isImageMission = challenge.type === 'AI Image Recognition Challenge';
   const imageUrl = resolveMediaUrl(challenge.imageUrl, ecobudApiOrigin);
@@ -85,8 +87,8 @@ export const DiscoverChallengeCard = React.forwardRef<View, DiscoverChallengeCar
       </View>
 
       <View style={[cardStyles.discoverBody, isTablet && cardStyles.discoverBodyCompact]}>
-        <View style={cardStyles.discoverMetaRow}>
-          <View style={[cardStyles.discoverCategoryBadge, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
+        <View style={[cardStyles.discoverMetaRow, { flexWrap: 'wrap', gap: 8 }]}>
+          <View style={[cardStyles.discoverCategoryBadge, { maxWidth: '100%', backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
             <Text style={[cardStyles.discoverCategoryText, { color: isDark ? theme.colors.primary : '#126027' }]}>{category}</Text>
           </View>
           {challenge.difficulty && (
@@ -103,7 +105,7 @@ export const DiscoverChallengeCard = React.forwardRef<View, DiscoverChallengeCar
           {challenge.description}
         </Text>
 
-        <View style={[cardStyles.discoverFooter, isTablet && cardStyles.discoverFooterCompact, { borderTopColor: isDark ? theme.colors.border : '#F0FDF4' }]}>
+        <View style={[cardStyles.discoverFooter, (isTablet || largeText) && cardStyles.discoverFooterCompact, { borderTopColor: isDark ? theme.colors.border : '#F0FDF4' }]}>
           <View style={cardStyles.rewardSection}>
             <Text style={[cardStyles.discoverRewardLabel, { color: theme.colors.textMuted }]}>REWARD</Text>
             <View style={cardStyles.discoverRewardRow}>

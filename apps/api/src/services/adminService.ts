@@ -1107,14 +1107,17 @@ export class AdminService {
             timestamp: new Date()
           }
         }),
-        () => supabaseRealtimeService.publishUserNotice(submission.userId, {
-          level: status === 'approved' ? 'success' : 'warning',
+        () => sendDirectNotification({
+          userId: submission.userId,
+          type: 'event',
           message:
             status === 'approved'
               ? `Your attendance for event "${submission.event.title}" has been approved.`
               : `Your attendance for event "${submission.event.title}" was rejected.${notes ? ` Notes: ${notes}` : ''}`,
-          scope: 'moderation',
           title: status === 'approved' ? 'Event Attendance Approved' : 'Event Attendance Rejected',
+          relatedId: submission.eventId,
+          relatedType: 'event',
+          notificationKey: `event_submission_${eventStatus}:${submission.id}:${submission.reviewedAt?.getTime()}`,
         }),
         () => supabaseRealtimeService.publishUserEventsRefresh(submission.userId, { entityId: submission.eventId, reason: 'event-attendance-reviewed' }),
         () => supabaseRealtimeService.publishAdminSectionRefresh('dashboard', { actorRole: 'moderator', actorUserId: reviewerId, entityId: submission.eventId, reason: 'event-attendance-reviewed' }),
