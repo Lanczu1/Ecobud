@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authorizeEventWrite, validateEventAudience } from '../services/eventAccess';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireModeratorAccess } from '../http/authentication';
@@ -148,6 +149,8 @@ moderationRoutes.get(
 
 moderationRoutes.post(
   '/events',
+  authorizeEventWrite,
+  validateEventAudience,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const payload = eventSchema.parse(req.body);
     const item = await prisma.event.create({
@@ -164,6 +167,10 @@ moderationRoutes.post(
         latitude: payload.latitude,
         longitude: payload.longitude,
         managedById: req.auth!.userId,
+        barangay: req.body.barangay ?? null,
+        targetAudience: req.body.targetAudience ?? 'Residents',
+        officialName: req.body.officialName ?? null,
+        officialPosition: req.body.officialPosition ?? null,
       },
     });
 
@@ -173,12 +180,18 @@ moderationRoutes.post(
 
 moderationRoutes.put(
   '/events/:eventId',
+  authorizeEventWrite,
+  validateEventAudience,
   errorBoundary(async (req, res) => {
     const payload = eventSchema.parse(req.body);
     const item = await prisma.event.update({
       where: { id: req.params.eventId },
       data: {
         title: payload.title,
+        barangay: req.body.barangay,
+        targetAudience: req.body.targetAudience,
+        officialName: req.body.officialName,
+        officialPosition: req.body.officialPosition,
         description: payload.description,
         location: payload.location,
         startDatetime: new Date(payload.startDatetime),
@@ -197,6 +210,7 @@ moderationRoutes.put(
 
 moderationRoutes.delete(
   '/events/:eventId',
+  authorizeEventWrite,
   errorBoundary(async (req, res) =>
     res.json({ deleted: await prisma.event.delete({ where: { id: req.params.eventId } }) }),
   ),

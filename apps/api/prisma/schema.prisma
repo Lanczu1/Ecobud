@@ -442,6 +442,10 @@ model UserBadge {
 }
 
 model Event {
+  officialName String? @map("official_name")
+  officialPosition String? @map("official_position")
+  targetAudience String              @default("Residents") @map("target_audience")
+  barangay       String?
   isPublished    Boolean             @default(true) @map("is_published")
   id             String              @id @default(cuid())
   title          String

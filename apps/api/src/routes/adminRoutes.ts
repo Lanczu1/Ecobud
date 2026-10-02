@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { authorizeEventWrite, validateEventAudience, eventBarangay } from '../services/eventAccess';
+import { BARANGAYS } from '../utils/announcementBarangays';
+import { AuthenticatedRequest } from '../http/authentication';
 import { AdminController } from "../controllers/adminController";
 import {
   authenticateRequest,
@@ -54,12 +57,13 @@ adminRoutes.delete("/submissions/:id", AdminController.deleteSubmission);
 
 
 // Events Management
+adminRoutes.get('/events/barangays', (req: AuthenticatedRequest, res) => res.json({ items: BARANGAYS, assignedBarangay: eventBarangay(req.auth!.city), canCreate: req.auth!.role === 'admin' || !!eventBarangay(req.auth!.city) }));
 adminRoutes.get("/events", AdminController.getEvents);
-adminRoutes.post("/events", requireAdminAccess, eventUploadMiddleware.single('image'), AdminController.createEvent);
-adminRoutes.put("/events/:id", requireAdminAccess, eventUploadMiddleware.single('image'), AdminController.updateEvent);
-adminRoutes.delete("/events/:id", AdminController.deleteEvent);
+adminRoutes.post("/events", authorizeEventWrite, eventUploadMiddleware.single('image'), validateEventAudience, AdminController.createEvent);
+adminRoutes.put("/events/:id", authorizeEventWrite, eventUploadMiddleware.single('image'), validateEventAudience, AdminController.updateEvent);
+adminRoutes.delete("/events/:id", authorizeEventWrite, AdminController.deleteEvent);
 adminRoutes.get("/events/:id/qr", AdminController.getEventQr);
-adminRoutes.post("/events/:id/qr", AdminController.generateEventQr);
+adminRoutes.post("/events/:id/qr", authorizeEventWrite, AdminController.generateEventQr);
 
 export { adminRoutes };
 

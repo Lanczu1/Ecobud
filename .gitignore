@@ -85,3 +85,6 @@ apps/api/ecobud-project-firebase-adminsdk-*.json
 **/debug.keystore
 
 *.sql
+!apps/api/prisma/migrations/20261002030000_event_official_assigned/migration.sql
+!apps/api/prisma/migrations/20261002000000_event_barangay/migration.sql
+!apps/api/prisma/migrations/20261002020000_event_target_audience/migration.sql
