@@ -1,3 +1,6 @@
+import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import type { DraftController } from '../../../hooks/useLocalDrafts';
+import { LocalDraftPanel } from '../LocalDraftPanel';
 import React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -228,6 +231,7 @@ function resolveEventImageUrl(imageUrl?: string | null) {
 }
 
 interface ModalProps {
+  drafts?: DraftController<FormData>;
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
   initial?: AdminEvent | null;
@@ -264,9 +268,9 @@ function LocationPickerMarker({ position, onChange }: { position: [number, numbe
   );
 }
 
-function EventModal({ onClose, onSave, initial }: ModalProps) {
+function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
   const [form, setForm] = useState<FormData>(
-    initial
+    drafts?.restored ?? (initial
       ? {
         title: initial.title,
         description: initial.description,
@@ -292,11 +296,19 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
             isFeatured: false,
   isPublished: true,
           }
-  );
+  ));
+  useEffect(() => {
+    if (!form.imageFile) return;
+    const url = URL.createObjectURL(form.imageFile);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [form.imageFile]);
   const [imagePreview, setImagePreview] = useState<string | null>(resolveEventImageUrl(initial?.imageUrl));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
+
+  useDraftAutosave(drafts, form, !initial);
 
   // Lock background scroll while modal is open
   useModalScrollLock(true);
@@ -325,7 +337,8 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
       if (!payload.endDatetime.includes('+') && !payload.endDatetime.endsWith('Z')) {
         payload.endDatetime = `${payload.endDatetime}:00+08:00`;
       }
-      await onSave(payload); 
+      await onSave(payload);
+      await drafts?.complete();
       handleClose(); 
     }
     catch (e: any) { setErr(e.message || 'Failed to save.'); }
@@ -340,6 +353,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
           <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
         <form id="event-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          {drafts && <p role={drafts.error ? "alert" : "status"} className="px-6 py-2 text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
           {err && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl px-4 py-3">{err}</p>}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
@@ -369,7 +383,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
                     const file = e.target.files?.[0];
                     if (file) {
                       setForm(f => ({ ...f, imageFile: file }));
-                      setImagePreview(URL.createObjectURL(file));
+
                     }
                   }} 
                   className="hidden" 
@@ -623,6 +637,7 @@ function EventModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function Events() {
+  const drafts = useLocalDrafts<FormData>('events');
   const [page, setPage] = useState(1);
   const [eventPagination, setEventPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -937,7 +952,8 @@ export function Events() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
-      {modal === 'add' && <EventModal onClose={() => setModal(null)} onSave={handleAdd} />}
+      <LocalDraftPanel controller={drafts} disabled={!!modal} onResume={record => { if (drafts.start(record)) setModal('add'); }} />
+      {modal === 'add' && <EventModal drafts={drafts} onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <EventModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
       
       {qrModal.open && createPortal(
@@ -1093,7 +1109,7 @@ export function Events() {
           <p className="text-gray-500 text-sm mt-1">Organize and track community eco-events</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setModal('add')} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
+          <button onClick={() => { if (drafts.start()) setModal('add'); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
             <Plus className="w-4 h-4" />Create Event
           </button>
         </div>

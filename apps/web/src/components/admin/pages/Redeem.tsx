@@ -1,3 +1,6 @@
+import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import type { LocalDraft } from '../../../utils/localDraftStore';
+import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
@@ -70,7 +73,13 @@ const statusLabels: Record<string, string> = {
   claimed: 'Claimed',
 };
 
+interface RedeemDraft {
+  title: string; description: string; coinCost: string; imageUrl: string;
+  imageFile: File | null; category: string; stock: string;
+}
+
 export function Redeem() {
+  const drafts = useLocalDrafts<RedeemDraft>('redeem');
   const [mainTab, setMainTab] = useState<'items' | 'requests'>('items');
   const [itemPage, setItemPage] = useState(1);
   const [requestPage, setRequestPage] = useState(1);
@@ -95,6 +104,7 @@ export function Redeem() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [formCategory, setFormCategory] = useState('general');
   const [formStock, setFormStock] = useState('-1');
+  useDraftAutosave(drafts, { title: formTitle, description: formDescription, coinCost: formCoinCost, imageUrl: formImageUrl, imageFile: formImageFile, category: formCategory, stock: formStock }, showCreateModal && !editItem);
 
   // Requests state
   const [requests, setRequests] = useState<RedeemRequest[]>([]);
@@ -160,7 +170,26 @@ export function Redeem() {
     setEditItem(null);
   };
 
-  const openCreateModal = () => { resetForm(); setShowCreateModal(true); };
+  const openCreateModal = (record?: LocalDraft<RedeemDraft>) => {
+    if (!drafts.start(record)) return;
+    resetForm();
+    if (record) {
+      const data = record.data;
+      setFormTitle(data.title);
+      setFormDescription(data.description);
+      setFormCoinCost(data.coinCost);
+      setFormImageUrl(data.imageUrl);
+      setFormImageFile(data.imageFile);
+      setFormCategory(data.category);
+      setFormStock(data.stock);
+      if (data.imageFile) {
+        const reader = new FileReader();
+        reader.onloadend = () => setFormImagePreview(reader.result as string);
+        reader.readAsDataURL(data.imageFile);
+      } else setFormImagePreview(data.imageUrl ? (data.imageUrl.startsWith('http') ? data.imageUrl : `${API_HOST}${data.imageUrl}`) : '');
+    }
+    setShowCreateModal(true);
+  };
 
   const openEditModal = (item: RedeemItem) => {
     setFormTitle(item.title);
@@ -216,6 +245,7 @@ export function Redeem() {
         toast.success('Redeem item updated.');
       } else {
         await adminPost<RedeemItem>('/redeem', body);
+        await drafts.complete();
         toast.success('New redeem item created.');
       }
       setShowCreateModal(false);
@@ -414,6 +444,7 @@ export function Redeem() {
 
   return (
     <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">
+      {mainTab === 'items' && <LocalDraftPanel controller={drafts} disabled={showCreateModal} onResume={openCreateModal} />}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -434,7 +465,7 @@ export function Redeem() {
             <span className="hidden sm:inline">Refresh</span>
           </button>
           {mainTab === 'items' && (
-            <button onClick={openCreateModal} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 active:scale-95 transition-all duration-200 shadow-sm">
+            <button onClick={() => openCreateModal()} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 active:scale-95 transition-all duration-200 shadow-sm">
               <Plus className="w-4 h-4" /> Add Item
             </button>
           )}
@@ -899,6 +930,7 @@ export function Redeem() {
               onSubmit={e => { e.preventDefault(); handleSave(); }}
               className="flex-1 overflow-y-auto p-6 space-y-4"
             >
+              {!editItem && <p role={drafts.error ? 'alert' : 'status'} className="text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
                 <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="e.g. Eco Water Bottle"

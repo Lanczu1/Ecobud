@@ -1,3 +1,6 @@
+import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import type { DraftController } from '../../../hooks/useLocalDrafts';
+import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -228,23 +231,36 @@ interface FormData {
 
 const emptyForm: FormData = { title: '', description: '', difficulty: 'Easy', category: 'General', startDate: null, endDate: null, expReward: 100, ecoCoinReward: 0, active: true, badgeLabel: '', type: 'AI Image Recognition Challenge', imageUrl: '', aiDetectionTargets: [], aiMinimumConfidence: 80, isFeatured: false, requirementType: 'quantity', requirementTarget: '1', requirementUnit: 'piece', additionalInstructions: '', collectionPointName: 'Barangay Collection Point' };
 
+interface ChallengeDraft { form: FormData; imageFile: File | null; }
+
 interface ModalProps {
+  drafts?: DraftController<ChallengeDraft>;
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
   initial?: Challenge | null;
 }
 
-function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
+function ChallengeModal({ onClose, onSave, initial, drafts }: ModalProps) {
   const [form, setForm] = useState<FormData>(
-    initial
+    drafts?.restored?.form ?? (initial
       ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', startDate: initial.startDate || null, endDate: initial.endDate || null, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false, requirementType: initial.requirementType || 'quantity', requirementTarget: initial.requirementTarget || '1', requirementUnit: initial.requirementUnit || 'piece', additionalInstructions: initial.additionalInstructions || '', collectionPointName: initial.collectionPointName || 'Barangay Collection Point' }
       : emptyForm
-  );
+  ));
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [pendingImage, setPendingImage] = useState<File | null>(drafts?.restored?.imageFile ?? null);
+  const [pendingPreview, setPendingPreview] = useState('');
+  useEffect(() => {
+    if (!pendingImage) { setPendingPreview(''); return; }
+    const url = URL.createObjectURL(pendingImage);
+    setPendingPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingImage]);
+  useDraftAutosave(drafts, { form, imageFile: pendingImage }, !initial);
 
   // Lock background scroll while modal is open
   useModalScrollLock(true);
@@ -257,6 +273,7 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!initial) { setPendingImage(file); return; }
     setUploadingImg(true);
     setErr('');
     try {
@@ -276,7 +293,18 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
     if (!form.title || !form.description) { setErr('Title and description are required.'); return; }
     if (!form.requirementTarget.trim() || !form.requirementUnit.trim()) { setErr('Requirement target and unit are required.'); return; }
     setSaving(true); setErr('');
-    try { await onSave({ ...form, startDate: null, endDate: null }); handleClose(); }
+    try {
+      let imageUrl = form.imageUrl;
+      if (pendingImage) {
+        const data = new window.FormData();
+        data.append('image', pendingImage);
+        const result = await adminPostForm<{ url: string }>('/admin/upload', data);
+        imageUrl = result.url;
+      }
+      await onSave({ ...form, imageUrl, startDate: null, endDate: null });
+      await drafts?.complete();
+      handleClose();
+    }
     catch (e: any) { setErr(e.message || 'Failed to save.'); }
     finally { setSaving(false); }
   };
@@ -292,6 +320,8 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
           
           {/* Left Side */}
           <div className="flex-1 space-y-4 overflow-y-auto challenge-modal-scroll p-6">
+          {drafts && <p role={drafts.error ? "alert" : "status"} className="px-6 py-2 text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
+
             {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
             
             <div>
@@ -307,11 +337,12 @@ function ChallengeModal({ onClose, onSave, initial }: ModalProps) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Challenge Image</label>
               <div className="flex items-center gap-4">
-                {form.imageUrl ? (
+                {(pendingPreview || form.imageUrl) ? (
                   <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-200 shrink-0">
-                    <img src={form.imageUrl.startsWith('http') ? form.imageUrl : `${API_HOST}${form.imageUrl}`} alt="Challenge" className="w-full h-full object-cover" />
+                    <img src={pendingPreview || (form.imageUrl.startsWith('http') ? form.imageUrl : `${API_HOST}${form.imageUrl}`)} alt="Challenge" className="w-full h-full object-cover" />
                     <button type="button" onClick={async () => {
-                        if (form.imageUrl) {
+                        setPendingImage(null);
+                        if (initial && form.imageUrl) {
                           try { await adminPost('/admin/upload/delete', { url: form.imageUrl }); } catch (e: any) { console.error('Failed to delete image', e); }
                         }
                         setForm(f => ({ ...f, imageUrl: '' }));
@@ -661,6 +692,7 @@ function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: Chall
 }
 
 export function Challenges() {
+  const drafts = useLocalDrafts<ChallengeDraft>('challenges');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -1224,7 +1256,8 @@ export function Challenges() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
-      {modal === 'add' && <ChallengeModal onClose={() => setModal(null)} onSave={handleAdd} />}
+      <LocalDraftPanel controller={drafts} disabled={!!modal} onResume={record => { if (drafts.start(record)) setModal('add'); }} />
+      {modal === 'add' && <ChallengeModal drafts={drafts} onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <ChallengeModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
       {viewingChallenge && (
         <ChallengeDetailModal 
@@ -1289,7 +1322,7 @@ export function Challenges() {
             </button>
           </div>
           {activeTab === 'challenges' && (
-            <button onClick={() => setModal('add')} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
+            <button onClick={() => { if (drafts.start()) setModal('add'); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
               <Plus className="w-4 h-4" />New Challenge
             </button>
           )}
