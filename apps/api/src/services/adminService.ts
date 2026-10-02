@@ -1189,9 +1189,10 @@ export class AdminService {
   }
 
   // Event Management
-  static async getAllEvents(page = 1, pageSize = 25, search?: string) {
+  static async getAllEvents(page = 1, pageSize = 25, search?: string, barangay?: string) {
     const where: any = search ? { title: { contains: search, mode: 'insensitive' } } : {};
-    return apiCache.getOrSet(`admin_events:${page}:${pageSize}:${search || ''}`, 15, async () => {
+    if (barangay) where.barangay = barangay === 'all-residents' ? null : barangay;
+    return apiCache.getOrSet(`admin_events:${page}:${pageSize}:${search || ''}:${barangay || ''}`, 15, async () => {
       const [events, total] = await Promise.all([prisma.event.findMany({
       where,
       skip: (page - 1) * pageSize,
@@ -1203,7 +1204,7 @@ export class AdminService {
       include: {
         _count: { select: { registrations: true } },
         managedBy: {
-          select: { id: true, name: true, email: true }
+          select: { id: true, name: true, email: true, role: true }
         }
       }
       }), prisma.event.count({ where })]);
@@ -1213,6 +1214,11 @@ export class AdminService {
   }
 
   static async createEvent(data: {
+    officialName?: string | null;
+    officialPosition?: string | null;
+    targetAudience?: string;
+    barangay?: string | null;
+    isPublished?: boolean;
     title: string;
     description: string;
     location: string;
@@ -1230,6 +1236,11 @@ export class AdminService {
     const event = await prisma.event.create({
       data: {
         title: data.title,
+        barangay: data.barangay ?? null,
+        targetAudience: data.targetAudience ?? 'Residents',
+        officialName: data.officialName ?? null,
+        officialPosition: data.officialPosition ?? null,
+        isPublished: data.isPublished ?? true,
         description: data.description,
         location: data.location,
         startDatetime: new Date(data.startDatetime),
@@ -1259,6 +1270,11 @@ export class AdminService {
   }
 
   static async updateEvent(id: string, data: Partial<{
+    officialName: string | null;
+    officialPosition: string | null;
+    targetAudience: string;
+    barangay: string | null;
+    isPublished: boolean;
     title: string;
     description: string;
     location: string;

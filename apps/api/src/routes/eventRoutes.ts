@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { eventBarangay } from '../services/eventAccess';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { HttpError, errorBoundary } from '../http/errorResponder';
@@ -29,8 +30,10 @@ eventRoutes.get(
       }
     }
 
+    const viewer = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { profile: { select: { city: true } } } }) : null;
+    const barangay = eventBarangay(viewer?.profile?.city);
     const events = await prisma.event.findMany({
-      where: { isPublished: true },
+      where: { isPublished: true, OR: [{ barangay: null }, ...(barangay ? [{ barangay }] : [])] },
       include: {
         _count: {
           select: { registrations: true }
@@ -95,6 +98,9 @@ eventRoutes.post(
 
     if (!event || !event.isPublished) {
       throw new HttpError(404, 'Event not found.');
+    }
+    if (event.barangay && event.barangay !== eventBarangay(req.auth!.city)) {
+      throw new HttpError(403, 'This event is for residents of another barangay.');
     }
 
     const existingRegistration = event.registrations.find(

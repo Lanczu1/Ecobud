@@ -1,4 +1,5 @@
 import { detectionSettingsSchema } from '../services/challengeImageService';
+import { canManageEvent } from '../services/eventAccess';
 import { Response } from "express";
 import { AuthenticatedRequest } from "../http/authentication";
 import { AdminService } from "../services/adminService";
@@ -626,8 +627,9 @@ export class AdminController {
     try {
       const { page, pageSize } = parseAdminPagination(req.query);
       const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
-      const items = await AdminService.getAllEvents(page, pageSize, search);
-      return res.status(200).json(items);
+      const barangay = typeof req.query.barangay === 'string' ? req.query.barangay : undefined;
+      const items = await AdminService.getAllEvents(page, pageSize, search, barangay);
+      return res.status(200).json({ ...items, items: items.items.map(item => ({ ...item, canManage: canManageEvent(req.auth!, item) })) });
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch events." });
     }
@@ -662,7 +664,7 @@ export class AdminController {
       }
 
       const item = await AdminService.createEvent({ ...payload, managedById: req.auth!.userId });
-      return res.status(201).json(item);
+      return res.status(201).json({ ...item, canManage: true });
     } catch (error: any) {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}
@@ -711,7 +713,7 @@ export class AdminController {
       }
 
       const item = await AdminService.updateEvent(req.params.id, payload);
-      return res.status(200).json(item);
+      return res.status(200).json({ ...item, canManage: true });
     } catch (error: any) {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}

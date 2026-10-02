@@ -110,6 +110,11 @@ export interface EventSubmission {
 }
 
 interface AdminEvent {
+  officialName?: string | null;
+  officialPosition?: string | null;
+  targetAudience?: string;
+  barangay: string | null;
+  canManage?: boolean;
   id: string;
   title: string;
   description: string;
@@ -181,6 +186,10 @@ function Skeleton({ className = '' }: { className?: string }) {
 }
 
 interface FormData {
+  officialName: string;
+  officialPosition: string;
+  targetAudience: string;
+  barangay: string;
   title: string;
   description: string;
   location: string;
@@ -208,6 +217,10 @@ function formatDateForInput(dateStr?: string | Date): string {
 }
 
 const emptyForm: FormData = {
+  officialName: '',
+  officialPosition: '',
+  targetAudience: 'Residents',
+  barangay: '',
   title: '',
   description: '',
   location: '',
@@ -231,6 +244,9 @@ function resolveEventImageUrl(imageUrl?: string | null) {
 }
 
 interface ModalProps {
+  barangays: string[];
+  assignedBarangay: string | null;
+  isModerator: boolean;
   drafts?: DraftController<FormData>;
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
@@ -268,11 +284,15 @@ function LocationPickerMarker({ position, onChange }: { position: [number, numbe
   );
 }
 
-function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
+function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBarangay, isModerator }: ModalProps) {
   const [form, setForm] = useState<FormData>(
     drafts?.restored ?? (initial
       ? {
         title: initial.title,
+        officialName: initial.officialName ?? '',
+        officialPosition: initial.officialPosition ?? '',
+        targetAudience: initial.targetAudience ?? 'Residents',
+        barangay: initial.barangay ?? '',
         description: initial.description,
         location: initial.location,
         startDatetime: formatDateForInput(initial.startDatetime),
@@ -287,6 +307,7 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
       }
         : { 
             ...emptyForm, 
+            barangay: isModerator ? assignedBarangay ?? '' : '',
             startDatetime: formatDateForInput(), 
             endDatetime: (() => {
               const d = new Date();
@@ -320,7 +341,8 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title || !form.description || !form.location || !form.startDatetime || !form.endDatetime) {
+    const missingNumber = Array.from(e.currentTarget.querySelectorAll<HTMLInputElement>('input[type="number"]')).some(input => input.value.trim() === '');
+    if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.startDatetime || !form.endDatetime || !form.officialName?.trim() || !form.officialPosition?.trim() || !form.targetAudience || (isModerator && !assignedBarangay) || (!form.imageFile && !initial?.imageUrl) || missingNumber || !Number.isFinite(form.capacity) || !Number.isFinite(form.pointsReward) || !Number.isFinite(form.coinReward)) {
       setErr('All fields are required.');
       return;
     }
@@ -328,9 +350,13 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
       setErr('End date & time must be after start date & time.');
       return;
     }
+    if (!Number.isInteger(form.capacity) || form.capacity < 1 || !Number.isInteger(form.pointsReward) || form.pointsReward < 0 || !Number.isInteger(form.coinReward) || form.coinReward < 0) {
+      setErr('Capacity must be a positive whole number. Rewards must be whole numbers of zero or more.');
+      return;
+    }
     setSaving(true); setErr('');
     try { 
-      const payload = { ...form };
+      const payload = { ...form, targetAudience: form.targetAudience ?? 'Residents', barangay: isModerator ? assignedBarangay ?? '' : form.barangay };
       if (!payload.startDatetime.includes('+') && !payload.startDatetime.endsWith('Z')) {
         payload.startDatetime = `${payload.startDatetime}:00+08:00`;
       }
@@ -352,8 +378,7 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
           <h2 className="text-lg font-serif font-bold text-gray-900 dark:text-white">{initial ? 'Edit Event' : 'Create Event'}</h2>
           <button type="button" onClick={handleClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
-        <form id="event-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-          {drafts && <p role={drafts.error ? "alert" : "status"} className="px-6 py-2 text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
+        <form id="event-form" noValidate onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
           {err && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl px-4 py-3">{err}</p>}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
@@ -364,11 +389,39 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 resize-none transition-colors" />
           </div>
           <div>
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">Official Assigned *</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-sm text-gray-700 dark:text-gray-300">Name *
+                  <input maxLength={120} value={form.officialName ?? ''} onChange={e => setForm(f => ({ ...f, officialName: e.target.value }))} placeholder="Official's full name" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-gray-700 dark:bg-gray-800/80 dark:text-white dark:focus:ring-green-800" />
+                </label>
+                <label className="block text-sm text-gray-700 dark:text-gray-300">Position *
+                  <input maxLength={120} value={form.officialPosition ?? ''} onChange={e => setForm(f => ({ ...f, officialPosition: e.target.value }))} placeholder="e.g. Barangay Secretary" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-200 dark:border-gray-700 dark:bg-gray-800/80 dark:text-white dark:focus:ring-green-800" />
+                </label>
+              </div>
+            </fieldset>
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Target Audience *
+              <select aria-label="Target Audience" value={form.targetAudience ?? 'Residents'} onChange={e => setForm(prev => ({ ...prev, targetAudience: e.target.value }))} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-2.5 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                {['Residents', 'SK', 'Barangay Officials', 'Others'].map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Barangay audience *
+              <select aria-label="Barangay audience" value={isModerator ? assignedBarangay ?? '' : form.barangay} disabled={isModerator} onChange={e => setForm(prev => ({ ...prev, barangay: e.target.value }))} className="mt-1 w-full rounded-xl border border-gray-200 bg-white p-2.5 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-70">
+                {!isModerator && <option value="">All Residents</option>}
+                {barangays.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </label>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location *</label>
             <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" placeholder="e.g. Bondi Beach, Sydney" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event Image</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event Image *</label>
             <div className="flex items-center gap-4">
               {imagePreview && (
                 <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0">
@@ -586,16 +639,16 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity</label>
-              <input type="number" min={1} value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity *</label>
+              <input type="number" min={1} value={Number.isFinite(form.capacity) ? form.capacity : ''} onChange={e => setForm(f => ({ ...f, capacity: e.target.valueAsNumber }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
             </div>
             <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><Leaf className="w-3.5 h-3.5 text-green-500" /> Points Reward</label>
-              <input type="number" min={0} value={form.pointsReward} onChange={e => setForm(f => ({ ...f, pointsReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><Leaf className="w-3.5 h-3.5 text-green-500" /> Points Reward *</label>
+              <input type="number" min={0} value={Number.isFinite(form.pointsReward) ? form.pointsReward : ''} onChange={e => setForm(f => ({ ...f, pointsReward: e.target.valueAsNumber }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
             </div>
             <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><img src="/coin.png" alt="eco coin" className="w-3.5 h-3.5 object-contain" /> Coin Reward</label>
-              <input type="number" min={0} value={form.coinReward} onChange={e => setForm(f => ({ ...f, coinReward: Number(e.target.value) }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-200 dark:focus:ring-yellow-800 focus:border-yellow-400 transition-colors" />
+              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"><img src="/coin.png" alt="eco coin" className="w-3.5 h-3.5 object-contain" /> Coin Reward *</label>
+              <input type="number" min={0} value={Number.isFinite(form.coinReward) ? form.coinReward : ''} onChange={e => setForm(f => ({ ...f, coinReward: e.target.valueAsNumber }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-200 dark:focus:ring-yellow-800 focus:border-yellow-400 transition-colors" />
             </div>
           </div>
 
@@ -623,7 +676,8 @@ function EventModal({ onClose, onSave, initial, drafts }: ModalProps) {
           </label>
         </form>
         {/* Footer buttons */}
-        <div className="shrink-0 p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1713] flex justify-end gap-3">
+        <div className="shrink-0 p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0f1713] flex flex-wrap items-center justify-end gap-3">
+          {drafts && <p role={drafts.error ? "alert" : "status"} className="mr-auto w-full text-left text-xs text-gray-600 dark:text-gray-300 sm:w-auto sm:min-w-0 sm:flex-1">{drafts.error || drafts.status}</p>}
           <button type="button" onClick={handleClose} className="px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancel</button>
           <button form="event-form" type="submit" disabled={saving} className="px-6 py-2.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 active:scale-95 rounded-xl transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -647,6 +701,8 @@ export function Events() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [barangayFilter, setBarangayFilter] = useState('');
+  const [audience, setAudience] = useState<{ items: string[]; assignedBarangay: string | null; canCreate: boolean }>({ items: [], assignedBarangay: null, canCreate: false });
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [editing, setEditing] = useState<AdminEvent | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -658,6 +714,10 @@ export function Events() {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
   }, []);
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
+  useEffect(() => {
+    void adminGet<typeof audience>('/admin/events/barangays').then(setAudience).catch((err: Error) => setError(err.message));
+  }, []);
+  const canManage = (event: AdminEvent) => event.canManage ?? (adminUser?.role === 'admin');
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
   const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
@@ -727,6 +787,7 @@ export function Events() {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
       if (search.trim()) params.set('search', search.trim());
+      if (barangayFilter) params.set('barangay', barangayFilter);
       const data = await adminGet<{ items: AdminEvent[]; pagination: typeof eventPagination }>(`/admin/events?${params.toString()}`, { bypassCache: fresh });
       setEvents(data.items);
       setEventPagination(data.pagination);
@@ -763,7 +824,7 @@ export function Events() {
     const initial = setTimeout(() => void load(true), 250);
     const interval = setInterval(() => void load(true), 30000);
     return () => { clearTimeout(initial); clearInterval(interval); };
-  }, [activeTab, page, search]);
+  }, [activeTab, page, search, barangayFilter]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -953,8 +1014,8 @@ export function Events() {
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
       <LocalDraftPanel controller={drafts} disabled={!!modal} onResume={record => { if (drafts.start(record)) setModal('add'); }} />
-      {modal === 'add' && <EventModal drafts={drafts} onClose={() => setModal(null)} onSave={handleAdd} />}
-      {modal === 'edit' && editing && <EventModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
+      {modal === 'add' && <EventModal barangays={audience.items} assignedBarangay={audience.assignedBarangay} isModerator={adminUser?.role === 'moderator'} drafts={drafts} onClose={() => setModal(null)} onSave={handleAdd} />}
+      {modal === 'edit' && editing && <EventModal barangays={audience.items} assignedBarangay={audience.assignedBarangay} isModerator={adminUser?.role === 'moderator'} onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
       
       {qrModal.open && createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setQrModal({ open: false, eventId: null, qrData: null, loading: false })}>
@@ -1109,7 +1170,7 @@ export function Events() {
           <p className="text-gray-500 text-sm mt-1">Organize and track community eco-events</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => { if (drafts.start()) setModal('add'); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
+          <button disabled={!audience.canCreate} onClick={() => { if (drafts.start()) setModal('add'); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50">
             <Plus className="w-4 h-4" />Create Event
           </button>
         </div>
@@ -1186,7 +1247,12 @@ export function Events() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 items-center animate-reveal delay-160">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-3 items-center animate-reveal delay-160">
+        <select aria-label="Filter events by barangay" value={barangayFilter} onChange={e => { setBarangayFilter(e.target.value); setPage(1); }} className="max-w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm">
+          <option value="">All barangays</option>
+          <option value="all-residents">All Residents</option>
+          {audience.items.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input type="text" placeholder="Search events..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
@@ -1241,11 +1307,13 @@ export function Events() {
                       <div className="min-w-0 flex-1">
                         <h3 className="font-serif font-bold text-gray-900 line-clamp-1" title={event.title}>{event.title}</h3>
                         <p className="text-xs text-gray-400">By {event.managedBy.name}</p>
+                        <p className="text-xs text-gray-500">{event.barangay || 'All Residents'}</p>
+                        <p className="text-xs text-gray-500">Audience: {event.targetAudience ?? 'Residents'}</p>
                       </div>
                     </div>
                     <button
                       onClick={() => handleToggleFeatured(event)}
-                      disabled={togglingFeatured === event.id}
+                      disabled={!canManage(event) || togglingFeatured === event.id}
                       title={event.isFeatured ? 'Unfeature event' : 'Feature event (Pin as highlight on mobile)'}
                       className={`p-2 rounded-xl transition-all disabled:opacity-60 shrink-0 ${
                         event.isFeatured
@@ -1270,6 +1338,7 @@ export function Events() {
                       <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-300" />{new Date(event.startDatetime).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
+                    <p className="text-xs text-gray-500">Official Assigned: {event.officialName ? `${event.officialName} · ${event.officialPosition}` : 'Not assigned'}</p>
                     <div className="flex items-center gap-4 text-xs font-semibold pt-1">
                       {event.expReward > 0 && (
                         <span className="flex items-center gap-1 text-green-600">
@@ -1303,7 +1372,7 @@ export function Events() {
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <button
                     onClick={() => handleToggleFeatured(event)}
-                    disabled={togglingFeatured === event.id}
+                    disabled={!canManage(event) || togglingFeatured === event.id}
                     title={event.isFeatured ? 'Unfeature event' : 'Feature event'}
                     className={`flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 ${
                       event.isFeatured ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1317,10 +1386,10 @@ export function Events() {
                   <button onClick={() => setReportModal({ open: true, eventId: event.id, eventTitle: event.title })} className="flex items-center justify-center px-3 py-2 bg-orange-50 text-orange-700 text-xs font-semibold rounded-xl hover:bg-orange-100 transition-colors">
                     <Download className="w-3 h-3" />
                   </button>
-                  <button onClick={() => { setEditing(event); setModal('edit'); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors">
+                  <button disabled={!canManage(event)} onClick={() => { setEditing(event); setModal('edit'); }} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40">
                     <Edit3 className="w-3 h-3" />Edit
                   </button>
-                  <button onClick={() => setDeleteConfirmModal({ open: true, event })} disabled={deleting === event.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60" title="Delete Event">
+                  <button onClick={() => setDeleteConfirmModal({ open: true, event })} disabled={!canManage(event) || deleting === event.id} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60" title="Delete Event">
                     {deleting === event.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                   </button>
                 </div>
