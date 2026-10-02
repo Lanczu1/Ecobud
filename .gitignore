@@ -85,6 +85,9 @@ apps/api/ecobud-project-firebase-adminsdk-*.json
 **/debug.keystore
 
 *.sql
+!apps/api/prisma/migrations/20261002040000_remove_legacy_badges/migration.sql
+!apps/api/prisma/migrations/20261002041000_clear_legacy_badge_labels/migration.sql
+!apps/api/prisma/migrations/20261002050000_content_badge_rewards/migration.sql
 !apps/api/prisma/migrations/20261002020000_announcement_notifications/migration.sql
 releases/announcement-push-20261002/
 releases/ecobud-announcement-push-20261002.zip

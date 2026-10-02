@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { adminBadgeRoutes } from './adminBadgeRoutes';
 import { authorizeEventWrite, validateEventAudience, eventBarangay } from '../services/eventAccess';
 import { BARANGAYS } from '../utils/announcementBarangays';
 import { AuthenticatedRequest } from '../http/authentication';
@@ -15,6 +16,7 @@ const adminRoutes = Router();
 // Apply global admin/moderator check for all sub-routes
 adminRoutes.use(authenticateRequest);
 adminRoutes.use(requireModeratorAccess);
+adminRoutes.use('/badges', adminBadgeRoutes);
 
 // Uploads
 adminRoutes.post("/upload", challengeUploadMiddleware.single('image'), AdminController.uploadImage);

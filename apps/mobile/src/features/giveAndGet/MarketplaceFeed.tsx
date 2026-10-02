@@ -66,6 +66,9 @@ export function MarketplaceFeed({
   const listingsRequestRef = useRef(0);
   const loadingMoreRef = useRef(false);
   const nextListingsOffsetRef = useRef(0);
+  const listingFiltersRef = useRef('');
+  const internetReadyRef = useRef(true);
+  internetReadyRef.current = model?.hasUsableInternet !== false;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -132,15 +135,30 @@ export function MarketplaceFeed({
 
   const loadListings = useCallback(async () => {
     const requestId = ++listingsRequestRef.current;
+    const params = {
+      search: debouncedSearchQuery || undefined,
+      category: selectedCategory === 'all' ? undefined : selectedCategory,
+      meetupMethod: selectedMeetup === 'all' ? undefined : selectedMeetup,
+      sortBy,
+      limit: 20,
+      offset: 0,
+    };
+    const cached = swapService.getCachedListings(params);
+    const filtersKey = JSON.stringify(params);
+    if (cached && listingFiltersRef.current !== filtersKey) {
+      setListings(cached);
+      nextListingsOffsetRef.current = cached.length;
+      setHasMoreListings(cached.length === 20);
+      setLoading(false);
+    }
+    listingFiltersRef.current = filtersKey;
+    if (!internetReadyRef.current) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
-      const data = await swapService.fetchListings({
-        search: debouncedSearchQuery || undefined,
-        category: selectedCategory === 'all' ? undefined : selectedCategory,
-        meetupMethod: selectedMeetup === 'all' ? undefined : selectedMeetup,
-        sortBy,
-        limit: 20,
-        offset: 0,
-      });
+      const data = await swapService.fetchListings(params);
       if (requestId !== listingsRequestRef.current) return;
       setListings(data);
       nextListingsOffsetRef.current = data.length;
@@ -148,8 +166,10 @@ export function MarketplaceFeed({
     } catch (err) {
       console.error('Failed to load listings:', err);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === listingsRequestRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [debouncedSearchQuery, selectedCategory, selectedMeetup, sortBy]);
 
@@ -184,8 +204,11 @@ export function MarketplaceFeed({
 
   const loadMyListings = useCallback(async () => {
     if (!currentUserId) return;
+    const cached = swapService.getCachedMyListings(currentUserId);
+    if (cached) setMyListings(cached);
+    if (!internetReadyRef.current) return;
     try {
-      setMyListingsLoading(true);
+      setMyListingsLoading(!cached);
       const data = await swapService.fetchMyListings(currentUserId);
       setMyListings(data);
     } catch (err) {
@@ -200,7 +223,7 @@ export function MarketplaceFeed({
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return;
+      if (state !== 'active' || !internetReadyRef.current) return;
       if (activeTab === 'browse') void loadListingsRef.current();
       if (activeTab === 'mylistings') void loadMyListingsRef.current();
     });
@@ -209,22 +232,22 @@ export function MarketplaceFeed({
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (AppState.currentState !== 'active') return;
-      if (activeTab === 'browse') void loadListingsRef.current();
+      if (AppState.currentState !== 'active' || !internetReadyRef.current) return;
+      if (activeTab === 'browse' && nextListingsOffsetRef.current <= 20 && !loadingMoreRef.current) void loadListingsRef.current();
       if (activeTab === 'mylistings') void loadMyListingsRef.current();
-    }, 60_000);
+    }, 10_000);
     return () => clearInterval(timer);
   }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'browse') loadListings();
-  }, [activeTab, loadListings]);
+  }, [activeTab, loadListings, model?.hasUsableInternet]);
 
   useEffect(() => {
     if (activeTab === 'mylistings') {
       loadMyListings();
     }
-  }, [activeTab, loadMyListings]);
+  }, [activeTab, loadMyListings, model?.hasUsableInternet]);
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener('giveAndGetListingsChanged', () => {

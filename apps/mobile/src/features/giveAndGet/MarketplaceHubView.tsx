@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, BackHandler, DeviceEventEmitter } from 'react-native';
+import { View, StyleSheet, BackHandler, DeviceEventEmitter, AppState } from 'react-native';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import type { EcoBudMobileModel } from '../../app/types/home';
 import { TopNavbar } from '../../app/components/CommonComponents';
@@ -74,7 +74,12 @@ export function MarketplaceHubView({
       return;
     }
     const key = `${currentUserId}:${token}`;
-    if (showLoading && conversationsLoadedFor.current !== key) setConversationsLoading(true);
+    swapService.init(token);
+    const cached = swapService.getCachedConversations(currentUserId);
+    if (cached) {
+      setConversations(cached);
+      setConversationsLoading(false);
+    } else if (showLoading && conversationsLoadedFor.current !== key) setConversationsLoading(true);
     if (conversationsInFlight.current?.key === key) return conversationsInFlight.current.promise;
 
     const requestId = ++conversationsRequestId.current;
@@ -108,6 +113,19 @@ export function MarketplaceHubView({
   useEffect(() => {
     loadConversations(true);
   }, [loadConversations]);
+
+  useEffect(() => {
+    if (!model.hasUsableInternet || screen !== 'feed' || feedTab !== 'chats') return;
+    const refresh = () => {
+      if (AppState.currentState === 'active') void loadConversations();
+    };
+    refresh();
+    const timer = setInterval(refresh, 10_000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') refresh();
+    });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, [loadConversations, model.hasUsableInternet, screen, feedTab]);
 
   // Hardware back button support within Marketplace (closes dialogs or steps back to feed)
   useEffect(() => {

@@ -7,14 +7,14 @@ import {
   ArrowLeftRight, 
   FileText, 
   LogOut,
-  Gift, Megaphone
+  Gift, Megaphone, Award
 } from 'lucide-react';
 import { Mascot } from 'page-mascot';
 
 import wordmarkImg from '../../assets/ecobud_wordmark.png';
 import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements';
+export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Badges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements';
 interface SidebarProps {
   onLogout: () => void;
   activeSection: AdminSection;
@@ -26,6 +26,7 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Users', icon: Users },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },
+  { name: 'Badges', icon: Award },
   { name: 'Events', icon: Calendar },
   { name: 'Give and Get Hub', icon: ArrowLeftRight },
   { name: 'Redeem', icon: Gift },
@@ -38,7 +39,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   const isModerator = user?.role === 'moderator';
 
   const visibleMenuItems = menuItems.filter((item) => {
-    if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Reports'].includes(item.name)) {
+    if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Reports', 'Badges'].includes(item.name)) {
       return false;
     }
     return true;

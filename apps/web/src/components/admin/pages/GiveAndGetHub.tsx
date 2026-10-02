@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { ContentBadgeReward, useContentBadgeReward } from '../ContentBadgeReward';
 import { createPortal } from 'react-dom';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import {
@@ -28,7 +29,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { adminGet, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminDelete, adminPatch, adminPut, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
@@ -514,6 +515,19 @@ function ListingFullDetailsModal({
   onOpenReject: (id: string) => void;
   onPreviewImages: (images: string[], idx: number, title: string) => void;
 }) {
+  const isAdmin = (() => { try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'admin'; } catch { return false; } })();
+  const badgeReward = useContentBadgeReward('exchange', listing.id, isAdmin);
+  const [savingBadge, setSavingBadge] = useState(false);
+  const [badgeNotice, setBadgeNotice] = useState('');
+  async function saveBadge() {
+    setSavingBadge(true); setBadgeNotice('');
+    try {
+      await adminPut(`/admin/badges/source/exchange/${listing.id}`, { badgeReward: await badgeReward.prepare() });
+      setBadgeNotice('Badge reward saved for both participants, including giveaways.');
+      badgeReward.retry();
+    } catch (e) { setBadgeNotice(e instanceof Error ? e.message : 'Unable to save badge reward.'); }
+    finally { setSavingBadge(false); }
+  }
   const [isClosing, setIsClosing] = useState(false);
   const images = resolveListingImages(listing.images, listing.userId);
   const approval = approvalConfig[listing.approvalStatus] || approvalConfig.pending;
@@ -530,6 +544,7 @@ function ListingFullDetailsModal({
   useModalScrollLock(true);
 
   const handleClose = () => {
+    if (savingBadge || badgeReward.processing) return;
     setIsClosing(true);
     setTimeout(onClose, 280);
   };
@@ -540,7 +555,7 @@ function ListingFullDetailsModal({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [savingBadge, badgeReward.processing]);
 
   return createPortal(
     <div
@@ -713,8 +728,8 @@ function ListingFullDetailsModal({
               </p>
             </div>
           )}
+        {isAdmin && <div className="space-y-3"><ContentBadgeReward reward={badgeReward} disabled={savingBadge} /><div className="flex flex-wrap items-center justify-end gap-3">{badgeNotice && <p role="status" className="text-sm text-gray-600 dark:text-gray-300">{badgeNotice}</p>}<button type="button" disabled={savingBadge || badgeReward.loading || badgeReward.processing} onClick={() => void saveBadge()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50">{savingBadge ? 'Saving…' : 'Save badge reward'}</button></div></div>}
         </div>
-
         {/* Modal Footer */}
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/90 flex items-center justify-between shrink-0">
           <div className="flex gap-2">

@@ -154,6 +154,7 @@ model Profile {
 }
 
 model Lesson {
+  badge            Badge?
   id               String               @id @default(cuid())
   title            String
   description      String
@@ -263,6 +264,7 @@ model UserWeeklyGoal {
 }
 
 model Challenge {
+  badge                   Badge?
   id                      String                    @id @default(cuid())
   title                   String
   description             String
@@ -423,6 +425,16 @@ model HabitCheckIn {
 }
 
 model Badge {
+  awardType      String      @default("points")
+  active         Boolean     @default(true)
+  lessonId       String?     @unique
+  challengeId    String?     @unique
+  eventId        String?     @unique
+  swapListingId  String?     @unique
+  lesson         Lesson?     @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  challenge      Challenge?  @relation(fields: [challengeId], references: [id], onDelete: SetNull)
+  event          Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  swapListing    SwapListing? @relation(fields: [swapListingId], references: [id], onDelete: SetNull)
   id             String      @id @default(cuid())
   name           String      @unique
   description    String
@@ -444,6 +456,7 @@ model UserBadge {
 }
 
 model Event {
+  badge          Badge?
   officialName String? @map("official_name")
   officialPosition String? @map("official_position")
   targetAudience String              @default("Residents") @map("target_audience")
@@ -720,6 +733,7 @@ model RedeemItem {
 }
 
 model SwapListing {
+  badge          Badge?
   id             String             @id @default(cuid())
   userId         String             @map("user_id")
   title          String

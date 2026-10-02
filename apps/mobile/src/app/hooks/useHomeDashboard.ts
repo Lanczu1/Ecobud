@@ -56,7 +56,7 @@ const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
 const CACHED_ANNOUNCEMENTS_STORAGE_KEY = 'ecobud.mobile.cached_announcements';
 type FocusedResource = 'lessons' | 'challenges' | 'events';
 const FOCUSED_REFRESH_INTERVAL_MS = 30_000;
-type SecondaryResource = 'tracker' | 'profile' | 'rewards' | 'leaderboard' | 'transparency';
+type SecondaryResource = 'tracker' | 'profile' | 'leaderboard' | 'transparency';
 const SECONDARY_REFRESH_INTERVAL_MS = 60_000;
 
 // --- Internal Utilities ---
@@ -183,7 +183,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const lastFocusedRefreshAtRef = React.useRef<Record<FocusedResource, number>>({ lessons: 0, challenges: 0, events: 0 });
   const focusedRefreshInFlightRef = React.useRef<Set<FocusedResource>>(new Set());
   const secondaryRefreshInFlightRef = React.useRef<Set<SecondaryResource>>(new Set());
-  const lastSecondaryRefreshAtRef = React.useRef<Record<SecondaryResource, number>>({ tracker: 0, profile: 0, rewards: 0, leaderboard: 0, transparency: 0 });
+  const lastSecondaryRefreshAtRef = React.useRef<Record<SecondaryResource, number>>({ tracker: 0, profile: 0, leaderboard: 0, transparency: 0 });
   const currentSessionTokenRef = React.useRef<string | null>(null);
   currentSessionTokenRef.current = session?.token ?? null;
 
@@ -482,7 +482,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setTabHistory(['home']);
     previousStreakRef.current = null;
     previousUnlockedBadgeIdsRef.current = null;
-    lastSecondaryRefreshAtRef.current = { tracker: 0, profile: 0, rewards: 0, leaderboard: 0, transparency: 0 };
+    lastSecondaryRefreshAtRef.current = { tracker: 0, profile: 0, leaderboard: 0, transparency: 0 };
     void mobileStorage.removeItem(CACHED_HOME_DATA_STORAGE_KEY).catch(() => {});
     // Intentionally keep viewed missions across logouts
   }, []);
@@ -1172,12 +1172,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
     if (!session?.token || !presence.hasUsableInternet || (isHydrating && !trackerIsVisible && !leaderboardIsVisible) || AppState.currentState !== 'active') return;
     const token = session.token;
     const needed: SecondaryResource[] = activeOverlay === 'leaderboard' ? ['leaderboard']
-      : activeOverlay === 'rewards' || activeOverlay === 'streakRewards' || activeOverlay === 'redeemPoints' || activeOverlay === 'coinsHistory' ? ['rewards']
       : activeOverlay === 'transparency' ? ['transparency']
       : activeOverlay === 'editProfile' ? ['profile']
       : activeOverlay !== null ? []
       : activeTab === 'tracker' ? ['tracker']
-      : activeTab === 'profile' ? ['profile', 'rewards']
+      : activeTab === 'profile' ? ['profile']
       : activeTab === 'challenges' ? ['profile']
       : [];
 
@@ -1210,14 +1209,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
           } else if (resource === 'profile') {
             const result = await homeService.getProfile(token);
             if (currentSessionTokenRef.current === token) setProfile(result);
-          } else if (resource === 'rewards') {
-            const result = await homeService.getRewards(token);
-            if (currentSessionTokenRef.current === token) {
-              if (previousUnlockedBadgeIdsRef.current === null && result?.badges) {
-                previousUnlockedBadgeIdsRef.current = new Set(result.badges.filter((badge) => badge.unlocked).map((badge) => String(badge.id)));
-              }
-              setRewards(result);
-            }
           } else if (resource === 'leaderboard') {
             const result = await homeService.getLeaderboard(token);
             if (currentSessionTokenRef.current === token) setLeaderboard(result);
@@ -1238,6 +1229,52 @@ export function useHomeDashboard(): EcoBudMobileModel {
       })();
     }
   }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating, tracker?.month]);
+
+  useEffect(() => {
+    if (!session?.token) return;
+    const token = session.token;
+    const cacheKey = `ecobud.mobile.rewards.${session.user.id}`;
+    try {
+      const raw = mobileStorage.getItemSync(cacheKey);
+      const cached = raw ? JSON.parse(raw) as RewardsData : null;
+      if (cached && Array.isArray(cached.badges) && Array.isArray(cached.achievements)) {
+        if (previousUnlockedBadgeIdsRef.current === null) {
+          previousUnlockedBadgeIdsRef.current = new Set(cached.badges.filter(badge => badge.unlocked).map(badge => String(badge.id)));
+        }
+        setRewards(current => current ?? cached);
+      }
+    } catch {}
+
+    const visible = activeOverlay === null && activeTab === 'profile' ||
+      activeOverlay === 'rewards' || activeOverlay === 'streakRewards' ||
+      activeOverlay === 'redeemPoints' || activeOverlay === 'coinsHistory' || activeOverlay === 'badgeUnlocked';
+    if (!visible || !presence.hasUsableInternet) return;
+    let disposed = false;
+    let inFlight = false;
+    const refresh = async () => {
+      if (disposed || inFlight || AppState.currentState !== 'active') return;
+      inFlight = true;
+      try {
+        const result = await homeService.getRewards(token);
+        if (disposed || currentSessionTokenRef.current !== token) return;
+        if (previousUnlockedBadgeIdsRef.current === null) {
+          previousUnlockedBadgeIdsRef.current = new Set(result.badges.filter(badge => badge.unlocked).map(badge => String(badge.id)));
+        }
+        setRewards(current => JSON.stringify(current) === JSON.stringify(result) ? current : result);
+        void mobileStorage.setItem(cacheKey, JSON.stringify(result)).catch(() => {});
+      } catch (error) {
+        if (!disposed) console.warn('[ECOBUD rewards refresh warning]:', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 10_000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void refresh();
+    });
+    return () => { disposed = true; clearInterval(timer); subscription.remove(); };
+  }, [session?.token, session?.user.id, presence.hasUsableInternet, activeTab, activeOverlay]);
 
   useEffect(() => {
     if (!session || !presence.hasUsableInternet) {

@@ -9,6 +9,13 @@ import { prisma } from "../prismaClient";
 import fs from "fs";
 import path from "path";
 import { parseAdminPagination } from '../utils/adminPagination';
+import { HttpError } from '../http/errorResponder';
+
+function contentSaveError(error: any, res: Response, fallback: string) {
+  if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+  if (error?.code === 'P2002') return res.status(409).json({ message: 'This badge name is already used. Choose a different badge name.' });
+  return res.status(500).json({ message: fallback });
+}
 
 const safelyDeleteUpload = async (url?: string | null) => {
   if (!url) return;
@@ -122,6 +129,7 @@ export class AdminController {
 
     try {
       const lesson = await AdminService.createLesson({
+        badgeReward: req.body.badgeReward,
         title,
         description,
         content: req.body.content || ' ',
@@ -142,7 +150,7 @@ export class AdminController {
       });
       return res.status(201).json(lesson);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to create lesson." });
+      return contentSaveError(error, res, 'Failed to create lesson.');
     }
   }
 
@@ -265,7 +273,7 @@ export class AdminController {
       const lesson = await AdminService.updateLesson(id, updateData);
       return res.status(200).json(lesson);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to update lesson." });
+      return contentSaveError(error, res, 'Failed to update lesson.');
     }
   }
 
@@ -412,7 +420,7 @@ export class AdminController {
       const item = await AdminService.createChallenge({ ...req.body, requirementType, requirementTarget, requirementUnit, ...settings.data });
       return res.status(201).json(item);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to create challenge." });
+      return contentSaveError(error, res, 'Failed to create challenge.');
     }
   }
 
@@ -434,7 +442,7 @@ export class AdminController {
       const item = await AdminService.updateChallenge(req.params.id, { ...req.body, requirementType, requirementTarget, requirementUnit, ...settings.data });
       return res.status(200).json(item);
     } catch (error: any) {
-      return res.status(500).json({ message: "Failed to update challenge." });
+      return contentSaveError(error, res, 'Failed to update challenge.');
     }
   }
 
@@ -636,6 +644,7 @@ export class AdminController {
   }
 
   static async createEvent(req: AuthenticatedRequest, res: Response) {
+    if (req.body.badgeReward !== undefined && req.auth?.role !== 'admin') return res.status(403).json({ message: 'Only administrators can manage badge rewards.' });
     try {
       const payload = { ...req.body };
       if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
@@ -669,11 +678,12 @@ export class AdminController {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}
       }
-      return res.status(500).json({ message: "Failed to create event." });
+      return contentSaveError(error, res, 'Failed to create event.');
     }
   }
 
   static async updateEvent(req: AuthenticatedRequest, res: Response) {
+    if (req.body.badgeReward !== undefined && req.auth?.role !== 'admin') return res.status(403).json({ message: 'Only administrators can manage badge rewards.' });
     try {
       const payload = { ...req.body };
       if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
@@ -718,7 +728,7 @@ export class AdminController {
       if (req.file && fs.existsSync(req.file.path)) {
         try { fs.unlinkSync(req.file.path); } catch {}
       }
-      return res.status(500).json({ message: "Failed to update event." });
+      return contentSaveError(error, res, 'Failed to update event.');
     }
   }
 

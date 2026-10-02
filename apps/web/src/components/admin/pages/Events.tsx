@@ -1,4 +1,5 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } from '../ContentBadgeReward';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
 import React from 'react';
@@ -235,6 +236,7 @@ function Skeleton({ className = '' }: { className?: string }) {
 }
 
 interface FormData {
+  badgeReward?: BadgeRewardPayload;
   officialName: string;
   officialPosition: string;
   targetAudience: string;
@@ -334,6 +336,7 @@ function LocationPickerMarker({ position, onChange }: { position: [number, numbe
 }
 
 function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBarangay, isModerator }: ModalProps) {
+  const badgeReward = useContentBadgeReward('event', initial?.id, !isModerator);
   const [form, setForm] = useState<FormData>(
     drafts?.restored ?? (initial
       ? {
@@ -405,7 +408,7 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
     }
     setSaving(true); setErr('');
     try { 
-      const payload = { ...form, targetAudience: form.targetAudience ?? 'Residents', barangay: isModerator ? assignedBarangay ?? '' : form.barangay };
+      const payload = { ...form, badgeReward: await badgeReward.prepare(), targetAudience: form.targetAudience ?? 'Residents', barangay: isModerator ? assignedBarangay ?? '' : form.barangay };
       if (!payload.startDatetime.includes('+') && !payload.startDatetime.endsWith('Z')) {
         payload.startDatetime = `${payload.startDatetime}:00+08:00`;
       }
@@ -701,6 +704,8 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
             </div>
           </div>
 
+          <ContentBadgeReward reward={badgeReward} disabled={saving} />
+
           {/* Featured Event Switch */}
           <div className="flex items-center justify-between p-3.5 bg-yellow-50/60 dark:bg-yellow-950/20 border border-yellow-100/80 dark:border-yellow-900/40 rounded-xl transition-colors">
             <div className="flex items-center gap-3">
@@ -957,6 +962,14 @@ export function Events() {
       const status = getEventStatus(e);
       return (filterStatus === 'All' || status === filterStatus) &&
         e.title.toLowerCase().includes(search.toLowerCase());
+    }).sort((a, b) => {
+      const now = Date.now();
+      const startA = Date.parse(a.startDatetime);
+      const startB = Date.parse(b.startDatetime);
+      const upcomingA = startA >= now;
+      const upcomingB = startB >= now;
+      if (upcomingA !== upcomingB) return upcomingA ? -1 : 1;
+      return upcomingA ? startA - startB : startB - startA;
     });
   }, [events, search, filterStatus]);
 
@@ -967,7 +980,7 @@ export function Events() {
       Object.entries(form).forEach(([key, value]) => {
         if (key === 'isFeatured' && !isAdmin) return;
         if (value !== null && value !== undefined && key !== 'imageFile' && key !== 'imageUrl') {
-          data.append(key, String(value));
+          data.append(key, key === 'badgeReward' ? JSON.stringify(value) : String(value));
         }
       });
       data.append('image', form.imageFile);
@@ -987,7 +1000,7 @@ export function Events() {
       Object.entries(form).forEach(([key, value]) => {
         if (key === 'isFeatured' && !isAdmin) return;
         if (value !== null && value !== undefined && key !== 'imageFile' && key !== 'imageUrl') {
-          data.append(key, String(value));
+          data.append(key, key === 'badgeReward' ? JSON.stringify(value) : String(value));
         }
       });
       data.append('image', form.imageFile);

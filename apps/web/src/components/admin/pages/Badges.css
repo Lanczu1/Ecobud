@@ -1,0 +1,61 @@
+.badge-editor-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  padding: 0;
+  width: calc(100% - 2rem);
+  max-width: 36rem;
+  max-height: calc(100dvh - 100px);
+  overflow: hidden;
+}
+
+.badge-editor-modal::backdrop {
+  background: rgb(0 0 0 / 50%);
+  backdrop-filter: blur(4px);
+}
+
+.badge-editor-modal[open] {
+  animation: modal-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.badge-editor-modal[open].badge-modal-closing {
+  animation: modal-exit 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.badge-editor-modal[open]::backdrop {
+  animation: fade-in 0.25s ease-out both;
+}
+
+.badge-editor-modal[open].badge-modal-closing::backdrop {
+  animation: fade-out 0.28s ease-out both;
+}
+
+.badge-delete-modal {
+  max-width: 28rem;
+}
+
+.badge-delete-modal::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-editor-modal[open],
+  .badge-editor-modal[open].badge-modal-closing,
+  .badge-editor-modal[open]::backdrop,
+  .badge-editor-modal[open].badge-modal-closing::backdrop {
+    animation: none;
+  }
+}
+
+.badge-editor-layout {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 100px);
+}
+
+@media (max-width: 639px), (max-height: 600px) {
+  .badge-editor-modal,
+  .badge-editor-layout {
+    max-height: calc(100dvh - 2rem);
+  }
+}

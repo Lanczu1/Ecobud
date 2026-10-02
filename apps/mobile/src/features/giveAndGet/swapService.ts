@@ -1,4 +1,5 @@
 import { ecobudApi } from '../../shared/api/ecobudApi';
+import { SwapReadCache } from './swapReadCache';
 import type {
   SwapListing,
   SwapRequest,
@@ -10,9 +11,23 @@ import type {
 } from './types';
 
 let authToken = '';
+const readCache = new SwapReadCache();
+type ListingFilters = {
+  search?: string;
+  category?: SwapCategory;
+  meetupMethod?: MeetupMethod;
+  sortBy?: 'newest' | 'nearest' | 'active';
+  limit?: number;
+  offset?: number;
+};
+const listingsKey = (params: ListingFilters) => JSON.stringify([
+  'listings', params.search ?? '', params.category ?? '', params.meetupMethod ?? '',
+  params.sortBy ?? 'newest', params.limit ?? 20, params.offset ?? 0,
+]);
 
 function setAuthToken(token: string) {
   authToken = token;
+  readCache.setScope(token);
 }
 
 function formatListing(row: any): SwapListing {
@@ -80,16 +95,24 @@ export const swapService = {
     setAuthToken(token);
   },
 
-  async fetchListings(params: {
-    search?: string;
-    category?: SwapCategory;
-    meetupMethod?: MeetupMethod;
-    sortBy?: 'newest' | 'nearest' | 'active';
-    limit?: number;
-    offset?: number;
-  }): Promise<SwapListing[]> {
-    const data = await ecobudApi.fetchSwapListings(authToken, params);
-    return (data || []).map(formatListing);
+  getCachedListings(params: ListingFilters) {
+    return readCache.get<SwapListing[]>(listingsKey(params));
+  },
+
+  getCachedMyListings(userId: string) {
+    return readCache.get<SwapListing[]>(`myListings:${userId}`);
+  },
+
+  getCachedConversations(userId: string) {
+    return readCache.get<SwapConversation[]>(`conversations:${userId}`);
+  },
+
+  fetchListings(params: ListingFilters): Promise<SwapListing[]> {
+    const token = authToken;
+    return readCache.fetch(listingsKey(params), async () => {
+      const data = await ecobudApi.fetchSwapListings(token, params);
+      return (data || []).map(formatListing);
+    });
   },
 
   async fetchListingById(id: string): Promise<SwapListing | null> {
@@ -172,24 +195,27 @@ export const swapService = {
   },
 
   async fetchConversations(userId: string): Promise<SwapConversation[]> {
-    const data = await ecobudApi.fetchSwapConversations(authToken);
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      swapRequestId: row.swapRequestId || row.swap_request_id,
-      listing: formatListing(row.listing),
-      otherUser: row.otherUser || row.listing?.user || {
-        id: '',
-        displayName: 'Anonymous',
-        avatarUrl: undefined,
-        successfulSwaps: 0,
-        rating: 0,
-        memberSince: new Date().toISOString(),
-        isVerified: false,
-      },
-      unreadCount: row.unreadCount || row.unread_count || 0,
-      status: row.status || 'pending',
-      meetupMethod: row.meetupMethod || row.meetup_method || 'public',
-    }));
+    const token = authToken;
+    return readCache.fetch(`conversations:${userId}`, async () => {
+      const data = await ecobudApi.fetchSwapConversations(token);
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        swapRequestId: row.swapRequestId || row.swap_request_id,
+        listing: formatListing(row.listing),
+        otherUser: row.otherUser || row.listing?.user || {
+          id: '',
+          displayName: 'Anonymous',
+          avatarUrl: undefined,
+          successfulSwaps: 0,
+          rating: 0,
+          memberSince: new Date().toISOString(),
+          isVerified: false,
+        },
+        unreadCount: row.unreadCount || row.unread_count || 0,
+        status: row.status || 'pending',
+        meetupMethod: row.meetupMethod || row.meetup_method || 'public',
+      }));
+    });
   },
 
   async fetchMessages(swapRequestId: string): Promise<SwapChatMessage[]> {
@@ -216,8 +242,11 @@ export const swapService = {
   },
 
   async fetchMyListings(userId: string): Promise<SwapListing[]> {
-    const data = await ecobudApi.fetchMySwapListings(authToken);
-    return (data || []).map(formatListing);
+    const token = authToken;
+    return readCache.fetch(`myListings:${userId}`, async () => {
+      const data = await ecobudApi.fetchMySwapListings(token);
+      return (data || []).map(formatListing);
+    });
   },
 
   async fetchMySwapRequests(userId: string): Promise<SwapRequest[]> {

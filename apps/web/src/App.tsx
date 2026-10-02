@@ -51,8 +51,10 @@ function SectionFallback() {
   );
 }
 
+const Badges = lazy(() => import('./components/admin/pages/Badges').then((m) => ({ default: m.Badges })));
+
 function renderSection(section: AdminSection, role?: string) {
-  const accessibleSection = role === 'moderator' && section === 'Learning Content'
+  const accessibleSection = role === 'moderator' && ['Learning Content', 'Badges'].includes(section)
     ? 'Challenges'
     : section;
 
@@ -64,6 +66,7 @@ function renderSection(section: AdminSection, role?: string) {
           case 'Users':            return <ManageUsers />;
           case 'Learning Content': return <LearningContent />;
           case 'Challenges':       return <Challenges />;
+          case 'Badges':           return <Badges />;
           case 'Events':           return <Events />;
           case 'Give and Get Hub': return <GiveAndGetHub />;
           case 'Redeem':          return <Redeem />;

@@ -16,7 +16,7 @@ const db = {
   user: { findUnique: vi.fn(), update: vi.fn() },
   userStats: { upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   rewardTransaction: { create: vi.fn() },
-  userBadge: { findMany: vi.fn() }, badge: { findMany: vi.fn() },
+  userBadge: { findMany: vi.fn() }, badge: { findMany: vi.fn(), findFirst: vi.fn() },
   profile: { findUnique: vi.fn() },
   transparencyLog: { findFirst: vi.fn(), create: vi.fn() },
 };

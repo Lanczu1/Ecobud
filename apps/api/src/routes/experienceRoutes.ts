@@ -296,10 +296,11 @@ experienceRoutes.get(
 
     return res.json({
       points: user?.points ?? 0,
-      badges: badges.map((badge) => {
-        if (badge.name === 'Challenge Champion') {
-          return { ...badge, unlocked: unlockedBadgeIds.has(badge.id), currentProgress: challengeCount, targetProgress: 100 };
-        }
+      badges: badges.filter(badge => {
+        if (unlockedBadgeIds.has(badge.id)) return true;
+        const linkedId = badge.awardType === 'lesson' ? badge.lessonId : badge.awardType === 'challenge' ? badge.challengeId : badge.awardType === 'event' ? badge.eventId : badge.awardType === 'exchange' ? badge.swapListingId : true;
+        return badge.active && !!linkedId;
+      }).map((badge) => {
         if (badge.name === 'Giveaway Master') {
           return {
             ...badge,
@@ -311,6 +312,7 @@ experienceRoutes.get(
         return {
           ...badge,
           unlocked: unlockedBadgeIds.has(badge.id),
+          ...(['lesson', 'challenge', 'event', 'exchange'].includes(badge.awardType) ? { currentProgress: unlockedBadgeIds.has(badge.id) ? 1 : 0, targetProgress: 1 } : {}),
         };
       }),
       achievements: [
