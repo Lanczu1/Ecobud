@@ -168,6 +168,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [authMode, setAuthMode] = useState<AuthMode>('member');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const clearAuthError = useCallback(() => setAuthError(null), []);
   const [refreshing, setRefreshing] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [actionOverlayVisible, setActionOverlayVisible] = useState(false);
@@ -1623,14 +1624,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [hydrateApp, persistSession]);
 
-  const handleSendOTP = useCallback(async (email: string) => {
-    try {
-      return await homeService.sendOTP(email.trim());
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Failed to send OTP.');
-      throw error;
-    }
-  }, []);
+  const handleSendOTP = useCallback((email: string) => homeService.sendOTP(email.trim()), []);
 
   const handleCheckUsernameAvailability = useCallback(async (displayName: string) => {
     return homeService.checkUsername(displayName.trim());
@@ -3118,6 +3112,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     authMode,
     authLoading,
     authError,
+    clearAuthError,
     refreshing,
     sendingMessage,
     dashboard,

@@ -196,6 +196,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
       <AuthView
         authLoading={model.authLoading}
         authError={model.authError}
+        onClearAuthError={model.clearAuthError}
         onLogin={(email, pass) => model.handleLoginArgs(email, pass)}
         onVerifyMfa={model.handleVerifyMfaChallenge}
         onGoogleSignIn={() => model.handleGoogleSignIn()}

@@ -26,6 +26,7 @@ import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { CoachMarksOverlay } from '../../app/components/CoachMarksOverlay';
 import { getOtpDeadline, getOtpCountdown } from './otpTimer';
+import { ForgotPasswordView } from './ForgotPasswordView';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { LegalDocumentModal, LegalDocumentType } from '../../shared/ui/LegalDocumentModal';
 
@@ -47,6 +48,7 @@ const showEnhancedChrome = !isLegacyAndroid;
 interface AuthViewProps {
   authLoading: boolean;
   authError: string | null;
+  onClearAuthError: () => void;
   onLogin: (email: string, pass: string) => Promise<{ mfaRequired: true; challengeToken: string; expiresAt: string } | void>;
   onVerifyMfa: (challengeToken: string, code: string) => Promise<void>;
   onGoogleSignIn: () => Promise<{
@@ -322,6 +324,7 @@ function AnimatedThemeToggle({
 export function AuthView({
   authLoading,
   authError,
+  onClearAuthError,
   onLogin,
   onVerifyMfa,
   onGoogleSignIn,
@@ -337,6 +340,7 @@ export function AuthView({
     p.play();
   });
   const [mode, setMode] = useState<AuthModeType>('signin');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const darkBgOpacity = useRef(new Animated.Value(isDark ? 1 : 0)).current;
 
   useEffect(() => {
@@ -369,7 +373,6 @@ export function AuthView({
   const [isConfirmingGoogleBarangay, setIsConfirmingGoogleBarangay] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
-  const [resendCooldown, setResendCooldown] = useState(0);
   const [otpDeadline, setOtpDeadline] = useState<number | null>(null);
   const [otpNow, setOtpNow] = useState(Date.now());
   const otpCountdown = getOtpCountdown(otpDeadline, otpNow);
@@ -483,6 +486,9 @@ export function AuthView({
 
   const switchMode = useCallback((nextMode: AuthModeType) => {
     if (nextMode === mode) return;
+    onClearAuthError();
+    setLocalError(null);
+    setTouched({});
 
     Animated.parallel([
       Animated.timing(pageFadeAnim, {
@@ -534,7 +540,7 @@ export function AuthView({
         }),
       ]).start();
     });
-  }, [mode, pageFadeAnim, pageSlideAnim, pageScaleAnim]);
+  }, [mode, onClearAuthError, pageFadeAnim, pageSlideAnim, pageScaleAnim]);
 
   useEffect(() => {
     setUsernameCheckState('idle');
@@ -552,14 +558,6 @@ export function AuthView({
       setLocalError(authError);
     }
   }, [authError, mode, switchMode]);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [resendCooldown]);
 
   useEffect(() => {
     if (mode !== 'verify' || otpDeadline === null) return;
@@ -683,6 +681,7 @@ export function AuthView({
   }, [fieldErrors.username, onCheckUsernameAvailability, username]);
 
   const handleAction = useCallback(async () => {
+    Keyboard.dismiss();
     setLocalError(null);
 
     const requiredFields = getRequiredFields(mode);
@@ -711,7 +710,6 @@ export function AuthView({
         switchMode('signin');
         return;
       }
-      Keyboard.dismiss();
       await onVerifyMfa(mfaChallengeToken, verificationCode.trim());
       return;
     }
@@ -732,7 +730,6 @@ export function AuthView({
         const response = await onSendOTP(email.trim());
         applyOtpTiming(response);
         switchMode('verify');
-        setResendCooldown(60);
         setTouched({});
       } catch (error) {
         setLocalError(
@@ -748,7 +745,6 @@ export function AuthView({
       setLocalError('Code expired. Request a new code.');
       return;
     }
-    Keyboard.dismiss();
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
   }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken, otpDeadline, applyOtpTiming]);
 
@@ -760,6 +756,16 @@ export function AuthView({
     mode === 'verify' && email
       ? `Enter the 6-digit code we sent to ${email.trim()} to finish your account setup.`
       : copy.subtitle;
+
+  if (showForgotPassword) {
+    return <ForgotPasswordView initialEmail={email} onBack={() => {
+      setShowForgotPassword(false);
+      setPassword('');
+      setLocalError(null);
+      setTouched({});
+      onClearAuthError();
+    }} />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#0E1512' : '#F9FAF5' }}>
@@ -892,15 +898,15 @@ export function AuthView({
                   {mode === 'verify' ? <View style={styles.resendRow}>
                     <Text style={[styles.resendPromptText, isDark && { color: theme.colors.textMuted }]}>Didn't receive the code?</Text>
                     <Pressable
-                      disabled={resendCooldown > 0 || isLoading}
+                      disabled={!otpCountdown.expired || isLoading}
                       onPress={async () => {
-                        if (resendCooldown > 0 || isLoading) return;
+                        if (!getOtpCountdown(otpDeadline, Date.now()).expired || isLoading) return;
+                        Keyboard.dismiss();
                         setIsSendingCode(true);
                         setLocalError(null);
                         try {
                           const response = await onSendOTP(email.trim());
                           applyOtpTiming(response);
-                          setResendCooldown(60);
                         } catch (err) {
                           setLocalError(err instanceof Error ? err.message : 'Failed to resend code.');
                         } finally {
@@ -910,17 +916,17 @@ export function AuthView({
                       style={({ pressed }) => [
                         styles.resendButton,
                         pressed && styles.resendButtonPressed,
-                        (resendCooldown > 0 || isLoading) && styles.resendButtonDisabled,
+                        (!otpCountdown.expired || isLoading) && styles.resendButtonDisabled,
                       ]}
                     >
                       <Text
                         style={[
                           styles.resendButtonText,
                           isDark && { color: theme.colors.primary },
-                          resendCooldown > 0 && (isDark ? { color: theme.colors.textMuted } : styles.resendButtonTextDisabled),
+                          !otpCountdown.expired && (isDark ? { color: theme.colors.textMuted } : styles.resendButtonTextDisabled),
                         ]}
                       >
-                        {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                        {!otpCountdown.expired ? `Resend in ${otpCountdown.label}` : 'Resend Code'}
                       </Text>
                     </Pressable>
                   </View> : mode === 'mfa' ? <Pressable onPress={() => { setMfaChallengeToken(null); setVerificationCode(''); switchMode('signin'); }} style={{ alignSelf: 'center', padding: 8 }}>
@@ -1029,6 +1035,12 @@ export function AuthView({
                     onTrailingPress={() => setShowPassword((current) => !current)}
                     placeholder="Enter your password"
                   />
+
+                  {mode === 'signin' ? <Pressable accessibilityRole="button" disabled={isLoading}
+                    onPress={() => { Keyboard.dismiss(); onClearAuthError(); setLocalError(null); setShowForgotPassword(true); }}
+                    style={{ alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', marginTop: -8, marginBottom: 8 }}>
+                    <Text style={{ color: isDark ? theme.colors.primary : palette.primary, fontSize: 13, fontWeight: '600' }}>Forgot password?</Text>
+                  </Pressable> : null}
 
                   {mode === 'signup' ? (
                     <View style={styles.legalConsentRow}>

@@ -171,6 +171,7 @@ export interface EcoBudMobileModel {
   authMode: AuthMode;
   authLoading: boolean;
   authError: string | null;
+  clearAuthError: () => void;
   refreshing: boolean;
   sendingMessage: boolean;
   dashboard: DashboardData | null;
