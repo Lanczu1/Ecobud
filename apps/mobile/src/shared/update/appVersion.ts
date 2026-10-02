@@ -16,9 +16,9 @@ export const requiresMandatoryUpdate = (
   versionInfo: AppVersionInfo,
 ) => compareAppVersions(installedVersion, versionInfo.minimumVersion) < 0;
 
-export const checkForMandatoryUpdate = async (): Promise<AppVersionInfo | null> => {
+export const checkAppVersion = async (): Promise<AppVersionInfo | null | undefined> => {
   const installedVersion = getInstalledAppVersion();
-  if (!installedVersion || !isValidAppVersion(installedVersion)) return null;
+  if (!installedVersion || !isValidAppVersion(installedVersion)) return undefined;
 
   try {
     const versionInfo = await ecobudApi.fetchAppVersion();
@@ -28,12 +28,15 @@ export const checkForMandatoryUpdate = async (): Promise<AppVersionInfo | null> 
       typeof versionInfo.updateUrl !== 'string' ||
       !versionInfo.updateUrl.trim()
     ) {
-      return null;
+      return undefined;
     }
 
     return requiresMandatoryUpdate(installedVersion, versionInfo) ? versionInfo : null;
   } catch {
-    // A failed or timed-out check must never lock users out of the app.
-    return null;
+    // Unknown status must not clear a previously confirmed mandatory update.
+    return undefined;
   }
 };
+
+export const checkForMandatoryUpdate = async (): Promise<AppVersionInfo | null> =>
+  (await checkAppVersion()) ?? null;

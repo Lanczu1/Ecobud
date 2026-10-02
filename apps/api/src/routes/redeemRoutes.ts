@@ -10,6 +10,7 @@ import { sendDirectNotification } from '../services/notificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import path from 'path';
 import fs from 'fs';
+import { randomBytes } from 'crypto';
 
 const router = Router();
 
@@ -270,25 +271,22 @@ router.get('/requests/stats', authenticateRequest, requireModeratorAccess, async
 router.patch('/requests/:id/approve', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
     const { id } = req.params;
-    const { claimLocation } = req.body;
+    const { claimLocation, claimUntil: claimUntilInput, claimInstructions } = req.body;
+    if (![claimLocation, claimUntilInput, claimInstructions].every(value => typeof value === 'string' && value.trim())) {
+      return res.status(400).json({ message: 'Claim Location, Claim Until, and Instructions are required.' });
+    }
+    const claimUntil = new Date(claimUntilInput);
+    if (!Number.isFinite(claimUntil.getTime()) || claimUntil.getTime() <= Date.now()) {
+      return res.status(400).json({ message: 'Claim Until must be a future date and time.' });
+    }
     const request = await prisma.redeemRequest.findUnique({ where: { id } });
     if (!request) return res.status(404).json({ message: 'Request not found' });
     if (request.status !== 'pending') {
       return res.status(400).json({ message: `Cannot approve a request with status "${request.status}"` });
     }
 
-    // Generate claim code: ECO-XXXXXX
-    const code = 'ECO-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    // Claim valid for 7 days
-    const claimUntil = new Date();
-    claimUntil.setDate(claimUntil.getDate() + 7);
-
-    const instructions = [
-      'Present this claim code.',
-      'Bring one valid ID.',
-      `Claim within the given period (until ${claimUntil.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}).`,
-    ].join('\n');
+    const code = `ECO-${randomBytes(6).toString('hex').toUpperCase()}`;
+    const instructions = claimInstructions.trim();
 
     const item = await prisma.redeemItem.findUnique({ where: { id: request.itemId } });
 
@@ -297,7 +295,7 @@ router.patch('/requests/:id/approve', authenticateRequest, requireModeratorAcces
       data: {
         status: 'ready_to_claim',
         claimCode: code,
-        claimLocation: claimLocation || 'Barangay San Isidro Hall',
+        claimLocation: claimLocation.trim(),
         claimUntil,
         claimInstructions: instructions,
       },
