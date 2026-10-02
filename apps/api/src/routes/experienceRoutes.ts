@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { badgeMilestoneProgress, milestoneTypes } from '../services/badgeMilestoneService';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
@@ -292,6 +293,8 @@ experienceRoutes.get(
       }),
     ]);
 
+    const milestoneProgress = badges.some(badge => milestoneTypes.includes(badge.awardType as typeof milestoneTypes[number]))
+      ? await badgeMilestoneProgress(prisma, userId) : {};
     const unlockedBadgeIds = new Set(userBadges.map((item) => item.badgeId));
 
     return res.json({
@@ -312,6 +315,7 @@ experienceRoutes.get(
         return {
           ...badge,
           unlocked: unlockedBadgeIds.has(badge.id),
+          ...(badge.awardType in milestoneProgress ? { currentProgress: Math.min(milestoneProgress[badge.awardType], badge.targetCount), targetProgress: badge.targetCount } : {}),
           ...(['lesson', 'challenge', 'event', 'exchange'].includes(badge.awardType) ? { currentProgress: unlockedBadgeIds.has(badge.id) ? 1 : 0, targetProgress: 1 } : {}),
         };
       }),

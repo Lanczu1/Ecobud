@@ -68,7 +68,7 @@ describe('milestone awards', () => {
       streakMilestone: { findMany: async () => earned, create: async ({ data }: any) => { earned.push(data); } },
       rewardTransaction: { createMany: vi.fn() },
       userStats: { upsert: vi.fn() },
-      badge: { upsert: vi.fn(async ({ create }: any) => create), findFirst: vi.fn() },
+      badge: { upsert: vi.fn(async ({ create }: any) => create), findFirst: vi.fn(), findMany: vi.fn(async () => []) },
       userBadge: { upsert: vi.fn() },
     };
     const service: any = new GamificationService({} as any);

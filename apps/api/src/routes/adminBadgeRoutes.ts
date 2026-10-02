@@ -8,6 +8,7 @@ import { apiCache } from '../lib/cache';
 import { requireAdminAccess } from '../http/authentication';
 import { errorBoundary, HttpError } from '../http/errorResponder';
 import { contentBadgeWrite } from '../services/contentBadgeService';
+import { milestoneTypes } from '../services/badgeMilestoneService';
 
 export const adminBadgeRoutes = Router();
 adminBadgeRoutes.use(requireAdminAccess);
@@ -17,6 +18,9 @@ const payload = z.object({
   description: z.string().trim().min(1).max(500),
   iconUrl: z.string().trim().url().max(2048).refine(value => /^https?:\/\//i.test(value), 'Use an HTTP or HTTPS image URL.'),
   requiredPoints: z.number().int().min(1).max(2147483647),
+  awardType: z.enum(['points', ...milestoneTypes]).default('points'),
+  targetCount: z.number().int().min(1).max(1000000).default(1),
+  bonusPoints: z.number().int().min(0).max(1000000).default(0),
   accentColor: z.string().regex(/^#[0-9a-f]{6}$/i),
 });
 
@@ -56,7 +60,7 @@ adminBadgeRoutes.post('/', errorBoundary(async (req, res) => {
   const data = payload.parse(req.body);
   if (specialNames.has(data.name)) throw new HttpError(400, 'This name is reserved for a system milestone.');
   try {
-    const badge = await prisma.badge.create({ data });
+    const badge = await prisma.badge.create({ data: { ...data, requiredPoints: data.awardType === 'points' ? data.requiredPoints : 2147483647, bonusPoints: data.awardType === 'points' ? 0 : data.bonusPoints } });
     apiCache.delete('system_badges_list');
     return res.status(201).json(badge);
   } catch (error) {
@@ -73,7 +77,11 @@ adminBadgeRoutes.put('/:id', errorBoundary(async (req, res) => {
     throw new HttpError(400, 'System milestone names and unlock requirements cannot be changed.');
   }
   try {
-    const updated = await prisma.badge.update({ where: { id: badge.id }, data: { ...data, requiredPoints: badge.awardType === 'points' ? data.requiredPoints : badge.requiredPoints } });
+    const managed = ['lesson', 'challenge', 'event', 'exchange', 'giveaway_milestone'].includes(badge.awardType) || specialNames.has(badge.name);
+    const updated = await prisma.badge.update({ where: { id: badge.id }, data: { ...data,
+      ...(managed ? { awardType: badge.awardType, requiredPoints: badge.requiredPoints, targetCount: badge.targetCount, bonusPoints: badge.bonusPoints }
+        : { requiredPoints: data.awardType === 'points' ? data.requiredPoints : 2147483647, bonusPoints: data.awardType === 'points' ? 0 : data.bonusPoints }),
+    } });
     apiCache.delete('system_badges_list');
     return res.json(updated);
   } catch (error) {

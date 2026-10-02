@@ -1023,7 +1023,7 @@ export function BadgeCard({ badge, fullWidth = false }: { badge: EcoBadge & { un
       </View>
       <Text style={[styles.badgeName, { color: theme.colors.textPrimary }]}>{badge.name}</Text>
       <Text style={[styles.badgeRequirement, { color: theme.colors.textMuted }]}>
-        {unlocked ? `${badge.requiredPoints} pts unlocked` : `Requires ${badge.requiredPoints} ECO Points`}
+        {badge.targetProgress ? (unlocked ? 'Badge unlocked' : `${badge.currentProgress ?? 0} / ${badge.targetProgress} completed`) : unlocked ? `${badge.requiredPoints} pts unlocked` : `Requires ${badge.requiredPoints} ECO Points`}
       </Text>
     </View>
   );
