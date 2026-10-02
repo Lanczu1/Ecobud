@@ -1,3 +1,6 @@
+import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import type { DraftController } from '../../../hooks/useLocalDrafts';
+import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
@@ -51,13 +54,13 @@ function Skeleton({ className = '' }: { className?: string }) {
 function OptimizedInput({ value, onChange, ...props }: any) {
   const [localValue, setLocalValue] = useState(value);
   useEffect(() => { setLocalValue(value); }, [value]);
-  return <input value={localValue} onChange={e => setLocalValue(e.target.value)} onBlur={() => onChange(localValue)} {...props} />;
+  return <input value={localValue} onChange={e => { setLocalValue(e.target.value); onChange(e.target.value); }} {...props} />;
 }
 
 function OptimizedTextArea({ value, onChange, ...props }: any) {
   const [localValue, setLocalValue] = useState(value);
   useEffect(() => { setLocalValue(value); }, [value]);
-  return <textarea value={localValue} onChange={e => setLocalValue(e.target.value)} onBlur={() => onChange(localValue)} {...props} />;
+  return <textarea value={localValue} onChange={e => { setLocalValue(e.target.value); onChange(e.target.value); }} {...props} />;
 }
 
 interface FormDataState {
@@ -79,7 +82,10 @@ interface FormDataState {
 
 const emptyForm: FormDataState = { title: '', description: '', content: '', category: 'General', difficulty: 'Beginner', isPublished: false, featured: false, quizPassingScore: 70, pointsReward: 10, durationMinutes: 0, quizQuestions: [], pages: [{ title: '', description: '', content: '' }], scheduledAt: '' };
 
+interface LessonDraft { form: FormDataState; videoFile: File | null; thumbnailFile: File | null; enableVideo: boolean; enableQuiz: boolean; uploadedVideoUrl: string | null; }
+
 interface ModalProps {
+  drafts?: DraftController<LessonDraft>;
   onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
   initial?: Lesson | null;
@@ -93,25 +99,27 @@ const formatLocalDatetime = (dateString?: string | null) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-function LessonModal({ onClose, onSave, initial }: ModalProps) {
+function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
   const [form, setForm] = useState<FormDataState>(
-    initial
+    drafts?.restored?.form ?? (initial
       ? { title: initial.title, description: initial.description, content: initial.content || '', category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, featured: initial.featured || false, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes ?? 0, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }], scheduledAt: formatLocalDatetime(initial.scheduledAt) }
       : emptyForm
-  );
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  ));
+  const [videoFile, setVideoFile] = useState<File | null>(drafts?.restored?.videoFile ?? null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(drafts?.restored?.thumbnailFile ?? null);
   const [removeThumbnail, setRemoveThumbnail] = useState(false);
   const [removeVideo, setRemoveVideo] = useState(false);
   const [thumbnailKey, setThumbnailKey] = useState(Date.now());
   const [videoKey, setVideoKey] = useState(Date.now());
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
-  const [enableVideo, setEnableVideo] = useState(initial ? !!initial.videoUrl : false);
-  const [enableQuiz, setEnableQuiz] = useState(initial ? (initial.quizQuestions && initial.quizQuestions.length > 0) : false);
+  const [enableVideo, setEnableVideo] = useState(drafts?.restored?.enableVideo ?? (initial ? !!initial.videoUrl : false));
+  const [enableQuiz, setEnableQuiz] = useState(drafts?.restored?.enableQuiz ?? (initial ? Boolean(initial.quizQuestions?.length) : false));
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(drafts?.restored?.uploadedVideoUrl ?? null);
   const [isClosing, setIsClosing] = useState(false);
+
+  useDraftAutosave(drafts, { form, videoFile, thumbnailFile, enableVideo, enableQuiz, uploadedVideoUrl }, !initial);
 
   // Lock background scroll while modal is open
   useModalScrollLock(true);
@@ -262,6 +270,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
       if (!enableVideo || removeVideo) formData.append('removeVideo', 'true');
 
       await onSave(formData);
+      await drafts?.complete();
       handleClose();
     } catch (error: any) {
       setErr(error.message || 'Failed to save lesson.');
@@ -278,6 +287,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
           <button onClick={handleClose} type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+          {drafts && <p role={drafts.error ? "alert" : "status"} className="px-6 py-2 text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
           <div className="flex-1 overflow-y-auto lesson-modal-scroll flex flex-col md:flex-row">
             <div className="flex-1 space-y-4 p-6">
               {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
@@ -342,6 +352,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                     </button>
                   )}
                 </div>
+                {thumbnailFile && <p className="mt-2 text-xs text-green-700">Attached: {thumbnailFile.name}</p>}
                 {initial?.imageUrl && !thumbnailFile && !removeThumbnail && (
                   <p className="mt-2 text-xs text-green-600 font-medium">
                     ✓ Current image: <a href={`${API_HOST}${initial.imageUrl}`} target="_blank" rel="noreferrer" className="underline hover:text-green-700" title={initial.imageUrl}>{initial.imageUrl.split('/').pop()}</a>
@@ -369,6 +380,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
                           </button>
                         )}
                       </div>
+                      {videoFile && <p className="mt-2 text-xs text-green-700">Attached: {videoFile.name}</p>}
                       <p className="mt-2 text-xs font-medium text-green-700">Allowed formats: MP4, MOV, WebM, MKV · Maximum file size: 50 MB</p>
                       {initial?.videoUrl && !videoFile && !isTranscribing && !removeVideo && (
                         <p className="mt-2 text-xs text-green-600 font-medium">
@@ -528,6 +540,7 @@ function LessonModal({ onClose, onSave, initial }: ModalProps) {
 }
 
 export function LearningContent() {
+  const drafts = useLocalDrafts<LessonDraft>('learning');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -665,8 +678,9 @@ export function LearningContent() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
+      <LocalDraftPanel controller={drafts} disabled={!!modal} onResume={record => { if (drafts.start(record)) setModal('add'); }} />
       {/* Modals */}
-      {modal === 'add' && <LessonModal onClose={() => setModal(null)} onSave={handleAdd} />}
+      {modal === 'add' && <LessonModal drafts={drafts} onClose={() => setModal(null)} onSave={handleAdd} />}
       {modal === 'edit' && editing && <LessonModal onClose={() => { setModal(null); setEditing(null); }} onSave={handleEdit} initial={editing} />}
 
       {/* Header */}
@@ -675,7 +689,7 @@ export function LearningContent() {
           <h2 className="text-2xl font-serif font-bold text-gray-900">Learning Content</h2>
           <p className="text-gray-500 text-sm mt-1">Create and manage eco-education articles and modules</p>
         </div>
-        <button onClick={() => setModal('add')} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
+        <button onClick={() => { if (drafts.start()) setModal('add'); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
           <Plus className="w-4 h-4" />
           Add Lesson
         </button>

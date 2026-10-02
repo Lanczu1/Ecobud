@@ -1,3 +1,5 @@
+import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -197,7 +199,17 @@ function Preview({ item, mobile }: { item: Announcement; mobile: boolean }) {
   );
 }
 
+interface AnnouncementDraft { form: Announcement; imageFiles: File[]; }
+
 export function Announcements() {
+  const drafts = useLocalDrafts<AnnouncementDraft>('announcements');
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = pendingImages.map(file => URL.createObjectURL(file));
+    setPendingPreviews(urls);
+    return () => urls.forEach(url => URL.revokeObjectURL(url));
+  }, [pendingImages]);
   const isModerator = (() => {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'moderator'; }
     catch { return false; }
@@ -215,6 +227,7 @@ export function Announcements() {
 
   // Modals state
   const [editor, setEditor] = useState<Announcement | null>(null);
+  useDraftAutosave(drafts, { form: editor ?? blank(), imageFiles: pendingImages }, !!editor && !editor.id);
   const [details, setDetails] = useState<Announcement | null>(null);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; item: Announcement | null }>({
@@ -278,9 +291,11 @@ export function Announcements() {
     }, 280);
   }
 
-  function edit(item: Announcement) {
+  function edit(item: Announcement, restoring = false) {
     if (isModerator && item.id && !item.canManage) return;
     if (isModerator && !assignedBarangay) return;
+    if (!item.id && !restoring && !drafts.start()) return;
+    if (!restoring) setPendingImages([]);
     setSaveError('');
     setDetails(null);
     setEditor({ ...item, images: announcementImages(item), ...(isModerator ? { targetAudience: 'Specific Barangay', barangays: [assignedBarangay!] } : {}) });
@@ -351,7 +366,15 @@ export function Announcements() {
       if (item.id) {
         await adminPut(`/admin/announcements/${item.id}`, item);
       } else {
-        await adminPost('/admin/announcements', item);
+        const images = [...announcementImages(item)];
+        for (const file of pendingImages) {
+          const data = new FormData();
+          data.append('image', file);
+          const result = await adminPostForm<{ url: string }>('/admin/announcements/upload', data);
+          images.push(result.url);
+        }
+        await adminPost('/admin/announcements', { ...item, images, image: images[0] ?? null });
+        await drafts.complete();
       }
       setNotice({ type: 'success', message: 'Announcement saved successfully.' });
       handleCloseModal(() => setEditor(null));
@@ -365,12 +388,17 @@ export function Announcements() {
 
   async function upload(files: File[]) {
     if (!files.length || !editor || uploadingImage || busy) return;
-    if (announcementImages(editor).length + files.length > 10) {
+    if (announcementImages(editor).length + pendingImages.length + files.length > 10) {
       setSaveError('You can attach up to 10 pictures per announcement.');
       return;
     }
     if (files.some(file => !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
       setSaveError('Choose JPEG, PNG, or WebP pictures, up to 5 MB each.');
+      return;
+    }
+    if (!editor.id) {
+      setPendingImages(current => [...current, ...files]);
+      setSaveError('');
       return;
     }
     setUploadingImage(true);
@@ -448,6 +476,12 @@ export function Announcements() {
 
   return (
     <div className="relative p-8 space-y-6 bg-gray-50/50 min-h-full">
+      <LocalDraftPanel controller={drafts} disabled={!!editor || (isModerator && !assignedBarangay)} onResume={record => {
+        if (drafts.start(record)) {
+          setPendingImages(record.data.imageFiles);
+          edit(record.data.form, true);
+        }
+      }} />
       {/* Toast Notice */}
       {notice && (
         <div
@@ -854,6 +888,14 @@ export function Announcements() {
 
               {/* Form Body */}
               <form id="announcement-form" onSubmit={submit} className="flex-1 overflow-y-auto p-6 space-y-4">
+                {!editor.id && <p role={drafts.error ? 'alert' : 'status'} className="text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
+                {pendingPreviews.length > 0 && <div className="flex flex-wrap gap-3">
+                  {pendingPreviews.map((url, index) => <div key={url} className="relative">
+                    <img src={url} alt={`Pending attachment ${index + 1}`} className="h-20 w-20 rounded-lg object-cover" />
+                    <button type="button" aria-label={`Remove pending attachment ${index + 1}`} onClick={() => setPendingImages(files => files.filter((_, i) => i !== index))} className="absolute right-0 top-0 rounded bg-white p-1 text-red-600">Remove</button>
+                  </div>)}
+                  <p className="w-full text-xs text-gray-500">These images will upload when you save the announcement.</p>
+                </div>}
                 {saveError && (
                   <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl px-4 py-3">
                     {saveError}
