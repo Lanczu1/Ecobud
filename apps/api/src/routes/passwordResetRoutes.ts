@@ -98,7 +98,25 @@ passwordResetRoutes.post('/request-code', requestTrafficLimiter, requestLimiter,
   if (user && eligible(user)) {
     try {
       void mailer.sendMail({ from: process.env.GMAIL_USER, to: email, subject: 'Reset your ECOBUD password',
-        text: `Your password reset code is ${code}. It expires in 5 minutes. Do not share this code. If you did not request a password reset, ignore this email.` }).catch(() => { console.error('Password reset email delivery failed.'); });
+        text: `Your password reset code is ${code}. It expires in 5 minutes. Do not share this code. If you did not request a password reset, ignore this email.`,
+        html: `
+          <div style="margin:0;padding:32px 16px;background:#f3f8f4;font-family:Arial,Helvetica,sans-serif;color:#173b2b;">
+            <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 24px rgba(23,59,43,.12);">
+              <div style="padding:30px 24px 24px;background:#1f6f4a;text-align:center;color:#ffffff;">
+                <div style="width:72px;height:72px;margin:0 auto 14px;border-radius:50%;background:#d9f2df;color:#1f6f4a;font-size:38px;line-height:72px;">🌿</div>
+                <div style="font-size:24px;font-weight:700;letter-spacing:.4px;">ECOBUD</div>
+                <div style="margin-top:6px;font-size:14px;opacity:.9;">Password reset</div>
+              </div>
+              <div style="padding:32px 28px;text-align:center;">
+                <h1 style="margin:0 0 12px;font-size:24px;color:#173b2b;">Reset your password</h1>
+                <p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#4d6358;">Use this code to reset your ECOBUD password.</p>
+                <div style="margin:0 auto 24px;padding:18px 12px;border:1px dashed #71a786;border-radius:12px;background:#f2faf4;color:#1f6f4a;font-size:32px;font-weight:700;letter-spacing:8px;">${code}</div>
+                <p style="margin:0;font-size:14px;line-height:1.5;color:#718278;">This code expires in <strong>5 minutes</strong>. Do not share it with anyone.</p>
+              </div>
+              <div style="padding:18px 24px;background:#f7faf8;text-align:center;font-size:12px;color:#718278;">If you did not request a password reset, you can safely ignore this email.</div>
+            </div>
+          </div>
+        ` }).catch(() => { console.error('Password reset email delivery failed.'); });
     } catch {
       console.error('Password reset email delivery failed.');
     }

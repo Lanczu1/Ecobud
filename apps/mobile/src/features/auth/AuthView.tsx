@@ -357,6 +357,9 @@ export function AuthView({
   const pageScaleAnim = useRef(new Animated.Value(1)).current;
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const submittedLoginEmail = useRef('');
+  const [loginAttempts, setLoginAttempts] = useState<Record<string, { remaining: number; lockedUntil: number }>>({});
+  const [loginNow, setLoginNow] = useState(Date.now());
   const [password, setPassword] = useState('');
   const [city, setCity] = useState('');
   const [isBarangayPickerOpen, setIsBarangayPickerOpen] = useState(false);
@@ -388,11 +391,36 @@ export function AuthView({
   const loadingOpacity = useRef(new Animated.Value(0)).current;
   const isLoading = authLoading || isSendingCode || isConfirmingGoogleBarangay;
   const [renderLoadingOverlay, setRenderLoadingOverlay] = useState(isLoading);
-  const isLoginLocked = Boolean(
-    authError &&
-    (authError.toLowerCase().includes('too many failed login attempts') ||
-      authError.toLowerCase().includes('temporarily locked')),
-  );
+  const loginAttemptState = loginAttempts[email.trim().toLowerCase()];
+  const loginCooldown = Math.max(0, Math.ceil(((loginAttemptState?.lockedUntil ?? 0) - loginNow) / 1000));
+  const isLoginLocked = loginCooldown > 0;
+
+  useEffect(() => {
+    if (!authError || !submittedLoginEmail.current) return;
+    const remainingMatch = authError.match(/(\d+) login attempt\(s\) remaining/i);
+    const locked = /too many failed login attempts|temporarily locked/i.test(authError);
+    if (!remainingMatch && !locked) return;
+    const account = submittedLoginEmail.current;
+    const minutes = Number(authError.match(/(?:for|in) (\d+) minute/i)?.[1] ?? 5);
+    const now = Date.now();
+    setLoginNow(now);
+    setLoginAttempts(current => ({ ...current, [account]: {
+      remaining: locked ? 0 : Number(remainingMatch![1]),
+      lockedUntil: locked ? now + minutes * 60_000 : 0,
+    } }));
+  }, [authError]);
+
+  useEffect(() => {
+    if (!isLoginLocked) return;
+    const timer = setInterval(() => setLoginNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isLoginLocked]);
+
+  useEffect(() => {
+    if (loginAttemptState?.lockedUntil && !isLoginLocked && email.trim().toLowerCase() === submittedLoginEmail.current) {
+      onClearAuthError();
+    }
+  }, [loginAttemptState?.lockedUntil, isLoginLocked, email, onClearAuthError]);
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardSpace, setKeyboardSpace] = useState(0);
 
@@ -696,6 +724,8 @@ export function AuthView({
     }
 
     if (mode === 'signin') {
+      if (isLoginLocked) return;
+      submittedLoginEmail.current = email.trim().toLowerCase();
       const result = await onLogin(email.trim(), password);
       if (result?.mfaRequired) {
         setMfaChallengeToken(result.challengeToken);
@@ -746,7 +776,7 @@ export function AuthView({
       return;
     }
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
-  }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken, otpDeadline, applyOtpTiming]);
+  }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken, otpDeadline, applyOtpTiming, isLoginLocked]);
 
   // Login errors belong to the login form and must not leak into the sign-up view.
   // Sign-up request errors are surfaced through localError; verification errors still
@@ -966,6 +996,22 @@ export function AuthView({
                     />
                   ) : null}
 
+                  {mode === 'signin' && loginAttemptState && (isLoginLocked || (!loginAttemptState.lockedUntil && loginAttemptState.remaining < 5)) ? (
+                    <View accessibilityLiveRegion="polite" style={{ marginBottom: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 7 }}>
+                      <Ionicons name="lock-closed-outline" size={14} color={isDark ? '#F87171' : palette.danger} style={{ marginTop: 1 }} />
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: '600', color: isDark ? '#F87171' : palette.danger }}>
+                          {isLoginLocked
+                            ? `No attempts left · Retry in ${Math.floor(loginCooldown / 60)}:${String(loginCooldown % 60).padStart(2, '0')}`
+                            : `${loginAttemptState.remaining} of 5 attempts remaining`}
+                        </Text>
+                        <Text style={{ fontSize: 12, lineHeight: 16, color: isDark ? '#F87171' : palette.danger }}>
+                          5-minute pause after 5 failed attempts.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+
                   <CustomInputField
                     label="Email Address"
                     labelIcon="leaf-outline"
@@ -1085,7 +1131,7 @@ export function AuthView({
                 onPress={() => {
                   void handleAction();
                 }}
-                disabled={isLoading || (mode === 'verify' && otpCountdown.expired) || (mode === 'signup' && (!isSignupComplete || isLoginLocked))}
+                disabled={isLoading || (mode === 'signin' && isLoginLocked) || (mode === 'verify' && otpCountdown.expired) || (mode === 'signup' && (!isSignupComplete || isLoginLocked))}
                 loading={isLoading}
               />
 

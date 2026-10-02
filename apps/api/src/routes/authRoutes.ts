@@ -426,8 +426,11 @@ authRoutes.post(
     });
 
     if (!user) {
-      LoginAttemptTracker.recordFailure(normalizedEmail);
-      throw new HttpError(401, 'Incorrect email or password.');
+      const failureResult = LoginAttemptTracker.recordFailure(normalizedEmail);
+      if (failureResult.locked) {
+        throw new HttpError(429, 'Too many failed login attempts. Your account has been temporarily locked for 5 minutes.');
+      }
+      throw new HttpError(401, `Incorrect email or password. ${failureResult.remainingAttempts} login attempt(s) remaining.`);
     }
 
     const passwordMatches = await PasswordService.compare(payload.password, user.passwordHash);
@@ -440,7 +443,7 @@ authRoutes.post(
           `Too many failed login attempts. Your account has been temporarily locked for 5 minutes.`,
         );
       }
-      throw new HttpError(401, 'Incorrect email or password.');
+      throw new HttpError(401, `Incorrect email or password. ${failureResult.remainingAttempts} login attempt(s) remaining.`);
     }
 
     if (user.status !== 'active') {
