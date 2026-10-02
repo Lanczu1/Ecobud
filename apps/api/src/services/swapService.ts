@@ -1,4 +1,7 @@
 import { prisma } from '../prismaClient';
+import { awardContentBadge } from './contentBadgeService';
+import { sendDirectNotification } from './notificationService';
+import { HttpError } from '../http/errorResponder';
 import { apiCache } from '../lib/cache';
 import { supabaseStorageService } from './supabaseStorageService';
 import path from 'path';
@@ -306,21 +309,42 @@ export const swapService = {
   },
 
   async updateSwapRequestStatus(requestId: string, userId: string, role: string, status: string) {
-    const swapReq = await prisma.swapRequest.findUnique({ where: { id: requestId } });
+    if (!['accepted', 'declined', 'completed', 'cancelled'].includes(status)) throw new HttpError(400, 'Invalid exchange status.');
+    const swapReq = await prisma.swapRequest.findUnique({ where: { id: requestId }, include: { listing: true } });
     if (!swapReq) throw new Error('Swap request not found');
 
     if (swapReq.toUserId !== userId && swapReq.fromUserId !== userId && role !== 'admin' && role !== 'moderator') {
       throw new Error('You do not have permission to update this swap request');
     }
 
-    await prisma.swapRequest.update({
-      where: { id: requestId },
-      data: { status },
+    if (status === 'accepted' && swapReq.toUserId !== userId && role !== 'admin' && role !== 'moderator') throw new HttpError(403, 'Only the owner can accept this exchange.');
+    if (swapReq.status === 'completed') {
+      if (status === 'completed') return;
+      throw new HttpError(400, 'A completed exchange cannot be reopened.');
+    }
+    if (status === 'completed' && (swapReq.status !== 'accepted' || swapReq.listing.approvalStatus !== 'approved')) throw new HttpError(400, 'Only an accepted exchange on an approved listing can be completed.');
+    const awarded = await prisma.$transaction(async tx => {
+      const updated = await tx.swapRequest.updateMany({ where: { id: requestId, status: swapReq.status }, data: { status } });
+      if (!updated.count) throw new HttpError(409, 'Exchange changed. Refresh and try again.');
+      await tx.swapConversation.updateMany({ where: { swapRequestId: requestId }, data: { status } });
+      if (status !== 'completed') return [];
+      const rewards = await awardContentBadge(tx, 'exchange', swapReq.listingId, [swapReq.fromUserId, swapReq.toUserId]);
+      if (swapReq.listing.lookingFor.toLowerCase() === 'giveaway') {
+        const count = await tx.swapRequest.count({ where: { toUserId: swapReq.toUserId, status: 'completed', listing: { lookingFor: { equals: 'giveaway', mode: 'insensitive' } } } });
+        if (count >= 10) {
+          const badge = await tx.badge.findFirst({ where: { name: 'Giveaway Master', active: true } });
+          if (badge) {
+            const result = await tx.userBadge.createMany({ data: [{ userId: swapReq.toUserId, badgeId: badge.id }], skipDuplicates: true });
+            if (result.count) rewards.push({ userId: swapReq.toUserId, badge });
+          }
+        }
+      }
+      return rewards;
     });
-    await prisma.swapConversation.updateMany({
-      where: { swapRequestId: requestId },
-      data: { status },
-    });
+    for (const reward of awarded) {
+      apiCache.delete(`user_dashboard_${reward.userId}`);
+      void sendDirectNotification({ userId: reward.userId, type: 'badge', title: 'Badge Unlocked!', message: `You earned the "${reward.badge.name}" badge.`, relatedId: reward.badge.id, relatedType: 'badge', priority: 'high', notificationKey: `badge_unlocked:${reward.userId}:${reward.badge.id}` }).catch(() => {});
+    }
   },
 
   async fetchConversations(userId: string) {

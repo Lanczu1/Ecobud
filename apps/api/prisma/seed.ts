@@ -157,14 +157,6 @@ async function main() {
   });
 
   const badgeData = [
-    ['Waste Warrior', 'Unlock for reducing daily waste.', 'https://cdn-icons-png.flaticon.com/512/2909/2909762.png', 150, '#22C55E'],
-    ['Energy Saver', 'Complete energy-saving activities.', 'https://cdn-icons-png.flaticon.com/512/159/159604.png', 200, '#FACC15'],
-    ['Water Wise', 'Build mindful water-use habits.', 'https://cdn-icons-png.flaticon.com/512/3105/3105807.png', 180, '#38BDF8'],
-    ['Carbon Champion', 'Finish multiple low-carbon actions.', 'https://cdn-icons-png.flaticon.com/512/4814/4814306.png', 220, '#16A34A'],
-    ['Tree Hugger', 'Reach the next impact tier.', 'https://cdn-icons-png.flaticon.com/512/628/628324.png', 300, '#84CC16'],
-    ['Recycle Pro', 'Show long-term recycling consistency.', 'https://cdn-icons-png.flaticon.com/512/5014/5014050.png', 350, '#22C55E'],
-    ['Sustainability Star', 'Earn top-tier eco credibility.', 'https://cdn-icons-png.flaticon.com/512/1828/1828884.png', 400, '#EAB308'],
-    ['Green Plate', 'Adopt plant-based meals 5 times', 'https://cdn-icons-png.flaticon.com/512/3229/3229061.png', 750, '#10B981'],
     ['Giveaway Master', 'Host 10 giveaways to earn this badge', 'https://cdn-icons-png.flaticon.com/512/3229/3229053.png', 999999, '#F59E0B'],
   ] as const;
 
@@ -247,7 +239,6 @@ async function main() {
         aiMinimumConfidence: 80,
         imageUrl:
           'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=80',
-        badgeLabel: 'Green Plate',
       },
     ]) {
       challenges.push(await prisma.challenge.create({ data: challenge as any }));

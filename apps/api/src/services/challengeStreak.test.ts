@@ -68,7 +68,7 @@ describe('milestone awards', () => {
       streakMilestone: { findMany: async () => earned, create: async ({ data }: any) => { earned.push(data); } },
       rewardTransaction: { createMany: vi.fn() },
       userStats: { upsert: vi.fn() },
-      badge: { upsert: vi.fn(async ({ create }: any) => create) },
+      badge: { upsert: vi.fn(async ({ create }: any) => create), findFirst: vi.fn() },
       userBadge: { upsert: vi.fn() },
     };
     const service: any = new GamificationService({} as any);
@@ -86,7 +86,8 @@ describe('milestone awards', () => {
     const second = await award();
     expect(second.pointsAwarded).toBe(20);
     expect(earned).toHaveLength(first);
-    if (count === 99) expect(tx.userBadge.upsert).toHaveBeenCalledOnce();
+    expect(tx.userBadge.upsert).not.toHaveBeenCalled();
+    expect(tx.badge.upsert).not.toHaveBeenCalled();
   });
   it('excludes lessons, habits, events, and repeat submissions from streak progress', async () => {
     const { award, user, earned } = setup(2);

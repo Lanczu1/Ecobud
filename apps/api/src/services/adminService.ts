@@ -1,4 +1,5 @@
 import { prisma } from "../prismaClient";
+import { contentBadgeWrite } from './contentBadgeService';
 import { presenceQueryService } from './presenceQueryService';
 import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
@@ -88,6 +89,7 @@ export class AdminService {
   }
 
   static async createLesson(data: {
+    badgeReward?: unknown;
     title: string;
     description: string;
     content: string;
@@ -108,6 +110,7 @@ export class AdminService {
   }) {
     const lesson = await prisma.lesson.create({
       data: {
+        badge: contentBadgeWrite(data.badgeReward, 'lesson', true),
         title: data.title,
         description: data.description,
         content: data.content,
@@ -148,6 +151,7 @@ export class AdminService {
       }
     });
 
+    apiCache.delete('system_badges_list');
     apiCache.invalidatePrefix('learn_published_');
     apiCache.invalidatePrefix('learn_catalog_');
     apiCache.delete('total_lessons_count');
@@ -183,10 +187,10 @@ export class AdminService {
   }
 
   static async updateLesson(id: string, data: any) {
-    const { quizQuestions, pages, ...otherData } = data;
+    const { quizQuestions, pages, badgeReward, ...otherData } = data;
 
     // If quiz questions or pages are provided, we delete existing and recreate
-    let updatePayload: any = { ...otherData };
+    let updatePayload: any = { ...otherData, badge: contentBadgeWrite(badgeReward, 'lesson') };
 
     if ('pointsReward' in updatePayload && typeof updatePayload.pointsReward === 'string') {
       updatePayload.pointsReward = parseInt(updatePayload.pointsReward, 10);
@@ -238,6 +242,7 @@ export class AdminService {
       }
     });
 
+    apiCache.delete('system_badges_list');
     apiCache.invalidatePrefix('learn_published_');
     apiCache.invalidatePrefix('learn_catalog_');
     apiCache.delete('total_lessons_count');
@@ -423,6 +428,7 @@ export class AdminService {
   }
 
   static async createChallenge(data: {
+    badgeReward?: unknown;
     title: string;
     description: string;
     difficulty: string;
@@ -453,6 +459,7 @@ export class AdminService {
   }) {
     const challenge = await prisma.challenge.create({
       data: {
+        badge: contentBadgeWrite(data.badgeReward, 'challenge', true),
         title: data.title,
         description: data.description,
         difficulty: data.difficulty,
@@ -480,6 +487,7 @@ export class AdminService {
       }
     });
 
+    apiCache.delete('system_badges_list');
     apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
@@ -501,11 +509,13 @@ export class AdminService {
   }
 
   static async updateChallenge(id: string, data: any) {
+    const { badgeReward, ...fields } = data;
     const challenge = await prisma.challenge.update({
       where: { id },
-      data
+      data: { ...fields, badge: contentBadgeWrite(badgeReward, 'challenge') }
     });
 
+    apiCache.delete('system_badges_list');
     apiCache.invalidatePrefix('admin_challenges_list:');
     apiCache.delete('global_active_challenges_with_instances');
 
@@ -1193,27 +1203,39 @@ export class AdminService {
     const where: any = search ? { title: { contains: search, mode: 'insensitive' } } : {};
     if (barangay) where.barangay = barangay === 'all-residents' ? null : barangay;
     return apiCache.getOrSet(`admin_events:${page}:${pageSize}:${search || ''}:${barangay || ''}`, 15, async () => {
-      const [events, total] = await Promise.all([prisma.event.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: [
-        { isFeatured: 'desc' },
-        { startDatetime: 'asc' },
-      ],
-      include: {
+      const now = new Date();
+      const upcomingWhere = { ...where, startDatetime: { gte: now } };
+      const pastWhere = { ...where, startDatetime: { lt: now } };
+      const [total, upcomingCount] = await Promise.all([
+        prisma.event.count({ where }),
+        prisma.event.count({ where: upcomingWhere }),
+      ]);
+      const offset = (page - 1) * pageSize;
+      const upcomingTake = Math.min(pageSize, Math.max(0, upcomingCount - offset));
+      const include = {
         _count: { select: { registrations: true } },
         managedBy: {
           select: { id: true, name: true, email: true, role: true }
         }
-      }
-      }), prisma.event.count({ where })]);
+      };
+      const [upcoming, past] = await Promise.all([
+        upcomingTake > 0 ? prisma.event.findMany({
+          where: upcomingWhere, skip: offset, take: upcomingTake,
+          orderBy: [{ startDatetime: 'asc' }, { id: 'asc' }], include,
+        }) : Promise.resolve([]),
+        upcomingTake < pageSize ? prisma.event.findMany({
+          where: pastWhere, skip: Math.max(0, offset - upcomingCount), take: pageSize - upcomingTake,
+          orderBy: [{ startDatetime: 'desc' }, { id: 'asc' }], include,
+        }) : Promise.resolve([]),
+      ]);
+      const events = [...upcoming, ...past];
       const items = events.map(({ _count, ...event }) => ({ ...event, registrationCount: _count.registrations }));
       return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
     });
   }
 
   static async createEvent(data: {
+    badgeReward?: unknown;
     officialName?: string | null;
     officialPosition?: string | null;
     targetAudience?: string;
@@ -1235,6 +1257,7 @@ export class AdminService {
   }) {
     const event = await prisma.event.create({
       data: {
+        badge: contentBadgeWrite(data.badgeReward, 'event', true),
         title: data.title,
         barangay: data.barangay ?? null,
         targetAudience: data.targetAudience ?? 'Residents',
@@ -1259,6 +1282,7 @@ export class AdminService {
         managedBy: { select: { id: true, name: true, email: true } }
       }
     });
+    apiCache.delete('system_badges_list');
     apiCache.invalidatePrefix('admin_events:');
     await supabaseRealtimeService.publishGlobalSectionRefresh('events', {
       actorRole: 'admin', actorUserId: data.managedById, entityId: event.id, reason: 'event-created',
@@ -1270,6 +1294,7 @@ export class AdminService {
   }
 
   static async updateEvent(id: string, data: Partial<{
+    badgeReward: unknown;
     officialName: string | null;
     officialPosition: string | null;
     targetAudience: string;
@@ -1288,7 +1313,8 @@ export class AdminService {
     longitude: number;
     isFeatured: boolean;
   }>) {
-    const updateData: any = { ...data };
+    const { badgeReward, ...eventFields } = data;
+    const updateData: any = { ...eventFields, badge: contentBadgeWrite(badgeReward, 'event') };
     if (data.startDatetime) {
       updateData.startDatetime = new Date(data.startDatetime);
     }
@@ -1311,6 +1337,7 @@ export class AdminService {
         managedBy: { select: { id: true, name: true, email: true } }
       }
     });
+    apiCache.delete('system_badges_list');
     apiCache.invalidatePrefix('admin_events:');
     await supabaseRealtimeService.publishGlobalSectionRefresh('events', {
       actorRole: 'admin', entityId: id, reason: 'event-updated',

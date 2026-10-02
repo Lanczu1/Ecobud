@@ -8,6 +8,7 @@ import { UserStatsService } from './UserStatsService';
 import { sendDirectNotification } from './notificationService';
 import { apiCache } from '../lib/cache';
 import { STREAK_MILESTONES } from '../utils/streakRules';
+import { awardContentBadge } from './contentBadgeService';
 
 type DatabaseSession = Prisma.TransactionClient | PrismaClient;
 
@@ -454,7 +455,6 @@ export class GamificationService {
     const now = new Date();
     const isChallenge = Boolean(action.metadata?.challengeId) && action.metadata?.streakEligible !== false;
     const nextStreak = user.currentStreak + (isChallenge ? 1 : 0);
-    const milestoneBadges = [];
     if (isChallenge) {
       const awarded = await tx.streakMilestone.findMany({ where: { userId: user.id } });
       for (const milestone of STREAK_MILESTONES) {
@@ -466,15 +466,6 @@ export class GamificationService {
           { userId: user.id, type: 'exp', amount: milestone.points },
           ...(milestone.ecoCoins > 0 ? [{ userId: user.id, type: 'eco_coins' as const, amount: milestone.ecoCoins }] : []),
         ] });
-        if (milestone.badge) {
-          const badge = await tx.badge.upsert({ where: { name: milestone.badge }, update: {}, create: {
-            id: 'challenge-champion', name: milestone.badge, description: 'Complete 100 eco challenges.',
-            iconUrl: 'trophy', requiredPoints: 2147483647, accentColor: '#15803D',
-          } });
-          await tx.userBadge.upsert({ where: { userId_badgeId: { userId: user.id, badgeId: badge.id } }, update: {}, create: { userId: user.id, badgeId: badge.id } });
-          milestoneBadges.push(badge);
-          apiCache.delete('system_badges_list');
-        }
       }
     }
 
@@ -528,7 +519,13 @@ export class GamificationService {
       );
 
       const awardedBadges = await this.unlockBadges(tx, user.id, updatedUser.points);
-      awardedBadges.push(...milestoneBadges);
+      for (const [type, key] of [['lesson', 'lessonId'], ['challenge', 'challengeId'], ['event', 'eventId']]) {
+        const sourceId = action.metadata?.[key];
+        if (typeof sourceId === 'string') {
+          const rewards = await awardContentBadge(tx, type, sourceId, [user.id]);
+          awardedBadges.push(...rewards.map(reward => reward.badge));
+        }
+      }
 
       // Fire push notifications for every newly unlocked badge (fire-and-forget, outside transaction)
       if (awardedBadges.length > 0) {
@@ -577,7 +574,9 @@ export class GamificationService {
       tx.badge.findMany({
         where: {
           requiredPoints: { lte: totalPoints },
-          name: { not: 'Challenge Champion' },
+          awardType: 'points',
+          active: true,
+          name: { not: 'Giveaway Master' },
         },
         orderBy: { requiredPoints: 'asc' },
       }),

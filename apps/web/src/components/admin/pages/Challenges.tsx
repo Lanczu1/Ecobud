@@ -1,4 +1,5 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } from '../ContentBadgeReward';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -207,6 +208,7 @@ function Skeleton({ className = '' }: { className?: string }) {
 }
 
 interface FormData {
+  badgeReward?: BadgeRewardPayload;
   title: string;
   description: string;
   difficulty: string;
@@ -241,6 +243,7 @@ interface ModalProps {
 }
 
 function ChallengeModal({ onClose, onSave, initial, drafts }: ModalProps) {
+  const badgeReward = useContentBadgeReward('challenge', initial?.id);
   const [form, setForm] = useState<FormData>(
     drafts?.restored?.form ?? (initial
       ? { title: initial.title, description: initial.description, difficulty: initial.difficulty, category: initial.category || 'General', startDate: initial.startDate || null, endDate: initial.endDate || null, expReward: initial.expReward, ecoCoinReward: initial.ecoCoinReward, active: initial.active, badgeLabel: initial.badgeLabel || '', type: 'AI Image Recognition Challenge', imageUrl: initial.imageUrl || '', aiDetectionTargets: initial.aiDetectionTargets || [], aiMinimumConfidence: initial.aiMinimumConfidence || 80, isFeatured: initial.isFeatured || false, requirementType: initial.requirementType || 'quantity', requirementTarget: initial.requirementTarget || '1', requirementUnit: initial.requirementUnit || 'piece', additionalInstructions: initial.additionalInstructions || '', collectionPointName: initial.collectionPointName || 'Barangay Collection Point' }
@@ -301,7 +304,7 @@ function ChallengeModal({ onClose, onSave, initial, drafts }: ModalProps) {
         const result = await adminPostForm<{ url: string }>('/admin/upload', data);
         imageUrl = result.url;
       }
-      await onSave({ ...form, imageUrl, startDate: null, endDate: null });
+      await onSave({ ...form, badgeLabel: '', badgeReward: await badgeReward.prepare(), imageUrl, startDate: null, endDate: null });
       await drafts?.complete();
       handleClose();
     }
@@ -463,8 +466,7 @@ function ChallengeModal({ onClose, onSave, initial, drafts }: ModalProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Badge Label (optional)</label>
-                <input value={form.badgeLabel} onChange={e => setForm(f => ({ ...f, badgeLabel: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all bg-white" placeholder="e.g. Eco Warrior" />
+                <ContentBadgeReward reward={badgeReward} disabled={saving} />
               </div>
             </div>
 

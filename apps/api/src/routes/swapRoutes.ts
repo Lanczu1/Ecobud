@@ -196,7 +196,7 @@ router.patch('/requests/:id/status', authenticateRequest, async (req: Authentica
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error updating swap request status:', error);
-    const statusCode = error.message?.includes('permission') ? 403 : error.message?.includes('not found') ? 404 : 500;
+    const statusCode = error.statusCode || (error.message?.includes('permission') ? 403 : error.message?.includes('not found') ? 404 : 500);
     res.status(statusCode).json({ message: error.message || 'Internal server error' });
   }
 });

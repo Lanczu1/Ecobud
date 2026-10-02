@@ -2,7 +2,7 @@ export const STREAK_MILESTONES = [
   { challenges: 3, points: 30, ecoCoins: 0, badge: null },
   { challenges: 10, points: 100, ecoCoins: 5, badge: null },
   { challenges: 30, points: 300, ecoCoins: 15, badge: null },
-  { challenges: 100, points: 1000, ecoCoins: 50, badge: 'Challenge Champion' },
+  { challenges: 100, points: 1000, ecoCoins: 50, badge: null },
 ] as const;
 
 export function streakMonth(now: Date): string {

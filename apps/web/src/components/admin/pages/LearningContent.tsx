@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
 import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { ContentBadgeReward, useContentBadgeReward } from '../ContentBadgeReward';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -100,6 +101,7 @@ const formatLocalDatetime = (dateString?: string | null) => {
 };
 
 function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
+  const badgeReward = useContentBadgeReward('lesson', initial?.id);
   const [form, setForm] = useState<FormDataState>(
     drafts?.restored?.form ?? (initial
       ? { title: initial.title, description: initial.description, content: initial.content || '', category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, featured: initial.featured || false, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes ?? 0, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }], scheduledAt: formatLocalDatetime(initial.scheduledAt) }
@@ -240,6 +242,7 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
     setErr('');
     try {
       const formData = new FormData();
+      formData.append('badgeReward', JSON.stringify(await badgeReward.prepare()));
       formData.append('title', form.title);
       formData.append('description', form.description);
       formData.append('content', form.content);
@@ -288,7 +291,7 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
         </div>
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
           {drafts && <p role={drafts.error ? "alert" : "status"} className="px-6 py-2 text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
-          <div className="flex-1 overflow-y-auto lesson-modal-scroll flex flex-col md:flex-row">
+          <div className="flex-1 overflow-y-auto lesson-modal-scroll flex flex-col md:flex-row pb-4">
             <div className="flex-1 space-y-4 p-6">
               {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">{err}</p>}
               <div>
@@ -502,6 +505,8 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Eco Points Reward</label>
                   <OptimizedInput type="number" min="0" value={form.pointsReward} onChange={(val: string) => setForm(f => ({ ...f, pointsReward: parseInt(val) || 0 }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
                 </div>
+
+                <ContentBadgeReward reward={badgeReward} disabled={saving} />
 
                 <div className="pt-2 border-t border-gray-100 flex flex-col gap-3">
                   <label className="flex items-center gap-3 cursor-pointer">
