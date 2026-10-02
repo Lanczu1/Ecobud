@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { passwordResetRoutes } from './passwordResetRoutes';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import { HttpError, errorBoundary } from '../http/errorResponder';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import nodemailer from 'nodemailer';
 import { emailRegistrationSchema } from '../security/emailValidator';
+import { SignupOtpSendLimiter } from '../security/signupOtpSendLimiter';
 import { LoginAttemptTracker } from '../security/loginAttemptTracker';
 import { verifyGoogleIdentity } from '../security/googleIdentity';
 import { emailCodeHash } from '../security/emailChange';
@@ -34,6 +36,15 @@ const authLimiter = rateLimit({
   limit: 30,
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+const signupOtpSendLimiter = new SignupOtpSendLimiter();
+const signupOtpIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many verification requests. Please try again in 15 minutes.' },
 });
 
 const otpLimiter = rateLimit({
@@ -164,6 +175,8 @@ const findProfileByDisplayName = (displayName: string) =>
       id: true,
     },
   });
+
+authRoutes.use('/password-reset', passwordResetRoutes);
 
 authRoutes.use(authLimiter);
 
@@ -305,7 +318,7 @@ authRoutes.post(
 
 authRoutes.post(
   '/send-otp',
-  otpLimiter,
+  signupOtpIpLimiter,
   errorBoundary(async (req, res) => {
     const { email } = otpSchema.parse(req.body);
     assertAccountNotLocked(email);
@@ -315,15 +328,40 @@ authRoutes.post(
       throw new HttpError(409, 'An ECOBUD account already exists for this email.');
     }
 
+    const now = new Date(Date.now());
+    const existingOtp = await prisma.otpCode.findUnique({ where: { email } });
+    if (existingOtp && existingOtp.expiresAt > now) {
+      res.setHeader('Retry-After', Math.ceil((existingOtp.expiresAt.getTime() - now.getTime()) / 1000));
+      throw new HttpError(429, 'A verification code is still active. Use that code or wait until it expires before requesting another.');
+    }
+
+    const retryAfter = signupOtpSendLimiter.retryAfterSeconds(email, now.getTime());
+    if (retryAfter > 0) {
+      res.setHeader('Retry-After', retryAfter);
+      throw new HttpError(429, 'Too many verification emails requested. Please wait before requesting another code.');
+    }
+
     const code = crypto.randomInt(100000, 1000000).toString();
     const storedCode = emailCodeHash(email, code);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    await prisma.otpCode.upsert({
-      where: { email },
-      update: { code: storedCode, expiresAt, attempts: 0 },
-      create: { email, code: storedCode, expiresAt },
+    const replaced = await prisma.otpCode.updateMany({
+      where: { email, expiresAt: { lte: now } },
+      data: { code: storedCode, expiresAt, attempts: 0 },
     });
+    if (replaced.count === 0) {
+      try {
+        await prisma.otpCode.create({ data: { email, code: storedCode, expiresAt, attempts: 0 } });
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+          const reserved = await prisma.otpCode.findUnique({ where: { email } });
+          res.setHeader('Retry-After', Math.max(1, Math.ceil(((reserved?.expiresAt.getTime() ?? expiresAt.getTime()) - Date.now()) / 1000)));
+          throw new HttpError(429, 'A verification code is still active. Use that code or wait until it expires before requesting another.');
+        }
+        throw error;
+      }
+    }
+    signupOtpSendLimiter.recordSend(email);
 
     try {
       await transporter.sendMail({

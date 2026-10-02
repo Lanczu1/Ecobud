@@ -677,6 +677,9 @@ const uploadFileAsync = async <T>(
 };
 
 export const ecobudApi = {
+  requestPasswordReset: (email: string) => request<{ success: boolean; message: string; expiresAt: string; serverTime: string }>('/auth/password-reset/request-code', { method: 'POST', body: { email } }),
+  verifyPasswordResetCode: (email: string, code: string) => request<{ resetToken: string; expiresAt: string; serverTime: string }>('/auth/password-reset/verify-code', { method: 'POST', body: { email, code } }),
+  completePasswordReset: (resetToken: string, password: string) => request<{ success: boolean; message: string }>('/auth/password-reset/complete', { method: 'POST', body: { resetToken, password } }),
   fetchAppVersion: () => request<AppVersionPayload>('/app/version', { timeoutMs: 5000 }),
   notification: (token:string,id:string) => request<import('../../app/types/notifications').AppNotification>('/notifications/'+encodeURIComponent(id),{token}),
   notifications: (token:string, query='') => request<NotificationPage>('/notifications'+query,{token}),
