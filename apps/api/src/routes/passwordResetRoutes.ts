@@ -12,8 +12,25 @@ import { PasswordService } from '../security/passwordService';
 import { SignupOtpSendLimiter } from '../security/signupOtpSendLimiter';
 
 export const passwordResetRoutes = Router();
-const requestLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 3, standardHeaders: true, legacyHeaders: false,
-  message: { message: 'Too many reset requests. Please try again in 15 minutes.' } });
+const requestTrafficLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many reset requests. Please try again shortly.' },
+});
+const requestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) => res.locals.resetCodeReused === true,
+  handler: (_req, res) => {
+    const seconds = Math.max(1, Number(res.getHeader('Retry-After')) || 900);
+    return res.status(429).json({ message: `Too many reset requests from this network. Please try again in ${Math.ceil(seconds / 60)} minute(s).` });
+  },
+});
 const verifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false,
   message: { message: 'Too many reset verification attempts. Please try again in 15 minutes.' } });
 const emailLimiter = new SignupOtpSendLimiter();
@@ -40,20 +57,26 @@ const grantHash = (claims: z.infer<typeof resetClaims>) =>
 const mailer = nodemailer.createTransport({ service: 'gmail', pool: true, maxConnections: 2,
   auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS } });
 
-passwordResetRoutes.post('/request-code', requestLimiter, errorBoundary(async (req, res) => {
+passwordResetRoutes.post('/request-code', requestTrafficLimiter, requestLimiter, errorBoundary(async (req, res) => {
   const { email } = requestSchema.parse(req.body);
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user?.googleIdentityId) {
+    throw new HttpError(403, 'This account uses Google sign-in. Please use Continue with Google.');
+  }
   const key = codeKey(email);
   const now = new Date(Date.now());
   const reply = (expiresAt: Date) => res.json({ success: true, message: genericMessage,
     expiresAt: expiresAt.toISOString(), serverTime: new Date(Date.now()).toISOString() });
   const existing = await prisma.otpCode.findUnique({ where: { email: key } });
-  if (existing && existing.expiresAt > now) return reply(existing.expiresAt);
+  if (existing && existing.expiresAt > now) {
+    res.locals.resetCodeReused = true;
+    return reply(existing.expiresAt);
+  }
   const retryAfter = emailLimiter.retryAfterSeconds(email);
   if (retryAfter) {
     res.setHeader('Retry-After', retryAfter);
     throw new HttpError(429, 'Too many reset requests for this email. Please wait before requesting another code.');
   }
-  const user = await prisma.user.findUnique({ where: { email } });
   const code = randomInt(100000, 1000000).toString();
   const storedHash = codeHash(key, user ?? { id: randomUUID(), sessionVersion: 0 }, code);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -65,6 +88,7 @@ passwordResetRoutes.post('/request-code', requestLimiter, errorBoundary(async (r
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
         const reserved = await prisma.otpCode.findUnique({ where: { email: key } });
+        res.locals.resetCodeReused = true;
         return reply(reserved?.expiresAt ?? expiresAt);
       }
       throw error;
