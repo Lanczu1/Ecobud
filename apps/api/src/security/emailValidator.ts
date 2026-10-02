@@ -57,7 +57,7 @@ export function isAllowedEmailDomain(email: string): boolean {
   return !isDisposableDomain(domain);
 }
 
-export const emailRegistrationSchema = z.string().email().refine((email) => {
+export const emailRegistrationSchema = z.string().trim().toLowerCase().email().refine((email) => {
   const domain = email.trim().toLowerCase().split('@')[1] || '';
   return !isDisposableDomain(domain);
 }, {

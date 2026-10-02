@@ -719,7 +719,7 @@ export const ecobudApi = {
       body: { refreshToken },
     }),
   sendOTP: (email: string) =>
-    request<{ success: boolean; message: string }>('/auth/send-otp', {
+    request<{ success: boolean; message: string; expiresAt: string; serverTime: string }>('/auth/send-otp', {
       method: 'POST',
       body: { email },
     }),

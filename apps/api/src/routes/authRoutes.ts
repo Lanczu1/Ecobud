@@ -312,12 +312,12 @@ authRoutes.post(
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
-      return res.json({ success: true, message: 'If this email can be registered, a verification code has been sent.' });
+      throw new HttpError(409, 'An ECOBUD account already exists for this email.');
     }
 
     const code = crypto.randomInt(100000, 1000000).toString();
     const storedCode = emailCodeHash(email, code);
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
     await prisma.otpCode.upsert({
       where: { email },
@@ -332,7 +332,7 @@ authRoutes.post(
         from: `"ECOBUD Auth" <${process.env.GMAIL_USER}>`,
         to: email,
         subject: 'Your ECOBUD Verification Code',
-        text: `Your ECOBUD verification code is: ${code}. It expires in 10 minutes.`,
+        text: `Your ECOBUD verification code is: ${code}. It expires in 5 minutes.`,
         html: `
           <div style="margin:0;padding:32px 16px;background:#f3f8f4;font-family:Arial,Helvetica,sans-serif;color:#173b2b;">
             <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 24px rgba(23,59,43,.12);">
@@ -345,7 +345,7 @@ authRoutes.post(
                 <h1 style="margin:0 0 12px;font-size:24px;color:#173b2b;">Verify your email</h1>
                 <p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#4d6358;">Use this code to finish creating your ECOBUD account.</p>
                 <div style="margin:0 auto 24px;padding:18px 12px;border:1px dashed #71a786;border-radius:12px;background:#f2faf4;color:#1f6f4a;font-size:32px;font-weight:700;letter-spacing:8px;">${code}</div>
-                <p style="margin:0;font-size:14px;line-height:1.5;color:#718278;">This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
+                <p style="margin:0;font-size:14px;line-height:1.5;color:#718278;">This code expires in <strong>5 minutes</strong>. Do not share it with anyone.</p>
               </div>
               <div style="padding:18px 24px;background:#f7faf8;text-align:center;font-size:12px;color:#718278;">If you did not request this code, you can safely ignore this email.</div>
             </div>
@@ -358,7 +358,12 @@ authRoutes.post(
       throw new HttpError(503, 'Verification email could not be sent. Please try again later.');
     }
 
-    return res.json({ success: true, message: 'If this email can be registered, a verification code has been sent.' });
+    return res.json({
+      success: true,
+      message: 'If this email can be registered, a verification code has been sent.',
+      expiresAt: expiresAt.toISOString(),
+      serverTime: new Date(Date.now()).toISOString(),
+    });
   }),
 );
 

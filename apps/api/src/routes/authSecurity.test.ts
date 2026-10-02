@@ -34,6 +34,77 @@ beforeEach(() => {
   google.mockResolvedValue({ id: 'google-alice', email: user.email, name: user.name, canLinkByEmail: true });
 });
 describe('authentication security regressions', () => {
+  it('expires signup OTP five minutes after creation and reports time remaining after email delivery', async () => {
+    const issuedAt = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(issuedAt);
+    db.user.findUnique.mockResolvedValue(null);
+    sendMail.mockImplementationOnce(async () => {
+      clock.mockReturnValue(issuedAt + 12000);
+      return { messageId: 'mock' };
+    });
+    try {
+      const response = await request(app).post('/auth/send-otp').send({ email: 'new@gmail.com' }).expect(200);
+      const expiry = new Date(issuedAt + 5 * 60 * 1000);
+      expect(response.body.expiresAt).toBe(expiry.toISOString());
+      expect(Date.parse(response.body.expiresAt) - Date.parse(response.body.serverTime)).toBe(288000);
+      expect(db.otpCode.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        update: expect.objectContaining({ expiresAt: expiry, attempts: 0 }),
+        create: expect.objectContaining({ expiresAt: expiry }),
+      }));
+      expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({
+        text: expect.stringContaining('expires in 5 minutes'),
+        html: expect.stringContaining('<strong>5 minutes</strong>'),
+      }));
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it('rejects an expired signup code without creating an account', async () => {
+    db.user.findUnique.mockResolvedValue(null);
+    db.profile.findFirst.mockResolvedValue(null);
+    db.otpCode.updateMany.mockResolvedValue({ count: 0 });
+    await request(app).post('/auth/register').send({
+      email: 'new@gmail.com', password: 'ExamplePass123', displayName: 'New User', city: 'Poblacion', otpCode: '123456',
+    }).expect(400);
+    expect(db.otpCode.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ expiresAt: { gt: expect.any(Date) } }),
+    }));
+    expect(db.user.create).not.toHaveBeenCalled();
+    expect(db.otpCode.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 'google-alice'])('blocks signup OTP for an existing account with Google identity %s without writes', async (googleIdentityId) => {
+    db.user.findUnique.mockResolvedValue({ ...user, googleIdentityId });
+    const result = await request(app).post('/auth/send-otp').send({ email: ' Alice@Gmail.COM ' }).expect(409);
+    expect(result.body.message).toBe('An ECOBUD account already exists for this email.');
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: user.email } });
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(db.otpCode.upsert).not.toHaveBeenCalled();
+    expect(db.otpCode.updateMany).not.toHaveBeenCalled();
+    expect(db.otpCode.deleteMany).not.toHaveBeenCalled();
+    expect(db.user.create).not.toHaveBeenCalled();
+    expect(db.user.update).not.toHaveBeenCalled();
+  });
+  it('blocks registration of an existing Google email even with a previously requested code', async () => {
+    db.user.findUnique.mockResolvedValue({ ...user, googleIdentityId: 'google-alice' });
+    await request(app).post('/auth/register').send({
+      email: ' Alice@Gmail.COM ', password: 'ExamplePass123', displayName: 'Alice New', city: 'Poblacion', otpCode: '123456',
+    }).expect(409);
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: user.email } });
+    expect(db.otpCode.updateMany).not.toHaveBeenCalled();
+    expect(db.otpCode.deleteMany).not.toHaveBeenCalled();
+    expect(db.user.create).not.toHaveBeenCalled();
+    expect(db.user.update).not.toHaveBeenCalled();
+  });
+  it('sends signup OTP for a new email using its normalized address', async () => {
+    db.user.findUnique.mockResolvedValue(null);
+    sendMail.mockResolvedValue({ messageId: 'mock' });
+    await request(app).post('/auth/send-otp').send({ email: ' New.User@Gmail.COM ' }).expect(200);
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: 'new.user@gmail.com' } });
+    expect(db.otpCode.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { email: 'new.user@gmail.com' } }));
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ to: 'new.user@gmail.com' }));
+  });
+
   it('rejects email-only Google login without looking up the victim', async () => {
     await request(app).post('/auth/google').send({ email: 'admin@ecobud.app' }).expect(400);
     expect(db.user.findUnique).not.toHaveBeenCalled();

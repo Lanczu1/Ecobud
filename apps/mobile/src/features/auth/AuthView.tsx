@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
 import {
   ActivityIndicator,
+  AppState,
   Easing,
   Keyboard,
   KeyboardAvoidingView,
@@ -24,6 +25,7 @@ import { LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { CoachMarksOverlay } from '../../app/components/CoachMarksOverlay';
+import { getOtpDeadline, getOtpCountdown } from './otpTimer';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { LegalDocumentModal, LegalDocumentType } from '../../shared/ui/LegalDocumentModal';
 
@@ -56,7 +58,7 @@ interface AuthViewProps {
   } | { mfaRequired: true; challengeToken: string; expiresAt: string } | void> | void;
 
   onSignUp: (username: string, email: string, pass: string, city: string, otpCode: string) => void;
-  onSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
+  onSendOTP: (email: string) => Promise<{ success: boolean; message: string; expiresAt: string; serverTime: string }>;
   onCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
 }
 
@@ -368,6 +370,9 @@ export function AuthView({
   const [verificationCode, setVerificationCode] = useState('');
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [otpDeadline, setOtpDeadline] = useState<number | null>(null);
+  const [otpNow, setOtpNow] = useState(Date.now());
+  const otpCountdown = getOtpCountdown(otpDeadline, otpNow);
   const [localError, setLocalError] = useState<string | null>(null);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
@@ -556,6 +561,27 @@ export function AuthView({
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  useEffect(() => {
+    if (mode !== 'verify' || otpDeadline === null) return;
+    const updateClock = () => setOtpNow(Date.now());
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') updateClock();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [mode, otpDeadline]);
+
+  const applyOtpTiming = useCallback((response: { expiresAt: string; serverTime: string }) => {
+    const now = Date.now();
+    setOtpDeadline(getOtpDeadline(response, now));
+    setOtpNow(now);
+    setVerificationCode('');
+  }, []);
+
   const backgroundPalette = useMemo(
     () =>
       mode === 'signup'
@@ -703,7 +729,8 @@ export function AuthView({
 
       setIsSendingCode(true);
       try {
-        await onSendOTP(email.trim());
+        const response = await onSendOTP(email.trim());
+        applyOtpTiming(response);
         switchMode('verify');
         setResendCooldown(60);
         setTouched({});
@@ -717,9 +744,13 @@ export function AuthView({
       return;
     }
 
+    if (getOtpCountdown(otpDeadline, Date.now()).expired) {
+      setLocalError('Code expired. Request a new code.');
+      return;
+    }
     Keyboard.dismiss();
     onSignUp(username.trim(), email.trim(), password, city, verificationCode.trim());
-  }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken]);
+  }, [email, fieldErrors, mode, onLogin, onVerifyMfa, onSendOTP, onSignUp, password, username, city, usernameCheckState, verificationCode, switchMode, hasAcceptedLegal, mfaChallengeToken, otpDeadline, applyOtpTiming]);
 
   // Login errors belong to the login form and must not leak into the sign-up view.
   // Sign-up request errors are surfaced through localError; verification errors still
@@ -817,6 +848,21 @@ export function AuthView({
                     </Pressable>
                   </View> : null}
 
+                  {mode === 'verify' ? <View style={styles.otpTimer}>
+                    <Text style={[styles.otpTimerText, { color: otpCountdown.expired ? (isDark ? '#F87171' : palette.danger) : theme.colors.textMuted }]}>
+                      {otpCountdown.expired ? 'Code expired. Request a new code.' : `Code expires in ${otpCountdown.label}`}
+                    </Text>
+                    <View
+                      style={[styles.otpTimerTrack, { backgroundColor: isDark ? theme.colors.border : palette.separator }]}
+                      accessible
+                      accessibilityRole="progressbar"
+                      accessibilityLabel="Verification code time remaining"
+                      accessibilityValue={{ min: 0, max: 300, now: otpCountdown.seconds, text: otpCountdown.expired ? 'Code expired' : `${otpCountdown.label} remaining` }}
+                    >
+                      <View style={[styles.otpTimerFill, { width: `${otpCountdown.progress * 100}%`, backgroundColor: isDark ? theme.colors.primary : palette.primary }]} />
+                    </View>
+                  </View> : null}
+
                   <Text style={[styles.otpPromptLabel, isDark && { color: theme.colors.textPrimary }]}>{mode === 'mfa' ? 'Authenticator or recovery code' : 'Enter the 6-digit verification code'}</Text>
 
                   {mode === 'mfa' ? <TextInput
@@ -852,7 +898,8 @@ export function AuthView({
                         setIsSendingCode(true);
                         setLocalError(null);
                         try {
-                          await onSendOTP(email.trim());
+                          const response = await onSendOTP(email.trim());
+                          applyOtpTiming(response);
                           setResendCooldown(60);
                         } catch (err) {
                           setLocalError(err instanceof Error ? err.message : 'Failed to resend code.');
@@ -1026,7 +1073,7 @@ export function AuthView({
                 onPress={() => {
                   void handleAction();
                 }}
-                disabled={isLoading || (mode === 'signup' && (!isSignupComplete || isLoginLocked))}
+                disabled={isLoading || (mode === 'verify' && otpCountdown.expired) || (mode === 'signup' && (!isSignupComplete || isLoginLocked))}
                 loading={isLoading}
               />
 
@@ -2208,6 +2255,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.primary,
     textDecorationLine: 'underline',
+  },
+  otpTimer: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: scale(220),
+    marginBottom: verticalScale(14),
+    gap: verticalScale(6),
+  },
+  otpTimerText: {
+    fontSize: responsiveFontSize(11),
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
+  otpTimerTrack: {
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  otpTimerFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   otpPromptLabel: {
     fontSize: responsiveFontSize(13),
