@@ -104,7 +104,7 @@ function assertAccountNotLocked(email: string): void {
   if (lockStatus.locked) {
     throw new HttpError(
       429,
-      `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 900) / 60)} minute(s).`,
+      `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 300) / 60)} minute(s).`,
     );
   }
 }
@@ -416,7 +416,7 @@ authRoutes.post(
     if (lockStatus.locked) {
       throw new HttpError(
         429,
-        `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 900) / 60)} minute(s).`,
+        `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 300) / 60)} minute(s).`,
       );
     }
 
@@ -437,7 +437,7 @@ authRoutes.post(
       if (failureResult.locked) {
         throw new HttpError(
           429,
-          `Too many failed login attempts. Your account has been temporarily locked for 15 minutes.`,
+          `Too many failed login attempts. Your account has been temporarily locked for 5 minutes.`,
         );
       }
       throw new HttpError(401, 'Incorrect email or password.');
