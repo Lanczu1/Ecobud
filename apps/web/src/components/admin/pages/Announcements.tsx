@@ -7,7 +7,8 @@ import {
   Megaphone, Plus, Edit3, Trash2, Users, Clock, Search,
   AlertCircle, X, Loader2, ImagePlus, Eye,
   Copy, Send, Calendar, AlertTriangle, CheckCircle2,
-  CalendarClock, FileText
+  CalendarClock, FileText, Wifi, ArrowLeft, ArrowRight,
+  ExternalLink, ChevronLeft, ChevronRight, Tag
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { AdminPagination } from '../AdminPagination';
@@ -94,7 +95,8 @@ function resolveImageUrl(imageUrl?: string | null) {
   return `${API_HOST.replace(/\/$/, '')}/${imageUrl.replace(/^\//, '')}`;
 }
 
-function announcementImages(item: Announcement): string[] {
+function announcementImages(item?: Announcement | null): string[] {
+  if (!item) return [];
   return item.images ?? (item.image ? [item.image] : []);
 }
 
@@ -174,29 +176,198 @@ function Content({ text }: { text: string }) {
   return <div className="announcement-content">{nodes}</div>;
 }
 
-function Preview({ item, mobile }: { item: Announcement; mobile: boolean }) {
-  return (
-    <article className={`announcement-preview ${mobile ? 'is-mobile' : ''} text-gray-900 dark:text-white`}>
-      <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold mb-4">
-        <Megaphone size={20} />
-        <span>ECOBUD Announcement</span>
+function Preview({ item, mobile }: { item: Announcement | null; mobile: boolean }) {
+  const [activeImg, setActiveImg] = useState(0);
+  const images = announcementImages(item);
+
+  useEffect(() => {
+    if (activeImg >= images.length) {
+      setActiveImg(Math.max(0, images.length - 1));
+    }
+  }, [images.length, activeImg]);
+
+  if (!item) return null;
+
+  const dateStr = item.publishAt
+    ? new Date(item.publishAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })
+    : new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+
+  const renderAnnouncementBody = (isPhone: boolean) => (
+    <div className="space-y-4">
+      {/* Category, Priority & Date Row */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60">
+            <Tag size={12} className="text-emerald-600 dark:text-emerald-400" />
+            {item.category || 'General'}
+          </span>
+          {item.priority === 'Important' && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+              <AlertTriangle size={12} className="text-amber-600 dark:text-amber-400" />
+              Important
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-gray-400 dark:text-gray-500 font-medium flex items-center gap-1">
+          <Calendar size={12} />
+          {dateStr}
+        </span>
       </div>
-      {announcementImages(item).length > 0 && <div className="grid grid-cols-2 gap-2 mb-4">
-        {announcementImages(item).map((url, index) => <img key={url} src={resolveImageUrl(url) || url} alt={`Announcement picture ${index + 1}`} className={`${index === 0 ? 'col-span-2' : ''} w-full aspect-video object-cover rounded-xl border border-gray-200 dark:border-gray-700`} />)}
-      </div>}
-      <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-        {item.category}
-        {item.priority === 'Important' && ' · Important'}
-      </div>
-      <h3 className="text-xl font-serif font-bold mb-3 wrap-break-word text-gray-900 dark:text-white">
+
+      {/* Title */}
+      <h3 className={`${isPhone ? 'text-lg' : 'text-2xl'} font-bold text-gray-900 dark:text-white leading-tight tracking-tight wrap-break-word font-sans`}>
         {item.title || 'Announcement title'}
       </h3>
-      <Content text={item.content || 'Your announcement content will appear here.'} />
-      {item.ctaType !== 'No Action' && (
-        <span className="inline-block mt-5 bg-green-600 hover:bg-green-700 text-white rounded-xl px-5 py-2.5 font-semibold text-sm shadow-sm transition-colors">
-          {item.ctaLabel || 'Action button'}
-        </span>
+
+      {/* Image Gallery */}
+      {images.length > 0 && (
+        <div className="space-y-2">
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-200/80 dark:border-gray-700/80 shadow-xs group">
+            <img
+              src={resolveImageUrl(images[activeImg]) || images[activeImg]}
+              alt={`Announcement picture ${activeImg + 1}`}
+              className="w-full h-full object-cover transition-all"
+            />
+            {images.length > 1 && (
+              <>
+                <div className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-black/60 backdrop-blur-xs text-white">
+                  {activeImg + 1} / {images.length}
+                </div>
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setActiveImg(prev => (prev > 0 ? prev - 1 : images.length - 1));
+                  }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/50 hover:bg-black/75 text-white backdrop-blur-xs transition-all opacity-80 hover:opacity-100 cursor-pointer"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setActiveImg(prev => (prev < images.length - 1 ? prev + 1 : 0));
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/50 hover:bg-black/75 text-white backdrop-blur-xs transition-all opacity-80 hover:opacity-100 cursor-pointer"
+                  aria-label="Next image"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Thumbnails if > 1 image */}
+          {images.length > 1 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {images.map((url, idx) => (
+                <button
+                  key={url + idx}
+                  type="button"
+                  onClick={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setActiveImg(idx);
+                  }}
+                  className={`relative w-12 h-12 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                    activeImg === idx
+                      ? 'border-emerald-600 scale-105 shadow-xs'
+                      : 'border-transparent opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <img
+                    src={resolveImageUrl(url) || url}
+                    alt={`Thumbnail ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
+
+      {/* Content */}
+      <div className="pt-1">
+        <Content text={item.content || 'Your announcement content will appear here.'} />
+      </div>
+
+      {/* CTA Button */}
+      {item.ctaType !== 'No Action' && (
+        <div className={isPhone ? 'pt-2' : 'pt-4'}>
+          <span
+            className={`${
+              isPhone ? 'w-full' : 'inline-flex'
+            } py-3 px-5 bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 select-none cursor-pointer`}
+          >
+            <span>{item.ctaLabel || 'Action button'}</span>
+            {item.ctaType === 'Open External Link' ? (
+              <ExternalLink size={16} />
+            ) : (
+              <ArrowRight size={16} />
+            )}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+
+  if (mobile) {
+    return (
+      <div className="phone-preview-shell font-sans text-gray-900 dark:text-white transition-all">
+        {/* Phone Top Status Bar */}
+        <div className="pt-2 px-5 pb-1 flex items-center justify-between text-[11px] font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-[#0b110e] select-none">
+          <span>9:41</span>
+          <div className="w-20 h-4 bg-gray-900 dark:bg-black rounded-full flex items-center justify-center">
+            <div className="w-2 h-2 rounded-full bg-gray-800 dark:bg-gray-900 mr-2" />
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
+          </div>
+          <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+            <Wifi size={12} />
+            <div className="w-4 h-2.5 border border-current rounded-xs p-0.5 flex items-center">
+              <div className="w-full h-full bg-current rounded-2xs" />
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Header Bar */}
+        <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100 dark:border-gray-800/80 bg-white/95 dark:bg-[#0b110e]/95 backdrop-blur-xs select-none">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded-full text-gray-600 dark:text-gray-300">
+              <ArrowLeft size={18} />
+            </div>
+            <span className="text-sm font-bold text-gray-900 dark:text-white">Announcement</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-900/40">
+            <Megaphone size={12} />
+            <span>EcoBud</span>
+          </div>
+        </div>
+
+        {/* Mobile Content Area */}
+        <div className="p-4 overflow-y-auto max-h-120 phone-scrollbar bg-[#F7F9F7] dark:bg-[#0B110E]">
+          {renderAnnouncementBody(true)}
+        </div>
+
+        {/* Phone Bottom Home Indicator */}
+        <div className="py-2.5 bg-white dark:bg-[#0b110e] flex justify-center select-none border-t border-gray-50 dark:border-gray-900">
+          <div className="w-28 h-1 bg-gray-300 dark:bg-gray-700 rounded-full" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <article className="announcement-preview w-full max-w-2xl mx-auto bg-white dark:bg-[#0f1713] rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-xs font-sans text-gray-900 dark:text-white">
+      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
+        <Megaphone size={18} />
+        <span>ECOBUD Community Announcement</span>
+      </div>
+      {renderAnnouncementBody(false)}
     </article>
   );
 }
@@ -1243,7 +1414,7 @@ export function Announcements() {
                       </button>
                     </div>
                   </div>
-                  <div className="p-2 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                  <div className="p-4 bg-gray-100/60 dark:bg-gray-950/60 rounded-2xl border border-gray-200/70 dark:border-gray-800 flex justify-center items-center overflow-hidden">
                     <Preview item={editor} mobile={mobilePreview} />
                   </div>
                 </div>

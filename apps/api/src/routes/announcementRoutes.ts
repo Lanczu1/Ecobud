@@ -99,10 +99,15 @@ export const announcementResidentRoutes = Router();
 announcementResidentRoutes.use(authenticateRequest);
 announcementResidentRoutes.get('/', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const now = new Date();
+  const barangay = assignedBarangay(req);
+  const audience = [
+    { targetAudience: 'All Residents' },
+    ...(barangay ? [{ targetAudience: { in: ['Specific Barangay', 'Multiple Barangays'] }, barangays: { has: barangay } }] : []),
+  ];
   const items = await prisma.announcement.findMany({ where: {
     OR: [{ status: 'Published' }, { status: 'Scheduled', publishAt: { lte: now } }],
     AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      { OR: [{ targetAudience: 'All Residents' }, { barangays: { has: assignedBarangay(req) || req.auth!.city || '' } }] }],
+      { OR: audience }],
   }, orderBy: [{ priority: 'asc' }, { publishAt: 'desc' }], take: 100 });
   res.json({ items: items.map(serialize) });
 }));

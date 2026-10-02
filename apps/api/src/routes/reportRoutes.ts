@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
-import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
+import { authenticateRequest, requireModeratorAccess, requireAdminAccess } from '../http/authentication';
 import { prisma } from '../prismaClient';
 import fs from 'fs';
 import path from 'path';
@@ -151,7 +151,7 @@ router.get('/events/:id', authenticateRequest, requireModeratorAccess, async (re
 });
 
 // ─── GET /api/reports/events/:id/pdf ─── Generate PDF
-router.get('/events/:id/pdf', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/events/:id/pdf', authenticateRequest, requireAdminAccess, async (req, res) => {
   try {
     const data = await getEventReportData(req.params.id);
     if (!data) return res.status(404).json({ message: 'Event not found' });

@@ -16,6 +16,7 @@ import { MilestoneBadgePreview } from './MilestoneBadgePreview';
 import { UpcomingEventCard } from './UpcomingEventCard';
 import { UnifiedProgressCard } from './UnifiedProgressCard';
 import { ForYouFeed } from './ForYouFeed';
+import { HomeAnnouncements } from './HomeAnnouncements';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
@@ -216,6 +217,8 @@ export const HomeView = React.memo(function HomeView({ model, section }: HomeDas
               </SurfaceCard>
             ) : null}
             </>}
+
+            {showFeed && <HomeAnnouncements model={model} />}
 
             {/* Consolidated Horizontal "For You" Feed */}
             {(section === undefined || section === 3) && <HomeFeed

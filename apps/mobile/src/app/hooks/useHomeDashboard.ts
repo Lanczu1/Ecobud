@@ -197,6 +197,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardHasLoaded, setLeaderboardHasLoaded] = useState(false);
+  const [announcements, setAnnouncements] = useState<import('../../shared/api/ecobudApi').ResidentAnnouncement[]>([]);
   const [events, setEvents] = useState<EcoEvent[]>([]);
 
 
@@ -443,6 +444,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setLeaderboardLoading(false);
     setLeaderboardHasLoaded(false);
     setEvents([]);
+    setAnnouncements([]);
     setTransparency(null);
     setAssistantMessages([]);
     setSelectedLessonId(null);
@@ -730,6 +732,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         setHabitsToday(homeData?.habitsToday ?? null);
         setEvents(Array.isArray(homeData?.events) ? homeData.events : []);
+        setAnnouncements(homeData.announcements);
         const hydratedAt = Date.now();
         lastFocusedRefreshAtRef.current = { lessons: hydratedAt, challenges: hydratedAt, events: hydratedAt };
         setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
@@ -3022,6 +3025,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     leaderboardHasLoaded,
     loadLeaderboard,
     events,
+    announcements,
     transparency,
     todaysCompletedHabits,
     userDisplayName,

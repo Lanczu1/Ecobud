@@ -62,7 +62,7 @@ adminRoutes.get("/events", AdminController.getEvents);
 adminRoutes.post("/events", authorizeEventWrite, eventUploadMiddleware.single('image'), validateEventAudience, AdminController.createEvent);
 adminRoutes.put("/events/:id", authorizeEventWrite, eventUploadMiddleware.single('image'), validateEventAudience, AdminController.updateEvent);
 adminRoutes.delete("/events/:id", authorizeEventWrite, AdminController.deleteEvent);
-adminRoutes.get("/events/:id/qr", AdminController.getEventQr);
+adminRoutes.get("/events/:id/qr", authorizeEventWrite, AdminController.getEventQr);
 adminRoutes.post("/events/:id/qr", authorizeEventWrite, AdminController.generateEventQr);
 
 export { adminRoutes };

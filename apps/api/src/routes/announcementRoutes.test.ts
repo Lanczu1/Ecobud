@@ -41,8 +41,26 @@ describe('announcement permissions and lifecycle', () => {
     await request(app).get('/resident?barangay=Another').auth('user', { type: 'bearer' }).expect(200);
     const where = db.announcement.findMany.mock.calls[0][0].where;
     expect(where.AND[1].OR[1].barangays.has).toBe('Yukos');
+    expect(where.AND[1].OR[0]).toEqual({ targetAudience: 'All Residents' });
+    expect(where.AND[1].OR[1].targetAudience.in).toEqual(['Specific Barangay', 'Multiple Barangays']);
     expect(where.OR).toEqual([{ status: 'Published' }, { status: 'Scheduled', publishAt: { lte: expect.any(Date) } }]);
     expect(where.AND[0].OR[1].expiresAt.gt).toBeInstanceOf(Date);
+  });
+  it('uses the resident barangay regardless of author or requested barangay', async () => {
+    await request(app).get('/resident?barangay=Yukos').auth('user', { type: 'bearer' }).set('x-city', ' abo ').expect(200);
+    const audience = db.announcement.findMany.mock.calls[0][0].where.AND[1].OR;
+    expect(audience).toEqual([
+      { targetAudience: 'All Residents' },
+      { targetAudience: { in: ['Specific Barangay', 'Multiple Barangays'] }, barangays: { has: 'Abo' } },
+    ]);
+    expect(db.announcement.findMany.mock.calls[0][0].where.createdById).toBeUndefined();
+  });
+  it('only returns announcements for all residents when the barangay is missing or invalid', async () => {
+    for (const city of ['', 'Unknown Barangay']) {
+      await request(app).get('/resident?barangay=Yukos').auth('user', { type: 'bearer' }).set('x-city', city).expect(200);
+      const query = db.announcement.findMany.mock.calls.at(-1)![0];
+      expect(query.where.AND[1].OR).toEqual([{ targetAudience: 'All Residents' }]);
+    }
   });
   it('rejects past schedules, invalid audience and unsafe CTA links', () => {
     expect(announcementSchema.safeParse({ ...payload, status: 'Scheduled', publishAt: '2020-01-01T00:00:00Z' }).success).toBe(false);

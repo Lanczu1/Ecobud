@@ -87,7 +87,7 @@ export default function App() {
       try {
         const user = JSON.parse(userJson);
         if (user.role === 'moderator') {
-          return 'Challenges';
+          return 'Announcements';
         }
       } catch (e) {
         // ignore parse error
@@ -216,7 +216,7 @@ export default function App() {
     localStorage.setItem(WEB_SESSION_STARTED_KEY, String(signedInAt));
     localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(signedInAt));
     setIsAuthenticated(true);
-    setActiveSection(data.user.role === 'moderator' ? 'Challenges' : 'Dashboard');
+    setActiveSection(data.user.role === 'moderator' ? 'Announcements' : 'Dashboard');
   };
 
   const handleLogout = () => {

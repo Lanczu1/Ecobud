@@ -18,6 +18,7 @@ app.post('/events', authorizeEventWrite, validateEventAudience, (req, res) => re
 app.put('/events/:id', authorizeEventWrite, validateEventAudience, (req, res) => res.json(req.body));
 app.delete('/events/:id', authorizeEventWrite, (_req, res) => res.sendStatus(204));
 app.post('/events/:id/qr', authorizeEventWrite, (_req, res) => res.sendStatus(201));
+app.get('/events/:id/qr', authorizeEventWrite, (_req, res) => res.sendStatus(200));
 
 describe('Eco Event barangay and ownership restrictions', () => {
   beforeEach(() => { vi.clearAllMocks(); db.event.findUnique.mockResolvedValue(own); });
@@ -64,5 +65,16 @@ describe('Eco Event barangay and ownership restrictions', () => {
     expect(result.body).toEqual({ title: 'Updated', barangay: 'Yukos' });
     db.event.findUnique.mockResolvedValue(null);
     await request(app).delete('/events/missing').expect(404);
+  });
+  it('reserves featuring for admins even on moderator-owned events', async () => {
+    await request(app).post('/events').send({ isFeatured: true }).expect(403);
+    await request(app).put('/events/e').send({ isFeatured: false }).expect(403);
+    await request(app).put('/events/e').set('x-role', 'admin').send({ isFeatured: true }).expect(200);
+  });
+  it('restricts QR reads to the owner or an admin', async () => {
+    await request(app).get('/events/e/qr').expect(200);
+    db.event.findUnique.mockResolvedValue({ ...own, managedById: 'other-mod' });
+    await request(app).get('/events/e/qr').expect(403);
+    await request(app).get('/events/e/qr').set('x-role', 'admin').expect(200);
   });
 });

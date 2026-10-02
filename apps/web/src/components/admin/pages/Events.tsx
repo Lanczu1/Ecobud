@@ -19,6 +19,55 @@ import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+function QrExpiration({ expiresAt, createdAt }: { expiresAt?: string; createdAt?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const timer = window.setInterval(tick, 1000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, []);
+  const deadline = expiresAt ? Date.parse(expiresAt) : NaN;
+  if (!Number.isFinite(deadline)) return <p className="mb-5 text-sm text-gray-500">Expiration time unavailable.</p>;
+  const remaining = Math.max(0, Math.ceil((deadline - now) / 1000));
+  const expired = remaining === 0;
+  const urgent = remaining <= 3600;
+  const start = createdAt ? Date.parse(createdAt) : NaN;
+  const percent = Number.isFinite(start) && deadline > start ? Math.max(0, Math.min(100, (deadline - now) / (deadline - start) * 100)) : null;
+  const days = Math.floor(remaining / 86400);
+  const units = [
+    ...(days > 0 ? [{ label: 'Days', value: days }] : []),
+    { label: 'Hours', value: Math.floor(remaining / 3600) % 24 },
+    { label: 'Minutes', value: Math.floor(remaining / 60) % 60 },
+    { label: 'Seconds', value: remaining % 60 },
+  ];
+  return (
+    <div className={`w-full mb-5 rounded-2xl border p-4 transition-colors duration-500 ${expired ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30' : urgent ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30' : 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30'}`}>
+      <div role="status" className={`flex items-center gap-2 text-sm font-semibold ${expired ? 'text-red-700 dark:text-red-300' : urgent ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+        <Clock className="h-4 w-4" />
+        {expired ? 'QR code expired' : 'Time left to scan'}
+      </div>
+      {!expired && (
+        <div className="flex gap-2 mt-3" role="timer" aria-label={`${days} days, ${units.find(unit => unit.label === 'Hours')?.value} hours, ${units.find(unit => unit.label === 'Minutes')?.value} minutes remaining`}>
+          {units.map(unit => (
+            <div key={unit.label} className="flex-1 text-center rounded-lg bg-white/70 dark:bg-gray-900/60 py-2 overflow-hidden">
+              <span key={unit.value} className="block text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100 motion-safe:animate-[qr-tick_220ms_ease-out]">{String(unit.value).padStart(2, '0')}</span>
+              <span className="text-[10px] text-gray-600 dark:text-gray-400">{unit.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {percent !== null && <div className="mt-3 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden" aria-hidden="true"><div style={{ width: `${percent}%` }} className={`h-full rounded-full motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-linear ${expired ? 'bg-red-500' : urgent ? 'bg-amber-500' : 'bg-emerald-500'}`} /></div>}
+      <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">{expired ? 'Expired' : 'Expires'} {new Date(deadline).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'medium' })}</p>
+      {expired && <p className="mt-2 text-xs text-red-700 dark:text-red-300">This code can no longer verify attendance. Regenerating uses the same event expiration limit.</p>}
+      <style>{`@keyframes qr-tick { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+    </div>
+  );
+}
+
 const LAGUNA_MAP_BOUNDS: [[number, number], [number, number]] = [
   [13.966778, 121.0054681],
   [14.5815501, 121.6207409],
@@ -663,12 +712,18 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pin as the top highlight on user mobile dashboard</p>
               </div>
             </div>
-            <div
-              className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${form.isFeatured ? 'bg-yellow-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+            <button
+              type="button"
+              role="switch"
+              aria-label="Feature this Event"
+              aria-checked={form.isFeatured}
+              disabled={isModerator}
+              title={isModerator ? 'Only administrators can feature events' : 'Feature this Event'}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${form.isFeatured ? 'bg-yellow-500' : 'bg-gray-300 dark:bg-gray-700'}`}
               onClick={() => setForm(f => ({ ...f, isFeatured: !f.isFeatured }))}
             >
               <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${form.isFeatured ? 'translate-x-5' : ''}`} />
-            </div>
+            </button>
           </div>
           <label className="flex items-center gap-3 p-4 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
             <input type="checkbox" checked={form.isPublished} onChange={e=>setForm(f=>({...f,isPublished:e.target.checked}))} className="rounded border-gray-300 dark:border-gray-700 text-green-600 focus:ring-green-500 w-4 h-4 cursor-pointer" />
@@ -701,13 +756,20 @@ export function Events() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
-  const [barangayFilter, setBarangayFilter] = useState('');
+  const [barangayFilter, setBarangayFilter] = useState(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null');
+      return user?.role === 'moderator' ? user.city?.trim() || '' : '';
+    } catch {
+      return '';
+    }
+  });
   const [audience, setAudience] = useState<{ items: string[]; assignedBarangay: string | null; canCreate: boolean }>({ items: [], assignedBarangay: null, canCreate: false });
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [editing, setEditing] = useState<AdminEvent | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; event: AdminEvent | null }>({ open: false, event: null });
-  const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
+  const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null, expiresAt?: string, createdAt?: string }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
   const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>('events');
   const adminUser = useMemo(() => {
@@ -715,9 +777,16 @@ export function Events() {
   }, []);
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
   useEffect(() => {
-    void adminGet<typeof audience>('/admin/events/barangays').then(setAudience).catch((err: Error) => setError(err.message));
+    void adminGet<typeof audience>('/admin/events/barangays').then(data => {
+      setAudience(data);
+      if (adminUser?.role === 'moderator' && data.assignedBarangay) {
+        setBarangayFilter(data.assignedBarangay);
+        setPage(1);
+      }
+    }).catch((err: Error) => setError(err.message));
   }, []);
   const canManage = (event: AdminEvent) => event.canManage ?? (adminUser?.role === 'admin');
+  const isAdmin = adminUser?.role === 'admin';
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
   const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
@@ -805,6 +874,7 @@ export function Events() {
   loadEventsRef.current = () => load(true);
 
   const handleToggleFeatured = async (event: AdminEvent) => {
+    if (!isAdmin) return;
     setTogglingFeatured(event.id);
     const nextFeatured = !event.isFeatured;
     setEvents(prev => prev.map(e => e.id === event.id ? { ...e, isFeatured: nextFeatured } : e));
@@ -895,6 +965,7 @@ export function Events() {
     if (form.imageFile) {
       const data = new window.FormData();
       Object.entries(form).forEach(([key, value]) => {
+        if (key === 'isFeatured' && !isAdmin) return;
         if (value !== null && value !== undefined && key !== 'imageFile' && key !== 'imageUrl') {
           data.append(key, String(value));
         }
@@ -902,8 +973,8 @@ export function Events() {
       data.append('image', form.imageFile);
       item = await adminPostForm<AdminEvent>('/admin/events', data);
     } else {
-      const { imageFile, imageUrl, ...rest } = form;
-      item = await adminPost<AdminEvent>('/admin/events', rest);
+      const { imageFile, imageUrl, isFeatured, ...rest } = form;
+      item = await adminPost<AdminEvent>('/admin/events', { ...rest, ...(isAdmin ? { isFeatured } : {}) });
     }
     setEvents(prev => [item, ...prev]);
   };
@@ -914,6 +985,7 @@ export function Events() {
     if (form.imageFile) {
       const data = new window.FormData();
       Object.entries(form).forEach(([key, value]) => {
+        if (key === 'isFeatured' && !isAdmin) return;
         if (value !== null && value !== undefined && key !== 'imageFile' && key !== 'imageUrl') {
           data.append(key, String(value));
         }
@@ -921,8 +993,8 @@ export function Events() {
       data.append('image', form.imageFile);
       updated = await adminPutForm<AdminEvent>(`/admin/events/${editing.id}`, data);
     } else {
-      const { imageFile, imageUrl, ...rest } = form;
-      updated = await adminPut<AdminEvent>(`/admin/events/${editing.id}`, rest);
+      const { imageFile, imageUrl, isFeatured, ...rest } = form;
+      updated = await adminPut<AdminEvent>(`/admin/events/${editing.id}`, { ...rest, ...(isAdmin ? { isFeatured } : {}) });
     }
     setEvents(prev => prev.map(e => e.id === updated.id ? updated : e));
   };
@@ -944,10 +1016,11 @@ export function Events() {
   };
 
   const handleOpenQr = async (eventId: string) => {
+    if (!events.some(event => event.id === eventId && canManage(event))) return;
     setQrModal({ open: true, eventId, qrData: null, loading: true, error: null });
     try {
-      const data = await adminGet<{ qrData: string }>(`/admin/events/${eventId}/qr`);
-      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false, error: null }));
+      const data = await adminGet<{ qrData: string; expiresAt: string; createdAt: string }>(`/admin/events/${eventId}/qr`, { bypassCache: true });
+      setQrModal(prev => ({ ...prev, qrData: data.qrData, expiresAt: data.expiresAt, createdAt: data.createdAt, loading: false, error: null }));
     } catch (err: any) {
       if (err.message && err.message.includes('No QR code generated yet')) {
         setQrModal(prev => ({ ...prev, loading: false, error: null })); // No QR yet
@@ -961,8 +1034,8 @@ export function Events() {
     if (!qrModal.eventId) return;
     setQrModal(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const data = await adminPost<{ qrData: string }>(`/admin/events/${qrModal.eventId}/qr`, {});
-      setQrModal(prev => ({ ...prev, qrData: data.qrData, loading: false, error: null }));
+      const data = await adminPost<{ qrData: string; expiresAt: string; createdAt: string }>(`/admin/events/${qrModal.eventId}/qr`, {});
+      setQrModal(prev => ({ ...prev, qrData: data.qrData, expiresAt: data.expiresAt, createdAt: data.createdAt, loading: false, error: null }));
       setReviewNotice({ type: 'success', message: 'QR Code generated successfully.' });
     } catch (err: any) {
       setQrModal(prev => ({ ...prev, loading: false, error: err.message || 'Failed to generate QR code.' }));
@@ -984,6 +1057,7 @@ export function Events() {
   };
 
   const handleDownloadReport = async (eventId: string, format: 'pdf' | 'excel') => {
+    if (format === 'pdf' && !isAdmin) return;
     setReportLoading(eventId);
     try {
       const token = localStorage.getItem('ecobud_admin_token') || '';
@@ -1030,14 +1104,14 @@ export function Events() {
               </button>
             </div>
             
-            <div className="p-8 flex flex-col items-center justify-center bg-gray-50/50">
+            <div className="p-5 sm:p-8 flex flex-col items-center bg-gray-50/50 overflow-y-auto min-h-0">
               {qrModal.loading ? (
                 <div className="flex flex-col items-center justify-center p-12">
                   <Loader2 className="w-8 h-8 text-green-600 animate-spin mb-4" />
                   <p className="text-gray-500 text-sm">Loading QR Code...</p>
                 </div>
               ) : qrModal.qrData ? (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center w-full">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
                     <QRCodeCanvas 
                       id="event-qr-canvas"
@@ -1049,6 +1123,7 @@ export function Events() {
                       includeMargin={false}
                     />
                   </div>
+                  <QrExpiration key={qrModal.qrData} expiresAt={qrModal.expiresAt} createdAt={qrModal.createdAt} />
                   <button
                     onClick={handleDownloadQr}
                     className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 font-semibold rounded-xl hover:bg-blue-100 transition-colors mb-6"
@@ -1128,7 +1203,8 @@ export function Events() {
                 <div className="space-y-2">
                   <button
                     onClick={() => { if (reportModal.eventId) handleDownloadReport(reportModal.eventId, 'pdf'); setReportModal({ open: false, eventId: null, eventTitle: '' }); }}
-                    disabled={reportLoading !== null}
+                    disabled={!isAdmin || reportLoading !== null}
+                    title={!isAdmin ? 'PDF reports are available to administrators only' : 'Download PDF report'}
                     className="w-full flex items-center gap-3 px-5 py-4 bg-red-50 text-red-700 font-semibold rounded-xl hover:bg-red-100 transition-colors text-left disabled:opacity-50"
                   >
                     {reportLoading === reportModal.eventId ? (
@@ -1313,7 +1389,7 @@ export function Events() {
                     </div>
                     <button
                       onClick={() => handleToggleFeatured(event)}
-                      disabled={!canManage(event) || togglingFeatured === event.id}
+                      disabled={!isAdmin || togglingFeatured === event.id}
                       title={event.isFeatured ? 'Unfeature event' : 'Feature event (Pin as highlight on mobile)'}
                       className={`p-2 rounded-xl transition-all disabled:opacity-60 shrink-0 ${
                         event.isFeatured
@@ -1372,7 +1448,7 @@ export function Events() {
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <button
                     onClick={() => handleToggleFeatured(event)}
-                    disabled={!canManage(event) || togglingFeatured === event.id}
+                    disabled={!isAdmin || togglingFeatured === event.id}
                     title={event.isFeatured ? 'Unfeature event' : 'Feature event'}
                     className={`flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 ${
                       event.isFeatured ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1380,7 +1456,7 @@ export function Events() {
                   >
                     {togglingFeatured === event.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className={`w-3 h-3 ${event.isFeatured ? 'fill-current text-yellow-500' : ''}`} />}
                   </button>
-                  <button onClick={() => handleOpenQr(event.id)} className="flex items-center justify-center px-3 py-2 bg-purple-50 text-purple-700 text-xs font-semibold rounded-xl hover:bg-purple-100 transition-colors">
+                  <button disabled={!canManage(event)} title={canManage(event) ? 'Event QR code' : 'Only the event author or an administrator can access this QR code'} onClick={() => handleOpenQr(event.id)} className="flex items-center justify-center px-3 py-2 bg-purple-50 text-purple-700 text-xs font-semibold rounded-xl hover:bg-purple-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                     <QrCode className="w-3 h-3" />
                   </button>
                   <button onClick={() => setReportModal({ open: true, eventId: event.id, eventTitle: event.title })} className="flex items-center justify-center px-3 py-2 bg-orange-50 text-orange-700 text-xs font-semibold rounded-xl hover:bg-orange-100 transition-colors">
