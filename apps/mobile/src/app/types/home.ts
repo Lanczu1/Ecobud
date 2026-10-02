@@ -227,7 +227,7 @@ export interface EcoBudMobileModel {
     onConfirmBarangay: (chosenBarangay: string) => Promise<void>;
   } | MfaChallengePayload | void>;
   handleSignUpArgs: (username: string, email: string, pass: string, city: string, otpCode?: string) => Promise<void>;
-  handleSendOTP: (email: string) => Promise<{ success: boolean; message: string }>;
+  handleSendOTP: (email: string) => Promise<{ success: boolean; message: string; expiresAt: string; serverTime: string }>;
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
   handleLogout: () => Promise<void>;
   refreshEverything: () => Promise<void>;
