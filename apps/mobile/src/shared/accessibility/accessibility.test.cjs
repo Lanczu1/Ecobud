@@ -11,7 +11,7 @@ function load(name, mocks) {
   const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(code, { module, exports: module.exports, require: id => mocks[id] || require(id) });
+  vm.runInNewContext(code, { module, exports: module.exports, setTimeout, clearTimeout, require: id => mocks[id] || require(id) });
   return module.exports;
 }
 function primitives(preferences) {
@@ -101,7 +101,7 @@ test('preferences validate stored values and persist all settings', async () => 
   assert.equal(fallback.props.value.preferences.size, 'Medium');
   await Promise.resolve();
 });
-test('performance mode completes transitions, suppresses loops, and lets new loops start when disabled', () => {
+test('performance mode completes transitions, suppresses loops, and lets new loops start when disabled', async () => {
   let preferences = { performance: true };
   let listener;
   let starts = 0;
@@ -113,6 +113,8 @@ test('performance mode completes transitions, suppresses loops, and lets new loo
   let completed = false;
   Animated.timing({ setValue: value => target = value }, { toValue: 1 }).start(result => completed = result.finished);
   assert.equal(target, 1);
+  assert.equal(completed, false);
+  await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(completed, true);
   const loop = Animated.loop(composite());
   loop.start();
@@ -128,6 +130,38 @@ test('performance mode completes transitions, suppresses loops, and lets new loo
   assert.equal(Animated.delay(500).duration, 500);
   preferences = { performance: true };
   assert.equal(Animated.delay(500).duration, 0);
+});
+test('performance transitions yield between chained callbacks and can be stopped', async () => {
+  const native = { createAnimatedComponent: value => value, timing() { throw new Error('Should skip native animation'); } };
+  const { Animated } = load('animations.ts', { 'react-native': { Animated: native }, './primitives': { Text: 'span' }, './AccessibilityContext': { getAccessibilityPreferences: () => ({ performance: true }), subscribeAccessibility() {} } });
+  let count = 0;
+  let depth = 0;
+  let maxDepth = 0;
+  let current;
+  const value = { setValue() {} };
+  await new Promise(resolve => {
+    const next = () => {
+      depth++;
+      maxDepth = Math.max(maxDepth, depth);
+      current = Animated.timing(value, { toValue: 1 });
+      current.start(({ finished }) => {
+        if (finished && ++count < 25) next();
+        else resolve();
+      });
+      depth--;
+    };
+    next();
+    assert.equal(count, 0);
+  });
+  assert.equal(count, 25);
+  assert.equal(maxDepth, 1);
+  let result;
+  current = Animated.timing(value, { toValue: 1 });
+  current.start(completion => result = completion.finished);
+  current.stop();
+  assert.equal(result, false);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(result, false);
 });
 test('normal mode preserves native loop iterations and stops native playback when performance mode turns on', () => {
   let performance = false;

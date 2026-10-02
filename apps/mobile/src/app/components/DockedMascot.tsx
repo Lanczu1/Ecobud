@@ -4,6 +4,7 @@ import Svg, { Ellipse, Path } from 'react-native-svg';
 import { Animated } from '../../shared/accessibility/animations';
 import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
 import { useHomeAnimationVisibility } from './HomeAnimationVisibility';
+import { useTheme } from '../../shared/theme/ThemeContext';
 
 export const DockedMascot = React.memo(function DockedMascot({ size, side, animated }: {
   size: number;
@@ -12,6 +13,7 @@ export const DockedMascot = React.memo(function DockedMascot({ size, side, anima
 }) {
   const motion = React.useRef(new Animated.Value(0)).current;
   const { preferences } = useAccessibility();
+  const { isDark } = useTheme();
   const { visible } = useHomeAnimationVisibility();
   const [active, setActive] = React.useState(AppState.currentState === 'active');
   const [reduceMotion, setReduceMotion] = React.useState(true);
@@ -35,17 +37,21 @@ export const DockedMascot = React.memo(function DockedMascot({ size, side, anima
   const tabSize = Math.min(64, Math.max(48, size * 0.7));
   return <View style={[styles.tab, {
     width: tabSize, height: tabSize,
-    borderTopLeftRadius: side === 'right' ? 18 : 0,
-    borderBottomLeftRadius: side === 'right' ? 18 : 0,
-    borderTopRightRadius: side === 'left' ? 18 : 0,
-    borderBottomRightRadius: side === 'left' ? 18 : 0,
+    backgroundColor: isDark ? '#183D2D' : '#F0F9EF',
+    borderColor: isDark ? '#427A56' : '#B5D6B6',
+    borderTopLeftRadius: side === 'right' ? 22 : 6,
+    borderBottomLeftRadius: side === 'right' ? 22 : 6,
+    borderTopRightRadius: side === 'left' ? 22 : 6,
+    borderBottomRightRadius: side === 'left' ? 22 : 6,
+    shadowOpacity: preferences.performance ? 0 : 0.14,
+    elevation: preferences.performance ? 0 : 4,
   }]}>
-    <View style={styles.tile}>
+    <View style={[styles.tile, { backgroundColor: isDark ? '#24513A' : '#E0F0D8' }]}>
       <Animated.View pointerEvents="none" style={{ transform: [
         { translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) },
         { rotate: motion.interpolate({ inputRange: [0, 1], outputRange: ['-3deg', '3deg'] }) },
       ] }}>
-        <Svg width={tabSize * 0.72} height={tabSize * 0.76} viewBox="0 0 64 68">
+        <Svg width={tabSize * 0.66} height={tabSize * 0.7} viewBox="0 0 64 68">
           <Path d="M34 15 C30 9 28 5 33 2 C41 3 45 7 43 12 C39 9 36 8 34 8" fill="#A3D62B" />
           <Path d="M32 23 C16 9 5 13 5 32 C4 47 18 57 32 64 C45 55 59 45 59 29 C59 12 45 10 32 23Z" fill="#8BCC20" stroke="#578C16" strokeWidth="1.5" />
           <Path d="M32 24 C39 17 51 15 55 23 C60 40 46 51 32 61Z" fill="#B7E638" />
@@ -61,10 +67,23 @@ export const DockedMascot = React.memo(function DockedMascot({ size, side, anima
         </Svg>
       </Animated.View>
     </View>
+    <View pointerEvents="none" style={[styles.grip, {
+      backgroundColor: isDark ? '#8DB49A' : '#6F9571',
+      ...(side === 'right' ? { right: 3 } : { left: 3 }),
+    }]} />
   </View>;
 });
 
 const styles = StyleSheet.create({
-  tab: { backgroundColor: '#454A47', padding: 7, justifyContent: 'center', alignItems: 'center' },
-  tile: { flex: 1, width: '100%', borderRadius: 12, backgroundColor: '#176A2C', justifyContent: 'center', alignItems: 'center' },
+  tab: {
+    padding: 6,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#163E26',
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  tile: { flex: 1, width: '100%', borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  grip: { position: 'absolute', top: '50%', marginTop: -7, width: 2, height: 14, borderRadius: 1 },
 });

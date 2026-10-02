@@ -50,6 +50,7 @@ import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
+import { QuickMissionsOverlay } from './components/QuickMissionsOverlay';
 
 /**
  * EcoBud App - Main Shell
@@ -90,6 +91,8 @@ const ScrollAwareChatbot = React.memo(React.forwardRef<ScrollAwareChatbotHandle,
 ));
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
+  const [quickMissionsOpen, setQuickMissionsOpen] = useState(false);
+  const [quickMissionsAnchor, setQuickMissionsAnchor] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -271,8 +274,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
-          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} />
+          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onLongPressChallenges={bounds => { setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />
         )}
+        {quickMissionsOpen && !model.activeOverlay && <QuickMissionsOverlay model={model} anchorBounds={quickMissionsAnchor} onClose={() => setQuickMissionsOpen(false)} />}
       </SafeAreaView>
     );
   }

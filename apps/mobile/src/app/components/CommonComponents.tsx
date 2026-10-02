@@ -1053,9 +1053,11 @@ export function BottomTabBar({
   activeTab,
   onChange,
   onTargetLayout,
+  onLongPressChallenges,
 }: {
   activeTab: AppTab;
   onChange: (tab: AppTab) => void;
+  onLongPressChallenges?: (bounds: { x: number; y: number; width: number; height: number }) => void;
   onTargetLayout?: (tab: 'home' | 'profile', target: { x: number; y: number }) => void;
 }) {
   const { theme, isDark } = useTheme();
@@ -1178,6 +1180,7 @@ export function BottomTabBar({
               isNarrow={isNarrow}
               isVeryNarrow={isVeryNarrow}
               isCenterAction={item.key === 'challenges'}
+              onLongPress={item.key === 'challenges' ? onLongPressChallenges : undefined}
             />
           );
         })}
@@ -1190,6 +1193,7 @@ function TabItem({
   item,
   isActive,
   onPress,
+  onLongPress,
   onLayout,
   isNarrow = false,
   isVeryNarrow = false,
@@ -1198,6 +1202,7 @@ function TabItem({
   item: { key: AppTab; label: string; icon: keyof typeof Ionicons.glyphMap };
   isActive: boolean;
   onPress: () => void;
+  onLongPress?: (bounds: { x: number; y: number; width: number; height: number }) => void;
   onLayout?: (target: { x: number; y: number }) => void;
   isNarrow?: boolean;
   isVeryNarrow?: boolean;
@@ -1223,6 +1228,12 @@ function TabItem({
   const activeColor = isDark ? theme.colors.primary : theme.colors.primaryDark;
   const inactiveColor = isDark ? theme.colors.textMuted : '#8A959F';
   const tabRef = useRef<any>(null);
+  const circleRef = useRef<View>(null);
+  const openQuickMissions = () => {
+    circleRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) onLongPress?.({ x, y, width, height });
+    });
+  };
   const centerDiameter = iconSize * 3;
   const centerIconSize = Math.round(iconSize * 1.35);
 
@@ -1235,6 +1246,13 @@ function TabItem({
         });
       }}
       onPress={onPress}
+      onLongPress={onLongPress ? openQuickMissions : undefined}
+      delayLongPress={400}
+      accessibilityRole="button"
+      accessibilityLabel={item.label}
+      accessibilityHint={onLongPress ? 'Hold to preview quick missions' : undefined}
+      accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Show quick missions' }] : undefined}
+      onAccessibilityAction={onLongPress ? event => { if (event.nativeEvent.actionName === 'longpress') openQuickMissions(); } : undefined}
       activeOpacity={0.75}
       style={styles.bottomBarItem}
     >
@@ -1253,6 +1271,8 @@ function TabItem({
       >
         {isCenterAction ? (
           <View
+            ref={circleRef}
+            collapsable={false}
             style={[
               styles.centerTabCircle,
               {

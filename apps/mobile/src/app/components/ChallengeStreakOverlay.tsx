@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, Easing, ScrollView, StyleSheet, View } from 'react-native';
 import { Modal } from '../../shared/accessibility/primitives';
 import { Pressable, Text } from '../../shared/accessibility/primitives';
 import { ecobudApi, type StreakSummary } from '../../shared/api/ecobudApi';
@@ -17,8 +17,46 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
   const [restoring, setRestoring] = React.useState(false);
   const [error, setError] = React.useState('');
   const [focused, setFocused] = React.useState<string | null>(null);
+  const [shown, setShown] = React.useState(false);
+  const [reduceMotion, setReduceMotion] = React.useState<boolean | null>(null);
+  const backdropOpacity = React.useRef(new Animated.Value(0)).current;
+  const panelEntrance = React.useRef(new Animated.Value(0)).current;
+  const closing = React.useRef(false);
   const token = model.session?.token;
-  const close = () => model.setActiveOverlay(null);
+  React.useEffect(() => {
+    let mounted = true;
+    closing.current = false;
+    void AccessibilityInfo.isReduceMotionEnabled().then(value => {
+      if (mounted) setReduceMotion(value);
+    }).catch(() => { if (mounted) setReduceMotion(true); });
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      mounted = false;
+      subscription.remove();
+      closing.current = true;
+      backdropOpacity.stopAnimation();
+      panelEntrance.stopAnimation();
+    };
+  }, [backdropOpacity, panelEntrance]);
+  React.useEffect(() => {
+    if (!shown || reduceMotion === null || closing.current) return;
+    const animation = Animated.parallel([
+      Animated.timing(backdropOpacity, { toValue: 1, duration: reduceMotion ? 120 : 220, useNativeDriver: true }),
+      reduceMotion
+        ? Animated.timing(panelEntrance, { toValue: 1, duration: 120, useNativeDriver: true })
+        : Animated.spring(panelEntrance, { toValue: 1, damping: 24, stiffness: 220, mass: 0.9, useNativeDriver: true }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [shown, reduceMotion, backdropOpacity, panelEntrance]);
+  const close = () => {
+    if (closing.current) return;
+    closing.current = true;
+    Animated.parallel([
+      Animated.timing(backdropOpacity, { toValue: 0, duration: reduceMotion ? 100 : 180, useNativeDriver: true }),
+      Animated.timing(panelEntrance, { toValue: 0, duration: reduceMotion ? 100 : 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+    ]).start(({ finished }) => { if (finished) model.setActiveOverlay(null); });
+  };
   const load = React.useCallback(async () => {
     setLoading(true);
     setError('');
@@ -68,9 +106,17 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
   const focusStyle = (name: string) => focused === name ? { borderColor: isDark ? '#FBBF24' : '#C2410C' } : null;
 
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={close}>
-      <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
-        <View style={[styles.panel, { backgroundColor: colors.card }]} accessibilityViewIsModal>
+    <Modal transparent animationType="none" visible onShow={() => setShown(true)} onRequestClose={close}>
+      <View style={styles.backdrop}>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity: backdropOpacity }]} />
+        <Animated.View style={[styles.panel, {
+          backgroundColor: colors.card,
+          opacity: panelEntrance.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
+          transform: reduceMotion !== false ? [] : [
+            { translateY: panelEntrance.interpolate({ inputRange: [0, 1], outputRange: [36, 0] }) },
+            { scale: panelEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+          ],
+        }]} accessibilityViewIsModal>
           <View style={[styles.heading, { borderBottomColor: colors.border }]}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.textPrimary }]}>Challenge streak</Text>
@@ -121,7 +167,7 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
               </View>
             </> : null}
           </ScrollView>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

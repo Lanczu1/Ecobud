@@ -10,19 +10,44 @@ subscribeAccessibility(() => {
 function transition(factory: typeof NativeAnimated.timing): typeof NativeAnimated.timing {
   return (value, config) => {
     let animation: Animated.CompositeAnimation | undefined;
+    let completionTimer: ReturnType<typeof setTimeout> | undefined;
+    let pendingCallback: ((result: { finished: boolean }) => void) | undefined;
     const finish = () => {
       if (typeof config.toValue === 'number') (value as NativeAnimated.Value).setValue(config.toValue);
       else if ('x' in config.toValue && 'y' in config.toValue && typeof config.toValue.x === 'number' && typeof config.toValue.y === 'number') (value as NativeAnimated.ValueXY).setValue(config.toValue as { x: number; y: number });
     };
-    const entry = { stop: () => animation?.stop(), finish };
+    const stop = () => {
+      running.delete(entry);
+      if (completionTimer !== undefined) {
+        clearTimeout(completionTimer);
+        completionTimer = undefined;
+        const callback = pendingCallback;
+        pendingCallback = undefined;
+        callback?.({ finished: false });
+      }
+      animation?.stop();
+    };
+    const entry = { stop, finish };
     return Object.assign({
       start(callback?: (result: { finished: boolean }) => void) {
-        if (getAccessibilityPreferences().performance) { finish(); callback?.({ finished: true }); return; }
+        if (getAccessibilityPreferences().performance) {
+          finish();
+          pendingCallback = callback;
+          running.add(entry);
+          completionTimer = setTimeout(() => {
+            completionTimer = undefined;
+            running.delete(entry);
+            const complete = pendingCallback;
+            pendingCallback = undefined;
+            complete?.({ finished: true });
+          }, 0);
+          return;
+        }
         animation = factory(value, config);
         running.add(entry);
         animation.start(result => { running.delete(entry); callback?.(result); });
       },
-      stop() { running.delete(entry); animation?.stop(); },
+      stop,
       reset() { animation?.reset(); },
     }, {
       _isUsingNativeDriver: () => config.useNativeDriver || false,

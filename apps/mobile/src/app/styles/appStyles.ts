@@ -2585,10 +2585,10 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     shadowColor: '#071C19',
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
+    shadowOpacity: 0,
+    shadowRadius: 0,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
+    elevation: 0,
   },
   bottomBarLabel: {
     fontSize: responsiveFontSize(11),

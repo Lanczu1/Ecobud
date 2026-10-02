@@ -44,6 +44,7 @@ interface RedeemRequest {
   claimCode?: string;
   claimLocation?: string;
   claimUntil?: string;
+  claimInstructions?: string;
 }
 
 interface RequestStats {
@@ -122,6 +123,9 @@ export function Redeem() {
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [approveModal, setApproveModal] = useState<{ open: boolean; requestId: string }>({ open: false, requestId: '' });
   const [approveLocation, setApproveLocation] = useState('Barangay San Isidro Hall');
+  const [approveUntil, setApproveUntil] = useState('');
+  const [approveInstructions, setApproveInstructions] = useState('');
+  const [approveError, setApproveError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [deleteItemModal, setDeleteItemModal] = useState<{ open: boolean; item: RedeemItem | null }>({ open: false, item: null });
   const [removeRequestModal, setRemoveRequestModal] = useState<{ open: boolean; request: RedeemRequest | null }>({ open: false, request: null });
@@ -363,19 +367,39 @@ export function Redeem() {
   }, [fetchItems, fetchRequests]);
 
   const openApproveModal = (id: string) => {
-    setApproveLocation('Barangay San Isidro Hall');
+    setApproveLocation('');
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 7);
+    setApproveUntil(`${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}T${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`);
+    setApproveInstructions('Present this claim code.\nBring one valid ID.\nClaim within the given period.');
+    setApproveError(null);
     setApproveModal({ open: true, requestId: id });
   };
 
   const handleApprove = async () => {
+    if (processingId === approveModal.requestId) return;
+    if (![approveLocation, approveUntil, approveInstructions].every(value => value.trim())) {
+      setApproveError('All claim details are required.');
+      return;
+    }
+    const deadline = new Date(approveUntil);
+    if (!Number.isFinite(deadline.getTime()) || deadline.getTime() <= Date.now()) {
+      setApproveError('Claim Until must be a future date and time.');
+      return;
+    }
+    setApproveError(null);
     try {
       setProcessingId(approveModal.requestId);
-      await adminPatch(`/redeem/requests/${approveModal.requestId}/approve`, { claimLocation: approveLocation });
+      await adminPatch(`/redeem/requests/${approveModal.requestId}/approve`, {
+        claimLocation: approveLocation.trim(),
+        claimUntil: deadline.toISOString(), claimInstructions: approveInstructions.trim(),
+      });
       setApproveModal({ open: false, requestId: '' });
       toast.success('Redemption request approved.');
       fetchRequests();
     } catch (error: any) {
       console.error('Failed to approve', error);
+      setApproveError(error.message || 'Failed to approve');
       toast.error(error.message || 'Failed to approve');
     }
     finally { setProcessingId(null); }
@@ -698,6 +722,7 @@ export function Redeem() {
                           <div className="flex items-center gap-2"><span className="font-bold text-green-800 dark:text-green-300">Code:</span><span className="font-mono font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 rounded">{req.claimCode}</span></div>
                           {req.claimLocation && <div className="flex items-center gap-2"><span className="font-bold text-green-800 dark:text-green-300">Location:</span><span className="text-green-700 dark:text-green-400">{req.claimLocation}</span></div>}
                           {req.claimUntil && <div className="flex items-center gap-2"><span className="font-bold text-green-800 dark:text-green-300">Until:</span><span className="text-green-700 dark:text-green-400">{new Date(req.claimUntil).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</span></div>}
+                          {req.claimInstructions && <div className="text-green-700 dark:text-green-400"><span className="font-bold text-green-800 dark:text-green-300">Instructions:</span><p className="whitespace-pre-wrap break-words mt-1">{req.claimInstructions}</p></div>}
                         </div>
                       )}
                       {req.status === 'rejected' && req.rejectReason && (
@@ -872,35 +897,43 @@ export function Redeem() {
       {/* ═══ APPROVE MODAL ═══ */}
       {approveModal.open && createPortal(
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setApproveModal({ open: false, requestId: '' })}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-xl max-h-[min(88vh,760px)] shadow-2xl animate-modal border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <form noValidate role="dialog" aria-modal="true" aria-labelledby="approve-request-title" className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-xl max-h-[min(88vh,760px)] shadow-2xl animate-modal border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); void handleApprove(); }}>
             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-green-50/50 dark:bg-green-950/20">
-              <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white">Approve Request</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Set the claim location. A claim code and deadline will be generated automatically.</p>
+              <h3 id="approve-request-title" className="text-lg font-serif font-bold text-gray-900 dark:text-white">Approve Request</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Complete all required claim details before approving this request.</p>
             </div>
             <div className="p-6 space-y-3 flex-1 overflow-y-auto">
+              {approveError && <p role="alert" className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl px-4 py-3">{approveError}</p>}
               <div>
-                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Claim Location</label>
-                <input type="text" value={approveLocation} onChange={e => setApproveLocation(e.target.value)}
+                <label htmlFor="approve-location" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Claim Location (required)</label>
+                <input id="approve-location" required autoFocus type="text" value={approveLocation} onChange={e => setApproveLocation(e.target.value)}
                   placeholder="e.g. Barangay San Isidro Hall"
                   className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
               </div>
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-xl p-3 text-xs text-green-700 dark:text-green-300 space-y-1">
-                <p className="font-semibold">Auto-generated on approval:</p>
-                <p>• Claim Code: ECO-XXXXXX</p>
-                <p>• Claim Until: 7 days from now</p>
-                <p>• Instructions: Present code, valid ID, claim within period</p>
+              <div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Claim Code</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Automatically generated when this request is approved.</p>
+              </div>
+              <div>
+                <label htmlFor="approve-until" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Claim Until (required)</label>
+                <input id="approve-until" required type="datetime-local" value={approveUntil} onChange={e => setApproveUntil(e.target.value)} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Defaults to 7 days from approval. Adjust if needed.</p>
+              </div>
+              <div>
+                <label htmlFor="approve-instructions" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 block">Instructions (required)</label>
+                <textarea id="approve-instructions" required rows={4} value={approveInstructions} onChange={e => setApproveInstructions(e.target.value)} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400" />
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
-              <button onClick={() => setApproveModal({ open: false, requestId: '' })}
+              <button type="button" onClick={() => setApproveModal({ open: false, requestId: '' })}
                 className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all duration-200">Cancel</button>
-              <button onClick={handleApprove} disabled={processingId === approveModal.requestId}
+              <button type="submit" disabled={processingId === approveModal.requestId}
                 className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 active:scale-95 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
                 {processingId === approveModal.requestId ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Approve & Generate Code
+                {processingId === approveModal.requestId ? 'Approving...' : 'Approve Request'}
               </button>
             </div>
-          </div>
+          </form>
         </div>,
         document.body
       )}

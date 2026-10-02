@@ -1,9 +1,12 @@
 import React from 'react';
-import { BackHandler, Linking, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, Linking, StyleSheet, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { Pressable, Text } from '../accessibility/primitives';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../theme/ecoTheme';
-import { AppVersionInfo, checkForMandatoryUpdate, getInstalledAppVersion } from './appVersion';
+import { AppVersionInfo, checkAppVersion, getInstalledAppVersion } from './appVersion';
+
+const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 export function UpdateRequiredGate({ children }: { children: React.ReactNode }) {
   const { theme, isDark } = useTheme();
@@ -13,13 +16,62 @@ export function UpdateRequiredGate({ children }: { children: React.ReactNode }) 
 
   React.useEffect(() => {
     let mounted = true;
-    void checkForMandatoryUpdate().then((result) => {
-      if (mounted) {
-        setRequiredUpdate(result);
-        setChecking(false);
+    let appState = AppState.currentState;
+    let internetAvailable: boolean | null = null;
+    let inFlight = false;
+    let pendingRecheck = false;
+
+    const recheck = async () => {
+      if (!mounted) return;
+      if (inFlight) {
+        pendingRecheck = true;
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const result = await checkAppVersion();
+        if (mounted && result !== undefined) setRequiredUpdate(result);
+      } finally {
+        inFlight = false;
+        if (mounted) setChecking(false);
+        const shouldRecheck = pendingRecheck;
+        pendingRecheck = false;
+        if (mounted && shouldRecheck && appState === 'active' && internetAvailable !== false) {
+          void recheck();
+        }
+      }
+    };
+
+    const appSubscription = AppState.addEventListener('change', (nextState) => {
+      const returningToApp = nextState === 'active' && appState !== 'active';
+      appState = nextState;
+      if (returningToApp) {
+        void recheck();
+        void NetInfo.refresh().catch(() => {});
       }
     });
-    return () => { mounted = false; };
+    const unsubscribeNetwork = NetInfo.addEventListener((state) => {
+      const wasAvailable = internetAvailable;
+      internetAvailable = state.isConnected === null
+        ? null
+        : state.isConnected && state.isInternetReachable !== false;
+      if (wasAvailable === false && internetAvailable === true && appState === 'active') {
+        void recheck();
+      }
+    });
+    const timer = setInterval(() => {
+      if (appState === 'active' && internetAvailable !== false) void recheck();
+    }, VERSION_CHECK_INTERVAL_MS);
+
+    void recheck();
+
+    return () => {
+      mounted = false;
+      appSubscription.remove();
+      unsubscribeNetwork();
+      clearInterval(timer);
+    };
   }, []);
 
   React.useEffect(() => {

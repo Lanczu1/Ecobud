@@ -13,6 +13,8 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
 
   const visibleStreak = getVisibleStreak(currentStreak);
   const isStreakActive = isStreakFlameActive(currentStreak, streakActive);
+  const milestones = [3, 10, 30, 100];
+  const nextMilestone = milestones.find(milestone => visibleStreak < milestone);
 
   return (
     <LinearGradient
@@ -65,12 +67,84 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
           )}
         </View>
 
-        <Text style={{ color: '#FFFFFF', marginTop: 16, fontSize: 13 }}>Reward milestones: 3 · 10 · 30 · 100 challenges</Text>
+        <View style={styles.milestones}>
+          <Text style={styles.milestoneHeading}>Reward milestones</Text>
+          <View
+            style={styles.milestoneRow}
+            accessible
+            accessibilityLabel={`Reward milestones: ${milestones.join(', ')} challenges. ${visibleStreak} challenges completed. ${nextMilestone ? `Next reward at ${nextMilestone} challenges.` : 'All milestones reached.'}`}
+          >
+            {milestones.map((milestone, index) => {
+              const previous = milestones[index - 1] ?? 0;
+              const progress = Math.max(0, Math.min(1, (visibleStreak - previous) / (milestone - previous)));
+              const reached = visibleStreak >= milestone;
+              const next = nextMilestone === milestone;
+              return (
+                <View key={milestone} style={styles.milestoneColumn}>
+                  <View style={[styles.milestoneTrack, next && styles.milestoneTrackNext]}>
+                    <View style={[styles.milestoneFill, { width: `${progress * 100}%` }]} />
+                  </View>
+                  <Text style={[styles.milestoneValue, (reached || next) && styles.milestoneValueActive]}>{milestone}</Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.milestoneCaption}>
+            {nextMilestone ? `${nextMilestone - visibleStreak} more ${nextMilestone - visibleStreak === 1 ? 'challenge' : 'challenges'} to your next reward` : 'All reward milestones reached'}
+          </Text>
+        </View>
       </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  milestones: {
+    marginTop: verticalScale(4),
+    gap: verticalScale(10),
+  },
+  milestoneHeading: {
+    color: '#FFFFFF',
+    fontSize: responsiveFontSize(13),
+    fontWeight: '600',
+  },
+  milestoneRow: {
+    flexDirection: 'row',
+    gap: scale(6),
+  },
+  milestoneColumn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: verticalScale(6),
+  },
+  milestoneTrack: {
+    width: '100%',
+    height: verticalScale(8),
+    borderRadius: moderateScale(4),
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  milestoneTrackNext: {
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+  },
+  milestoneFill: {
+    height: '100%',
+    borderRadius: moderateScale(4),
+    backgroundColor: '#A7F3D0',
+  },
+  milestoneValue: {
+    color: '#FFFFFF',
+    fontSize: responsiveFontSize(12),
+    fontWeight: '500',
+  },
+  milestoneValueActive: {
+    fontWeight: '800',
+  },
+  milestoneCaption: {
+    color: '#FFFFFF',
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(18),
+  },
   streakCard: {
     borderRadius: moderateScale(24),
     padding: moderateScale(20),
