@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
-  Text,
-  TextInput,
   ScrollView,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
   Image,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Modal,
   Keyboard,
-  Animated,
   AppState,
   DeviceEventEmitter,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';

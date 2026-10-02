@@ -1,10 +1,12 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, Image, useWindowDimensions } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
 import { type EcoBudMobileModel } from '../types/home';
 import { useTheme } from '../../shared/theme/ecoTheme';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
 
 export interface QuickActionsProps {
   model?: EcoBudMobileModel;
@@ -39,6 +41,8 @@ export function QuickActions({
 }: QuickActionsProps) {
   const { theme, isDark } = useTheme();
   const { width } = useWindowDimensions();
+  const { preferences } = useAccessibility();
+  const largeText = preferences.size === 'Large';
   const isTablet = width >= 600;
 
   const habitPending = isHabitPending !== undefined
@@ -130,7 +134,7 @@ export function QuickActions({
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.grid}>
+      <View style={[styles.grid, largeText && { flexWrap: 'wrap', gap: scale(10) }]}>
         {actions.map((action) => {
           const isPrimary = action.id === 'habits' && habitPending;
 
@@ -145,7 +149,7 @@ export function QuickActions({
                   backgroundColor: isPrimary ? (isDark ? '#142E1F' : '#EBF7EE') : theme.colors.card,
                   borderColor: isPrimary ? (isDark ? theme.colors.primary : '#126027') : (isDark ? theme.colors.cardBorder : action.borderColor),
                   borderWidth: isPrimary ? 2 : 1,
-                  width: isTablet ? '23.5%' : '23%',
+                  width: largeText ? '48%' : isTablet ? '23.5%' : '23%',
                   shadowOpacity: isPrimary ? (isDark ? 0.35 : 0.16) : (isDark ? 0.2 : 0.05),
                   transform: isPrimary ? [{ scale: 1.02 }] : undefined,
                 },
@@ -180,6 +184,7 @@ export function QuickActions({
               <Text
                 style={[
                   styles.actionLabel,
+                  { width: '100%' },
                   { color: isPrimary ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textPrimary },
                 ]}
                 numberOfLines={1}
@@ -188,7 +193,7 @@ export function QuickActions({
               >
                 {action.label}
               </Text>
-              <Text style={[styles.actionSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+              <Text style={[styles.actionSub, { color: theme.colors.textMuted, width: '100%' }]} numberOfLines={1}>
                 {action.subLabel}
               </Text>
             </TouchableOpacity>

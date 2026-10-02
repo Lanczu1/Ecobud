@@ -6,6 +6,7 @@ import { eventSubmissionUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { GamificationService } from '../services/GamificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
+import { sendDirectNotification } from '../services/notificationService';
 import path from 'path';
 
 const eventRoutes = Router();
@@ -119,6 +120,15 @@ eventRoutes.post(
       },
     });
     void supabaseRealtimeService.publishUserEventsRefresh(req.auth!.userId, { entityId: event.id, reason: 'event-joined' });
+    await sendDirectNotification({
+      userId: req.auth!.userId,
+      type: 'event',
+      title: 'Eco Event Joined',
+      message: `You have joined "${event.title}".`,
+      relatedId: event.id,
+      relatedType: 'event',
+      notificationKey: `event_joined:${registration.id}`,
+    });
 
     return res.status(201).json({ alreadyJoined: false, registration });
   }),

@@ -1,24 +1,21 @@
 import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { NotificationInbox } from './NotificationInbox';
+import { AccessibilityOverlay } from './AccessibilityOverlay';
 import React from 'react';
 import { useAudioPlayer } from 'expo-audio';
-import LottieView from 'lottie-react-native';
+import LottieView from '../../shared/accessibility/AccessibleLottie';
 import {
   View,
-  Text,
-  TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Keyboard,
   Platform,
   BackHandler,
-  TextInput,
   ImageBackground,
   Image,
   Alert,
   StyleProp,
   ViewStyle,
-  Animated,
   StyleSheet,
   Easing,
   Dimensions,
@@ -29,8 +26,10 @@ import {
   useWindowDimensions,
   AppState,
   Linking,
-  Modal,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TouchableOpacity, TextInput } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -65,6 +64,7 @@ import {
 import { triggerSuccessHaptic, triggerImpactMedium, triggerSelectionHaptic } from '../utils/haptics';
 import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
 import { ChallengeStreakOverlay } from './ChallengeStreakOverlay';
+import { StreakUnlockedOverlay } from './StreakUnlockedOverlay';
 import {
   TopNavbar,
   OverlayScaffold,
@@ -278,13 +278,16 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     setMockResult(null);
     setAttemptsLoaded(false);
     attemptsChallengeIdRef.current = challenge?.id || null;
-    if (challenge?.id) {
-      void loadChallengeAttempts(challenge.id);
-    }
     // If submission is rejected or not started, clear beforeProofUrl so user can take a fresh photo
     setBeforeProofUrl(isRejectedSubmission ? null : (submission?.proofUrl || null));
     setStep(getInitialStep());
-  }, [challenge?.id, challenge?.progress?.status, isRejectedSubmission, submission?.id, submission?.status, submission?.afterProofUrl, loadChallengeAttempts]);
+  }, [challenge?.id, challenge?.progress?.status, isRejectedSubmission, submission?.id, submission?.status, submission?.afterProofUrl, model.session?.user.id]);
+
+  React.useEffect(() => {
+    if (challenge?.id) {
+      void loadChallengeAttempts(challenge.id);
+    }
+  }, [challenge?.id, loadChallengeAttempts]);
 
   React.useEffect(() => {
     if (processing) {
@@ -303,6 +306,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null);
   const [cameraSessionId, setCameraSessionId] = React.useState(0);
   const [isCameraReady, setIsCameraReady] = React.useState(false);
+  const [nativeCameraFallback, setNativeCameraFallback] = React.useState(false);
+  const [cameraFacing, setCameraFacing] = React.useState<'back' | 'front'>('back');
+  const captureBusyRef = React.useRef(false);
+  const openFallbackRef = React.useRef<() => void>(() => {});
+  const fallbackSessionRef = React.useRef<string | null>(null);
   const [isRequestingCameraPermission, setIsRequestingCameraPermission] = React.useState(false);
   const cameraPermissionRequestRef = React.useRef<Promise<boolean> | null>(null);
 
@@ -312,6 +320,8 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     if (cameraResetTimerRef.current) clearTimeout(cameraResetTimerRef.current);
     setCapturedImage(null);
     setIsCameraReady(false);
+    setNativeCameraFallback(false);
+    fallbackSessionRef.current = null;
     // Briefly unmount camera to allow Android camera hardware to release cleanly
     setIsCameraMountAllowed(false);
     setCameraSessionId(prev => prev + 1);
@@ -331,6 +341,12 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
       setIsCameraReady(false);
     }
   }, [step]);
+
+  React.useEffect(() => {
+    if ((step !== 'capture' && step !== 'capture_after') || !permission?.granted || !isCameraMountAllowed || isCameraReady || nativeCameraFallback || processing) return;
+    const timer = setTimeout(() => openFallbackRef.current(), 8000);
+    return () => clearTimeout(timer);
+  }, [step, permission?.granted, isCameraMountAllowed, isCameraReady, nativeCameraFallback, processing, cameraSessionId, cameraFacing]);
 
   const ensureCameraPermission = React.useCallback(async () => {
     if (permission?.granted) return true;
@@ -512,39 +528,73 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   };
 
-  const handleCapture = async () => {
+  const handleNativeCamera = async () => {
+    if (captureBusyRef.current || processing) return;
+    captureBusyRef.current = true;
     const operationId = ++activeOperationRef.current;
-    if (!(await ensureCameraPermission()) || activeOperationRef.current !== operationId) return;
-    if (!isCameraReady) {
-      Alert.alert('Camera Not Ready', 'Please wait a moment for the camera to initialize.');
+    setNativeCameraFallback(true);
+    setIsCameraReady(false);
+    try {
+      const access = await ImagePicker.requestCameraPermissionsAsync();
+      if (activeOperationRef.current !== operationId) return;
+      if (!access.granted) {
+        Alert.alert('Camera access needed', 'Allow camera access in Settings, or choose a photo from your gallery.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ]);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (activeOperationRef.current !== operationId) return;
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.5, allowsEditing: false, cameraType: cameraFacing === 'front' ? ImagePicker.CameraType.front : ImagePicker.CameraType.back });
+      if (activeOperationRef.current !== operationId || result.canceled || !result.assets?.[0]?.uri) return;
+      if (step === 'capture_after') await processAfterImage(result.assets[0].uri);
+      else await processImage(result.assets[0].uri);
+    } catch {
+      if (activeOperationRef.current === operationId) Alert.alert('Camera unavailable', 'The phone camera could not open. Use Choose from Gallery below to continue.');
+    } finally { captureBusyRef.current = false; }
+  };
+
+  openFallbackRef.current = () => {
+    const session = `${step}-${cameraSessionId}`;
+    if (fallbackSessionRef.current === session || (step !== 'capture' && step !== 'capture_after') || processing) return;
+    fallbackSessionRef.current = session;
+    void handleNativeCamera();
+  };
+
+  const handleCapture = async () => {
+    if (captureBusyRef.current || processing) return;
+    if (nativeCameraFallback || !isCameraReady || !cameraRef.current) {
+      await handleNativeCamera();
       return;
     }
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
-        if (activeOperationRef.current !== operationId) return;
-        // Do NOT manually null cameraRef here — let React handle ref lifecycle
-        if (step === 'capture_after') {
-          await processAfterImage(photo.uri);
-        } else {
-          await processImage(photo.uri);
-        }
-      } catch (err: any) {
-        console.error('Camera error', err);
-        Alert.alert('Camera Error', err.message || 'Failed to open camera');
-      }
-    } else {
-      Alert.alert('Camera Not Ready', 'The camera is still starting. Please try again in a moment.');
+    captureBusyRef.current = true;
+    const operationId = ++activeOperationRef.current;
+    let photoUri: string | undefined;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
+      photoUri = photo?.uri;
+    } catch (err) {
+      console.warn('Embedded camera failed; opening phone camera:', err);
+    } finally { captureBusyRef.current = false; }
+    if (activeOperationRef.current !== operationId) return;
+    if (!photoUri) {
+      await handleNativeCamera();
+      return;
     }
+    if (step === 'capture_after') await processAfterImage(photoUri);
+    else await processImage(photoUri);
   };
 
   const handleCameraMountError = React.useCallback((event: { message?: string }) => {
     setIsCameraReady(false);
-    console.error('Camera mount error', event?.message);
-    Alert.alert('Camera Error', event?.message || 'The camera could not start. Close other apps using the camera and try again.');
+    console.warn('Embedded camera unavailable:', event?.message);
+    openFallbackRef.current();
   }, []);
 
+
   const handleGallery = async () => {
+    if (captureBusyRef.current || processing) return;
     const operationId = ++activeOperationRef.current;
     try {
       cameraRef.current = null;
@@ -1058,64 +1108,19 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
           title={isAfterPhoto ? "Take After Picture" : "AI Recognition Submission Page"}
           subtitle={isAfterPhoto ? (isAfterPreview ? "Review your photo" : "Weekend Step") : "AI Recognition"}
           onBack={returnToDetails}
+          compactHeader
+          titleStyle={{ fontSize: responsiveFontSize(24), lineHeight: responsiveFontSize(30), marginTop: 8 }}
+          headerStyle={{ paddingBottom: 16 }}
         >
-          <View style={{ flex: 1, padding: 24, alignItems: 'center' }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
             <View style={{ flex: 1, width: '100%' }}>
-              {step === 'capture' && (
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: isDark ? theme.colors.surface : '#F0FDF4',
-                  borderRadius: 14,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  marginBottom: 16,
-                  borderWidth: 1,
-                  borderColor: isDark ? theme.colors.cardBorder : '#BBF7D0',
-                }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="sparkles" size={18} color={theme.colors.primary} />
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: isDark ? theme.colors.textPrimary : '#166534' }}>
-                      AI Recognition Limit:
-                    </Text>
-                  </View>
-                  <View style={{
-                    backgroundColor: attemptsLeft > 1
-                      ? (isDark ? 'rgba(16, 185, 129, 0.2)' : '#DCFCE7')
-                      : attemptsLeft === 1
-                        ? (isDark ? 'rgba(234, 179, 8, 0.2)' : '#FEF9C3')
-                        : (isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2'),
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: attemptsLeft > 1
-                      ? '#10B981'
-                      : attemptsLeft === 1
-                        ? '#F59E0B'
-                        : '#EF4444'
-                  }}>
-                    <Text style={{
-                      fontSize: 12,
-                      fontWeight: '800',
-                      color: attemptsLeft > 1
-                        ? (isDark ? '#34D399' : '#15803D')
-                        : attemptsLeft === 1
-                          ? (isDark ? '#FBBF24' : '#B45309')
-                          : '#DC2626'
-                    }}>
-                      {attemptsLeft} / {MAX_AI_ATTEMPTS} attempts left
-                    </Text>
-                  </View>
-                </View>
-              )}
+
 
               <View
                 collapsable={false}
                 renderToHardwareTextureAndroid
                 style={{
-                  flex: 1,
+                  height: verticalScale(440),
                   minHeight: 220,
                   width: '100%',
                   backgroundColor: '#101915',
@@ -1128,18 +1133,40 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               >
                 {capturedImage ? (
                   <Image source={{ uri: capturedImage }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                ) : nativeCameraFallback ? (
+                  <View style={{ padding: 20, alignItems: 'center', gap: 12 }}>
+                    <Ionicons name="camera-outline" size={44} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', textAlign: 'center', fontSize: 16 }}>Using your phone camera</Text>
+                    <Text style={{ color: '#D1FAE5', textAlign: 'center', fontSize: 14 }}>Tap Open Camera below to try again, or choose a photo from Gallery.</Text>
+                  </View>
                 ) : permission?.granted ? (
                   isCameraMountAllowed ? (
                     <>
                       <CameraView
                         key={`cam-${step}-${cameraSessionId}`}
                         style={StyleSheet.absoluteFill}
-                        facing="back"
+                        facing={cameraFacing}
                         mode="picture"
                         ref={cameraRef}
                         onCameraReady={() => setIsCameraReady(true)}
                         onMountError={handleCameraMountError}
                       />
+                      {isCameraReady && !processing && (
+                        <>
+                          <View style={{ position: 'absolute', top: step === 'capture' ? 80 : 12, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <Text style={{ color: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.65)', padding: 8, borderRadius: 8, fontSize: 14, flexShrink: 1 }}>{isAfterPhoto ? 'After photo' : 'Before photo'}</Text>
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Switch front or back camera" onPress={() => { setIsCameraReady(false); setCameraFacing(current => current === 'back' ? 'front' : 'back'); }} style={{ alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 24, width: 48, height: 48 }}>
+                              <Ionicons name="camera-reverse-outline" size={26} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          </View>
+                          <View style={{ position: 'absolute', bottom: 12, left: 0, right: 0, alignItems: 'center', gap: 4 }}>
+                            <TouchableOpacity accessibilityRole="button" accessibilityLabel={isAfterPhoto ? 'Take After photo' : 'Take Before photo'} onPress={() => void handleCapture()} style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 4, borderColor: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' }}>
+                              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF' }} />
+                            </TouchableOpacity>
+                            <Text style={{ fontSize: 12, color: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 8, borderRadius: 6 }}>Take photo</Text>
+                          </View>
+                        </>
+                      )}
                       {!isCameraReady && (
                         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F0EA' }}>
                           <ActivityIndicator size="large" color="#10B981" />
@@ -1169,6 +1196,22 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                       )}
                     </TouchableOpacity>
                   </>
+                )}
+
+                {step === 'capture' && (
+                  <View
+                    pointerEvents="none"
+                    accessible
+                    accessibilityLabel={`AI recognition: ${attemptsLeft} of ${MAX_AI_ATTEMPTS} attempts remaining`}
+                    accessibilityLiveRegion="polite"
+                    style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 2, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(8, 30, 23, 0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' }}
+                  >
+                    <Ionicons name="scan-outline" size={18} color="#D1FAE5" accessible={false} />
+                    <Text style={{ flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '600' }}>AI attempts</Text>
+                    <Text style={{ flexShrink: 1, color: attemptsLeft > 1 ? '#A7F3D0' : attemptsLeft === 1 ? '#FDE68A' : '#FECACA', fontSize: 13, fontWeight: '800', textAlign: 'right' }}>
+                      {attemptsLeft} / {MAX_AI_ATTEMPTS} left
+                    </Text>
+                  </View>
                 )}
 
                 {processing && (
@@ -1208,19 +1251,19 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
               {!processing && !isAfterPreview && (
                 <View style={{ width: '100%', gap: 16 }}>
-                  <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleCapture}>
+                  {(!isCameraReady || nativeCameraFallback) && <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#10B981', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleCapture}>
                     <Ionicons name="camera" size={20} color="#FFF" />
-                    <Text style={styles.primaryButtonText}>{step === 'capture_after' ? 'Capture After Photo' : 'Capture Before Photo'}</Text>
-                  </TouchableOpacity>
+                    <Text style={[styles.primaryButtonText, { flexShrink: 1, textAlign: 'center' }]}>Open Camera</Text>
+                  </TouchableOpacity>}
 
                   <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#4ADE80', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]} onPress={handleGallery}>
                     <Ionicons name="image" size={20} color="#FFF" />
-                    <Text style={styles.primaryButtonText}>Choose from Gallery</Text>
+                    <Text style={[styles.primaryButtonText, { flexShrink: 1, textAlign: 'center' }]}>Choose from Gallery</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
-          </View>
+          </ScrollView>
         </OverlayScaffold>
       </View>
     );
@@ -1690,6 +1733,8 @@ export function NotificationsOverlay({ model }: { model: EcoBudMobileModel }) {
 
 export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
   switch (model.activeOverlay) {
+    case 'accessibility':
+      return <AccessibilityOverlay model={model} />;
     case 'coinsHistory':
       return <CoinsHistoryOverlay model={model} />;
     case 'redeemPoints':
@@ -1717,7 +1762,7 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
     case 'claimParticles':
       return <ClaimParticlesOverlay model={model} />;
     case 'streakUnlocked':
-      return <ChallengeStreakOverlay model={model} />;
+      return <StreakUnlockedOverlay model={model} />;
     case 'streakRewards':
       return <ChallengeStreakOverlay model={model} />;
     case 'badgeUnlocked':
@@ -2169,7 +2214,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
     : DEFAULT_LAGUNA_CENTER.longitude;
 
   const phEvents = React.useMemo(() => {
-    return (model.events || []).filter((event: any) => 
+    return (model.events || []).filter((event: any) =>
       event.latitude && event.longitude && isWithinPhilippines(event.latitude, event.longitude)
     );
   }, [model.events]);
@@ -2214,7 +2259,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
         <style>
           * { box-sizing: border-box; }
           html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-          
+
           .custom-popup .leaflet-popup-content-wrapper {
             background: #0E1512; color: #F1F5F9; border-radius: 14px;
             padding: 2px;
@@ -2233,7 +2278,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             display: block; text-align: center; box-shadow: 0 2px 8px rgba(16,185,129,0.3);
           }
           .popup-btn:active { opacity: 0.85; }
-          
+
           .user-marker {
             background-color: #3B82F6; width: 18px; height: 18px; border-radius: 50%;
             border: 3px solid #ffffff; box-shadow: 0 0 14px rgba(59,130,246,0.9);
@@ -2374,7 +2419,7 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
             L.marker([userLoc.lat, userLoc.lng], { icon: userIcon })
               .addTo(map)
               .bindPopup('<b>Your Live Location</b><br/>Philippines');
-            
+
             map.flyTo([userLoc.lat, userLoc.lng], 13, { duration: 2.2 });
           }
 
@@ -2804,12 +2849,12 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const featuredEvent = model.events[0] ?? null;
   const otherEvents = featuredEvent ? model.events.slice(1) : model.events;
   const allEvents = featuredEvent ? [featuredEvent, ...otherEvents] : otherEvents;
-  
+
   const displayedEvents = allEvents.filter((event) => {
     if (model.focusedEventId) return event.id === model.focusedEventId;
     const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
     const hasJoined = event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
-    
+
     if (activeTab === 'joined') return hasJoined;
     if (activeTab === 'browse') return lc !== 'ended' && !hasJoined;
     return lc === 'ended';
@@ -3185,10 +3230,10 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         <View style={{ height: 100 }} />
       </ScrollView>
       {attendanceEvent && (
-        <EventAttendanceOverlay 
-          eventId={attendanceEvent} 
+        <EventAttendanceOverlay
+          eventId={attendanceEvent}
           model={model}
-          onClose={() => setAttendanceEvent(null)} 
+          onClose={() => setAttendanceEvent(null)}
         />
       )}
       <RejectionModal
@@ -4097,7 +4142,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
             <SurfaceCard onLayout={({ nativeEvent }) => { lessonCardY.current = nativeEvent.layout.y; }} style={styles.lessonDetailCard}>
               <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{model.selectedLesson.title}</Text>
               <Text style={[styles.sectionCaption, { color: theme.colors.textMuted }]}>{model.selectedLesson.description}</Text>
-              
+
               {model.selectedLesson.durationMinutes ? (
                 <View style={{
                   flexDirection: 'row',
@@ -6605,10 +6650,10 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   }, [page, fadeAnim, slideAnim]);
 
   const isPageOne = page === 1;
-  
+
   const top3 = isPageOne ? currentPageItems.slice(0, 3) : [];
   const remainingList = isPageOne ? currentPageItems.slice(3) : currentPageItems;
-  
+
   const podiumLeaders = [];
   if (top3[1]) podiumLeaders.push({ ...top3[1], badgeColor: '#B0BEC5', avatarSize: 64, cardStyle: { marginTop: 40 } });
   if (top3[0]) podiumLeaders.push({ ...top3[0], badgeColor: '#FFD700', avatarSize: 80, cardStyle: {} });
@@ -6720,8 +6765,8 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                     {
                       backgroundColor: isDark ? theme.colors.surfaceMuted : '#FFF',
                       borderWidth: 1,
-                      borderColor: user.isCurrentUser 
-                        ? (isDark ? theme.colors.primary : '#126027') 
+                      borderColor: user.isCurrentUser
+                        ? (isDark ? theme.colors.primary : '#126027')
                         : (isDark ? theme.colors.cardBorder : '#EBF2EE'),
                     },
                   ]}
@@ -6747,15 +6792,15 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
                     avatarUrl={userAvatar}
                   />
                   <View style={{ flex: 1, marginHorizontal: 12, justifyContent: 'center' }}>
-                    <Text 
+                    <Text
                       style={[
-                        styles.cardTitle, 
-                        { 
-                          fontSize: 15, 
+                        styles.cardTitle,
+                        {
+                          fontSize: 15,
                           fontWeight: user.isCurrentUser ? '800' : '700',
-                          color: theme.colors.textPrimary 
+                          color: theme.colors.textPrimary
                         }
-                      ]} 
+                      ]}
                       numberOfLines={1}
                       ellipsizeMode="tail"
                     >
@@ -6936,7 +6981,7 @@ interface FireRainParticleProps {
 function generateFireRainParticles(count: number) {
   const { width, height } = Dimensions.get('window');
   const colors = ['#FF3D00', '#FF9100', '#FFD600', '#FFEA00', '#FF5722', '#FFC107'];
-  
+
   return Array.from({ length: count }, (_, i) => {
     return {
       id: i,
@@ -7157,7 +7202,7 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView ref={formScroll.scrollRef} showsVerticalScrollIndicator={false} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
-          
+
           <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>Username</Text>
           <SurfaceCard style={{ padding: 16, backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1 }}>
             <TextInput
@@ -8388,20 +8433,20 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                 flex: 1,
                 paddingVertical: 10,
                 borderRadius: 12,
-                backgroundColor: activeTab === tab 
-                  ? (isDark ? theme.colors.primary : '#126027') 
+                backgroundColor: activeTab === tab
+                  ? (isDark ? theme.colors.primary : '#126027')
                   : (isDark ? theme.colors.surfaceMuted : '#F3F4F6'),
                 alignItems: 'center',
                 borderWidth: isDark ? 1 : 0,
                 borderColor: isDark ? (activeTab === tab ? theme.colors.primary : theme.colors.border) : 'transparent',
               }}
             >
-              <Text style={{ 
-                color: activeTab === tab 
-                  ? (isDark ? '#0E1512' : '#FFF') 
-                  : (isDark ? theme.colors.textMuted : '#6B7280'), 
-                fontWeight: '700', 
-                fontSize: 13 
+              <Text style={{
+                color: activeTab === tab
+                  ? (isDark ? '#0E1512' : '#FFF')
+                  : (isDark ? theme.colors.textMuted : '#6B7280'),
+                fontWeight: '700',
+                fontSize: 13
               }}>
                 {tab === 'shop' ? 'Shop' : `My Requests${myRequests.length > 0 ? ` (${myRequests.length})` : ''}`}
               </Text>
@@ -8456,7 +8501,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
                         disabled={!canAfford || isRedeeming || hasPendingRequest}
                         style={{
                           backgroundColor: hasPendingRequest ? (isDark ? '#3D2C0C' : '#FEF3C7') : canAfford
-                            ? (isDark ? theme.colors.primary : '#126027') 
+                            ? (isDark ? theme.colors.primary : '#126027')
                             : (isDark ? theme.colors.surfaceMuted : '#E5E7EB'),
                           borderRadius: 20,
                           paddingVertical: 12,

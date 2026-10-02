@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleProp, ViewStyle } from 'react-native';
+import { Easing, StyleProp, ViewStyle } from 'react-native';
+import { Animated } from '../accessibility/animations';
 
 /**
  * Small native-driven entrance transition for routes, overlays, and hub screens.

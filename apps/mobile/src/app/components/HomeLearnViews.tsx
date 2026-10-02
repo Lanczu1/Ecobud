@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Text, View, TextInput, ScrollView, FlatList, RefreshControl, TouchableOpacity, Image, useWindowDimensions, StyleSheet, Keyboard, Platform } from 'react-native';
+import { View, ScrollView, FlatList, RefreshControl, Image, useWindowDimensions, StyleSheet, Keyboard, Platform } from 'react-native';
+import { Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { styles } from '../styles/appStyles';
 import { type EcoBudMobileModel, type LessonWithProgress } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
@@ -22,8 +23,12 @@ import { HomeViewSkeleton, HomeCardsSkeleton, LearnViewSkeleton } from '../../sh
 import { useTheme } from '../../shared/theme/ecoTheme';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { triggerSelectionHaptic } from '../utils/haptics';
+import { areHomeDashboardRowsEqual, type HomeDashboardRowProps } from '../utils/homeDashboardRows';
 
 export { getCategoryDetails };
+
+const HomeProgressCard = React.memo(UnifiedProgressCard);
+const HomeFeed = React.memo(ForYouFeed);
 
 type LearnLayoutMode = 'grid' | 'list';
 
@@ -103,7 +108,7 @@ const getGreetingInfo = (): { text: string; icon: keyof typeof Ionicons.glyphMap
   try {
     const timeString = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour12: false, hour: 'numeric' });
     const hour = parseInt(timeString, 10);
-    
+
     if (!isNaN(hour)) {
       if (hour >= 5 && hour < 12) return { text: 'Good morning', icon: 'sunny', iconColor: '#F59E0B' };
       if (hour >= 12 && hour < 18) return { text: 'Good afternoon', icon: 'partly-sunny', iconColor: '#F97316' };
@@ -115,10 +120,8 @@ const getGreetingInfo = (): { text: string; icon: keyof typeof Ionicons.glyphMap
   return { text: 'Hello', icon: 'sparkles', iconColor: '#10B981' };
 };
 
-export function HomeView({ model }: { model: EcoBudMobileModel }) {
+export const HomeView = React.memo(function HomeView({ model, section }: HomeDashboardRowProps) {
   const { theme, isDark } = useTheme();
-  const { width } = useWindowDimensions();
-  const isTablet = width >= 600;
 
   // Show card skeleton on cold launch when there is genuinely no data yet
   const isCardsLoading = !model.dashboard && (model.isHydrating || model.initializing || model.booting);
@@ -127,27 +130,35 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   const currentStreak = model.dashboard?.streak ?? model.session?.user.currentStreak ?? 0;
   const baseEcoPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
   const ecoPoints = (model.activeOverlay === 'lessonCompleted' || model.activeOverlay === 'eventApproved')
-    ? Math.max(0, baseEcoPoints - (model.earnedPoints || 0)) 
+    ? Math.max(0, baseEcoPoints - (model.earnedPoints || 0))
     : baseEcoPoints;
-  const weeklyGoal = model.dashboard?.weeklyGoal ?? 0;
-  const firstDiscoverChallenge = model.challenges?.slice().sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))[0] || null;
-  const featuredLesson = model.lessons?.find((l: any) => l.featured) || (model.lessons && model.lessons.length > 0 ? model.lessons[0] : null);
-  const featuredEvent = model.events.find((e) => e.isFeatured) || model.events[0] || null;
+  const showFeed = section === undefined || section === 3;
+  const firstDiscoverChallenge = React.useMemo(() => showFeed ? model.challenges.find(item => item.isFeatured) ?? model.challenges[0] ?? null : null, [showFeed, model.challenges]);
+  const featuredLesson = React.useMemo(() => showFeed ? model.lessons.find(item => item.featured) ?? model.lessons[0] ?? null : null, [showFeed, model.lessons]);
+  const featuredEvent = React.useMemo(() => showFeed ? model.events.find(item => item.isFeatured) ?? model.events[0] ?? null : null, [showFeed, model.events]);
+  const openRoadmap = React.useCallback(() => model.setActiveOverlay('ecoLevels'), [model.setActiveOverlay]);
+  const openStreak = React.useCallback(() => model.setActiveOverlay('streakUnlocked'), [model.setActiveOverlay]);
+  const openLeaderboard = React.useCallback(() => model.setActiveOverlay('leaderboard'), [model.setActiveOverlay]);
+  const openEvents = React.useCallback(() => model.setActiveOverlay('events'), [model.setActiveOverlay]);
+  const seeLessons = React.useCallback(() => model.setActiveTab('learn'), [model.setActiveTab]);
+  const seeChallenges = React.useCallback(() => model.setActiveTab('challenges'), [model.setActiveTab]);
+  const openLesson = React.useCallback((id: string) => { void model.openLesson(id); }, [model.openLesson]);
   const isHabitPending = model.todaysCompletedHabits === 0;
 
-  const greeting = getGreetingInfo();
+  const greeting = section === undefined || section === 0 ? getGreetingInfo() : null;
   const firstName = model.userDisplayName.split(' ')[0] || 'Eco-Warrior';
 
   return (
     <>
-      <TopNavbar model={model} />
-      <View style={styles.homeContent}>
+      {(section === undefined || section === 0) && <TopNavbar model={model} />}
+      <View style={[styles.homeContent, section !== undefined && section !== 3 && { paddingBottom: 0 }]}>
+        {(section === undefined || section === 0) && <>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
           <View style={{ flex: 1, paddingRight: scale(8) }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
-              <Ionicons name={greeting.icon} size={scale(18)} color={greeting.iconColor} />
+              <Ionicons name={greeting!.icon} size={scale(18)} color={greeting!.iconColor} />
               <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                {greeting.text}
+                {greeting!.text}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
@@ -176,23 +187,25 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
 
         {/* Discoverable AI Assistant Bar (Replaces floating FAB) */}
         <AiAssistantBar onPress={() => model.setActiveOverlay('assistant')} />
+        </>}
 
         {isCardsLoading ? (
-          <HomeCardsSkeleton />
+          (section === undefined || section === 1) ? <HomeCardsSkeleton /> : null
         ) : (
           <>
             {/* Quick Action Grid with Hero Primary CTA indicator */}
-            <QuickActions model={model} isHabitPending={isHabitPending} />
+            {(section === undefined || section === 1) && <QuickActions model={model} isHabitPending={isHabitPending} />}
 
             {/* Consolidated Gamification Progress Card */}
-            <UnifiedProgressCard
+            {(section === undefined || section === 2) && <>
+            <HomeProgressCard
               ecoPoints={ecoPoints}
               currentStreak={currentStreak}
               streakActive={model.dashboard?.streakSummary?.active ?? false}
               leaderboard={model.leaderboard}
-              onOpenRoadmap={() => model.setActiveOverlay('ecoLevels')}
-              onOpenStreak={() => model.setActiveOverlay('streakUnlocked')}
-              onOpenLeaderboard={() => model.setActiveOverlay('leaderboard')}
+              onOpenRoadmap={openRoadmap}
+              onOpenStreak={openStreak}
+              onOpenLeaderboard={openLeaderboard}
               onProgressBarMeasured={model.setProgressBarLayout}
             />
 
@@ -202,26 +215,27 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                 <Text style={styles.metaTextSmallDark}>Pull to refresh and load your latest streak, eco points, and weekly goal.</Text>
               </SurfaceCard>
             ) : null}
+            </>}
 
             {/* Consolidated Horizontal "For You" Feed */}
-            <ForYouFeed
+            {(section === undefined || section === 3) && <HomeFeed
               lesson={featuredLesson}
               challenge={firstDiscoverChallenge}
               event={featuredEvent}
-              onOpenLesson={(id) => void model.openLesson(id)}
-              onOpenChallenge={(challenge) => model.openChallengeMission(challenge)}
-              onOpenEvent={(_e) => model.setActiveOverlay('events')}
-              onSeeAllLessons={() => model.setActiveTab('learn')}
-              onSeeAllChallenges={() => model.setActiveTab('challenges')}
-              onSeeAllEvents={() => model.setActiveOverlay('events')}
+              onOpenLesson={openLesson}
+              onOpenChallenge={model.openChallengeMission}
+              onOpenEvent={openEvents}
+              onSeeAllLessons={seeLessons}
+              onSeeAllChallenges={seeChallenges}
+              onSeeAllEvents={openEvents}
               hasPendingHabit={isHabitPending}
-            />
+            />}
           </>
         )}
       </View>
     </>
   );
-}
+}, areHomeDashboardRowsEqual);
 
 export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }: {
   model: EcoBudMobileModel;
@@ -407,15 +421,15 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
                 </Text>
               </View>
             </View>
-            
+
             {/* Progress bar */}
             <View style={{ height: verticalScale(6), backgroundColor: '#0D381A', borderRadius: 3, overflow: 'hidden', marginBottom: verticalScale(6) }}>
               <View style={{ width: `${progressPercentage}%`, height: '100%', backgroundColor: '#5DDF87', borderRadius: 3 }} />
             </View>
-            
+
             <Text style={{ color: '#C8E6D3', fontSize: responsiveFontSize(11), fontWeight: '600' }}>
-              {progressPercentage === 100 
-                ? "Outstanding! You've mastered all available lessons!" 
+              {progressPercentage === 100
+                ? "Outstanding! You've mastered all available lessons!"
                 : `Keep going! You are ${progressPercentage}% through the courses.`}
             </Text>
           </View>
@@ -426,7 +440,7 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
           return (
             <View style={{ marginTop: verticalScale(14), marginBottom: verticalScale(6) }}>
               <Text style={[styles.cardTitle, { marginBottom: verticalScale(10), fontSize: responsiveFontSize(15), color: theme.colors.textPrimary }]}>Jump Back In</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => void model.openLesson(continueLesson.id)}
                 activeOpacity={0.9}
                 style={{
@@ -562,7 +576,7 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
           {['All Categories', 'Featured', ...Array.from(new Set(model.lessons.map(l => l.category || 'General')))].map((category) => {
             const isActive = model.learnCategory === category;
             const { name, iconName, iconColor } = getCategoryDetails(category, isActive);
-            
+
             return (
               <TouchableOpacity
                 key={category}
@@ -579,11 +593,11 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
                   marginRight: scale(8),
                 }}
               >
-                <Ionicons 
-                  name={iconName} 
-                  size={scale(15)} 
-                  color={isActive ? (isDark ? theme.colors.primary : iconColor) : theme.colors.textMuted} 
-                  style={{ marginRight: scale(5) }} 
+                <Ionicons
+                  name={iconName}
+                  size={scale(15)}
+                  color={isActive ? (isDark ? theme.colors.primary : iconColor) : theme.colors.textMuted}
+                  style={{ marginRight: scale(5) }}
                 />
                 <Text
                   style={{

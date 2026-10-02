@@ -12,12 +12,12 @@
 import React, { useEffect, useRef } from 'react';
 import {
   View,
-  Text,
-  Animated,
   StyleSheet,
   Easing,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { Text } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import Svg, { Path, Ellipse, Defs, RadialGradient as SvgRadialGradient, Stop } from 'react-native-svg';
 
 // ─────────────────────────────────────────────────────────────

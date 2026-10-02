@@ -1,12 +1,11 @@
 import React from 'react';
 import {
   StyleSheet,
-  Text,
   View,
   ScrollView,
-  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { OverlayScaffold, SurfaceCard } from './CommonComponents';

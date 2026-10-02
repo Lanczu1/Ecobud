@@ -3,9 +3,9 @@ import React from 'react';
 import {
   Image,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { Text } from '../../shared/accessibility/primitives';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
 export function DailyTipCard({ title, description }: { title?: string; description?: string }) {

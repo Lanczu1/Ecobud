@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAccessibility } from '../accessibility/AccessibilityContext';
 import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import type { ImageProps as ExpoImageProps } from 'expo-image/build/Image.types';
@@ -36,6 +37,7 @@ export function FastImage({
   onError,
   ...props
 }: FastImageProps) {
+  const { preferences } = useAccessibility();
   const [hasError, setHasError] = useState(false);
 
   const thumbOptions = thumbnailWidth || imageQuality ? {
@@ -71,7 +73,7 @@ export function FastImage({
       style={style as ImageStyle}
       contentFit={fit}
       cachePolicy={cachePolicy}
-      transition={transition}
+      transition={preferences.performance ? 0 : transition}
       priority="high"
       recyclingKey={typeof resolvedSource === 'object' ? resolvedSource.uri : undefined}
       placeholder={props.placeholder || { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}

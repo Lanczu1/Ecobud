@@ -1,13 +1,12 @@
 import React, { useRef, useState } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Image,
   useWindowDimensions,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -61,7 +60,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       setMode('image_preview');
     }
   };
-  
+
   const handleTakePhoto = async () => {
     if (!permission?.granted) {
       const result = await requestPermission();
@@ -102,10 +101,10 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
     scanSubmittedRef.current = true;
     setUploadProgress(0);
     setMode('uploading');
-    
+
     try {
       if (!session) throw new Error('Not authenticated');
-      
+
       const result = await homeService.submitEventAttendance(
         session.token,
         eventId,
@@ -115,7 +114,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       );
 
       if (!result.success) throw new Error(result.message || 'Failed to submit attendance');
-      
+
       setMode('success');
       model.refreshEverything(); // Refresh to update userStatus
     } catch (err: any) {
@@ -143,7 +142,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       </View>
     );
   }
-  
+
   if (mode === 'success') {
     return (
       <View style={styles.overlayContainer}>
@@ -206,7 +205,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
 
           <Text style={styles.titleText}>Verify with Image</Text>
           <Text style={styles.descText}>Make sure this photo clearly shows you at {event?.title || 'the event'}.</Text>
-          
+
           <View style={[styles.imagePreviewContainer, { maxHeight: previewMaxHeight }]}>
             {capturedImage && <Image source={{ uri: capturedImage }} style={styles.imagePreview} />}
             <View style={styles.photoBadge}>
@@ -218,7 +217,7 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
               <Text style={styles.photoCaptionHint}>You can retake or choose another photo.</Text>
             </View>
           </View>
-          
+
           <View style={styles.previewActions}>
             <PrimaryButton label="Continue to QR scan" onPress={async () => {
               if (!permission?.granted) {
@@ -244,14 +243,14 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       <View style={styles.content}>
         <Text style={styles.titleText}>Submit Picture</Text>
         <Text style={styles.descText}>Step 1: Provide a photo of yourself participating in {event?.title}.</Text>
-        
+
         <View style={styles.optionsContainer}>
           <TouchableOpacity style={styles.optionCard} onPress={handlePickImage}>
             <Ionicons name="images" size={40} color={theme.colors.primary} />
             <Text style={styles.optionTitle}>Upload Photo</Text>
             <Text style={styles.optionDesc}>Upload a photo from your gallery.</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.optionCard} onPress={handleTakePhoto}>
             <Ionicons name="camera" size={40} color={theme.colors.primary} />
             <Text style={styles.optionTitle}>Take Photo</Text>

@@ -1,0 +1,46 @@
+/* Announcement Preview & Content Markdown Styles */
+.announcement-preview {
+  padding: 20px;
+  border: 1px solid #d6e5dc;
+  border-radius: 16px;
+  background: #f5fbf7;
+  overflow-wrap: anywhere;
+}
+
+.announcement-preview.is-mobile {
+  width: min(100%, 360px);
+  margin: 0 auto;
+}
+
+.dark .announcement-preview {
+  background: #122019;
+  border-color: #233d30;
+}
+
+.announcement-content p {
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.announcement-content ul,
+.announcement-content ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.announcement-content ul {
+  list-style: disc;
+}
+
+.announcement-content ol {
+  list-style: decimal;
+}
+
+.announcement-content a {
+  color: #166534;
+  text-decoration: underline;
+}
+
+.dark .announcement-content a {
+  color: #84d9b0;
+}

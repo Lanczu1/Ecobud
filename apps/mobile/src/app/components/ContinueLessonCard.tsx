@@ -3,9 +3,9 @@ import React from 'react';
 import {
   Image,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { Text } from '../../shared/accessibility/primitives';
 
 export function ContinueLessonCard() {
   return (

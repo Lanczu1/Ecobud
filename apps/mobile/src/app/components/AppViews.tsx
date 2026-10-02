@@ -1,28 +1,25 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   Image,
-  Animated,
   Platform,
   ScrollView,
   FlatList,
   RefreshControl,
   ActivityIndicator,
   ImageBackground,
-  Pressable,
   Easing,
   KeyboardAvoidingView,
   useWindowDimensions,
   StyleSheet,
   Alert,
   Keyboard,
-  TextInput,
-  Modal,
   Switch,
   type StyleProp,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TouchableOpacity, Pressable, TextInput } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -52,7 +49,7 @@ import {
 } from './CommonComponents';
 import { CoachMarkTarget } from './CoachMarkTarget';
 import { RejectionModal } from './RejectionModal';
-import { FireStreak } from './FireStreak';
+import { StreakFlame } from './StreakFlame';
 import { LevelCard, getLevelFromPoints } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
@@ -67,6 +64,8 @@ import { ecobudApiOrigin, type ChallengeWithProgress } from '../../shared/api/ec
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { ChallengesViewSkeleton, LeaderboardSkeleton, TrackerCardsSkeleton } from '../../shared/ui/SkeletonLoaders';
 import { triggerSelectionHaptic } from '../utils/haptics';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
+import { TextSizeMultiplierContext } from '../../shared/accessibility/primitives';
 
 const getValidImageUrl = (url: string | null | undefined) => {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
@@ -446,9 +445,9 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
   }, [pulseAnim]);
 
   const hour = new Date().getHours();
-  const greetingInfo = hour >= 5 && hour < 12 
+  const greetingInfo = hour >= 5 && hour < 12
     ? { text: 'Good morning', icon: 'sunny' as const, color: '#F59E0B' }
-    : hour >= 12 && hour < 18 
+    : hour >= 12 && hour < 18
     ? { text: 'Good afternoon', icon: 'partly-sunny' as const, color: '#F97316' }
     : { text: 'Good evening', icon: 'moon' as const, color: '#6366F1' };
 
@@ -517,7 +516,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                 )}
                 <View style={localStyles.featuredOverlay} />
                 <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.9)']} style={localStyles.featuredGradient} />
-                
+
                 <View style={localStyles.featuredContent}>
                   <View style={[styles.rowBetween, { marginBottom: 16, alignItems: 'flex-start' }]}>
                     <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', flex: 1 }}>
@@ -545,7 +544,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                         </View>
                       )}
                     </View>
-                    
+
                     {model.viewedMissionIds.includes(challenge.id) ? (
                       <View style={[localStyles.glassTag, { backgroundColor: 'rgba(59, 130, 246, 0.3)', borderColor: 'rgba(59, 130, 246, 0.5)', marginLeft: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
                         <Ionicons name="eye" size={11} color="#EFF6FF" />
@@ -558,7 +557,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
                       </View>
                     )}
                   </View>
-                  
+
                   <Text style={{ fontSize: 34, fontWeight: '900', color: '#FFF', marginBottom: 10, letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 }}>{challenge.title}</Text>
                   <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.9)', marginBottom: 24, lineHeight: 24, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{challenge.description}</Text>
 
@@ -760,21 +759,21 @@ const AnimatedStartButton = ({ challenge, model, pulseAnim }: { challenge: any, 
 
   return (
     <Animated.View style={shouldPulse ? { transform: [{ scale: Animated.multiply(pulseAnim, scaleAnim) }] } : { transform: [{ scale: scaleAnim }] }}>
-      <TouchableOpacity 
+      <TouchableOpacity
         activeOpacity={0.8}
         onPress={handlePress}
         disabled={isPressing || isPending || isCompleted || isClaiming}
         style={
-          isApproved 
-            ? [styles.featuredProgramBtn, { backgroundColor: '#F59E0B', borderColor: '#D97706' }] 
-            : isApprovedCollection 
+          isApproved
+            ? [styles.featuredProgramBtn, { backgroundColor: '#F59E0B', borderColor: '#D97706' }]
+            : isApprovedCollection
               ? [styles.featuredProgramBtn, { backgroundColor: '#1D4ED8', borderColor: '#1E40AF' }]
               : (isAI ? localStyles.pulseBtn : styles.featuredProgramBtn)
         }
       >
         <Text style={isApproved ? [styles.featuredProgramBtnText, { color: '#FFFFFF' }] : (isAI ? localStyles.pulseBtnText : styles.featuredProgramBtnText)}>
-          {isCompleted 
-            ? 'CHALLENGE FINISHED' 
+          {isCompleted
+            ? 'CHALLENGE FINISHED'
             : isApprovedCollection
               ? (challenge.progress?.submission?.afterProofUrl ? 'PENDING AFTER REVIEW' : 'TAKE AFTER PHOTO')
               : isPending
@@ -860,13 +859,23 @@ export function GroupedChallengeSkeleton() {
   );
 }
 
-export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight = 0 }: {
+export function ChallengesView(props: {
+  model: EcoBudMobileModel;
+  onSearchKeyboardChange?: (keyboardHeight: number, searchScreenY?: number) => void;
+  keyboardHeight?: number;
+}) {
+  return <TextSizeMultiplierContext.Provider value={1}><ChallengesContent {...props} /></TextSizeMultiplierContext.Provider>;
+}
+
+function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }: {
   model: EcoBudMobileModel;
   onSearchKeyboardChange?: (keyboardHeight: number, searchScreenY?: number) => void;
   keyboardHeight?: number;
 }) {
   const { theme, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
+  const { preferences } = useAccessibility();
+  const largeText = preferences.size === 'Large';
   const isCardsLoading = (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
   const searchBarRef = useRef<View>(null);
   const searchFocusedRef = useRef(false);
@@ -959,7 +968,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
   };
 
   const filteredActiveRaw = model.challenges.filter(filterChallenge);
-  
+
   // Discover: all challenges sorted with Featured first, without carrying previous in-progress submissions
   const discoverChallenges = [...filteredActiveRaw]
     .sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))
@@ -1029,8 +1038,8 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
   const completedGroups: CompletedGroup[] = [];
 
   for (const c of filteredActiveRaw) {
-    const rawSubs = c.progress?.submissions && c.progress.submissions.length > 0 
-      ? c.progress.submissions 
+    const rawSubs = c.progress?.submissions && c.progress.submissions.length > 0
+      ? c.progress.submissions
       : (c.progress?.submission ? [c.progress.submission] : []);
 
     const activeSubsForChallenge: InProgressGroup['submissions'] = [];
@@ -1043,8 +1052,8 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
 
       if (status === 'completed' || status === 'approved' || status === 'unclaimed') {
         const earnedExp = sub.expAwarded || c.expReward;
-        const earnedCoins = sub.ecoCoinsAwarded !== undefined 
-          ? sub.ecoCoinsAwarded 
+        const earnedCoins = sub.ecoCoinsAwarded !== undefined
+          ? sub.ecoCoinsAwarded
           : c.ecoCoinReward;
 
         const fullChallengeItem: ChallengeWithProgress = {
@@ -1124,7 +1133,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
   }
 
   const currentActiveList = viewMode === 'Discover' ? discoverChallenges : [];
-  const challengeColumnCount = width >= 900 ? 3 : 2;
+  const challengeColumnCount = largeText ? (width >= 900 ? 2 : 1) : width >= 900 ? 3 : 2;
   const challengeGridGap = scale(width < 360 ? 8 : 14);
   const challengeRows = React.useMemo<ChallengeWithProgress[][]>(() => contentLayout === 'grid'
     ? Array.from({ length: Math.ceil(currentActiveList.length / challengeColumnCount) }, (_, index) =>
@@ -1199,7 +1208,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
             <View style={{ flex: 1, paddingRight: scale(8) }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
                 <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
-                <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                <Text style={{ flexShrink: 1, fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
                   YOUR ECO JOURNEY
                 </Text>
               </View>
@@ -1215,6 +1224,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                       color: theme.colors.textPrimary,
                       fontSize: responsiveFontSize(26),
                       letterSpacing: -0.3,
+                      flex: 1,
                     },
                   ]}
                 >
@@ -1262,15 +1272,15 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
             { key: 'My Tasks', label: 'My Tasks', icon: 'list-circle-outline' as const, badge: inProgressGroups.length },
             { key: 'History', label: 'History', icon: 'time-outline' as const, badge: completedGroups.reduce((sum, g) => sum + g.unclaimedCount, 0), badgeColor: '#F59E0B' }
           ].map(tab => (
-            <TouchableOpacity 
-              key={tab.key} 
+            <TouchableOpacity
+              key={tab.key}
               style={{
                 flex: 1,
                 paddingVertical: 10,
                 alignItems: 'center',
                 justifyContent: 'center',
-                flexDirection: 'row',
-                gap: 5,
+                flexDirection: largeText ? 'column' : 'row',
+                gap: largeText ? 8 : 5,
                 borderRadius: 10,
                 backgroundColor: viewMode === tab.key ? theme.colors.card : 'transparent',
                 shadowColor: viewMode === tab.key ? '#000' : 'transparent',
@@ -1280,22 +1290,22 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
               }}
               onPress={() => setViewMode(tab.key as any)}
             >
-              <Ionicons 
-                name={tab.icon} 
-                size={15} 
-                color={viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted} 
+              <Ionicons
+                name={tab.icon}
+                size={15}
+                color={viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted}
               />
-              <Text style={{ fontWeight: '700', color: viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted, fontSize: 13 }}>{tab.label}</Text>
+              <Text style={{ textAlign: 'center', flexShrink: 1, fontWeight: '700', color: viewMode === tab.key ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted, fontSize: 13 }}>{tab.label}</Text>
               {tab.badge > 0 && (
-                <View 
-                  style={{ 
-                    backgroundColor: tab.badgeColor || (isDark ? theme.colors.primary : '#126027'), 
-                    paddingHorizontal: 5, 
-                    paddingVertical: 1, 
-                    borderRadius: 8, 
-                    minWidth: 16, 
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                <View
+                  style={{
+                    backgroundColor: tab.badgeColor || (isDark ? theme.colors.primary : '#126027'),
+                    paddingHorizontal: 5,
+                    paddingVertical: 1,
+                    borderRadius: 8,
+                    minWidth: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
                   <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>{tab.badge}</Text>
@@ -1324,10 +1334,10 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
           )}
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, maxHeight: 40, minHeight: 40 }} contentContainerStyle={{ paddingRight: 20 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, flexGrow: 0 }} contentContainerStyle={{ paddingRight: 20, paddingVertical: 4, alignItems: 'center' }}>
           {categories.map((cat, index) => (
-            <TouchableOpacity 
-              key={index} 
+            <TouchableOpacity
+              key={index}
               style={{
                 backgroundColor: selectedCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.card,
                 paddingHorizontal: 16,
@@ -1337,6 +1347,8 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                 borderWidth: 1,
                 borderColor: selectedCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.border,
                 alignSelf: 'center',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
               onPress={() => setSelectedCategory(cat)}
             >
@@ -1368,15 +1380,15 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
 
         {/* Headings */}
         {((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedGroups.length > 0)) && (
-          <View style={[localStyles.challengeListHeading, { gap: scale(10) }]}>
-            <View style={{ flex: 1 }}>
+          <View style={[localStyles.challengeListHeading, { gap: scale(10) }, largeText && { flexDirection: 'column', alignItems: 'stretch' }]}>
+            <View style={{ flex: largeText ? undefined : 1, minWidth: 0 }}>
               <Text style={[localStyles.challengeListTitle, { color: theme.colors.textPrimary }]}>
-                {isFiltering 
-                  ? 'Search results' 
-                  : viewMode === 'Discover' 
-                  ? 'New missions for you' 
-                  : viewMode === 'My Tasks' 
-                  ? 'In progress (Grouped by Mission)' 
+                {isFiltering
+                  ? 'Search results'
+                  : viewMode === 'Discover'
+                  ? 'New missions for you'
+                  : viewMode === 'My Tasks'
+                  ? 'In progress (Grouped by Mission)'
                   : 'Completed challenges (Grouped by Mission)'}
               </Text>
               {viewMode === 'Discover' && !isFiltering && <Text style={[localStyles.challengeListSubtitle, { color: theme.colors.textMuted }]}>Tap a mission to see how you can help.</Text>}
@@ -1493,7 +1505,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                 const isExpanded = expandedTaskGroups[challenge.id] !== false; // default true
 
               return (
-                <View 
+                <View
                   key={challenge.id}
                   style={{
                     backgroundColor: theme.colors.card,
@@ -1509,7 +1521,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                   }}
                 >
                   {/* Group Header Card (Click to expand/collapse) */}
-                  <Pressable 
+                  <Pressable
                     onPress={() => toggleTaskGroup(challenge.id)}
                     style={({ pressed }) => [
                       { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
@@ -1624,7 +1636,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                         };
 
                         return (
-                          <View 
+                          <View
                             key={item.uniqueId}
                             style={{
                               backgroundColor: theme.colors.card,
@@ -1678,7 +1690,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                             {/* Submission Proof Image */}
                             {item.sub?.proofUrl && (
                               <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.cardBorder, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAFC' }}>
-                                <Image 
+                                <Image
                                   source={{ uri: item.sub.proofUrl }}
                                   style={{ width: '100%', height: 140 }}
                                   resizeMode="cover"
@@ -1700,7 +1712,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                               {/* Action Button for this specific sub-item */}
                             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
                               {isApprovedCollection && !item.afterProofUrl ? (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                   style={{ backgroundColor: isDark ? '#2563EB' : '#1D4ED8', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                                   onPress={() => model.openChallengeMission(fullChallengeItem)}
                                 >
@@ -1710,7 +1722,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                                   </Text>
                                 </TouchableOpacity>
                               ) : isRejected ? (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                   style={{ backgroundColor: '#DC2626', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                                   onPress={() => {
                                     setRejectionModal({
@@ -1755,7 +1767,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                 const isExpanded = expandedTaskGroups[historyGroupKey] === true;
 
                 return (
-                  <View 
+                  <View
                   key={challenge.id}
                   style={{
                     backgroundColor: theme.colors.card,
@@ -1771,7 +1783,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                   }}
                 >
                   {/* Group Header Card (Click to expand/collapse) */}
-                  <Pressable 
+                  <Pressable
                     onPress={() => setExpandedTaskGroups((prev) => ({ ...prev, [historyGroupKey]: !isExpanded }))}
                     style={({ pressed }) => [
                       { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
@@ -1857,7 +1869,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                         const isClaiming = model.claimingChallengeId === claimId;
 
                         return (
-                          <View 
+                          <View
                             key={item.uniqueId}
                             style={{
                               backgroundColor: theme.colors.card,
@@ -1903,7 +1915,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
                             {/* Submission Proof Image */}
                             {item.sub?.proofUrl && (
                               <TouchableOpacity activeOpacity={0.8} onPress={() => setPreviewImage(item.sub.proofUrl)} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.cardBorder, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F8FAFC' }}>
-                                <Image 
+                                <Image
                                   source={{ uri: item.sub.proofUrl }}
                                   style={{ width: '100%', height: 140 }}
                                   resizeMode="cover"
@@ -1969,7 +1981,7 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
           <View style={{ flexDirection: 'row', gap: contentLayout === 'grid' ? challengeGridGap : 0, paddingHorizontal: scale(24), marginBottom: contentLayout === 'grid' ? challengeGridGap : 0 }}>
             {challengeRow.map((challenge, columnIndex) => {
               const challengeIndex = contentLayout === 'grid' ? rowIndex * challengeColumnCount + columnIndex : rowIndex;
-              const card = <DiscoverChallengeCard challenge={challenge} isTablet={contentLayout === 'grid'}
+              const card = <DiscoverChallengeCard challenge={challenge} isTablet={contentLayout === 'grid' && !largeText}
                 style={{ marginBottom: contentLayout === 'grid' ? 0 : verticalScale(16), width: '100%' }}
                 onPress={() => model.openChallengeMission(challenge)} />;
               return <View key={challenge.uniqueId || challenge.id} style={{ flex: 1 }}>
@@ -2019,25 +2031,25 @@ export function ChallengesView({ model, onSearchKeyboardChange, keyboardHeight =
 
       <Modal visible={!!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
-          <TouchableOpacity 
-            style={{ 
-              position: 'absolute', 
-              top: Platform.OS === 'android' ? 24 : 12, 
-              right: 20, 
-              zIndex: 20, 
+          <TouchableOpacity
+            style={{
+              position: 'absolute',
+              top: Platform.OS === 'android' ? 24 : 12,
+              right: 20,
+              zIndex: 20,
               padding: 10,
               backgroundColor: 'rgba(255,255,255,0.2)',
               borderRadius: 22,
-            }} 
+            }}
             onPress={() => setPreviewImage(null)}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Ionicons name="close" size={26} color="#FFF" />
           </TouchableOpacity>
           {previewImage && (
-            <Image 
-              source={{ uri: previewImage }} 
-              style={{ width: '92%', height: '82%', resizeMode: 'contain' }} 
+            <Image
+              source={{ uri: previewImage }}
+              style={{ width: '92%', height: '82%', resizeMode: 'contain' }}
             />
           )}
         </SafeAreaView>
@@ -2148,7 +2160,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
   const lbStartIndex = (leaderboardPage - 1) * 10;
   const lbEndIndex = lbStartIndex + 10;
   const lbCurrentItems = leaderboardItems.slice(lbStartIndex, lbEndIndex);
-  
+
   const isLbPageOne = leaderboardPage === 1;
   const podiumTop3 = isLbPageOne ? lbCurrentItems.slice(0, 3) : [];
   const rankListItems = lbCurrentItems;
@@ -2287,27 +2299,34 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
             <View style={trackerStyles.calNavRow}>
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Previous month"
                 onPress={() => void model.loadTrackerMonth(-1)}
-                style={[trackerStyles.calNavBtn, { backgroundColor: theme.colors.surfaceMuted }]}
+                style={[trackerStyles.calNavBtn, { left: 0, backgroundColor: theme.colors.surfaceMuted }]}
               >
                 <Feather name="chevron-left" size={20} color={theme.colors.icon} />
               </TouchableOpacity>
-              <View style={{ alignItems: 'center' }}>
+              <View style={{ width: '100%', minWidth: 0, alignItems: 'center' }}>
                 {(() => {
                   const currentStreak = getDisplayStreak(model);
-                  const isStreakActive = model.dashboard?.streakSummary?.active ?? false;
-                  
+                  const isStreakActive = currentStreak >= 3 && (model.dashboard?.streakSummary?.active ?? false);
+
                   return isStreakActive ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
                       <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? theme.colors.primary : '#169070', letterSpacing: 0.5 }}>
                         BUILDING STREAK: {currentStreak}
                       </Text>
-                      <Ionicons name="flame" size={14} color="#F97316" />
+                      <StreakFlame count={currentStreak} active={isStreakActive} size={18} />
                     </View>
                   ) : (
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 6 }}>
-                      {currentStreak} completed challenges. {currentStreak > 0 ? 'Streak inactive.' : 'Complete a challenge to start.'}
-                    </Text>
+                    <View style={{ alignItems: 'center', marginBottom: 8, width: '100%', gap: 3 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary, textAlign: 'center' }}>
+                        {currentStreak > 0 ? `${currentStreak} ${currentStreak === 1 ? 'challenge' : 'challenges'} completed` : 'Start your challenge streak'}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: theme.colors.textSecondary, textAlign: 'center' }}>
+                        {currentStreak === 0 ? 'Complete your first challenge.' : currentStreak < 3 ? `${3 - currentStreak} more ${3 - currentStreak === 1 ? 'challenge' : 'challenges'} to ignite your streak.` : 'Streak inactive. Your count is saved.'}
+                      </Text>
+                    </View>
                   );
                 })()}
                 <View style={trackerStyles.calLegendRow}>
@@ -2318,8 +2337,10 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 </View>
               </View>
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Next month"
                 onPress={() => void model.loadTrackerMonth(1)}
-                style={[trackerStyles.calNavBtn, { backgroundColor: theme.colors.surfaceMuted }]}
+                style={[trackerStyles.calNavBtn, { right: 0, backgroundColor: theme.colors.surfaceMuted }]}
               >
                 <Feather name="chevron-right" size={20} color={theme.colors.icon} />
               </TouchableOpacity>
@@ -2477,8 +2498,8 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
                 {/* Pagination Controls */}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, borderTopWidth: 1, borderColor: theme.colors.border, alignItems: 'center' }}>
-                  <TouchableOpacity 
-                    disabled={leaderboardPage === 1} 
+                  <TouchableOpacity
+                    disabled={leaderboardPage === 1}
                     onPress={() => setLeaderboardPage(leaderboardPage - 1)}
                     style={{ padding: 8, opacity: leaderboardPage === 1 ? 0.3 : 1 }}
                   >
@@ -2487,8 +2508,8 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   <Text style={{ fontWeight: '800', color: isDark ? theme.colors.primary : '#126027', fontSize: 14 }}>
                     Page {leaderboardPage} of {lbTotalPages}
                   </Text>
-                  <TouchableOpacity 
-                    disabled={leaderboardPage >= lbTotalPages} 
+                  <TouchableOpacity
+                    disabled={leaderboardPage >= lbTotalPages}
                     onPress={() => setLeaderboardPage(leaderboardPage + 1)}
                     style={{ padding: 8, opacity: leaderboardPage >= lbTotalPages ? 0.3 : 1 }}
                   >
@@ -2641,7 +2662,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
   const totalPoints = model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
   const { currentLevelObj, nextLevelObj } = getLevelFromPoints(totalPoints);
-  
+
   const isMaxLevel = currentLevelObj.level === 10;
   let progressPercent = 100;
   let pointsToNext = 0;
@@ -2658,13 +2679,13 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
   return (
     <>
       <TopNavbar model={model} />
-      
+
       {/* Background Decor Orbs */}
       <View style={profileStyles.backgroundOrbOne} />
       <View style={profileStyles.backgroundOrbTwo} />
 
       <View style={styles.homeContent}>
-        
+
         {/* Profile Card Banner */}
         <LinearGradient
           colors={['#126027', '#0F4D20', '#0A3B18']}
@@ -2683,13 +2704,13 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[profileStyles.headerSettingsBtn, isSmallDevice && { width: scale(28), height: scale(28), borderRadius: scale(14) }]}
                 onPress={() => model.setActiveOverlay('editProfile')}
               >
                 <Ionicons name="pencil" size={isSmallDevice ? scale(14) : scale(16)} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[profileStyles.headerSettingsBtn, isSmallDevice && { width: scale(28), height: scale(28), borderRadius: scale(14) }]}
                 onPress={() => model.setActiveOverlay('settings')}
               >
@@ -2716,12 +2737,15 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               )}
               <TouchableOpacity
                 onPress={() => void pickImage()}
+                preserveVisualSize
+                accessibilityRole="button"
+                accessibilityLabel="Change profile photo"
                 style={[profileStyles.avatarEditBadge, isSmallDevice && { width: scale(18), height: scale(18), borderRadius: scale(9) }]}
               >
                 <Ionicons name="camera" size={isSmallDevice ? scale(9) : scale(11)} color="#FFF" />
               </TouchableOpacity>
             </TouchableOpacity>
-            
+
             <View style={profileStyles.profileMeta}>
               <Text
                 style={[profileStyles.profileName, isSmallDevice && { fontSize: responsiveFontSize(16), marginBottom: 1 }]}
@@ -2739,7 +2763,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               >
                 {model.session?.user.email}
               </Text>
-              
+
               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
                 <View style={[profileStyles.titleBadge, isSmallDevice && { paddingHorizontal: scale(6), paddingVertical: verticalScale(2) }]}>
                   <MaterialCommunityIcons name="shield-crown" size={isSmallDevice ? scale(12) : scale(14)} color="#F59E0B" />
@@ -2778,7 +2802,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               model.setSpotlightTargetRect?.(rect);
             }}
           >
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
                 profileStyles.coinCardHorizontal,
                 isSmallDevice && { paddingHorizontal: scale(10), paddingVertical: verticalScale(8), borderRadius: moderateScale(12) }
@@ -2861,7 +2885,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
         <View style={profileStyles.sectionContainer}>
           <Text style={[profileStyles.sectionHeadline, { color: theme.colors.textPrimary }]}>Eco Hub</Text>
           <View style={[profileStyles.actionListCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.05 }]}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('redeemPoints')}
             >
@@ -2877,7 +2901,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={profileStyles.actionItem}
               onPress={() => model.setActiveOverlay('coinsHistory')}
             >
@@ -2887,6 +2911,25 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               <View style={profileStyles.actionTextCol}>
                 <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Coins History</Text>
                 <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Check your points and task completion logs</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
+            </TouchableOpacity>
+
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
+
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Accessibility"
+              accessibilityHint="Open display and reading settings"
+              style={[profileStyles.actionItem, { minHeight: 64 }]}
+              onPress={() => model.setActiveOverlay('accessibility')}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDF6F1' }]}>
+                <Ionicons name="accessibility-outline" size={20} color={isDark ? theme.colors.primary : '#126027'} />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Accessibility</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Text size, motion, and easier reading</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>
@@ -3083,7 +3126,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={profileStyles.actionItem}
               onPress={() => {
                 model.setActiveTab('home');
@@ -3102,7 +3145,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
             <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={profileStyles.actionItem}
               onPress={() => void model.handleLogout()}
             >
@@ -3216,7 +3259,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
           </LinearGradient>
-          
+
           <Text style={[profileStyles.sectionHeadline, { fontSize: isSmallDevice ? 14 : 16, marginTop: isSmallDevice ? 4 : 8, color: theme.colors.textPrimary }]}>Lifetime Achievements</Text>
           {(model.rewards?.achievements ?? []).length > 0 ? (
             (model.rewards?.achievements ?? []).map((achievement) => {
@@ -3282,7 +3325,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                           )}
                         </View>
                       )}
-                      
+
                       {!isUnlocked && (
                         <View style={[profileStyles.lockBadgeTag, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                           <Ionicons name="lock-closed" size={10} color="#FFF" />
@@ -3320,7 +3363,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
             <TouchableOpacity style={{ position: 'absolute', top: 60, right: 30, zIndex: 10 }} onPress={() => setIsViewingAvatar(false)}>
               <Ionicons name="close" size={32} color="#FFF" />
             </TouchableOpacity>
-            
+
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '70%', resizeMode: 'contain' }} />
             ) : (
@@ -3331,9 +3374,9 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
                 textStyle={{ fontSize: 80 }}
               />
             )}
-            
-            <TouchableOpacity 
-              style={{ marginTop: 40, backgroundColor: '#126027', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 8 }} 
+
+            <TouchableOpacity
+              style={{ marginTop: 40, backgroundColor: '#126027', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 8 }}
               onPress={() => { setIsViewingAvatar(false); void pickImage(); }}
             >
               <Ionicons name="camera" size={20} color="#FFF" />
@@ -3378,7 +3421,7 @@ const localStyles = StyleSheet.create({
   challengeListTitle: { color: '#153B22', fontSize: 18, fontWeight: '900', letterSpacing: -0.25 },
   challengeListSubtitle: { color: '#688074', fontSize: 12, marginTop: 3 },
   challengeListCount: { color: '#126027', backgroundColor: '#E8F5E9', fontSize: 13, fontWeight: '900', minWidth: 28, textAlign: 'center', paddingVertical: 5, paddingHorizontal: 8, borderRadius: 12 },
-  
+
   featuredCard: {
     borderRadius: 32,
     overflow: 'hidden',
@@ -3394,7 +3437,7 @@ const localStyles = StyleSheet.create({
   featuredOverlay: { ...StyleSheet.absoluteFill as any, backgroundColor: 'rgba(0, 0, 0, 0.3)' },
   featuredGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '90%' },
   featuredContent: { padding: 24, paddingTop: 40 },
-  
+
   glassTag: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 16, paddingVertical: 8,
@@ -3484,7 +3527,7 @@ const localStyles = StyleSheet.create({
     padding: 16, borderRadius: 20, marginTop: 8, marginBottom: 12,
     borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  
+
   pulseBtn: {
     backgroundColor: '#4ADE80',
     paddingVertical: 16,
@@ -3540,7 +3583,7 @@ const trackerStyles = StyleSheet.create({
   streakUnit: { color: 'rgba(255,255,255,0.8)', fontSize: 18, fontWeight: '700' },
   streakDotsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingHorizontal: 4, alignItems: 'center' },
   streakDot: { width: 36, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
-  streakDotDone: { 
+  streakDotDone: {
     backgroundColor: '#34D399',
     shadowColor: '#34D399',
     shadowOpacity: 0.6,
@@ -3548,11 +3591,11 @@ const trackerStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 3,
   },
-  streakDotToday: { 
-    borderWidth: 2, 
-    borderColor: '#FFFFFF', 
-    height: 10, 
-    backgroundColor: 'rgba(255, 255, 255, 0.4)' 
+  streakDotToday: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    height: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)'
   },
 
   // ── Level Card ─────────────────────────────────────────────────────────
@@ -3662,14 +3705,20 @@ const trackerStyles = StyleSheet.create({
 
   // ── Activity Calendar ─────────────────────────────────────────────────────
   calNavRow: {
-    flexDirection: 'row',
+    position: 'relative',
+    width: '100%',
+    minHeight: 44,
+    paddingHorizontal: 52,
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginTop: 16,
   },
   calNavBtn: {
-    width: 36,
-    height: 36,
+    position: 'absolute',
+    top: '50%',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    flexShrink: 0,
     borderRadius: 12,
     backgroundColor: '#F0F5F2',
     alignItems: 'center',

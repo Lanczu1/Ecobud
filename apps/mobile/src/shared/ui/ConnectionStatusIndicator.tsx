@@ -1,14 +1,14 @@
 import React from 'react';
 import {
-  Animated,
   Easing,
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import { Text } from '../accessibility/primitives';
+import { Animated } from '../accessibility/animations';
 
 interface ConnectionStatusIndicatorProps {
   hasUsableInternet: boolean;

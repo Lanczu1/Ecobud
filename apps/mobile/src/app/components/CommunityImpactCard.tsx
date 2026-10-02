@@ -2,9 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { Text } from '../../shared/accessibility/primitives';
 
 import { type CommunityImpactCardProps } from '../types/home';
 

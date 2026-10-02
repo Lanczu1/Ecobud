@@ -1,20 +1,18 @@
 import React, { useState, useRef } from 'react';
 import {
   View,
-  Text,
   ScrollView,
-  TouchableOpacity,
-  TextInput,
   Image,
   StyleSheet,
   Dimensions,
-  Modal,
   ActivityIndicator,
-  Animated,
   Easing,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TouchableOpacity, TextInput } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';

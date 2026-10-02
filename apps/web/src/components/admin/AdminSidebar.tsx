@@ -7,14 +7,14 @@ import {
   ArrowLeftRight, 
   FileText, 
   LogOut,
-  Gift
+  Gift, Megaphone
 } from 'lucide-react';
 import { Mascot } from 'page-mascot';
 
 import wordmarkImg from '../../assets/ecobud_wordmark.png';
 import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports';
+export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements';
 interface SidebarProps {
   onLogout: () => void;
   activeSection: AdminSection;
@@ -22,6 +22,7 @@ interface SidebarProps {
 }
 const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Dashboard', icon: LayoutDashboard },
+  { name: 'Announcements', icon: Megaphone },
   { name: 'Users', icon: Users },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },

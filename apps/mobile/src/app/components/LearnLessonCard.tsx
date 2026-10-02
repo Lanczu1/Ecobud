@@ -2,11 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
-  Animated,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { FastImage } from '../../shared/ui/FastImage';
 import { type LessonWithProgress, ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale, useResponsive, clampFontSize } from '../utils/responsive';
@@ -62,7 +61,7 @@ export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(func
     <TouchableOpacity ref={ref} onPress={onPress} activeOpacity={0.92} style={[styles.card, compact && styles.cardCompact, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.08 }, style]}>
       <View style={[styles.imageWrapper, compact && styles.imageWrapperCompact]}>
         {resolvedImageUrl && !imgError ? (
-          <FastImage 
+          <FastImage
             source={{ uri: resolvedImageUrl }}
             style={styles.cardImage}
             contentFit="cover"
@@ -80,7 +79,7 @@ export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(func
             isSmall && styles.featuredBadgeSmall
           ]}>
             <Ionicons name="star" size={starIconSize} color="#FFF" style={styles.featuredStarIcon} />
-            <Text 
+            <Text
               style={[
                 styles.featuredBadgeText,
                 isSmall && styles.featuredBadgeTextSmall
@@ -94,7 +93,7 @@ export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(func
       </View>
 
       <Text style={[styles.title, compact && styles.titleCompact, { color: theme.colors.textPrimary }]} numberOfLines={compact ? 2 : undefined}>{lesson.title}</Text>
-      
+
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: compact ? verticalScale(7) : verticalScale(10), gap: compact ? scale(4) : scale(6) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
           <Ionicons name={getCategoryDetails(lesson.category || 'General', false).iconName} size={scale(12)} color={theme.colors.textMuted} />
@@ -139,14 +138,14 @@ export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(func
         </View>
       </View>
 
-      <View style={{ 
+      <View style={{
         marginTop: compact ? 0 : verticalScale(4),
         paddingTop: verticalScale(compact ? 8 : 12),
         paddingBottom: verticalScale(compact ? 8 : 12),
-        borderTopWidth: 1, 
-        borderTopColor: isDark ? theme.colors.border : '#F0F5F2', 
-        alignItems: 'center', 
-        justifyContent: 'center' 
+        borderTopWidth: 1,
+        borderTopColor: isDark ? theme.colors.border : '#F0F5F2',
+        alignItems: 'center',
+        justifyContent: 'center'
       }}>
         <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: responsiveFontSize(compact ? 11 : 15), fontWeight: '800' }} numberOfLines={1}>
           {compact ? (lesson.status === 'seen' ? 'Continue' : lesson.status === 'completed' ? 'Review' : 'Start') : getActionLabel(lesson.status)}

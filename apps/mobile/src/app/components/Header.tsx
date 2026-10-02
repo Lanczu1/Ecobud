@@ -2,15 +2,14 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
-  Modal,
   useWindowDimensions,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { FastImage } from '../../shared/ui/FastImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { responsiveFontSize, moderateScale, scale } from '../utils/responsive';

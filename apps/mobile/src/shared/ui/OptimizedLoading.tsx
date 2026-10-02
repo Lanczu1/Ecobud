@@ -1,6 +1,7 @@
 import React from 'react';
-import { ActivityIndicator, Platform, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import LottieView from 'lottie-react-native';
+import { ActivityIndicator, Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Text } from '../accessibility/primitives';
+import LottieView from '../accessibility/AccessibleLottie';
 import { useTheme } from '../theme/ecoTheme';
 
 const loadingAnimation = require('../../../assets/Loading.lottie');

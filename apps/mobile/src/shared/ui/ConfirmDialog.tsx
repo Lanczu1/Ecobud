@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Modal } from '../accessibility/primitives';
+import { Pressable, Text } from '../accessibility/primitives';
 import { useTheme } from '../theme/ecoTheme';
 
 export function ConfirmDialog({

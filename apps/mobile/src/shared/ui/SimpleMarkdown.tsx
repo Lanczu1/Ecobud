@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text, View, StyleSheet, TextStyle, ViewStyle } from 'react-native';
+import { View, StyleSheet, TextStyle, ViewStyle } from 'react-native';
+import { Text } from '../accessibility/primitives';
 
 /**
  * SimpleMarkdown — a lightweight Markdown renderer for React Native.

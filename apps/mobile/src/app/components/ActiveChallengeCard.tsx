@@ -2,12 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState, useEffect } from 'react';
 import {
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
-  Animated,
   Easing
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { FastImage } from '../../shared/ui/FastImage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type ActiveChallengeCardProps } from '../types/home';
@@ -24,7 +23,7 @@ const getValidImageUrl = (url: string | null | undefined) => {
 export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isViewed, isCycleActive = true }: ActiveChallengeCardProps) {
   const { theme, isDark } = useTheme();
   const status = dailyChallenge.progress?.status?.toLowerCase() || 'not_started';
-  
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [isPressing, setIsPressing] = useState(false);
@@ -60,7 +59,7 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
 
   const handlePress = (e: any) => {
     const { pageX, pageY } = e.nativeEvent;
-    
+
     setIsPressing(true);
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 0.85, duration: 100, useNativeDriver: true }),

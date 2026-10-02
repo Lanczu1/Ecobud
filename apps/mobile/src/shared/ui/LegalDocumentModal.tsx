@@ -1,5 +1,7 @@
 import React from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
+import { Modal } from '../accessibility/primitives';
+import { Pressable, Text } from '../accessibility/primitives';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ecoTheme';

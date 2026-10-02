@@ -2,22 +2,19 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
 import {
   ActivityIndicator,
-  Animated,
   Easing,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
   Image,
-  TouchableOpacity,
-  Modal,
   FlatList,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Pressable, Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { BARANGAYS } from '../../shared/constants/barangays';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -186,7 +183,7 @@ function validateFields(
     } else if (trimmedUsername.length < 3) {
       errors.username = 'Username must be at least 3 characters.';
     }
-    
+
     if (!values.city) {
       errors.city = 'Please select a barangay.';
     }
@@ -821,7 +818,7 @@ export function AuthView({
                   </View> : null}
 
                   <Text style={[styles.otpPromptLabel, isDark && { color: theme.colors.textPrimary }]}>{mode === 'mfa' ? 'Authenticator or recovery code' : 'Enter the 6-digit verification code'}</Text>
-                  
+
                   {mode === 'mfa' ? <TextInput
                     value={verificationCode}
                     onChangeText={(value) => setVerificationCode(value.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 16))}
@@ -1689,8 +1686,8 @@ function SocialButton({ label, onPress, disabled, iconName }: AuthButtonProps) {
         onPressOut={onPressOut}
         android_ripple={disabled ? undefined : { color: 'rgba(18,96,39,0.08)' }}
         style={[
-          styles.secondaryButton, 
-          styles.googleButton, 
+          styles.secondaryButton,
+          styles.googleButton,
           isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border },
           disabled && styles.secondaryButtonDisabled
         ]}

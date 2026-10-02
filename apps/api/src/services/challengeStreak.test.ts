@@ -12,6 +12,13 @@ const now = new Date('2026-10-01T00:00:00Z');
 const inactiveUser = () => ({ id: 'alice', points: 0, currentStreak: 10, lastChallengeAt: new Date('2026-09-20T00:00:00Z'), streakRestoredAt: null as Date | null, streakRestoreMonth: '2026-10', streakRestoresUsed: 0, streakMilestones: [] });
 
 describe('challenge streak rules', () => {
+  it('ignites at exactly 3 completed challenges and cannot restore before unlocking', () => {
+    for (const count of [0, 1, 2, 3]) {
+      const user = { ...inactiveUser(), currentStreak: count, lastChallengeAt: now };
+      expect(streakStatus(user, now).active).toBe(count >= 3);
+      expect(streakStatus({ ...user, lastChallengeAt: new Date('2026-09-01') }, now).canRestore).toBe(count >= 3);
+    }
+  });
   it('turns gray at exactly seven days and keeps the count', () => {
     const user = { ...inactiveUser(), lastChallengeAt: new Date(now.getTime() - 7 * 86400000) };
     expect(streakStatus(user, now)).toMatchObject({ active: false, canRestore: true });

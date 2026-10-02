@@ -1,21 +1,20 @@
 import React, { useRef, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   StyleSheet,
-  Animated,
   Easing,
   useWindowDimensions,
   Platform,
   Image,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
-import LottieView from 'lottie-react-native';
+import LottieView from '../../shared/accessibility/AccessibleLottie';
 import Svg, { Path } from 'react-native-svg';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
@@ -495,7 +494,7 @@ export function CoachMarksOverlay({
   const mascotRight = currentStepData.mascotPosition === 'right'
     ? isBottomRightMascot ? Math.max(scale(16), cardLeftForMascot) : cardLeftForMascot
     : undefined;
-  
+
   const mascotLeft = currentStepData.mascotPosition === 'left'
     ? cardLeftForMascot
     : undefined;

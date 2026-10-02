@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import {
   StyleSheet,
-  Text,
   View,
   ScrollView,
-  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { FastImage } from '../../shared/ui/FastImage';
 import { Ionicons } from '@expo/vector-icons';
 import { type LessonWithProgress, type ChallengeWithProgress, type EcoEvent, ecobudApiOrigin } from '../../shared/api/ecobudApi';

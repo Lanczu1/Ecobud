@@ -4,10 +4,9 @@ import {
   Image,
   ImageBackground,
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { RejectionModal } from './RejectionModal';
 import { type UpcomingEventCardProps } from '../types/home';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';

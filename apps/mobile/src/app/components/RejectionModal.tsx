@@ -1,12 +1,11 @@
 import React from 'react';
 import {
-  Modal,
   View,
-  Text,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { Modal } from '../../shared/accessibility/primitives';
+import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { ecoTheme } from '../../shared/theme/ecoTheme';
 import { useTheme } from '../../shared/theme/ThemeContext';
@@ -40,14 +39,14 @@ export function RejectionModal({
               <Ionicons name="close" size={24} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
-          
+
           <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{title}</Text>
-          
+
           <View style={[styles.reasonContainer, { backgroundColor: isDark ? theme.colors.surface : '#F8FAFC', borderColor: theme.colors.cardBorder }]}>
             <Text style={[styles.reasonLabel, { color: theme.colors.textMuted }]}>Moderator Note:</Text>
             <Text style={[styles.reasonText, { color: theme.colors.textSecondary }]}>{reason || 'No reason provided.'}</Text>
           </View>
-          
+
           <View style={styles.actions}>
             {onResubmit ? (
               <>

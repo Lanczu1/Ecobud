@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { mobileStorage } from '../storage/mobileStorage';
+import { useAccessibility } from '../accessibility/AccessibilityContext';
 import { typography, spacing } from '../../app/utils/responsive';
 
 export type ThemeMode = 'light' | 'dark' | 'onyx';
@@ -192,6 +193,7 @@ export const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { preferences } = useAccessibility();
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
     try {
       const syncSaved = mobileStorage.getItemSync(THEME_STORAGE_KEY);
@@ -240,7 +242,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [themeMode, setThemeMode]);
 
   const isDark = themeMode === 'dark' || themeMode === 'onyx';
-  const theme = useMemo(() => (themeMode === 'onyx' ? onyxTheme : isDark ? darkTheme : lightTheme), [isDark, themeMode]);
+  const theme = useMemo(() => {
+    const base = themeMode === 'onyx' ? onyxTheme : isDark ? darkTheme : lightTheme;
+    if (!preferences.contrast) return base;
+    const foreground = isDark ? '#FFFFFF' : '#111111';
+    const background = isDark ? '#000000' : '#FFFFFF';
+    return { ...base, colors: { ...base.colors, background, surface: background, card: background, cardAlt: background, surfaceMuted: isDark ? '#141414' : '#F5F5F5', text: foreground, textPrimary: foreground, textSecondary: foreground, textMuted: foreground, textSoft: foreground, icon: foreground, iconMuted: foreground, border: isDark ? '#FFFFFF' : '#444444', cardBorder: isDark ? '#FFFFFF' : '#444444', inputBackground: background, inputBorder: foreground } };
+  }, [isDark, themeMode, preferences.contrast]);
 
   const value = useMemo(
     () => ({

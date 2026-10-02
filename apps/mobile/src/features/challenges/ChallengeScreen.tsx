@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView} from 'react-native';
+import { Text, TouchableOpacity, TextInput } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
@@ -84,8 +85,8 @@ export const ChallengeScreen = () => {
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryList} contentContainerStyle={styles.categoryListContent}>
         {categories.map((cat, index) => (
-          <TouchableOpacity 
-            key={index} 
+          <TouchableOpacity
+            key={index}
             style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipSelected]}
             onPress={() => setSelectedCategory(cat)}
           >
@@ -97,10 +98,10 @@ export const ChallengeScreen = () => {
       </ScrollView>
 
       <Text style={styles.sectionTitle}>Active Challenges</Text>
-      
+
       <ChallengeCard title="Use a Reusable Water Bottle" progress={100} isCompleted={true} category="Waste" />
       <ChallengeCard title="7-Day Waste Segregation" progress={43} isCompleted={false} category="Recycling" />
-      
+
       <TouchableOpacity style={styles.actionButton} onPress={completeAction}>
         <Text style={styles.actionButtonText}>Log Eco-Action (+10 pts)</Text>
       </TouchableOpacity>
@@ -117,7 +118,7 @@ export const ChallengeScreen = () => {
         <DiscoverCard title="Plant a Tree" category="Community" reward={200} participants={85} />
         <DiscoverCard title="Zero Waste Week" category="Recycling" reward={150} participants={432} />
       </ScrollView>
-      
+
       <View style={{ height: verticalScale(40) }} /> {/* Bottom padding */}
     </ScrollView>
   );

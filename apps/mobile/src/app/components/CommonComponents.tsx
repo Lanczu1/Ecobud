@@ -1,15 +1,10 @@
 import React, { useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   Image,
-  Animated,
   Platform,
   StyleSheet,
-  Pressable,
   Easing,
-  TextInput,
   ImageBackground,
   StyleProp,
   ViewStyle,
@@ -19,10 +14,14 @@ import {
   Alert,
   PanResponder,
 } from 'react-native';
+import { Text, TouchableOpacity, Pressable, TextInput } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { styles } from '../styles/appStyles';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
+import { TextSizeMultiplierContext } from '../../shared/accessibility/primitives';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LoadingGlyph, LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
 import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
@@ -30,22 +29,30 @@ import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appU
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic } from '../utils/haptics';
-import LottieView from 'lottie-react-native';
+import LottieView from '../../shared/accessibility/AccessibleLottie';
 import { Header } from './Header';
+import { useHomeAnimationVisibility } from './HomeAnimationVisibility';
+import { HomeMascotAnimation } from './HomeMascotAnimation';
+import { DockedMascot } from './DockedMascot';
+import { getMascotDockCoordinates, resolveMascotDock, resolveMascotPosition, isMascotEdgeDrop, type MascotDock } from '../utils/mascotDock';
 
 export const ChatbotFAB = React.memo(function ChatbotFAB({
   onPress,
   onPositionChange,
-  size = 'medium',
+  size = 'small',
   position = 'bottom-right',
   performanceMode = 'default',
+  dock: controlledDock,
+  onDockChange,
 }: {
   onPress: () => void;
   onLongPress?: () => void;
   onPositionChange?: (pos: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right') => void;
   size?: 'small' | 'medium' | 'large';
   position?: 'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right';
-  performanceMode?: 'default' | 'reduced';
+  performanceMode?: 'default' | 'quiet' | 'reduced';
+  dock?: MascotDock | null;
+  onDockChange?: (dock: MascotDock | null) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -57,7 +64,13 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   // Android devices vary widely in GPU capability, so keep this overlay on the
   // inexpensive path for all Android builds instead of guessing from screen size.
   const useLightweightBubble = Platform.OS === 'android';
-  const reduceMascotMotion = performanceMode === 'reduced' || (Platform.OS === 'android' && isSmallDevice);
+  const [localDock, setLocalDock] = React.useState<MascotDock | null>(null);
+  const dock = controlledDock === undefined ? localDock : controlledDock;
+  const setDock = onDockChange ?? setLocalDock;
+  const isDocked = dock !== null;
+  const reduceMascotMotion = performanceMode === 'reduced' || isDocked;
+  const legacyMascotAnimation = useRef<React.ElementRef<typeof LottieView>>(null);
+  const homeVisibility = useHomeAnimationVisibility();
   const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
   // Dynamic sizing derived directly from screen dimensions and user preference multiplier:
@@ -87,13 +100,23 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
     [horizontalOffset, topOffset, screenWidth, screenHeight, mascotSize, bottomOffset]
   );
 
-  const targetPosition = useMemo(() => getPositionCoords(position), [getPositionCoords, position]);
+  const dockMinY = topOffset;
+  const dockMaxY = Math.max(dockMinY, screenHeight - mascotSize - bottomOffset);
+  const targetPosition = useMemo(() => dock
+    ? getMascotDockCoordinates(dock, screenWidth, mascotSize, dockMinY, dockMaxY)
+    : getPositionCoords(position), [dock, screenWidth, mascotSize, dockMinY, dockMaxY, getPositionCoords, position]);
   const isLeftPosition = position.endsWith('left');
 
   const isDragging = useRef(false);
+  const suppressPressUntilRef = useRef(0);
   const animatedPosition = useRef(new Animated.ValueXY(targetPosition)).current;
   useEffect(() => {
     if (isDragging.current) return;
+    if (dock) {
+      animatedPosition.stopAnimation();
+      animatedPosition.setValue(targetPosition);
+      return;
+    }
 
     Animated.spring(animatedPosition, {
       toValue: targetPosition,
@@ -102,7 +125,27 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       mass: 0.8,
       useNativeDriver: true,
     }).start();
-  }, [animatedPosition, targetPosition.x, targetPosition.y]);
+  }, [animatedPosition, targetPosition.x, targetPosition.y, dock]);
+
+  useEffect(() => {
+    if (homeVisibility.managed) return;
+    if (reduceMascotMotion) legacyMascotAnimation.current?.pause();
+    else legacyMascotAnimation.current?.resume();
+  }, [homeVisibility.managed, reduceMascotMotion]);
+
+  const handleMascotPress = useCallback(() => {
+    if (isDragging.current || Date.now() < suppressPressUntilRef.current) return;
+    if (!dock) { onPress(); return; }
+    setDock(null);
+    onPositionChange?.('bottom-right');
+    Animated.spring(animatedPosition, {
+      toValue: getPositionCoords('bottom-right'),
+      damping: 18,
+      stiffness: 180,
+      mass: 0.8,
+      useNativeDriver: true,
+    }).start();
+  }, [dock, setDock, onPress, onPositionChange, animatedPosition, getPositionCoords]);
 
   const bubbleWidth = Math.min(screenWidth * 0.48, mascotSize * 1.35);
   const bubblePadding = Math.max(8, Math.round(mascotSize * 0.08));
@@ -114,7 +157,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
 
   const clampDragPosition = useCallback(
     (fingerX: number, fingerY: number) => ({
-      x: Math.max(0, Math.min(screenWidth - mascotSize, fingerX - mascotSize / 2)),
+      x: Math.max(-mascotSize / 2, Math.min(screenWidth - mascotSize / 2, fingerX - mascotSize / 2)),
       y: Math.max(insets.top, Math.min(screenHeight - insets.bottom - mascotSize, fingerY - mascotSize / 2)),
     }),
     [insets.bottom, insets.top, mascotSize, screenHeight, screenWidth]
@@ -122,42 +165,27 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
 
   const snapToClosestPosition = useCallback(
     (fingerX: number, fingerY: number) => {
-      const positions: Array<'top-left' | 'top-right' | 'center-left' | 'center-right' | 'bottom-left' | 'bottom-right'> = [
-        'top-left',
-        'top-right',
-        'center-left',
-        'center-right',
-        'bottom-left',
-        'bottom-right',
-      ];
-
-      let closestPosition = position;
-      let minDistanceSq = Number.MAX_VALUE;
-
-      for (const candidate of positions) {
-        const coords = getPositionCoords(candidate);
-        const dx = fingerX - (coords.x + mascotSize / 2);
-        const dy = fingerY - (coords.y + mascotSize / 2);
-        const distanceSq = dx * dx + dy * dy;
-
-        if (distanceSq < minDistanceSq) {
-          minDistanceSq = distanceSq;
-          closestPosition = candidate;
-        }
-      }
-
       isDragging.current = false;
+      suppressPressUntilRef.current = Date.now() + 250;
       triggerSelectionHaptic();
-      Animated.spring(animatedPosition, {
-        toValue: getPositionCoords(closestPosition),
-        damping: 18,
-        stiffness: 180,
-        mass: 0.8,
-        useNativeDriver: true,
-      }).start();
-      onPositionChange?.(closestPosition);
+      if (!isMascotEdgeDrop(fingerX, screenWidth, mascotSize)) {
+        const nextPosition = resolveMascotPosition(fingerX, fingerY, screenWidth, screenHeight);
+        setDock(null);
+        onPositionChange?.(nextPosition);
+        Animated.spring(animatedPosition, {
+          toValue: getPositionCoords(nextPosition),
+          damping: 18,
+          stiffness: 180,
+          mass: 0.8,
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
+      const nextDock = resolveMascotDock(fingerX, fingerY, screenWidth, mascotSize, dockMinY, dockMaxY);
+      setDock(nextDock);
+      animatedPosition.setValue(getMascotDockCoordinates(nextDock, screenWidth, mascotSize, dockMinY, dockMaxY));
     },
-    [animatedPosition, getPositionCoords, mascotSize, onPositionChange, position]
+    [animatedPosition, screenWidth, screenHeight, mascotSize, dockMinY, dockMaxY, setDock, onPositionChange, getPositionCoords]
   );
 
   const panResponder = useMemo(
@@ -189,7 +217,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
 
   // Gentle periodic bubble appearance without compounding continuous CPU render loops
   useEffect(() => {
-    if (performanceMode === 'reduced') {
+    if (performanceMode !== 'default' || !homeVisibility.visible || isDocked) {
       bubbleOpacity.stopAnimation();
       bubbleTranslateY.stopAnimation();
       bubbleOpacity.setValue(0);
@@ -260,8 +288,12 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       isMounted = false;
       if (initialDelay) clearTimeout(initialDelay);
       if (timer) clearTimeout(timer);
+      if (homeVisibility.managed) {
+        bubbleOpacity.stopAnimation();
+        bubbleTranslateY.stopAnimation();
+      }
     };
-  }, [bubbleOpacity, bubbleTranslateY, performanceMode, useLightweightBubble]);
+  }, [bubbleOpacity, bubbleTranslateY, performanceMode, useLightweightBubble, homeVisibility.managed, homeVisibility.visible, isDocked]);
 
   return (
     <Animated.View
@@ -277,11 +309,11 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           right: undefined,
           bottom: undefined,
         },
-        { 
+        {
           transform: [
             { translateX: animatedPosition.x },
             { translateY: animatedPosition.y },
-          ] 
+          ]
         },
       ]}
     >
@@ -425,14 +457,15 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
 
       {/* Interactive Mascot FAB */}
       <Pressable
-        onPress={onPress}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        style={styles.chatbotFab}
-        accessibilityLabel="Chat with EcoBud AI. Drag to reposition mascot."
+        onPress={handleMascotPress}
+        onPressIn={isDocked ? undefined : onPressIn}
+        onPressOut={isDocked ? undefined : onPressOut}
+        style={[styles.chatbotFab, isDocked && { width: mascotSize, height: mascotSize, alignItems: dock.side === 'left' ? 'flex-start' : 'flex-end', justifyContent: 'center' }]}
+        accessibilityLabel={isDocked ? 'Restore EcoBud mascot to bottom right' : 'Chat with EcoBud AI. Drag to reposition or dock mascot at screen edge.'}
         accessibilityRole="button"
       >
-        <LottieView
+        {isDocked ? <DockedMascot size={mascotSize} side={dock.side} animated={performanceMode !== 'reduced'} /> : homeVisibility.managed ? <HomeMascotAnimation size={mascotSize} animated={!reduceMascotMotion} /> : <LottieView
+          ref={legacyMascotAnimation}
           source={require('../../../assets/Ecobud Mascot/New Lottie files/Wave.lottie')}
           autoPlay={!reduceMascotMotion}
           loop={!reduceMascotMotion}
@@ -441,7 +474,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
           cacheComposition={true}
           hardwareAccelerationAndroid={Platform.OS === 'android'}
           style={{ width: mascotSize, height: mascotSize }}
-        />
+        />}
       </Pressable>
       </Animated.View>
     </Animated.View>
@@ -587,7 +620,7 @@ export function TopNavbar({
   onBack?: () => void;
   showAssistantInHeader?: boolean;
 }) {
-  // The user requested to remove the sparkle icon (AI assistant) from the top navigation header on all screens, 
+  // The user requested to remove the sparkle icon (AI assistant) from the top navigation header on all screens,
   // since the new floating Chatbot FAB handles this access point.
   const shouldShowAssistantInHeader = showAssistantInHeader !== undefined ? showAssistantInHeader : false;
 
@@ -864,7 +897,8 @@ export function SecondaryButton({
 
 export function SurfaceCard({ children, style, onLayout }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; onLayout?: (event: LayoutChangeEvent) => void }) {
   const { theme } = useTheme();
-  return <View onLayout={onLayout} style={[styles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, style]}>{children}</View>;
+  const { preferences } = useAccessibility();
+  return <View onLayout={onLayout} style={[styles.surfaceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, style, preferences.performance && { shadowOpacity: 0, elevation: 0 }]}>{children}</View>;
 }
 
 export function ProgressBar({ progress }: { progress: number }) {
@@ -1243,6 +1277,7 @@ function TabItem({
             color={isActive ? activeColor : inactiveColor}
           />
         )}
+        <TextSizeMultiplierContext.Provider value={1}>
         <Text
           style={[
             styles.bottomBarLabel,
@@ -1256,6 +1291,7 @@ function TabItem({
         >
           {item.label}
         </Text>
+        </TextSizeMultiplierContext.Provider>
       </Animated.View>
     </TouchableOpacity>
   );
