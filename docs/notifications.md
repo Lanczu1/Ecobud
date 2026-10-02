@@ -10,7 +10,7 @@ Review the live database baseline, role privileges and existing notifications RL
 2. Configure the existing GMAIL_USER and GMAIL_PASS. Set ECOBUD_WELCOME_URL to your HTTPS onboarding URL or `ecobud://`. SMTP credentials and the verification-code template are reused/preserved, respectively; the welcome template is separate.
 3. Configure the API with `FIREBASE_PROJECT_ID` and one server-only credential source: `FIREBASE_SERVICE_ACCOUNT_PATH` (recommended), `FIREBASE_SERVICE_ACCOUNT_JSON`, or `FIREBASE_SERVICE_ACCOUNT_BASE64`. Never bundle an Admin service account in the mobile app or commit it.
 4. Keep the Android Firebase client configuration at `apps/mobile/google-services.json`, then rebuild the native app with `expo-notifications`. Native Android registers its FCM device token directly; Expo Go and web still support the in-app inbox but do not register remote push tokens.
-5. Restart the API. Its notification worker runs every ten seconds. Keep at least one API instance running. Multiple workers claim disjoint jobs using PostgreSQL row locks.
+5. Restart the API. Its notification worker runs every two seconds, claiming up to 25 jobs per tick and sending in groups of five. Keep at least one API instance running. Multiple workers claim disjoint jobs using PostgreSQL row locks.
 6. Run the staging acceptance checks below before enabling production traffic.
 
 ## Behavior

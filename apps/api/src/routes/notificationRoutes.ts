@@ -4,7 +4,7 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest } from '../http/authentication';
 import { errorBoundary, HttpError } from '../http/errorResponder';
 export const notificationRoutes = Router();
-export const notificationTypes = ['challenge', 'verification', 'swap', 'chat', 'event', 'reward', 'learning', 'streak', 'leaderboard', 'system'] as const;
+export const notificationTypes = ['announcement', 'challenge', 'verification', 'swap', 'chat', 'event', 'reward', 'learning', 'streak', 'leaderboard', 'system'] as const;
 notificationRoutes.use(authenticateRequest);
 notificationRoutes.get('/', errorBoundary(async (req: AuthenticatedRequest, res) => {
     const q = z.object({ type: z.enum(notificationTypes).optional(), unread: z.enum(['true', 'false']).optional(), offset: z.coerce.number().int().min(0).max(100000).default(0) }).parse(req.query);

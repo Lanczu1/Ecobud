@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
   Linking,
@@ -13,9 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
 import { useTheme } from '../../shared/theme/ecoTheme';
-import { ecobudApiOrigin, type ResidentAnnouncement } from '../../shared/api/ecobudApi';
+import { ecobudApi, ecobudApiOrigin, type ResidentAnnouncement } from '../../shared/api/ecobudApi';
 import { type EcoBudMobileModel } from '../types/home';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
+import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 const previewText = (text: string) =>
   text
@@ -40,6 +41,28 @@ export function HomeAnnouncements({ model }: { model: EcoBudMobileModel }) {
   const [selected, setSelected] = useState<ResidentAnnouncement | null>(null);
   const [selectedImgIndex, setSelectedImgIndex] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  const { showNotification } = useInAppNotification();
+  const destination = model.notificationDestination;
+  const token = model.session?.token;
+  useEffect(() => {
+    if (destination?.type !== 'announcement' || !token) return;
+    let alive = true;
+    void ecobudApi.fetchAnnouncements(token, destination.id).then(({ items }) => {
+      if (!alive) return;
+      model.setNotificationDestination(null);
+      if (items[0]) {
+        setSelectedImgIndex(0);
+        setSelected(items[0]);
+      } else {
+        showNotification({ title: 'Announcement unavailable', message: 'This announcement is no longer available.', tone: 'warning' });
+      }
+    }).catch(() => {
+      if (!alive) return;
+      model.setNotificationDestination(null);
+      showNotification({ title: 'Unable to load announcement', message: 'Please check your connection and try again.', tone: 'error' });
+    });
+    return () => { alive = false; };
+  }, [destination?.type, destination?.id, token]);
 
   const carouselWidth = Math.max(280, windowWidth - 40);
 
@@ -51,7 +74,7 @@ export function HomeAnnouncements({ model }: { model: EcoBudMobileModel }) {
         new Date(b.publishAt || 0).getTime() - new Date(a.publishAt || 0).getTime()
     );
 
-  if (!items.length) return null;
+  if (!items.length && !selected) return null;
 
   const openAction = (item: ResidentAnnouncement) => {
     if (item.ctaType === 'Open External Link' && /^https?:\/\//i.test(item.ctaValue || '')) {

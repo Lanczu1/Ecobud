@@ -27,6 +27,8 @@ const fallbackUnlessAuthError = async <T, F>(
   }
 };
 
+const announcementRequests = new Map<string, Promise<import('../../shared/api/ecobudApi').ResidentAnnouncement[]>>();
+
 export const homeService = {
   // ─── Auth ───────────────────────────────────────────────────────────────────────
 
@@ -84,8 +86,14 @@ export const homeService = {
   getLeaderboard: (token: string) =>
     ecobudApi.fetchLeaderboard(token),
 
-  getAnnouncements: (token: string) =>
-    ecobudApi.fetchAnnouncements(token).then(res => res.items),
+  getAnnouncements: (token: string) => {
+    const pending = announcementRequests.get(token);
+    if (pending) return pending;
+    const request = ecobudApi.fetchAnnouncements(token).then(res => res.items)
+      .finally(() => { announcementRequests.delete(token); });
+    announcementRequests.set(token, request);
+    return request;
+  },
 
   getEvents: (token?: string) =>
     ecobudApi.fetchEvents(token).then((res: any) => (Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [])),
@@ -164,17 +172,21 @@ export const homeService = {
    * Fetches only the critical data required for the Home Screen immediately.
    * Keeps network bandwidth lean and reduces time-to-interactive.
    */
-  async getHomeCriticalData(token: string) {
+  async getHomeCriticalData(token: string, onAnnouncements?: (items: import('../../shared/api/ecobudApi').ResidentAnnouncement[]) => void) {
     const [dashboard, ...contentResults] = await Promise.all([
       fallbackUnlessAuthError(this.getDashboard(token), null),
       fallbackUnlessAuthError(this.getLessons(token), []),
       fallbackUnlessAuthError(this.getChallenges(token), { items: [], isCycleActive: true }),
       fallbackUnlessAuthError(this.getHabitsToday(token), null),
       fallbackUnlessAuthError(this.getEvents(token), []),
-      fallbackUnlessAuthError(this.getAnnouncements(token), []),
+      fallbackUnlessAuthError(this.getAnnouncements(token).then(items => {
+        onAnnouncements?.(items);
+        return items;
+      }), []),
+      fallbackUnlessAuthError(this.getLeaderboard(token), null),
     ]);
 
-    const [lessons, challenges, habitsToday, events, announcements] = contentResults;
+    const [lessons, challenges, habitsToday, events, announcements, leaderboard] = contentResults;
 
     return {
       dashboard: dashboard || null,
@@ -184,6 +196,7 @@ export const homeService = {
       habitsToday: habitsToday || null,
       events: Array.isArray(events) ? events : (events as any)?.items || [],
       announcements: Array.isArray(announcements) ? announcements : [],
+      leaderboard: leaderboard || null,
     };
   },
 
@@ -195,13 +208,11 @@ export const homeService = {
       tracker,
       profile,
       rewards,
-      leaderboard,
       transparency,
     ] = await Promise.all([
       fallbackUnlessAuthError(this.getTracker(token), null),
       fallbackUnlessAuthError(this.getProfile(token), null),
       fallbackUnlessAuthError(this.getRewards(token), null),
-      fallbackUnlessAuthError(this.getLeaderboard(token), null),
       fallbackUnlessAuthError(this.getTransparency(token), null),
     ]);
 
@@ -209,7 +220,6 @@ export const homeService = {
       tracker: tracker || null,
       profile: profile || null,
       rewards: rewards || null,
-      leaderboard: leaderboard || null,
       transparency: transparency || null,
     };
   },

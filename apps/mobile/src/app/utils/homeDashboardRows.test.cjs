@@ -18,6 +18,10 @@ test('chat typing and layout measurements do not rerender Home rows', () => {
 });
 test('notification updates only rerender the header', () => assert.deepEqual(changedRows({ notificationCount: 2 }), [0]));
 test('points updates only rerender the progress row', () => assert.deepEqual(changedRows({ dashboard: { ecoPoints: 400 } }), [2]));
+test('announcement push destinations rerender the feed even when its data is unchanged', () => {
+  assert.deepEqual(changedRows({ notificationDestination: { type: 'announcement', id: 'new' } }), [3]);
+});
+
 test('lesson updates only rerender the feed', () => assert.deepEqual(changedRows({ lessons: [{ id: 'new' }] }), [3]));
 test('habit completion updates actions and feed emphasis', () => assert.deepEqual(changedRows({ todaysCompletedHabits: 1 }), [1, 3]));
 test('replacement navigation callbacks refresh all consumers', () => {

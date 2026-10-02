@@ -75,6 +75,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
       try {
         subscriptions.push(Notifications.addNotificationReceivedListener(() => {
           refresh(); DeviceEventEmitter.emit('notificationsInboxRefresh');
+          DeviceEventEmitter.emit('announcementsChanged');
         }));
         const response = (result: Notifications.NotificationResponse) => {
           const id = result.notification.request.content.data?.notificationId;

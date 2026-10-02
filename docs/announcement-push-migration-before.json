@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-10-02T10:07:09.292Z",
+  "migration": "20261002020000_announcement_notifications",
+  "pending": [
+    "20261002020000_announcement_notifications"
+  ],
+  "snapshot": {
+    "schemaHash": "7ac3903142426d57218b100f5fca3f44d5eee42dc21b2a3980000585c5e3ace1",
+    "announcements": {
+      "count": 1,
+      "fingerprint": "bb50e95fca7096168379b8d266a6ff08"
+    },
+    "existingMigrationHistoryHash": "ed127f6610a8774c5ac17df6e40b80426b91f774367fdf10fed7c464596b932c"
+  }
+}

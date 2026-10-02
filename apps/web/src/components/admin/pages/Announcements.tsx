@@ -1,6 +1,6 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -423,17 +423,27 @@ export function Announcements() {
   const isModalOpen = !!(editor || details || deleteConfirmModal.open);
   useModalScrollLock(isModalOpen);
 
-  async function load(fresh = true) {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await adminGet<{ items: Announcement[] }>('/admin/announcements', { bypassCache: fresh });
-      setItems(data.items);
-    } catch (e: any) {
-      setError(e.message || 'Unable to load announcements. Please try again.');
-    } finally {
-      setLoading(false);
+  const loadInFlight = useRef<Promise<void> | null>(null);
+  async function load(fresh = true, background = false) {
+    if (loadInFlight.current) {
+      await loadInFlight.current;
+      if (!background) return load(fresh, background);
+      return;
     }
+    const task = (async () => {
+      if (!background) setLoading(true);
+      if (!background) setError('');
+      try {
+        const data = await adminGet<{ items: Announcement[] }>('/admin/announcements', { bypassCache: fresh });
+        setItems(current => JSON.stringify(current) === JSON.stringify(data.items) ? current : data.items);
+      } catch (e: any) {
+        if (!background) setError(e.message || 'Unable to load announcements. Please try again.');
+      } finally {
+        if (!background) setLoading(false);
+      }
+    })();
+    loadInFlight.current = task;
+    try { await task; } finally { if (loadInFlight.current === task) loadInFlight.current = null; }
   }
 
   useEffect(() => {
@@ -442,10 +452,19 @@ export function Announcements() {
       .then(v => { setBarangays(v.items); setAssignedBarangay(v.assignedBarangay); })
       .catch(() => setBarangayError('Unable to load barangays. Reopen this page to retry.'));
 
-    const timer = window.setInterval(() => {
-      void load(false);
-    }, 60000);
-    return () => clearInterval(timer);
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void load(true, true);
+    };
+    const timer = window.setInterval(refresh, 10_000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+    };
   }, []);
 
   // Auto-dismiss notice after 4 seconds
@@ -1045,14 +1064,6 @@ export function Announcements() {
 
               {/* Form Body */}
               <form id="announcement-form" onSubmit={submit} className="flex-1 overflow-y-auto p-6 space-y-4">
-                {!editor.id && <p role={drafts.error ? 'alert' : 'status'} className="text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
-                {pendingPreviews.length > 0 && <div className="flex flex-wrap gap-3">
-                  {pendingPreviews.map((url, index) => <div key={url} className="relative">
-                    <img src={url} alt={`Pending attachment ${index + 1}`} className="h-20 w-20 rounded-lg object-cover" />
-                    <button type="button" aria-label={`Remove pending attachment ${index + 1}`} onClick={() => setPendingImages(files => files.filter((_, i) => i !== index))} className="absolute right-0 top-0 rounded bg-white p-1 text-red-600">Remove</button>
-                  </div>)}
-                  <p className="w-full text-xs text-gray-500">These images will upload when you save the announcement.</p>
-                </div>}
                 {saveError && (
                   <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl px-4 py-3">
                     {saveError}
@@ -1116,7 +1127,7 @@ export function Announcements() {
                   }}
                   className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-4 transition-colors hover:border-green-400 dark:hover:border-green-500"
                 >
-                  <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pictures ({announcementImages(editor).length}/10)</p>
+                  <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pictures ({announcementImages(editor).length + pendingImages.length}/10)</p>
                   <div className="grid grid-cols-2 gap-3">
                   {announcementImages(editor).map((url, index) => (
                     <div key={url} className="relative aspect-video w-full rounded-xl overflow-hidden mb-3 border border-gray-200 dark:border-gray-700">
@@ -1138,7 +1149,19 @@ export function Announcements() {
                       {index === 0 && <span className="absolute bottom-2 left-2 bg-black/60 text-white rounded px-2 py-1 text-xs">Cover</span>}
                     </div>
                   ))}
+                  {pendingPreviews.map((url, index) => (
+                    <div key={url} className="relative aspect-video w-full rounded-xl overflow-hidden mb-3 border border-gray-200 dark:border-gray-700">
+                      <img src={url} alt={`Picture ${announcementImages(editor).length + index + 1} preview`} className="w-full h-full object-cover" />
+                      <button type="button" aria-label={`Remove pending attachment ${index + 1}`} title={`Remove picture ${announcementImages(editor).length + index + 1}`} disabled={busy || uploadingImage}
+                        onClick={() => setPendingImages(files => files.filter((_, i) => i !== index))}
+                        className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-lg transition-colors cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
+                      {announcementImages(editor).length === 0 && index === 0 && <span className="absolute bottom-2 left-2 bg-black/60 text-white rounded px-2 py-1 text-xs">Cover</span>}
+                    </div>
+                  ))}
                   </div>
+                  {pendingPreviews.length > 0 && <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">These images will upload when you save the announcement.</p>}
                   <div className="flex items-center gap-3">
                     <label
                       htmlFor="announcement-image-input"
@@ -1150,7 +1173,7 @@ export function Announcements() {
                         id="announcement-image-input"
                         type="file"
                         multiple
-                        disabled={busy || uploadingImage || announcementImages(editor).length >= 10}
+                        disabled={busy || uploadingImage || announcementImages(editor).length + pendingImages.length >= 10}
                         className="hidden"
                         accept="image/png,image/jpeg,image/webp"
                         onChange={e => {
@@ -1421,7 +1444,8 @@ export function Announcements() {
               </form>
 
               {/* Modal Footer */}
-              <div className="shrink-0 p-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1713] flex justify-end gap-3">
+              <div className="shrink-0 p-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#0f1713] flex flex-wrap items-center justify-end gap-3">
+                {!editor.id && <p role={drafts.error ? 'alert' : 'status'} className="mr-auto text-left text-sm text-gray-600 dark:text-gray-300">{drafts.error || drafts.status}</p>}
                 <button
                   type="button"
                   onClick={() => !busy && !uploadingImage && handleCloseModal(() => setEditor(null))}

@@ -53,6 +53,7 @@ const CHATBOT_ENABLED_STORAGE_KEY = 'ecobud.mobile.chatbotEnabled';
 const CHATBOT_SIZE_STORAGE_KEY = 'ecobud.mobile.chatbotSize';
 const PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY = 'ecobud.mobile.pushNotificationsEnabled';
 const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
+const CACHED_ANNOUNCEMENTS_STORAGE_KEY = 'ecobud.mobile.cached_announcements';
 type FocusedResource = 'lessons' | 'challenges' | 'events';
 const FOCUSED_REFRESH_INTERVAL_MS = 30_000;
 type SecondaryResource = 'tracker' | 'profile' | 'rewards' | 'leaderboard' | 'transparency';
@@ -199,6 +200,29 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [leaderboardHasLoaded, setLeaderboardHasLoaded] = useState(false);
   const [announcements, setAnnouncements] = useState<import('../../shared/api/ecobudApi').ResidentAnnouncement[]>([]);
   const [events, setEvents] = useState<EcoEvent[]>([]);
+
+  useEffect(() => {
+    if (!session?.token) return;
+    const token = session.token;
+    let alive = true;
+    const refreshAnnouncements = () => {
+      void homeService.getAnnouncements(token).then(items => {
+        if (!alive || currentSessionTokenRef.current !== token) return;
+        setAnnouncements(current => JSON.stringify(current) === JSON.stringify(items) ? current : items);
+        void mobileStorage.setItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify({
+          userId: session.user.id, items, cachedAt: Date.now(),
+        })).catch(() => {});
+      }).catch(() => {});
+    };
+    const changed = DeviceEventEmitter.addListener('announcementsChanged', refreshAnnouncements);
+    const foreground = AppState.addEventListener('change', state => {
+      if (state === 'active') refreshAnnouncements();
+    });
+    const interval = setInterval(() => {
+      if (AppState.currentState === 'active') refreshAnnouncements();
+    }, 30000);
+    return () => { alive = false; changed.remove(); foreground.remove(); clearInterval(interval); };
+  }, [session?.token]);
 
 
   const [transparency, setTransparency] = useState<TransparencyFeed | null>(null);
@@ -445,6 +469,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setLeaderboardHasLoaded(false);
     setEvents([]);
     setAnnouncements([]);
+    void mobileStorage.removeItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY).catch(() => {});
     setTransparency(null);
     setAssistantMessages([]);
     setSelectedLessonId(null);
@@ -699,7 +724,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       try {
         // Step 1: Fetch Home Critical Data first (dashboard, lessons, challenges, habits, events)
-        const homeData = await homeService.getHomeCriticalData(existingSession.token);
+        const homeData = await homeService.getHomeCriticalData(existingSession.token, items => {
+          if (currentSessionTokenRef.current === existingSession.token) {
+            setAnnouncements(current => JSON.stringify(current) === JSON.stringify(items) ? current : items);
+            void mobileStorage.setItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify({
+              userId: existingSession.user.id, items, cachedAt: Date.now(),
+            })).catch(() => {});
+          }
+        });
 
         const safeLessons = uniqueLessonsById(Array.isArray(homeData?.lessons) ? [...homeData.lessons] : []);
         safeLessons.sort((a: any, b: any) => {
@@ -732,7 +764,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         setHabitsToday(homeData?.habitsToday ?? null);
         setEvents(Array.isArray(homeData?.events) ? homeData.events : []);
-        setAnnouncements(homeData.announcements);
+        if (homeData.leaderboard) setLeaderboard(homeData.leaderboard);
         const hydratedAt = Date.now();
         lastFocusedRefreshAtRef.current = { lessons: hydratedAt, challenges: hydratedAt, events: hydratedAt };
         setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
@@ -907,6 +939,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
               // server state in the background so network latency does not block startup.
 
               setSession(activeSession);
+              try {
+                const rawAnnouncements = await mobileStorage.getItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY);
+                const cachedAnnouncements = rawAnnouncements ? JSON.parse(rawAnnouncements) : null;
+                if (cachedAnnouncements?.userId === activeSession.user.id && Array.isArray(cachedAnnouncements.items)) {
+                  setAnnouncements(cachedAnnouncements.items.filter((item: { expiresAt?: string | null }) =>
+                    !item.expiresAt || Date.parse(item.expiresAt) > Date.now()));
+                }
+              } catch {}
 
               // ─── Instant Stale-While-Revalidate Hydration ──────────────
               // If cached home dashboard data exists, apply it immediately to skip the loading state!
@@ -928,6 +968,14 @@ export function useHomeDashboard(): EcoBudMobileModel {
                 }
               }
 
+              const startupSession = activeSession;
+              void homeService.getAnnouncements(startupSession.token).then(items => {
+                if (currentSessionTokenRef.current !== startupSession.token) return;
+                setAnnouncements(items);
+                void mobileStorage.setItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify({
+                  userId: startupSession.user.id, items, cachedAt: Date.now(),
+                })).catch(() => {});
+              }).catch(() => {});
               void (async () => {
                 if (parsed.refreshToken) {
                   try {
@@ -1041,6 +1089,27 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, []);
 
+  useEffect(() => {
+    if (!session?.token || !presence.hasUsableInternet || activeTab !== 'home' || activeOverlay !== null) return;
+    let disposed = false;
+    let inFlight = false;
+    const refresh = async () => {
+      if (disposed || inFlight || isHydratingRef.current || AppState.currentState !== 'active') return;
+      inFlight = true;
+      try {
+        await hydrateApp(session, true);
+      } catch {
+        // Preserve the last successful feed during temporary network failures.
+      } finally {
+        inFlight = false;
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 10_000);
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
+    return () => { disposed = true; clearInterval(timer); subscription.remove(); };
+  }, [session, presence.hasUsableInternet, activeTab, activeOverlay, hydrateApp]);
+
   // Refresh only the data visible on the current page.
   useEffect(() => {
     if (!session?.token) return;
@@ -1050,7 +1119,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       : activeOverlay !== null
         ? []
         : activeTab === 'home'
-          ? ['lessons', 'challenges', 'events']
+          ? []
           : activeTab === 'learn'
             ? ['lessons']
             : activeTab === 'challenges'
@@ -1696,6 +1765,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
               message: notice.message,
               tone: notice.level ?? 'info',
             });
+          }
+          if (notice.relatedType === 'announcement') {
+            DeviceEventEmitter.emit('announcementsChanged');
+            return;
           }
           queueRealtimeRefresh(`notice:${notice.scope}`);
         },
@@ -2855,6 +2928,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [ensureSession, runWithActionLoader, hydrateApp, persistSession]);
 
   const handleUpdateProfile = useCallback(async (payload: { displayName?: string; email?: string; city?: string }) => {
+    if (payload.city !== undefined) {
+      setAnnouncements([]);
+      await mobileStorage.removeItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY).catch(() => {});
+    }
     await runWithActionLoader('Saving profile changes...', async () => {
       try {
         const activeSession = ensureSession();

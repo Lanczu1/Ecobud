@@ -1,4 +1,5 @@
 export type NotificationType =
+  | 'announcement'
   | 'challenge'
   | 'verification'
   | 'swap'
