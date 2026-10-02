@@ -7,6 +7,7 @@ import { announcementSchema, effectiveAnnouncementStatus } from '../services/ann
 import { challengeUploadMiddleware } from '../http/uploadMiddleware';
 import { AdminController } from '../controllers/adminController';
 import { BARANGAYS } from '../utils/announcementBarangays';
+import { notificationTick } from '../services/notificationService';
 
 const include = { createdBy: { select: { id: true, name: true, role: true } } };
 const serialize = <T extends { status: string; publishAt: Date | null; expiresAt: Date | null }>(item: T) => ({ ...item, status: effectiveAnnouncementStatus(item) });
@@ -45,6 +46,7 @@ announcementAdminRoutes.post('/', errorBoundary<AuthenticatedRequest>(async (req
   restrictAudience(req, input);
   const data = await prepare(input);
   res.status(201).json(await prisma.announcement.create({ data: { ...data, createdById: req.auth!.userId }, include }));
+  if (input.status === 'Published') void notificationTick();
 }));
 announcementAdminRoutes.put('/:id', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const previous = await editableAnnouncement(req);
@@ -53,6 +55,7 @@ announcementAdminRoutes.put('/:id', errorBoundary<AuthenticatedRequest>(async (r
   const data = await prepare(input);
   if (input.status === 'Published' && effectiveAnnouncementStatus(previous) === 'Published') data.publishAt = previous.publishAt;
   res.json(await prisma.announcement.update({ where: { id: req.params.id }, data, include }));
+  if (input.status === 'Published') void notificationTick();
 }));
 announcementAdminRoutes.patch('/:id/images', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const previous = await editableAnnouncement(req);
@@ -98,6 +101,7 @@ async function prepare(input: ReturnType<typeof announcementSchema.parse>) {
 export const announcementResidentRoutes = Router();
 announcementResidentRoutes.use(authenticateRequest);
 announcementResidentRoutes.get('/', errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const { id } = z.object({ id: z.string().min(1).max(100).optional() }).parse(req.query);
   const now = new Date();
   const barangay = assignedBarangay(req);
   const audience = [
@@ -105,6 +109,7 @@ announcementResidentRoutes.get('/', errorBoundary<AuthenticatedRequest>(async (r
     ...(barangay ? [{ targetAudience: { in: ['Specific Barangay', 'Multiple Barangays'] }, barangays: { has: barangay } }] : []),
   ];
   const items = await prisma.announcement.findMany({ where: {
+    ...(id ? { id } : {}),
     OR: [{ status: 'Published' }, { status: 'Scheduled', publishAt: { lte: now } }],
     AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       { OR: audience }],

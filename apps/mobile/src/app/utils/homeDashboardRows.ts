@@ -9,7 +9,7 @@ const rowDependencies: Record<HomeDashboardSection, readonly (keyof EcoBudMobile
   0: ['userDisplayName', 'profile', 'session', 'notificationCount', 'hasUsableInternet', 'setActiveOverlay', 'setActiveTab'],
   1: ['todaysCompletedHabits', 'setActiveOverlay', 'setActiveTab'],
   2: ['dashboard', 'session', 'activeOverlay', 'earnedPoints', 'leaderboard', 'setActiveOverlay', 'setProgressBarLayout'],
-  3: ['announcements', 'session', 'lessons', 'challenges', 'events', 'todaysCompletedHabits', 'openLesson', 'openChallengeMission', 'setActiveOverlay', 'setActiveTab'],
+  3: ['announcements', 'notificationDestination', 'setNotificationDestination', 'session', 'lessons', 'challenges', 'events', 'todaysCompletedHabits', 'openLesson', 'openChallengeMission', 'setActiveOverlay', 'setActiveTab'],
 };
 
 const cardsLoading = (model: EcoBudMobileModel) =>

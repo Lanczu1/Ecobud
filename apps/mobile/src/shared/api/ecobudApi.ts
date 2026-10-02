@@ -893,8 +893,8 @@ export const ecobudApi = {
     request<RewardsData>('/experience/rewards', { token }),
   fetchLeaderboard: (token: string) =>
     request<LeaderboardData>('/experience/leaderboard', { token }),
-  fetchAnnouncements: (token: string) =>
-    request<{ items: ResidentAnnouncement[] }>('/announcements', { token }),
+  fetchAnnouncements: (token: string, id?: string) =>
+    request<{ items: ResidentAnnouncement[] }>(`/announcements${id ? `?id=${encodeURIComponent(id)}` : ''}`, { token }),
   fetchEvents: (token?: string) =>
     request<{ items: EcoEvent[] }>('/events', token ? { token } : undefined),
   joinEvent: (token: string, eventId: string) =>

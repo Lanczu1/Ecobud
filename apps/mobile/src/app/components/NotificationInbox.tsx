@@ -30,6 +30,7 @@ const categories = [
 ] as const;
 
 const moreCategories = [
+  ['announcement', 'Announcements'],
   ['verification', 'Verification'],
   ['swap', 'Swap / GGH'],
   ['chat', 'Chat'],
@@ -40,6 +41,7 @@ const moreCategories = [
 ] as const;
 
 const iconMap: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
+  announcement: 'megaphone',
   challenge: 'trophy',
   verification: 'checkmark-circle',
   swap: 'swap-horizontal',
@@ -53,6 +55,7 @@ const iconMap: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
 };
 
 const categoryThemeColors: Record<NotificationType, { lightBg: string; color: string }> = {
+  announcement: { lightBg: 'rgba(22, 163, 74, 0.14)', color: '#16A34A' },
   challenge: { lightBg: 'rgba(234, 179, 8, 0.14)', color: '#D97706' },
   verification: { lightBg: 'rgba(34, 197, 94, 0.14)', color: '#16A34A' },
   swap: { lightBg: 'rgba(14, 165, 233, 0.14)', color: '#0284C7' },
@@ -176,7 +179,12 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       }
 
       const id = n.relatedId;
-      if (n.type === 'learning' && id) {
+      if (n.type === 'announcement' && id) {
+        model.setNotificationDestination({ type: 'announcement', id });
+        model.setActiveOverlay(null);
+        model.setActiveTab('home');
+        DeviceEventEmitter.emit('announcementsChanged');
+      } else if (n.type === 'learning' && id) {
         await model.refreshEverything();
         await model.openLesson(id);
       } else if (n.type === 'challenge' && id) {

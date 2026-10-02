@@ -3,6 +3,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db = vi.hoisted(() => ({ announcement: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() }, profile: { findMany: vi.fn() }, challenge: {}, event: {}, lesson: {}, redeemItem: {} }));
 vi.mock('../prismaClient', () => ({ prisma: db }));
+vi.mock('../services/notificationService', () => ({ notificationTick: vi.fn() }));
 vi.mock('../http/uploadMiddleware', () => ({ challengeUploadMiddleware: { single: () => (_req: any, _res: any, next: any) => next() } }));
 vi.mock('../controllers/adminController', () => ({ AdminController: { uploadImage: (_req: any, res: any) => res.json({ url: 'https://example.com/image.png' }) } }));
 vi.mock('../http/authentication', () => ({
@@ -12,6 +13,7 @@ vi.mock('../http/authentication', () => ({
 }));
 import { announcementAdminRoutes, announcementResidentRoutes } from './announcementRoutes';
 import { errorResponder } from '../http/errorResponder';
+import { notificationTick } from '../services/notificationService';
 import { announcementSchema, effectiveAnnouncementStatus } from '../services/announcementRules';
 const app = express(); app.use(express.json()); app.use('/admin', announcementAdminRoutes); app.use('/resident', announcementResidentRoutes); app.use(errorResponder);
 const payload = { title: 'Test announcement', content: 'Test content', category: 'General', status: 'Draft', priority: 'Normal', targetAudience: 'All Residents', barangays: [], publishAt: null, expiresAt: null, ctaLabel: null, ctaType: 'No Action', ctaValue: null };
@@ -45,6 +47,18 @@ describe('announcement permissions and lifecycle', () => {
     expect(where.AND[1].OR[1].targetAudience.in).toEqual(['Specific Barangay', 'Multiple Barangays']);
     expect(where.OR).toEqual([{ status: 'Published' }, { status: 'Scheduled', publishAt: { lte: expect.any(Date) } }]);
     expect(where.AND[0].OR[1].expiresAt.gt).toBeInstanceOf(Date);
+  });
+  it('starts push processing immediately after publication but not for drafts', async () => {
+    await request(app).post('/admin').auth('admin', { type: 'bearer' }).send(payload).expect(201);
+    expect(notificationTick).not.toHaveBeenCalled();
+    await request(app).post('/admin').auth('admin', { type: 'bearer' }).send({ ...payload, status: 'Published' }).expect(201);
+    expect(notificationTick).toHaveBeenCalledOnce();
+  });
+  it('fetches a notification destination by ID with the same audience and expiration checks', async () => {
+    await request(app).get('/resident?id=target').auth('user', { type: 'bearer' }).expect(200);
+    expect(db.announcement.findMany.mock.calls[0][0].where).toMatchObject({
+      id: 'target', AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] }, { OR: expect.any(Array) }],
+    });
   });
   it('uses the resident barangay regardless of author or requested barangay', async () => {
     await request(app).get('/resident?barangay=Yukos').auth('user', { type: 'bearer' }).set('x-city', ' abo ').expect(200);

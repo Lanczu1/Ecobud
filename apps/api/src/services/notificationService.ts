@@ -4,6 +4,8 @@ import { prisma } from '../prismaClient';
 import { welcomeEmail } from './welcomeEmail';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { firebaseMessaging } from '../lib/firebaseMessaging';
+import { effectiveAnnouncementStatus } from './announcementRules';
+import { BARANGAYS } from '../utils/announcementBarangays';
 const mail = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }, connectionTimeout: 10000, socketTimeout: 20000 });
 type EventRow = {
     key: string;
@@ -24,7 +26,7 @@ type Delivery = {
     attempts: number;
     receipt: string | null;
 };
-async function fanout() {
+export async function fanout() {
     await prisma.$transaction(async (tx) => {
         const events = await tx.$queryRaw<EventRow[]> `SELECT * FROM notification_events WHERE NOT completed AND available_at<=CURRENT_TIMESTAMP ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`;
         const e = events[0];
@@ -41,9 +43,30 @@ async function fanout() {
                 return;
             }
         }
-        const users = await tx.user.findMany({ where: { status: 'active', role: 'user', createdAt: { lte: e.available_at }, ...(e.user_id ? { id: e.user_id } : e.cursor ? { id: { gt: e.cursor } } : {}) }, orderBy: { id: 'asc' }, take: 200, select: { id: true, email: true } });
+        let announcement: Awaited<ReturnType<typeof tx.announcement.findUnique>> = null;
+        let audience: Prisma.UserWhereInput = {};
+        if (e.type === 'announcement') {
+            announcement = await tx.announcement.findUnique({ where: { id: e.related_id } });
+            if (!announcement || effectiveAnnouncementStatus(announcement) !== 'Published') {
+                if (announcement?.status === 'Scheduled' && announcement.publishAt && announcement.publishAt > new Date()) {
+                    await tx.$executeRaw `UPDATE notification_events SET available_at=${announcement.publishAt} WHERE key=${e.key}`;
+                } else {
+                    await tx.$executeRaw `UPDATE notification_events SET completed=true WHERE key=${e.key}`;
+                }
+                return;
+            }
+            if (announcement.targetAudience !== 'All Residents') {
+                const barangays = announcement.barangays.filter(b => BARANGAYS.some(known => known === b));
+                if (!barangays.length) {
+                    await tx.$executeRaw `UPDATE notification_events SET completed=true WHERE key=${e.key}`;
+                    return;
+                }
+                audience = { profile: { is: { OR: barangays.map(city => ({ city: { equals: city, mode: 'insensitive' as const } })) } } };
+            }
+        }
+        const users = await tx.user.findMany({ where: { ...audience, status: 'active', role: 'user', createdAt: { lte: e.available_at }, ...(e.user_id ? { id: e.user_id } : e.cursor ? { id: { gt: e.cursor } } : {}) }, orderBy: { id: 'asc' }, take: 200, select: { id: true, email: true } });
         if (users.length) {
-            await tx.notification.createMany({ skipDuplicates: true, data: users.map(u => ({ userId: u.id, notificationKey: e.key, type: e.type, title: e.title, message: e.message, relatedId: e.related_id, relatedType: e.type, priority: ['challenge', 'verification', 'swap', 'reward'].includes(e.type) ? 'high' : e.type === 'event' ? 'medium' : 'low' })) });
+            await tx.notification.createMany({ skipDuplicates: true, data: users.map(u => ({ userId: u.id, notificationKey: e.key, type: e.type, title: e.title, message: announcement?.title ?? e.message, relatedId: e.related_id, relatedType: e.type, priority: announcement ? announcement.priority === 'Important' ? 'high' : 'medium' : ['challenge', 'verification', 'swap', 'reward'].includes(e.type) ? 'high' : e.type === 'event' ? 'medium' : 'low' })) });
             const ids = Prisma.join(users.map(u => u.id));
             await tx.$executeRaw `INSERT INTO notification_deliveries(id,notification_id,channel,destination) SELECT md5(n.id || ':realtime'),n.id,'realtime',n.user_id FROM notifications n WHERE n.notification_key=${e.key} AND n.user_id IN (${ids}) ON CONFLICT DO NOTHING`;
             if (e.type === 'verification')
@@ -57,6 +80,14 @@ export async function deliverNotification(d: Delivery) {
     const n = await prisma.notification.findUnique({ where: { id: d.notification_id }, include: { user: { select: { status: true, email: true, sessionVersion: true } } } });
     if (!n || n.user.status !== 'active')
         return 'cancelled';
+    if (n.type === 'announcement' && n.relatedId) {
+        const announcement = await prisma.announcement.findUnique({ where: { id: n.relatedId } });
+        if (!announcement || effectiveAnnouncementStatus(announcement) !== 'Published') return 'cancelled';
+        if (announcement.targetAudience !== 'All Residents') {
+            const profile = await prisma.profile.findUnique({ where: { userId: n.userId }, select: { city: true } });
+            if (!announcement.barangays.some(b => b.toLowerCase() === profile?.city?.trim().toLowerCase())) return 'cancelled';
+        }
+    }
     if (d.channel === 'email') {
         if (n.user.email !== d.destination)
             return 'cancelled';
@@ -64,7 +95,7 @@ export async function deliverNotification(d: Delivery) {
         return 'sent';
     }
     if (d.channel === 'realtime') {
-        if (!await supabaseRealtimeService.publishUserNotice(n.userId, { scope: 'notifications', title: n.title, message: n.message }))
+        if (!await supabaseRealtimeService.publishUserNotice(n.userId, { scope: 'notifications', title: n.title, message: n.message, relatedType: n.type }))
             throw new Error('Realtime unavailable');
         return 'sent';
     }
@@ -99,17 +130,19 @@ export async function notificationTick() {
         await fanout();
         // Stale network sends are ambiguous: never blindly resend email/push after a crash.
         await prisma.$executeRaw `UPDATE notification_deliveries SET state='uncertain' WHERE state='sending' AND next_at<CURRENT_TIMESTAMP - interval '5 minutes'`;
-        const jobs = await prisma.$queryRaw<Delivery[]> `UPDATE notification_deliveries SET state='sending',attempts=attempts+1,next_at=CURRENT_TIMESTAMP WHERE id IN (SELECT id FROM notification_deliveries WHERE state IN ('pending','receipt') AND next_at<=CURRENT_TIMESTAMP AND attempts<20 ORDER BY next_at LIMIT 5 FOR UPDATE SKIP LOCKED) RETURNING *`;
-        for (const d of jobs) {
-            let state: string;
-            try {
-                state = await deliverNotification(d);
-            }
-            catch (error: any) {
-                state = d.channel === 'realtime' || error?.retrySafe || (d.channel === 'email' && (['ECONNECTION', 'EDNS'].includes(error?.code) || (error?.responseCode >= 400 && error?.responseCode < 500))) ? 'pending' : 'uncertain';
-                console.error('notification_delivery_failed', d.id, state);
-            }
-            await prisma.$executeRaw `UPDATE notification_deliveries SET state=${state},next_at=${new Date(Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(d.attempts, 6)))} WHERE id=${d.id}`;
+        const jobs = await prisma.$queryRaw<Delivery[]> `UPDATE notification_deliveries SET state='sending',attempts=attempts+1,next_at=CURRENT_TIMESTAMP WHERE id IN (SELECT id FROM notification_deliveries WHERE state IN ('pending','receipt') AND next_at<=CURRENT_TIMESTAMP AND attempts<20 ORDER BY next_at LIMIT 25 FOR UPDATE SKIP LOCKED) RETURNING *`;
+        for (let offset = 0; offset < jobs.length; offset += 5) {
+            await Promise.all(jobs.slice(offset, offset + 5).map(async d => {
+                let state: string;
+                try {
+                    state = await deliverNotification(d);
+                }
+                catch (error: any) {
+                    state = d.channel === 'realtime' || error?.retrySafe || (d.channel === 'email' && (['ECONNECTION', 'EDNS'].includes(error?.code) || (error?.responseCode >= 400 && error?.responseCode < 500))) ? 'pending' : 'uncertain';
+                    console.error('notification_delivery_failed', d.id, state);
+                }
+                await prisma.$executeRaw `UPDATE notification_deliveries SET state=${state},next_at=${new Date(Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(d.attempts, 6)))} WHERE id=${d.id}`;
+            }));
         }
     }
     catch {
@@ -119,7 +152,7 @@ export async function notificationTick() {
         running = false;
     }
 }
-export function startNotificationWorker() { void notificationTick(); timer = setInterval(() => void notificationTick(), 10000); timer.unref(); }
+export function startNotificationWorker() { void notificationTick(); timer = setInterval(() => void notificationTick(), 2000); timer.unref(); }
 export function stopNotificationWorker() { if (timer)
     clearInterval(timer); }
 

@@ -90,6 +90,8 @@ model Announcement {
   updatedAt DateTime @updatedAt
 
   @@index([status, publishAt, expiresAt])
+  @@index([barangays], type: Gin, map: "announcements_barangays_gin")
+  @@index([status, priority, publishAt(sort: Desc)], map: "announcements_feed_order")
   @@map("announcements")
 }
 

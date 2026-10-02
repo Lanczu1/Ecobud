@@ -12,6 +12,7 @@ interface RealtimeSignal {
 }
 
 interface RealtimeNotice {
+  relatedType?: string;
   level?: 'info' | 'success' | 'warning';
   message: string;
   revision: number;

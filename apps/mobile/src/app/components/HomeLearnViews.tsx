@@ -218,8 +218,10 @@ export const HomeView = React.memo(function HomeView({ model, section }: HomeDas
             ) : null}
             </>}
 
-            {showFeed && <HomeAnnouncements model={model} />}
-
+          </>
+        )}
+        {showFeed && <HomeAnnouncements model={model} />}
+        {!isCardsLoading && <>
             {/* Consolidated Horizontal "For You" Feed */}
             {(section === undefined || section === 3) && <HomeFeed
               lesson={featuredLesson}
@@ -233,8 +235,7 @@ export const HomeView = React.memo(function HomeView({ model, section }: HomeDas
               onSeeAllEvents={openEvents}
               hasPendingHabit={isHabitPending}
             />}
-          </>
-        )}
+          </>}
       </View>
     </>
   );
