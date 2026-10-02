@@ -27,6 +27,7 @@ export async function authorizeEventWrite(req: AuthenticatedRequest, res: Respon
 }
 
 export function validateEventAudience(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (req.auth!.role !== 'admin' && req.body.isFeatured !== undefined) return res.status(403).json({ message: 'Only administrators can feature events.' });
   for (const field of ['officialName', 'officialPosition']) {
     const value = req.body[field];
     if (value !== undefined && value !== null && (typeof value !== 'string' || value.trim().length > 120)) return res.status(400).json({ message: 'Official name and position must be text of at most 120 characters.' });

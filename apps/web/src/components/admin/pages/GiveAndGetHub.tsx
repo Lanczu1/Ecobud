@@ -1150,7 +1150,7 @@ export function GiveAndGetHub() {
   const [listings, setListings] = useState<SwapListingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SwapStats | null>(null);
-  const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean) => Promise<void>>(async () => {});
+  const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean, background?: boolean) => Promise<void>>(async () => {});
   const fetchInFlightRef = useRef(false);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [reportModal, setReportModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
@@ -1173,11 +1173,11 @@ export function GiveAndGetHub() {
     title: '',
   });
 
-  const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search, fresh = false) => {
+  const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search, fresh = false, background = false) => {
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const params = new URLSearchParams({ page: String(pageToLoad), pageSize: '25' });
       if (['pending', 'approved', 'rejected'].includes(statusToLoad)) params.set('status', statusToLoad);
       if (statusToLoad === 'reported') params.set('reported', 'true');
@@ -1198,7 +1198,7 @@ export function GiveAndGetHub() {
     }
   };
 
-  fetchListingsRef.current = (nextPage, status, nextSearch, fresh = true) => fetchListings(nextPage, status, nextSearch, fresh);
+  fetchListingsRef.current = (nextPage, status, nextSearch, fresh = true, background = false) => fetchListings(nextPage, status, nextSearch, fresh, background);
 
   useEffect(() => {
     const timer = setTimeout(() => void fetchListings(page, filterStatus, search, true), 300);
@@ -1210,22 +1210,10 @@ export function GiveAndGetHub() {
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/give-and-get/swap-listings');
-        void fetchListingsRef.current(page, filterStatus, search, true);
+        void fetchListingsRef.current(page, filterStatus, search, true, true);
       },
     }).then((unsub) => { unsubscribe = unsub; });
     return () => unsubscribe?.();
-  }, [page, filterStatus, search]);
-
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === 'visible') void fetchListings(page, filterStatus, search);
-    };
-    const interval = window.setInterval(refresh, 30_000);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('focus', refresh);
-    };
   }, [page, filterStatus, search]);
 
   const handleApprove = async (id: string) => {

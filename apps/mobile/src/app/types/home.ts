@@ -191,6 +191,7 @@ export interface EcoBudMobileModel {
   leaderboardLoading: boolean;
   leaderboardHasLoaded: boolean;
   loadLeaderboard: () => Promise<void>;
+  announcements: import('../../shared/api/ecobudApi').ResidentAnnouncement[];
   events: EcoEvent[];
   transparency: TransparencyFeed | null;
   todaysCompletedHabits: number;

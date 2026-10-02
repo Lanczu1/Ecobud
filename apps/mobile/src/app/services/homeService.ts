@@ -84,6 +84,9 @@ export const homeService = {
   getLeaderboard: (token: string) =>
     ecobudApi.fetchLeaderboard(token),
 
+  getAnnouncements: (token: string) =>
+    ecobudApi.fetchAnnouncements(token).then(res => res.items),
+
   getEvents: (token?: string) =>
     ecobudApi.fetchEvents(token).then((res: any) => (Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [])),
 
@@ -168,9 +171,10 @@ export const homeService = {
       fallbackUnlessAuthError(this.getChallenges(token), { items: [], isCycleActive: true }),
       fallbackUnlessAuthError(this.getHabitsToday(token), null),
       fallbackUnlessAuthError(this.getEvents(token), []),
+      fallbackUnlessAuthError(this.getAnnouncements(token), []),
     ]);
 
-    const [lessons, challenges, habitsToday, events] = contentResults;
+    const [lessons, challenges, habitsToday, events, announcements] = contentResults;
 
     return {
       dashboard: dashboard || null,
@@ -179,6 +183,7 @@ export const homeService = {
       isCycleActive: (challenges as any)?.isCycleActive ?? true,
       habitsToday: habitsToday || null,
       events: Array.isArray(events) ? events : (events as any)?.items || [],
+      announcements: Array.isArray(announcements) ? announcements : [],
     };
   },
 

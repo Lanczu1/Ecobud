@@ -1,3 +1,9 @@
+export interface ResidentAnnouncement {
+  id: string; title: string; content: string; category: string; priority: string;
+  image: string | null; images: string[]; publishAt: string | null; expiresAt: string | null;
+  barangays: string[]; ctaLabel: string | null; ctaType: string; ctaValue: string | null;
+}
+
 import type { NotificationPage } from '../../app/types/notifications';
 import { parseStreakSummary } from './streakSummary';
 import Constants from 'expo-constants';
@@ -887,6 +893,8 @@ export const ecobudApi = {
     request<RewardsData>('/experience/rewards', { token }),
   fetchLeaderboard: (token: string) =>
     request<LeaderboardData>('/experience/leaderboard', { token }),
+  fetchAnnouncements: (token: string) =>
+    request<{ items: ResidentAnnouncement[] }>('/announcements', { token }),
   fetchEvents: (token?: string) =>
     request<{ items: EcoEvent[] }>('/events', token ? { token } : undefined),
   joinEvent: (token: string, eventId: string) =>
