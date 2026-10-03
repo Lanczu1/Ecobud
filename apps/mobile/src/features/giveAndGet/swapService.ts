@@ -125,6 +125,10 @@ export const swapService = {
     }
   },
 
+  reportListing(id: string, reason: string) {
+    return ecobudApi.reportSwapListing(authToken, id, reason);
+  },
+
   async createListing(input: {
     title: string;
     category: SwapCategory;

@@ -14,7 +14,7 @@ import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import type { SwapListing, SwapConversation } from './types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { ScreenTransition } from '../../shared/ui/ScreenTransition';
-import { ConfirmDialog } from '../../shared/ui/ConfirmDialog';
+import { ReportListingDialog } from './ReportListingDialog';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
 
 type HubScreen = 'feed' | 'create' | 'detail' | 'chat';
@@ -296,18 +296,15 @@ export function MarketplaceHubView({
 
   return (
     <View style={[localStyles.container, { backgroundColor: theme.colors.background }]}>
-      <ConfirmDialog
-        visible={showReportDialog}
-        title="Report listing?"
-        message={`This will send “${selectedListing?.title ?? 'this listing'}” to community moderators for review.`}
-        confirmLabel="Report"
-        destructive
-        onCancel={() => setShowReportDialog(false)}
-        onConfirm={() => {
-          setShowReportDialog(false);
-          showNotification({ title: 'Report submitted', message: 'Thank you. Our moderation team will review this listing.', tone: 'success' });
+      {showReportDialog && selectedListing && <ReportListingDialog
+        title={selectedListing.title}
+        onClose={() => setShowReportDialog(false)}
+        onSubmit={async (reason) => {
+          swapService.init(token);
+          await swapService.reportListing(selectedListing.id, reason);
+          showNotification({ title: 'Report submitted', message: 'Your report was saved for moderator review.', tone: 'success' });
         }}
-      />
+      />}
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (
@@ -416,5 +413,4 @@ const localStyles = StyleSheet.create({
     backgroundColor: ecoTheme.colors.background,
   },
 });
-
 

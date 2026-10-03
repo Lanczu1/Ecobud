@@ -1,5 +1,8 @@
 import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
+import { z } from 'zod';
+import { errorBoundary } from '../http/errorResponder';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
 import { swapService } from '../services/swapService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
@@ -8,6 +11,21 @@ import { prisma } from '../prismaClient';
 import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 
 const router = Router();
+const listingReportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  keyGenerator: (req) => (req as AuthenticatedRequest).auth!.userId,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many reports. Please try again in an hour.' },
+});
+
+router.post('/listings/:id/report', authenticateRequest, listingReportLimiter, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).parse(req.body);
+  const result = await swapService.reportListing(req.params.id, req.auth!.userId, reason);
+  supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: result.ownerId, eventType: 'listing', listingId: result.listingId }).catch(() => {});
+  res.status(201).json({ message: 'Report submitted for moderator review.' });
+}));
 
 // Fetch marketplace listings
 router.get('/listings', authenticateRequest, async (req: AuthenticatedRequest, res) => {
