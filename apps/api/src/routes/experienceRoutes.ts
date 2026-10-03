@@ -202,7 +202,7 @@ experienceRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const currentUserId = req.auth!.userId;
-    const users = await apiCache.getOrSet('global_leaderboard_top10', 45, async () => {
+    const users = await apiCache.getOrSet('global_leaderboard_all_users', 45, async () => {
       return prisma.user.findMany({
         where: {
           status: 'active',
@@ -227,8 +227,7 @@ experienceRoutes.get(
             },
           },
         },
-        orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],
-        take: 10,
+        orderBy: [{ points: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
       });
     });
 

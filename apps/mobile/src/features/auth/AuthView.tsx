@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
+import { AuthBackgroundVideo } from './AuthBackgroundVideo';
 import {
   ActivityIndicator,
   AppState,
@@ -334,11 +334,6 @@ export function AuthView({
   onCheckUsernameAvailability,
 }: AuthViewProps) {
   const { theme, isDark, toggleTheme } = useTheme();
-  const player = useVideoPlayer(require('../../../assets/mobile-bg.mp4'), p => {
-    p.loop = true;
-    p.muted = true;
-    p.play();
-  });
   const [mode, setMode] = useState<AuthModeType>('signin');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const darkBgOpacity = useRef(new Animated.Value(isDark ? 1 : 0)).current;
@@ -799,7 +794,7 @@ export function AuthView({
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#0E1512' : '#F9FAF5' }}>
-      <VideoView style={StyleSheet.absoluteFill} player={player as any} contentFit="cover" />
+      <AuthBackgroundVideo />
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
@@ -1163,55 +1158,55 @@ export function AuthView({
                 </>
               ) : null}
             </View>
-
-            <View style={styles.footerSwitchRow}>
-              <Text style={[styles.footerSwitchText, isDark && { color: theme.colors.textMuted }]}>
-              {mode === 'signin'
-                ? 'Need an account?'
-                : mode === 'verify'
-                  ? 'Want to update your email?'
-                  : mode === 'mfa'
-                    ? 'Sign in verification required'
-                  : 'Already have an account?'}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: mode === 'signin' && isLoginLocked }}
-                disabled={mode === 'signin' && isLoginLocked}
-                onPress={() => {
-                  if (mode === 'signin') {
-                    switchMode('signup');
-                  } else if (mode === 'verify') {
-                    switchMode('signup');
-                  } else if (mode === 'mfa') {
-                    setMfaChallengeToken(null);
-                    switchMode('signin');
-                  } else {
-                    switchMode('signin');
-                  }
-                }}
-                style={({ pressed }) => [
-                  styles.footerSwitchLink,
-                  pressed && styles.footerSwitchLinkPressed,
-                  mode === 'signin' && isLoginLocked && styles.footerSwitchLinkDisabled,
-                ]}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.footerSwitchLinkText, isDark && { color: theme.colors.primary }]}>
-                    {mode === 'signin'
-                      ? 'Create account'
-                    : mode === 'verify'
-                      ? 'Back to sign up'
-                      : mode === 'mfa'
-                        ? 'Back to sign in'
-                      : 'Log in'}
-                  </Text>
-                  {mode === 'signin' && (
-                    <Ionicons name="leaf-outline" size={14} color={isDark ? theme.colors.primary : palette.primary} style={{ marginLeft: 4, marginTop: 4 }} />
-                  )}
-                </View>
-              </Pressable>
-            </View>
+              <View style={styles.footerSwitchRow}>
+                <Text style={[styles.footerSwitchText, isDark && { color: theme.colors.textMuted }]}>
+                {mode === 'signin'
+                  ? 'Need an account?'
+                  : mode === 'verify'
+                    ? 'Want to update your email?'
+                    : mode === 'mfa'
+                      ? 'Sign in verification required'
+                    : 'Already have an account?'}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: mode === 'signin' && isLoginLocked }}
+                  disabled={mode === 'signin' && isLoginLocked}
+                  onPress={() => {
+                    if (mode === 'signin') {
+                      switchMode('signup');
+                    } else if (mode === 'verify') {
+                      switchMode('signup');
+                    } else if (mode === 'mfa') {
+                      setMfaChallengeToken(null);
+                      switchMode('signin');
+                    } else {
+                      switchMode('signin');
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.footerSwitchLink,
+                    isDark && { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder },
+                    pressed && styles.footerSwitchLinkPressed,
+                    mode === 'signin' && isLoginLocked && styles.footerSwitchLinkDisabled,
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.footerSwitchLinkText, isDark && { color: theme.colors.primary }]}>
+                      {mode === 'signin'
+                        ? 'Create account'
+                      : mode === 'verify'
+                        ? 'Back to sign up'
+                        : mode === 'mfa'
+                          ? 'Back to sign in'
+                        : 'Log in'}
+                    </Text>
+                    {mode === 'signin' && (
+                      <Ionicons name="arrow-forward" size={15} color={isDark ? theme.colors.primary : palette.primary} style={{ marginLeft: 6 }} />
+                    )}
+                  </View>
+                </Pressable>
+              </View>
             </Animated.View>
           </View>
         </ScrollView>
@@ -2254,21 +2249,29 @@ const styles = StyleSheet.create({
     color: palette.textStrong,
   },
   footerSwitchRow: {
-    marginTop: verticalScale(28),
+    marginTop: verticalScale(20),
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: scale(8),
+    rowGap: verticalScale(4),
     alignItems: 'center',
     justifyContent: 'center',
   },
   footerSwitchText: {
     fontSize: responsiveFontSize(14),
     lineHeight: responsiveFontSize(20),
-    color: palette.textStrong,
-    marginBottom: verticalScale(4),
+    color: palette.subtitle,
   },
   footerSwitchLink: {
-    minHeight: scale(32),
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(12),
+    borderWidth: 1,
+    borderColor: '#DCE9DF',
+    backgroundColor: '#F3F8F4',
   },
   footerSwitchLinkPressed: {
     opacity: 0.68,
@@ -2277,11 +2280,10 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   footerSwitchLinkText: {
-    fontSize: responsiveFontSize(15),
+    fontSize: responsiveFontSize(14),
     lineHeight: responsiveFontSize(20),
     color: palette.primary,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
+    fontWeight: '700',
   },
   verifyStepBox: {
     marginVertical: 4,

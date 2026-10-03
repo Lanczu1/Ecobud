@@ -49,6 +49,7 @@ import {
 } from './CommonComponents';
 import { CoachMarkTarget } from './CoachMarkTarget';
 import { RejectionModal } from './RejectionModal';
+import { LeaderboardPagination } from './LeaderboardPagination';
 import { StreakFlame } from './StreakFlame';
 import { LevelCard, getLevelFromPoints } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
@@ -2157,6 +2158,9 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
   const [leaderboardPage, setLeaderboardPage] = useState(1);
   const lbTotalPages = Math.max(1, Math.ceil(leaderboardItems.length / 10));
+  useEffect(() => {
+    setLeaderboardPage(current => Math.min(current, lbTotalPages));
+  }, [lbTotalPages]);
   const lbStartIndex = (leaderboardPage - 1) * 10;
   const lbEndIndex = lbStartIndex + 10;
   const lbCurrentItems = leaderboardItems.slice(lbStartIndex, lbEndIndex);
@@ -2497,25 +2501,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 </View>
 
                 {/* Pagination Controls */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, borderTopWidth: 1, borderColor: theme.colors.border, alignItems: 'center' }}>
-                  <TouchableOpacity
-                    disabled={leaderboardPage === 1}
-                    onPress={() => setLeaderboardPage(leaderboardPage - 1)}
-                    style={{ padding: 8, opacity: leaderboardPage === 1 ? 0.3 : 1 }}
-                  >
-                    <Ionicons name="chevron-back" size={24} color={isDark ? theme.colors.primary : '#126027'} />
-                  </TouchableOpacity>
-                  <Text style={{ fontWeight: '800', color: isDark ? theme.colors.primary : '#126027', fontSize: 14 }}>
-                    Page {leaderboardPage} of {lbTotalPages}
-                  </Text>
-                  <TouchableOpacity
-                    disabled={leaderboardPage >= lbTotalPages}
-                    onPress={() => setLeaderboardPage(leaderboardPage + 1)}
-                    style={{ padding: 8, opacity: leaderboardPage >= lbTotalPages ? 0.3 : 1 }}
-                  >
-                    <Ionicons name="chevron-forward" size={24} color={isDark ? theme.colors.primary : '#126027'} />
-                  </TouchableOpacity>
-                </View>
+                <LeaderboardPagination page={leaderboardPage} totalPages={lbTotalPages} onPageChange={setLeaderboardPage} />
 
                 {/* Current user anchor */}
                 {currentRank != null && !lbCurrentItems.some((entry) => entry.isCurrentUser) && (

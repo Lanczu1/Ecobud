@@ -8,7 +8,7 @@ export type AccessibilityPreferences = {
   bold: boolean;
   largeTargets: boolean;
 };
-export const defaultPreferences: AccessibilityPreferences = { size: 'Medium', performance: false, contrast: false, bold: false, largeTargets: true };
+export const defaultPreferences: AccessibilityPreferences = { size: 'Medium', performance: false, contrast: false, bold: false, largeTargets: false };
 const key = 'ecobud_accessibility';
 let current = defaultPreferences;
 const listeners = new Set<() => void>();
@@ -17,7 +17,7 @@ export const subscribeAccessibility = (listener: () => void) => { listeners.add(
 function decode(value: string | null): AccessibilityPreferences {
   try {
     const saved = JSON.parse(value || '{}');
-    return { size: ['Small', 'Medium', 'Large'].includes(saved.size) ? saved.size : 'Medium', performance: saved.performance === true, contrast: saved.contrast === true, bold: saved.bold === true, largeTargets: saved.largeTargets !== false };
+    return { size: ['Small', 'Medium', 'Large'].includes(saved.size) ? saved.size : 'Medium', performance: saved.performance === true, contrast: saved.contrast === true, bold: saved.bold === true, largeTargets: saved.largeTargetsDefaultVersion === 1 && saved.largeTargets === true };
   } catch { return defaultPreferences; }
 }
 const Context = createContext({ preferences: defaultPreferences, storageError: false, update: (_patch: Partial<AccessibilityPreferences>) => {} });
@@ -39,7 +39,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     const next = { ...current, ...patch };
     current = next;
     setPreferences(next);
-    const serialized = JSON.stringify(next);
+    const serialized = JSON.stringify({ ...next, largeTargetsDefaultVersion: 1 });
     try { mobileStorage.setItemSync(key, serialized); } catch { setStorageError(true); }
     void mobileStorage.setItem(key, serialized).then(() => setStorageError(false)).catch(() => setStorageError(true));
   };

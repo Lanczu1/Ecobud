@@ -8,7 +8,7 @@ import { useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApi } from '../../shared/api/ecobudApi';
 import { getOtpCountdown, getOtpDeadline } from './otpTimer';
 import { Animated } from '../../shared/accessibility/animations';
-import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
+import { AuthBackgroundVideo } from './AuthBackgroundVideo';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 const palette = {
@@ -43,11 +43,6 @@ type Step = 'email' | 'code' | 'password' | 'success';
 export function ForgotPasswordView({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
   const { theme, isDark, toggleTheme } = useTheme();
   const colors = theme.colors;
-  const player = useVideoPlayer(require('../../../assets/mobile-bg.mp4'), (video) => {
-    video.loop = true;
-    video.muted = true;
-    video.play();
-  });
   const darkBgOpacity = useRef(new Animated.Value(isDark ? 1 : 0)).current;
   const [keyboardSpace, setKeyboardSpace] = useState(0);
 
@@ -140,7 +135,7 @@ export function ForgotPasswordView({ initialEmail, onBack }: { initialEmail: str
   const buttonDisabled = busy || ((step === 'code' || step === 'password') && countdown.expired);
 
   return <View style={{ flex: 1, backgroundColor: isDark ? '#0E1512' : '#F9FAF5' }}>
-    <VideoView style={StyleSheet.absoluteFill} player={player as any} contentFit="cover" />
+    <AuthBackgroundVideo />
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(14, 21, 18, 0.90)', opacity: darkBgOpacity }]} />
     <StatusBar style={isDark ? 'light' : 'dark'} />
     <SafeAreaView style={styles.safeArea}>
