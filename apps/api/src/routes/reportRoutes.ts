@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
-import { authenticateRequest, requireModeratorAccess, requireAdminAccess } from '../http/authentication';
+import { authenticateRequest, requireModeratorAccess } from '../http/authentication';
 import { prisma } from '../prismaClient';
 import fs from 'fs';
 import path from 'path';
+import { authorizeEventReport } from '../services/barangayReports';
+import { errorBoundary } from '../http/errorResponder';
+import { AuthenticatedRequest } from '../http/authentication';
 
 const router = Router();
+const requireEventReportAccess = errorBoundary<AuthenticatedRequest>(async (req, _res, next) => {
+  await authorizeEventReport(req.auth!, req.params.id);
+  next();
+});
 
 // Pre-load the ECOBUD logo for PDF embedding
 const logoPath = path.join(__dirname, '..', '..', '..', 'web', 'public', 'logo.png');
@@ -139,7 +146,7 @@ function generateSummary(data: NonNullable<Awaited<ReturnType<typeof getEventRep
 }
 
 // ─── GET /api/reports/events/:id ─── Return report JSON data
-router.get('/events/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/events/:id', authenticateRequest, requireModeratorAccess, requireEventReportAccess, async (req, res) => {
   try {
     const data = await getEventReportData(req.params.id);
     if (!data) return res.status(404).json({ message: 'Event not found' });
@@ -151,7 +158,7 @@ router.get('/events/:id', authenticateRequest, requireModeratorAccess, async (re
 });
 
 // ─── GET /api/reports/events/:id/pdf ─── Generate PDF
-router.get('/events/:id/pdf', authenticateRequest, requireAdminAccess, async (req, res) => {
+router.get('/events/:id/pdf', authenticateRequest, requireModeratorAccess, requireEventReportAccess, async (req, res) => {
   try {
     const data = await getEventReportData(req.params.id);
     if (!data) return res.status(404).json({ message: 'Event not found' });
@@ -448,7 +455,7 @@ router.get('/events/:id/pdf', authenticateRequest, requireAdminAccess, async (re
 });
 
 // ─── GET /api/reports/events/:id/excel ─── Generate Excel
-router.get('/events/:id/excel', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/events/:id/excel', authenticateRequest, requireModeratorAccess, requireEventReportAccess, async (req, res) => {
   try {
     const data = await getEventReportData(req.params.id);
     if (!data) return res.status(404).json({ message: 'Event not found' });

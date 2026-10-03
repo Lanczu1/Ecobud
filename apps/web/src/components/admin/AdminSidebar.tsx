@@ -39,7 +39,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   const isModerator = user?.role === 'moderator';
 
   const visibleMenuItems = menuItems.filter((item) => {
-    if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Reports', 'Badges'].includes(item.name)) {
+    if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Badges'].includes(item.name)) {
       return false;
     }
     return true;

@@ -7,7 +7,7 @@ const { db } = vi.hoisted(() => ({ db: {
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
   redeemItem: { findUnique: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
-  redeemRequest: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+  redeemRequest: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   userStats: { updateMany: vi.fn() },
   user: { findUnique: vi.fn() },
   rewardTransaction: { create: vi.fn() },
@@ -22,6 +22,11 @@ vi.mock('../http/authentication', () => ({
 }));
 vi.mock('../http/uploadMiddleware', () => ({ redeemUploadMiddleware: { single: () => (_req: any, _res: any, next: () => void) => next() } }));
 vi.mock('../services/supabaseStorageService', () => ({ supabaseStorageService: {} }));
+vi.mock('../services/supabaseRealtimeService', () => ({ supabaseRealtimeService: {
+  publishAdminSectionRefresh: vi.fn(), publishUserSectionRefresh: vi.fn(), publishUserNotice: vi.fn(),
+} }));
+vi.mock('../services/notificationService', () => ({ sendDirectNotification: vi.fn() }));
+import { apiCache } from '../lib/cache';
 import router from './redeemRoutes';
 
 const app = express();
@@ -30,11 +35,13 @@ const conflict = () => new Prisma.PrismaClientKnownRequestError('Concurrent writ
 
 beforeEach(() => {
   vi.resetAllMocks();
+  apiCache.clear();
   db.$transaction.mockImplementation(async (run) => run(db));
   db.redeemItem.findUnique.mockResolvedValue({ id: 'item', isActive: true, stock: 1, coinCost: 100, title: 'Reward', imageUrl: null });
   db.redeemRequest.findFirst.mockResolvedValue(null);
   db.redeemRequest.findMany.mockResolvedValue([]);
   db.redeemRequest.count.mockResolvedValue(0);
+  db.redeemRequest.aggregate.mockResolvedValue({ _sum: { coinCost: null } });
   db.redeemItem.findMany.mockResolvedValue([]);
   db.redeemItem.count.mockResolvedValue(0);
   db.$queryRaw.mockResolvedValue([{ total: 0n, pending: 0n, approved: 0n, rejected: 0n, readyToClaim: 0n, claimed: 0n, active: 0n, inactive: 0n, outOfStock: 0n }]);
@@ -87,6 +94,12 @@ describe('redemption reservations', () => {
 });
 
 describe('admin redemption request filters', () => {
+  it('returns coins spent on completed redemptions, independently of request counts', async () => {
+    db.redeemRequest.aggregate.mockResolvedValueOnce({ _sum: { coinCost: 750 } });
+    const response = await request(app).get('/requests/stats').expect(200);
+    expect(response.body.totalCoinsRedeemed).toBe(750);
+    expect(db.redeemRequest.aggregate).toHaveBeenCalledWith({ where: { status: 'claimed' }, _sum: { coinCost: true } });
+  });
   it('lists claimed requests in the archive filter', async () => {
     await request(app).get('/requests?status=claimed').expect(200);
     expect(db.redeemRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'claimed' } }));
@@ -102,8 +115,20 @@ describe('admin redemption request filters', () => {
   it('aggregates request status totals in a single query', async () => {
     db.$queryRaw.mockResolvedValueOnce([{ total: 8n, pending: 1n, approved: 2n, rejected: 1n, readyToClaim: 3n, claimed: 1n }]);
     const response = await request(app).get('/requests/stats').expect(200);
-    expect(response.body).toEqual({ total: 8, pending: 1, approved: 2, rejected: 1, readyToClaim: 3, claimed: 1 });
+    expect(response.body).toEqual({ total: 8, pending: 1, approved: 2, rejected: 1, readyToClaim: 3, claimed: 1, totalCoinsRedeemed: 0 });
     expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('claimed redemption dashboard refresh', () => {
+  it('clears the cached total after a successful claim without deducting coins again', async () => {
+    apiCache.set('admin_dashboard_stats', { overview: { totalCoinsRedeemed: 0 } }, 60);
+    db.redeemRequest.findUnique.mockResolvedValue({ id: 'request', userId: 'member', status: 'ready_to_claim', coinCost: 100 });
+    db.redeemRequest.update.mockResolvedValue({ id: 'request', status: 'claimed' });
+    await request(app).patch('/requests/request/claim').expect(200);
+    expect(apiCache.get('admin_dashboard_stats')).toBeUndefined();
+    expect(db.userStats.updateMany).not.toHaveBeenCalled();
+    expect(db.rewardTransaction.create).not.toHaveBeenCalled();
   });
 });
 
