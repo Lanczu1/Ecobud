@@ -1,4 +1,6 @@
+import { startIdDocumentCleanup, stopIdDocumentCleanup } from './services/idDocumentCleanup';
 import { notificationRoutes } from './routes/notificationRoutes';
+import { idVerificationRoutes } from './routes/idVerificationRoutes';
 import { announcementAdminRoutes, announcementResidentRoutes } from './routes/announcementRoutes';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationService';
 import 'dotenv/config';
@@ -184,6 +186,7 @@ app.use('/api/', apiLimiter);
 
 app.use('/api/app/version', appVersionRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/id-verification', idVerificationRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/home', homeRoutes);
 app.use('/api/learn', learnRoutes);
@@ -216,14 +219,14 @@ const server = app.listen(port, process.env.HOST || (production ? '127.0.0.1' : 
 });
 
 startPresenceCleanupScheduler();
-startLessonPublishScheduler(); startNotificationWorker();
+startLessonPublishScheduler(); startNotificationWorker(); startIdDocumentCleanup();
 
 let shuttingDown = false;
 const shutdownSchedulers = () => {
   if (shuttingDown) return;
   shuttingDown = true;
   stopPresenceCleanupScheduler();
-  stopLessonPublishScheduler(); stopNotificationWorker();
+  stopLessonPublishScheduler(); stopNotificationWorker(); stopIdDocumentCleanup();
   server.close(() => {
     void prisma.$disconnect().finally(() => process.exit(0));
   });

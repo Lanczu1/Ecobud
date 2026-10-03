@@ -1,3 +1,4 @@
+import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
 import { swapService } from '../services/swapService';
@@ -40,11 +41,11 @@ router.get('/listings/:id', authenticateRequest, async (req: AuthenticatedReques
 });
 
 // Create listing
-router.post('/listings', authenticateRequest, async (req: AuthenticatedRequest, res) => {
+router.post('/listings', authenticateRequest, requireApprovedId, async (req: AuthenticatedRequest, res) => {
   try {
     const listing = await swapService.createListing({
-      userId: req.auth!.userId,
       ...req.body,
+      userId: req.auth!.userId,
     });
     supabaseRealtimeService.publishSwapEvent({
       actorUserId: req.auth!.userId,
@@ -60,7 +61,7 @@ router.post('/listings', authenticateRequest, async (req: AuthenticatedRequest, 
 });
 
 // Update listing (with IDOR protection)
-router.patch('/listings/:id', authenticateRequest, async (req: AuthenticatedRequest, res) => {
+router.patch('/listings/:id', authenticateRequest, requireApprovedId, async (req: AuthenticatedRequest, res) => {
   try {
     const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { userId: true } });
     await swapService.updateListing(req.params.id, req.auth!.userId, req.auth!.role, req.body);
@@ -102,7 +103,7 @@ router.delete('/listings/:id', authenticateRequest, async (req: AuthenticatedReq
 });
 
 // Upload listing image
-router.post('/upload-image', authenticateRequest, avatarUploadMiddleware.single('image'), async (req: AuthenticatedRequest, res) => {
+router.post('/upload-image', authenticateRequest, requireApprovedId, avatarUploadMiddleware.single('image'), async (req: AuthenticatedRequest, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file provided' });
     const url = await swapService.uploadImage(req.auth!.userId, req.file);
@@ -114,7 +115,7 @@ router.post('/upload-image', authenticateRequest, avatarUploadMiddleware.single(
 });
 
 // Send swap request
-router.post('/requests', authenticateRequest, async (req: AuthenticatedRequest, res) => {
+router.post('/requests', authenticateRequest, requireApprovedId, async (req: AuthenticatedRequest, res) => {
   try {
     const { listingId, message } = req.body;
     const request = await swapService.sendSwapRequest(listingId, req.auth!.userId, message);

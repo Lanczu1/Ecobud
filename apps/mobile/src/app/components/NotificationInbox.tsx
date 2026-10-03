@@ -213,8 +213,13 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
         model.setFocusedEventId(id);
         model.setActiveOverlay('events');
       } else if (n.type === 'verification') {
-        model.setActiveOverlay(null);
-        model.setActiveTab('profile');
+        if (n.relatedType === 'id_verification') {
+          await model.refreshIdVerification();
+          model.setActiveOverlay('idVerification');
+        } else {
+          model.setActiveOverlay(null);
+          model.setActiveTab('profile');
+        }
       } else if (n.type === 'leaderboard') {
         model.setActiveOverlay(null);
         model.setActiveOverlay('leaderboard');

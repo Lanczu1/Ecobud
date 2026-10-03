@@ -1,3 +1,4 @@
+import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -331,6 +332,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/progress',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const payload = progressSchema.parse(req.body);
     const userId = req.auth!.userId;
@@ -382,6 +384,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/analyze',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   analyzeLimiter,
   analyzeUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
@@ -492,6 +495,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/upload-proof',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   uploadProofLimiter,
   challengeUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
@@ -559,6 +563,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/submissions',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const payload = submissionSchema.parse(req.body);
     const requestKey = readIdempotencyKey(req);
@@ -660,6 +665,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/verify-qr',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   qrVerificationLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
@@ -777,6 +783,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/after-photo',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   challengeUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     let { afterProofUrl, submissionId } = req.body;
@@ -881,6 +888,7 @@ challengeRoutes.post(
   '/:challengeInstanceId/claim',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   claimLimiter,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;

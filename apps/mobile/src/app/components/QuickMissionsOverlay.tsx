@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   BackHandler,
+  Easing,
   PanResponder,
   StyleSheet,
   View,
@@ -12,23 +12,25 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
 import { Text } from '../../shared/accessibility/primitives';
 import { FastImage } from '../../shared/ui/FastImage';
+import { Animated } from '../../shared/accessibility/animations';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
 import type { EcoBudMobileModel, ChallengeWithProgress } from '../types/home';
-
-export type QuickMissionGesture = { phase: 'move' | 'release' | 'cancel'; x: number; y: number };
+import type { QuickMissionGestureChannel } from '../utils/quickMissionGesture';
 
 export function QuickMissionsOverlay({
   model,
   onClose,
   anchorBounds,
-  gesture,
+  gestureChannel,
 }: {
   model: EcoBudMobileModel;
   onClose: () => void;
   anchorBounds?: { x: number; y: number; width: number; height: number };
-  gesture?: QuickMissionGesture | null;
+  gestureChannel?: QuickMissionGestureChannel;
 }) {
   const insets = useSafeAreaInsets();
+  const { preferences } = useAccessibility();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const isNarrow = screenWidth < 380;
@@ -56,6 +58,8 @@ export function QuickMissionsOverlay({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const fanAnim = useRef(new Animated.Value(0)).current;
   const isClosingRef = useRef(false);
+  const mountedRef = useRef(false);
+  const transitionRef = useRef<Animated.CompositeAnimation | null>(null);
 
   // Hover state and animated scale springs for the 3 items
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -66,46 +70,61 @@ export function QuickMissionsOverlay({
   const scaleAnim2 = useRef(new Animated.Value(1)).current;
 
   // Filter 3 active quick missions
-  let missions = model.challenges
-    .filter(challenge => {
-      const expired = challenge.endDate && new Date(challenge.endDate).getTime() <= Date.now();
-      return challenge.active && !expired && challenge.imageUrl && challenge.progress?.status !== 'completed';
-    })
-    .sort((a, b) => Number(Boolean(b.isFeatured)) - Number(Boolean(a.isFeatured)))
-    .slice(0, 3);
+  const missions = useMemo(() => {
+    let selectedMissions = model.challenges
+      .filter(challenge => {
+        const expired = challenge.endDate && new Date(challenge.endDate).getTime() <= Date.now();
+        return challenge.active && !expired && challenge.imageUrl && challenge.progress?.status !== 'completed';
+      })
+      .sort((a, b) => Number(Boolean(b.isFeatured)) - Number(Boolean(a.isFeatured)))
+      .slice(0, 3);
 
-  if (missions.length < 3) {
-    const existingIds = new Set(missions.map(m => m.id));
-    const extras = model.challenges
-      .filter(c => c.active && c.imageUrl && !existingIds.has(c.id))
-      .slice(0, 3 - missions.length);
-    missions = [...missions, ...extras];
-  }
+    if (selectedMissions.length < 3) {
+      const existingIds = new Set(selectedMissions.map(m => m.id));
+      const extras = model.challenges
+        .filter(c => c.active && c.imageUrl && !existingIds.has(c.id))
+        .slice(0, 3 - selectedMissions.length);
+      selectedMissions = [...selectedMissions, ...extras];
+    }
+    return selectedMissions;
+  }, [model.challenges]);
 
   // Smooth entrance
   useEffect(() => {
-    Animated.parallel([
+    mountedRef.current = true;
+    isClosingRef.current = false;
+    const animation = Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 80,
+        duration: 160,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
+        isInteraction: false,
       }),
       Animated.timing(fanAnim, {
         toValue: 1,
-        duration: 120,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
+        isInteraction: false,
       }),
-    ]).start();
+    ]);
+    transitionRef.current = animation;
+    animation.start();
+    return () => { mountedRef.current = false; transitionRef.current?.stop(); };
   }, [fadeAnim, fanAnim]);
 
   const handleDismiss = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
-      Animated.spring(fanAnim, { toValue: 0, tension: 90, friction: 9, useNativeDriver: true }),
-    ]).start(() => {
-      onClose();
+    transitionRef.current?.stop();
+    const animation = Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true, isInteraction: false }),
+      Animated.timing(fanAnim, { toValue: 0, duration: 160, easing: Easing.in(Easing.quad), useNativeDriver: true, isInteraction: false }),
+    ]);
+    transitionRef.current = animation;
+    animation.start(({ finished }) => {
+      if (finished && mountedRef.current) onClose();
     });
   }, [fadeAnim, fanAnim, onClose]);
 
@@ -114,10 +133,14 @@ export function QuickMissionsOverlay({
       if (isClosingRef.current) return;
       isClosingRef.current = true;
       triggerSuccessHaptic();
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-        Animated.timing(fanAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-      ]).start(() => {
+      transitionRef.current?.stop();
+      const animation = Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 140, easing: Easing.in(Easing.quad), useNativeDriver: true, isInteraction: false }),
+        Animated.timing(fanAnim, { toValue: 0, duration: 160, easing: Easing.in(Easing.quad), useNativeDriver: true, isInteraction: false }),
+      ]);
+      transitionRef.current = animation;
+      animation.start(({ finished }) => {
+        if (!finished || !mountedRef.current) return;
         onClose();
         model.openChallengeMission(mission);
       });
@@ -177,6 +200,7 @@ export function QuickMissionsOverlay({
 
   const updateHover = useCallback(
     (x: number, y: number) => {
+      if (isClosingRef.current) return;
       const nextIndex = calculateHoveredIndex(x, y);
       if (hoveredIndexRef.current !== nextIndex) {
         hoveredIndexRef.current = nextIndex;
@@ -191,26 +215,22 @@ export function QuickMissionsOverlay({
 
   // Animate hover scale springs
   useEffect(() => {
-    Animated.spring(scaleAnim0, {
-      toValue: hoveredIndex === 0 ? 1.15 : hoveredIndex === 1 || hoveredIndex === 2 ? 0.95 : 1,
-      tension: 130,
-      friction: 8,
-      useNativeDriver: true,
-    }).start();
-
-    Animated.spring(scaleAnim1, {
-      toValue: hoveredIndex === 1 ? 1.15 : hoveredIndex === 0 || hoveredIndex === 2 ? 0.95 : 1,
-      tension: 130,
-      friction: 8,
-      useNativeDriver: true,
-    }).start();
-
-    Animated.spring(scaleAnim2, {
-      toValue: hoveredIndex === 2 ? 1.15 : hoveredIndex === 0 || hoveredIndex === 1 ? 0.95 : 1,
-      tension: 130,
-      friction: 8,
-      useNativeDriver: true,
-    }).start();
+    if (isClosingRef.current) return;
+    const animation = Animated.parallel([scaleAnim0, scaleAnim1, scaleAnim2].map((value, index) =>
+      Animated.spring(value, {
+        toValue: hoveredIndex === index ? 1.1 : hoveredIndex !== null && hoveredIndex >= 0 ? 0.98 : 1,
+        stiffness: 240,
+        damping: 22,
+        mass: 0.7,
+        overshootClamping: true,
+        restDisplacementThreshold: 0.002,
+        restSpeedThreshold: 0.002,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ));
+    animation.start();
+    return () => animation.stop();
   }, [hoveredIndex, scaleAnim0, scaleAnim1, scaleAnim2]);
 
   const releaseAt = useCallback((x: number, y: number) => {
@@ -220,11 +240,26 @@ export function QuickMissionsOverlay({
   }, [calculateHoveredIndex, missions, handleSelectMission, handleDismiss]);
 
   useEffect(() => {
-    if (!gesture) return;
-    if (gesture.phase === 'move') updateHover(gesture.x, gesture.y);
-    else if (gesture.phase === 'release') releaseAt(gesture.x, gesture.y);
-    else handleDismiss();
-  }, [gesture, updateHover, releaseAt, handleDismiss]);
+    return gestureChannel?.subscribe(gesture => {
+      if (gesture.phase === 'move') updateHover(gesture.x, gesture.y);
+      else if (gesture.phase === 'release') releaseAt(gesture.x, gesture.y);
+      else handleDismiss();
+    });
+  }, [gestureChannel, updateHover, releaseAt, handleDismiss]);
+
+  const itemTransforms = useMemo(() => {
+    const fanScale = fanAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
+    return [
+      [{ translateX: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [spreadX * 0.35, 0] }) },
+        { translateY: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [leftRightY * 0.35, 0] }) },
+        { scale: Animated.multiply(fanScale, scaleAnim0) }],
+      [{ translateY: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [centerY * 0.35, 0] }) },
+        { scale: Animated.multiply(fanScale, scaleAnim1) }],
+      [{ translateX: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [-spreadX * 0.35, 0] }) },
+        { translateY: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [leftRightY * 0.35, 0] }) },
+        { scale: Animated.multiply(fanScale, scaleAnim2) }],
+    ];
+  }, [fanAnim, spreadX, leftRightY, centerY, scaleAnim0, scaleAnim1, scaleAnim2]);
 
   const panResponder = useMemo(() =>
     PanResponder.create({
@@ -350,26 +385,7 @@ export function QuickMissionsOverlay({
                 top: c0Y - circleSizeSide / 2,
                 width: circleSizeSide,
                 opacity: fanAnim,
-                transform: [
-                  {
-                    translateX: fanAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [spreadX * 0.45, 0],
-                    }),
-                  },
-                  {
-                    translateY: fanAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [leftRightY * 0.45, 0],
-                    }),
-                  },
-                  {
-                    scale: Animated.multiply(
-                      fanAnim.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }),
-                      scaleAnim0
-                    ),
-                  },
-                ],
+                transform: itemTransforms[0],
               },
             ]}
           >
@@ -381,13 +397,19 @@ export function QuickMissionsOverlay({
                   height: circleSizeSide,
                   borderRadius: circleSizeSide / 2,
                   borderColor: hoveredIndex === 0 ? '#6EE7B7' : '#34D399',
-                  shadowColor: hoveredIndex === 0 ? '#6EE7B7' : '#34D399',
-                  shadowRadius: hoveredIndex === 0 ? 16 : 10,
+                  shadowOpacity: preferences.performance ? 0 : 0.25,
+                  elevation: preferences.performance ? 0 : 3,
                 },
               ]}
             >
               <FastImage
                 source={{ uri: missions[0].imageUrl }}
+                thumbnailWidth={160}
+                thumbnailHeight={160}
+                imageQuality={75}
+                transition={0}
+                allowDownscaling
+                enforceEarlyResizing
                 style={styles.imageFill}
                 contentFit="cover"
                 fallback={fallback}
@@ -398,6 +420,7 @@ export function QuickMissionsOverlay({
             <View
               style={[
                 styles.rewardPill,
+                preferences.performance && { shadowOpacity: 0, elevation: 0 },
                 hoveredIndex === 0 && {
                   borderColor: '#6EE7B7',
                   backgroundColor: '#0C2D1F',
@@ -411,6 +434,7 @@ export function QuickMissionsOverlay({
                 source={require('../../../assets/coin.png')}
                 style={styles.pillCoinIcon}
                 contentFit="contain"
+                transition={0}
               />
               <Text style={styles.pillTextCoin}>
                 +{missions[0].ecoCoinReward > 0 ? missions[0].ecoCoinReward : 20}
@@ -429,20 +453,7 @@ export function QuickMissionsOverlay({
                 top: c1Y - circleSizeCenter / 2,
                 width: circleSizeCenter,
                 opacity: fanAnim,
-                transform: [
-                  {
-                    translateY: fanAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [centerY * 0.45, 0],
-                    }),
-                  },
-                  {
-                    scale: Animated.multiply(
-                      fanAnim.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }),
-                      scaleAnim1
-                    ),
-                  },
-                ],
+                transform: itemTransforms[1],
               },
             ]}
           >
@@ -454,13 +465,19 @@ export function QuickMissionsOverlay({
                   height: circleSizeCenter,
                   borderRadius: circleSizeCenter / 2,
                   borderColor: hoveredIndex === 1 ? '#6EE7B7' : '#34D399',
-                  shadowColor: hoveredIndex === 1 ? '#6EE7B7' : '#34D399',
-                  shadowRadius: hoveredIndex === 1 ? 16 : 10,
+                  shadowOpacity: preferences.performance ? 0 : 0.25,
+                  elevation: preferences.performance ? 0 : 3,
                 },
               ]}
             >
               <FastImage
                 source={{ uri: missions[1].imageUrl }}
+                thumbnailWidth={160}
+                thumbnailHeight={160}
+                imageQuality={75}
+                transition={0}
+                allowDownscaling
+                enforceEarlyResizing
                 style={styles.imageFill}
                 contentFit="cover"
                 fallback={fallback}
@@ -471,6 +488,7 @@ export function QuickMissionsOverlay({
             <View
               style={[
                 styles.rewardPill,
+                preferences.performance && { shadowOpacity: 0, elevation: 0 },
                 hoveredIndex === 1 && {
                   borderColor: '#6EE7B7',
                   backgroundColor: '#0C2D1F',
@@ -484,6 +502,7 @@ export function QuickMissionsOverlay({
                 source={require('../../../assets/coin.png')}
                 style={styles.pillCoinIcon}
                 contentFit="contain"
+                transition={0}
               />
               <Text style={styles.pillTextCoin}>
                 +{missions[1].ecoCoinReward > 0 ? missions[1].ecoCoinReward : 20}
@@ -502,26 +521,7 @@ export function QuickMissionsOverlay({
                 top: c2Y - circleSizeSide / 2,
                 width: circleSizeSide,
                 opacity: fanAnim,
-                transform: [
-                  {
-                    translateX: fanAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-spreadX * 0.45, 0],
-                    }),
-                  },
-                  {
-                    translateY: fanAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [leftRightY * 0.45, 0],
-                    }),
-                  },
-                  {
-                    scale: Animated.multiply(
-                      fanAnim.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }),
-                      scaleAnim2
-                    ),
-                  },
-                ],
+                transform: itemTransforms[2],
               },
             ]}
           >
@@ -533,13 +533,19 @@ export function QuickMissionsOverlay({
                   height: circleSizeSide,
                   borderRadius: circleSizeSide / 2,
                   borderColor: hoveredIndex === 2 ? '#6EE7B7' : '#34D399',
-                  shadowColor: hoveredIndex === 2 ? '#6EE7B7' : '#34D399',
-                  shadowRadius: hoveredIndex === 2 ? 16 : 10,
+                  shadowOpacity: preferences.performance ? 0 : 0.25,
+                  elevation: preferences.performance ? 0 : 3,
                 },
               ]}
             >
               <FastImage
                 source={{ uri: missions[2].imageUrl }}
+                thumbnailWidth={160}
+                thumbnailHeight={160}
+                imageQuality={75}
+                transition={0}
+                allowDownscaling
+                enforceEarlyResizing
                 style={styles.imageFill}
                 contentFit="cover"
                 fallback={fallback}
@@ -550,6 +556,7 @@ export function QuickMissionsOverlay({
             <View
               style={[
                 styles.rewardPill,
+                preferences.performance && { shadowOpacity: 0, elevation: 0 },
                 hoveredIndex === 2 && {
                   borderColor: '#6EE7B7',
                   backgroundColor: '#0C2D1F',
@@ -563,6 +570,7 @@ export function QuickMissionsOverlay({
                 source={require('../../../assets/coin.png')}
                 style={styles.pillCoinIcon}
                 contentFit="contain"
+                transition={0}
               />
               <Text style={styles.pillTextCoin}>
                 +{missions[2].ecoCoinReward > 0 ? missions[2].ecoCoinReward : 50}
@@ -620,8 +628,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.85,
-    elevation: 10,
+    shadowColor: '#34D399',
+    shadowRadius: 6,
+    shadowOpacity: 0.25,
+    elevation: 3,
   },
   imageFill: {
     width: '100%',
@@ -642,9 +652,9 @@ const styles = StyleSheet.create({
     gap: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
     minWidth: 84,
   },
   pillTextLeaf: {

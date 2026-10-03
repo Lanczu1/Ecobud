@@ -1,3 +1,4 @@
+import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { eventBarangay } from '../services/eventAccess';
 import { prisma } from '../prismaClient';
@@ -90,6 +91,7 @@ eventRoutes.post(
   '/:eventId/join',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const event = await prisma.event.findUnique({
       where: { id: req.params.eventId },
@@ -144,6 +146,7 @@ eventRoutes.post(
   '/:eventId/claim',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const { eventId } = req.params;
     const userId = req.auth!.userId;
@@ -168,6 +171,7 @@ eventRoutes.post(
   '/:eventId/submissions',
   authenticateRequest,
   requireUserAccess,
+  requireApprovedId,
   eventSubmissionUploadMiddleware.single('image'),
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const { eventId } = req.params;

@@ -9,6 +9,9 @@ datasource db {
 }
 
 model User {
+  idVerificationStatus         IdVerificationStatus      @default(not_submitted) @map("id_verification_status")
+  idSubmissions                IdVerificationSubmission[] @relation("IdOwner")
+  reviewedIds                  IdVerificationSubmission[] @relation("IdReviewer")
   announcements Announcement[]
   notificationEvents           NotificationEvent[]
   notificationDevices          NotificationDevice[]
@@ -66,6 +69,33 @@ model User {
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
   @@index([status, role, points(sort: Desc), createdAt], map: "users_leaderboard_order_idx")
   @@map("users")
+}
+
+enum IdVerificationStatus {
+  not_submitted
+  pending
+  approved
+  rejected
+}
+
+model IdVerificationSubmission {
+  id           String @id @default(cuid())
+  userId       String @map("user_id")
+  user         User @relation("IdOwner", fields: [userId], references: [id], onDelete: Cascade)
+  legalName    String @map("legal_name")
+  idType       String @map("id_type")
+  barangay     String
+  documentPath String? @map("document_path")
+  status       IdVerificationStatus @default(pending)
+  reason       String?
+  reviewerId   String? @map("reviewer_id")
+  reviewer     User? @relation("IdReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  submittedAt  DateTime @default(now()) @map("submitted_at")
+  reviewedAt   DateTime? @map("reviewed_at")
+  @@index([status, barangay, submittedAt])
+  @@index([userId, submittedAt])
+  @@index([reviewedAt])
+  @@map("id_verification_submissions")
 }
 
 model Announcement {

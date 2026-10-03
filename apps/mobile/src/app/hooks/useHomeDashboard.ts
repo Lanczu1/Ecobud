@@ -1,5 +1,4 @@
 import { getQuizLessonProgress, getVideoProgressLimit, isLocalLessonProgressNewer } from '../utils/lessonProgress';
-import { getRegisteredBarangay } from '../utils/registeredBarangay';
 import { decodeProfileSnapshot, profileSnapshotKey } from '../utils/profileSnapshot';
 import { useNotifications } from './useNotifications';
 import { takeUnseenBadges } from '../utils/badgeUnlockQueue';
@@ -35,7 +34,7 @@ import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMut
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import { realtimeService } from '../../shared/supabase/realtimeService';
-import { type EcoBadge } from '../../shared/api/ecobudApi';
+import { ecobudApi, type IdVerificationStatus, type EcoBadge } from '../../shared/api/ecobudApi';
 import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
 import { coachMarkSpotlightStore } from '../utils/coachMarkSpotlightStore';
@@ -131,6 +130,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   });
   const [session, setSession] = useState<SessionPayload | null>(null);
+  const [idVerificationStatus, setIdVerificationStatus] = useState<IdVerificationStatus>('not_submitted');
   const [notificationDestination, setNotificationDestination] = useState<{type:string;id:string}|null>(null);
   const [pendingNotificationId, setPendingNotificationId] = useState<string|null>(null);
   const [pushNotificationsEnabled, setPushNotificationsEnabledState] = useState(true);
@@ -1846,6 +1846,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           DeviceEventEmitter.emit('notificationsChanged');
           DeviceEventEmitter.emit('notificationsInboxRefresh');
           DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
+          if (notice.relatedType === 'id_verification') DeviceEventEmitter.emit('idVerificationChanged');
           if (notice.scope !== 'notifications') {
             showNotification({
               title: notice.title,
@@ -1951,25 +1952,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
   ]);
 
   const openChallengeMission = useCallback((challenge: ChallengeWithProgress) => {
-    const userBarangay = getRegisteredBarangay(profile, session);
-    if (!userBarangay) {
-      Alert.alert(
-        'Barangay Location Required',
-        'Please set your registered Barangay in your profile before participating in challenges to represent your community!',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Set Barangay',
-            style: 'default',
-            onPress: () => {
-              setActiveOverlayState('editProfile');
-            },
-          },
-        ]
-      );
-      return;
-    }
-
     setSelectedChallenge(challenge);
 
     setRecentViewedMission(challenge);
@@ -1982,7 +1964,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
 
     setActiveOverlayState('ai_mission');
-  }, [profile, session]);
+  }, []);
 
   const handleCompleteLesson = useCallback(async () => {
     await runWithActionLoader('Verifying lesson completion...', async () => {
@@ -2293,8 +2275,18 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setChallenges(fresh.items);
     setIsCycleActive(fresh.isCycleActive ?? true);
   }, []);
+  const requireIdApproval = useCallback(() => {
+    if (idVerificationStatus === 'approved') return true;
+    Alert.alert('ID approval required', 'ID approval is required to use this feature. You can still browse and complete Learn activities.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'View verification status', onPress: () => setActiveOverlayState('idVerification') },
+    ]);
+    return false;
+  }, [idVerificationStatus]);
+
   const handleChallengeProgress = useCallback(
     async (challenge: ChallengeWithProgress, nextProgress: number) => {
+      if (!requireIdApproval()) return;
       await runWithActionLoader('Updating challenge progress...', async () => {
         try {
           const activeSession = ensureSession();
@@ -2334,6 +2326,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     },
     [
       applyOfflineChallengeProgress,
+      requireIdApproval,
       ensureSession,
       refreshChallenges,
       runMutationWithOfflineFallback,
@@ -2388,6 +2381,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
   const handleJoinEvent = useCallback(
     async (eventId: string) => {
+      if (!requireIdApproval()) return false;
       if (eventJoinInFlightRef.current.has(eventId)) return false;
       eventJoinInFlightRef.current.add(eventId);
 
@@ -2440,7 +2434,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         eventJoinInFlightRef.current.delete(eventId);
       }
     },
-    [ensureSession, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
+    [requireIdApproval, ensureSession, runMutationWithOfflineFallback, runWithActionLoader, showNotification],
   );
 
   const handleClaimEventReward = useCallback(
@@ -2633,7 +2627,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
    */
   const handleHardwareBackPress = useCallback((): boolean => {
     // 1. If CoachMarks walkthrough tutorial is open, close it
-    if (coachMarksVisible) {
+    if (coachMarksVisible && activeOverlay !== 'idVerification') {
       completeCoachMarks();
       return true;
     }
@@ -3120,6 +3114,50 @@ export function useHomeDashboard(): EcoBudMobileModel {
     await persistSession(updatedSession);
   }, [ensureSession, persistSession]);
 
+  const applyIdVerificationStatus = useCallback((status: IdVerificationStatus, userId: string) => {
+    const current = latestSessionRef.current;
+    if (!current || current.user.id !== userId) return;
+    setIdVerificationStatus(status);
+    if (current.user.idVerificationStatus !== status) {
+      const next = { ...current, user: { ...current.user, idVerificationStatus: status } };
+      setSession(next);
+      void persistSession(next);
+    }
+  }, [persistSession]);
+
+  const refreshIdVerification = useCallback(async () => {
+    if (!session?.token) return;
+    const result = await ecobudApi.getIdVerification(session.token);
+    applyIdVerificationStatus(result.status, session.user.id);
+  }, [session?.token, applyIdVerificationStatus]);
+
+  useEffect(() => {
+    if (!session?.token || session.user.role !== 'user') return;
+    let alive = true;
+    const sync = async () => {
+      try {
+        const result = await ecobudApi.getIdVerification(session.token);
+        if (alive) applyIdVerificationStatus(result.status, session.user.id);
+      } catch { /* Keep the last known status; the API enforces every restricted action. */ }
+    };
+    setIdVerificationStatus(session.user.idVerificationStatus ?? 'not_submitted');
+    void sync();
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void sync(); }, 30000);
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void sync(); });
+    const changed = DeviceEventEmitter.addListener('idVerificationChanged', () => void sync());
+    return () => { alive = false; clearInterval(timer); listener.remove(); changed.remove(); };
+  }, [session?.token, session?.user.id, applyIdVerificationStatus]);
+
+  const idPromptedUser = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session) { idPromptedUser.current = null; return; }
+    if (session.user.role === 'user' && session.user.idVerificationStatus === 'not_submitted' && idPromptedUser.current !== session.user.id) {
+      idPromptedUser.current = session.user.id;
+      setActiveOverlayState('idVerification');
+    }
+  }, [session?.user.id]);
+
+
   const userDisplayName =
     profile?.profile?.displayName ??
     session?.user.displayName ??
@@ -3136,6 +3174,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     isHydrating,
     hasOnboarded,
     session,
+    idVerificationStatus,
+    refreshIdVerification,
+    requireIdApproval,
     actionOverlayVisible,
     actionOverlayLabel,
     activeTab,

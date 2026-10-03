@@ -1,3 +1,4 @@
+import { IdVerificationOverlay, idStatusLabel } from './IdVerificationOverlay';
 import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { NotificationInbox } from './NotificationInbox';
 import { AccessibilityOverlay } from './AccessibilityOverlay';
@@ -106,6 +107,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
 
   // Determine initial step
   const getInitialStep = (): 'details' | 'capture' | 'result' | 'capture_after' => {
+    if (model.idVerificationStatus !== 'approved') return 'details';
     if (isReadyForAfterPhoto && !submission?.afterProofUrl) {
       return 'capture_after';
     }
@@ -386,6 +388,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   }
 
   const handleStartRecognition = async () => {
+    if (!model.requireIdApproval()) return;
     if (attemptsLeft <= 0 && cooldownRemainingSec > 0) {
       const minutes = Math.floor(cooldownRemainingSec / 60);
       const seconds = cooldownRemainingSec % 60;
@@ -406,6 +409,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const processImage = async (uri: string) => {
+    if (!model.requireIdApproval()) return;
     const operationId = ++activeOperationRef.current;
     setCapturedImage(uri);
     setProcessing(true);
@@ -1235,7 +1239,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                     accessibilityRole="button"
                     accessibilityLabel="Retake After photo"
                     style={[styles.primaryButton, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F3F4F6', borderWidth: 1, borderColor: isDark ? theme.colors.cardBorder : '#D1D5DB', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
-                    onPress={() => { setCapturedImage(null); resetCameraSession(); setStep('capture_after'); }}
+                    onPress={() => { setCapturedImage(null); resetCameraSession(); if (model.requireIdApproval()) setStep('capture_after'); }}
                   >
                     <Ionicons name="camera" size={20} color={isDark ? theme.colors.textPrimary : '#14532D'} />
                     <Text style={[styles.primaryButtonText, { color: isDark ? theme.colors.textPrimary : '#14532D' }]}>Retake Photo</Text>
@@ -1428,6 +1432,11 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
             )}
 
+            {model.idVerificationStatus !== 'approved' && <SurfaceCard style={{ padding: 16, gap: 8 }}>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{idStatusLabel[model.idVerificationStatus]}</Text>
+              <Text style={{ color: theme.colors.textMuted }}>You can view this challenge. ID approval is required before starting recognition.</Text>
+              <PrimaryButton label="View verification status" onPress={() => model.setActiveOverlay('idVerification')} />
+            </SurfaceCard>}
             {/* Attempt / Cooldown Status Banner directly above Start Recognition button */}
             {!isPreliminaryApproved && (
               <View style={{
@@ -1514,7 +1523,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
                   void ensureCameraPermission().then((granted) => {
                     if (!granted || activeOperationRef.current !== operationId) return;
                     resetCameraSession();
-                    setStep('capture_after');
+                    if (model.requireIdApproval()) setStep('capture_after');
                   });
                 }} />
               ) : (
@@ -1771,6 +1780,8 @@ export function OverlayRouter({ model }: { model: EcoBudMobileModel }) {
       return <BadgeUnlockedOverlay model={model} />;
     case 'eventApproved':
       return <EventApprovedOverlay model={model} />;
+    case 'idVerification':
+      return <IdVerificationOverlay model={model} />;
     case 'settings':
       return <SettingsOverlay model={model} />;
     case 'editProfile':
@@ -7584,6 +7595,11 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView ref={formScroll.scrollRef} showsVerticalScrollIndicator={false} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
+          <SurfaceCard style={{ padding: 16, gap: 10 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700' }}>{idStatusLabel[model.idVerificationStatus]}</Text>
+            <Text style={{ color: theme.colors.textMuted }}>ID approval is required for Challenges, joining Eco Events, and creating listings or requests. Learn remains available.</Text>
+            <PrimaryButton label="View ID verification" onPress={() => model.setActiveOverlay('idVerification')} />
+          </SurfaceCard>
           {isGoogleAccount ? <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
             <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="logo-google" size={19} color="#4285F4" />

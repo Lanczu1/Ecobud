@@ -104,12 +104,19 @@ const resolveApiBase = () => {
 const API_BASE = resolveApiBase();
 const apiOrigin = API_BASE.replace(/\/api$/, '');
 
+export type IdVerificationStatus = 'not_submitted' | 'pending' | 'approved' | 'rejected';
+export interface IdVerificationResult {
+  status: IdVerificationStatus;
+  submission: { id: string; legalName: string; idType: string; status: IdVerificationStatus; reason: string | null; submittedAt: string; reviewedAt: string | null } | null;
+}
+
 export interface SessionUser {
   id: string;
   name: string;
   email: string;
   role: string;
   status: string;
+  idVerificationStatus?: IdVerificationStatus;
   isGoogleAccount?: boolean;
   points: number;
   currentStreak: number;
@@ -387,6 +394,7 @@ export interface ProfileData {
   id: string;
   name?: string | null;
   email: string;
+  idVerificationStatus?: IdVerificationStatus;
   isGoogleAccount?: boolean;
   role: string;
   status?: string | null;
@@ -679,6 +687,9 @@ const uploadFileAsync = async <T>(
 };
 
 export const ecobudApi = {
+  getIdVerification: (token: string) => request<IdVerificationResult>('/id-verification/me', { token }),
+  submitIdVerification: (token: string, uri: string, legalName: string, idType: string, onProgress?: (value: number) => void) =>
+    uploadFileAsync<IdVerificationResult>('/id-verification/me', token, uri, { legalName, idType, consent: 'true' }, undefined, onProgress),
   requestPasswordReset: (email: string) => request<{ success: boolean; message: string; expiresAt: string; serverTime: string }>('/auth/password-reset/request-code', { method: 'POST', body: { email } }),
   verifyPasswordResetCode: (email: string, code: string) => request<{ resetToken: string; expiresAt: string; serverTime: string }>('/auth/password-reset/verify-code', { method: 'POST', body: { email, code } }),
   completePasswordReset: (resetToken: string, password: string) => request<{ success: boolean; message: string }>('/auth/password-reset/complete', { method: 'POST', body: { resetToken, password } }),

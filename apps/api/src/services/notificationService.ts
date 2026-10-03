@@ -91,11 +91,14 @@ export async function deliverNotification(d: Delivery) {
     if (d.channel === 'email') {
         if (n.user.email !== d.destination)
             return 'cancelled';
-        await mail.sendMail({ from: `"ECOBUD" <${process.env.GMAIL_USER}>`, to: d.destination, messageId: `<welcome-${n.userId}@ecobud.app>`, ...welcomeEmail(process.env.ECOBUD_WELCOME_URL || 'ecobud://') });
+        const content = n.relatedType === 'id_verification'
+            ? { subject: `ECOBUD: ${n.title}`, text: `${n.message}\n\nOpen ECOBUD > Settings > ID verification to view your status.` }
+            : welcomeEmail(process.env.ECOBUD_WELCOME_URL || 'ecobud://');
+        await mail.sendMail({ from: `"ECOBUD" <${process.env.GMAIL_USER}>`, to: d.destination, messageId: `<notification-${n.id}@ecobud.app>`, ...content });
         return 'sent';
     }
     if (d.channel === 'realtime') {
-        if (!await supabaseRealtimeService.publishUserNotice(n.userId, { scope: 'notifications', title: n.title, message: n.message, relatedType: n.type }))
+        if (!await supabaseRealtimeService.publishUserNotice(n.userId, { scope: 'notifications', title: n.title, message: n.message, relatedType: n.relatedType === 'id_verification' ? n.relatedType : n.type }))
             throw new Error('Realtime unavailable');
         return 'sent';
     }

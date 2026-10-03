@@ -29,7 +29,7 @@ import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appU
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic } from '../utils/haptics';
-import type { QuickMissionGesture } from './QuickMissionsOverlay';
+import type { QuickMissionGesture } from '../utils/quickMissionGesture';
 import LottieView from '../../shared/accessibility/AccessibleLottie';
 import { Header } from './Header';
 import { useHomeAnimationVisibility } from './HomeAnimationVisibility';
@@ -1216,6 +1216,21 @@ function TabItem({
 }) {
   const { theme, isDark } = useTheme();
   const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const pressFeedback = useRef<Animated.CompositeAnimation | null>(null);
+  React.useEffect(() => () => { pressFeedback.current?.stop(); }, []);
+  const animatePress = (pressed: boolean) => {
+    pressFeedback.current?.stop();
+    const animation = Animated.timing(pressScale, {
+      toValue: pressed ? 0.94 : 1,
+      duration: pressed ? 100 : 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    pressFeedback.current = animation;
+    animation.start();
+  };
   const activeIconName = isActive
     ? (item.icon.replace('-outline', '') as any)
     : item.icon;
@@ -1270,6 +1285,8 @@ function TabItem({
         });
       }}
       onPress={() => { if (!heldRef.current) onPress(); }}
+      onPressIn={isCenterAction ? () => animatePress(true) : undefined}
+      onPressOut={isCenterAction ? () => animatePress(false) : undefined}
       onLongPress={onLongPress ? () => openQuickMissions(true) : undefined}
       delayLongPress={200}
       accessibilityRole="button"
@@ -1277,7 +1294,7 @@ function TabItem({
       accessibilityHint={onLongPress ? 'Hold to preview quick missions' : undefined}
       accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Show quick missions' }] : undefined}
       onAccessibilityAction={onLongPress ? event => { if (event.nativeEvent.actionName === 'longpress') openQuickMissions(); } : undefined}
-      activeOpacity={0.75}
+      activeOpacity={isCenterAction ? 1 : 0.75}
       style={[styles.bottomBarItem, { width: '100%' }]}
     >
       <Animated.View
@@ -1308,11 +1325,13 @@ function TabItem({
               },
             ]}
           >
-            <Ionicons
-              name={activeIconName}
-              size={centerIconSize}
-              color={isActive ? activeColor : inactiveColor}
-            />
+            <Animated.View style={{ transform: [{ scale: pressScale }] }}>
+              <Ionicons
+                name={activeIconName}
+                size={centerIconSize}
+                color={isActive ? activeColor : inactiveColor}
+              />
+            </Animated.View>
           </View>
         ) : (
           <Ionicons
