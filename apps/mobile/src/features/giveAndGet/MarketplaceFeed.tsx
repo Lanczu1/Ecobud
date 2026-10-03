@@ -598,9 +598,9 @@ export function MarketplaceFeed({
                   <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>{statusLabel}</Text>
                 </View>
                 {status === 'pending' && <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Waiting for admin approval</Text>}
-                {status === 'rejected' && listing.description &&
-                  <Text style={{ fontSize: 11, color: '#EF4444' }} numberOfLines={1}>Reason: {listing.description}</Text>}
               </View>
+              {status === 'rejected' && listing.rejectionReason &&
+                <Text style={{ fontSize: 12, color: '#EF4444', paddingHorizontal: 4, marginBottom: 8 }}>Reason: {listing.rejectionReason}</Text>}
               <SwapListingCard listing={listing} isOwnListing={true} onPress={() => onSelectListing(listing)} />
             </View>
           </Animated.View>;

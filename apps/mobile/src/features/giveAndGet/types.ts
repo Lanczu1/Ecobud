@@ -53,6 +53,7 @@ export interface SwapListing {
   postedAt: string;
   isActive: boolean;
   approvalStatus?: string;
+  rejectionReason?: string | null;
 }
 
 export interface SwapRequest {

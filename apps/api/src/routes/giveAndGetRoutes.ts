@@ -83,7 +83,7 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
   try {
     const { status, reported } = req.query;
     const { page, pageSize, skip } = parseAdminPagination(req.query);
-    const where: any = {};
+    const where: any = { approvalStatus: { not: 'deleted' } };
     if (status && status !== 'all') where.approvalStatus = status;
     if (reported === 'true') where.isReported = true;
     if (typeof req.query.search === 'string' && req.query.search.trim()) where.title = { contains: req.query.search.trim().slice(0, 100), mode: 'insensitive' };
@@ -253,11 +253,11 @@ router.delete('/swap-listings/:id', authenticateRequest, requireModeratorAccess,
 router.get('/swap-listings/stats', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
     const [total, pending, approved, rejected, reported] = await Promise.all([
-      prisma.swapListing.count(),
+      prisma.swapListing.count({ where: { approvalStatus: { not: 'deleted' } } }),
       prisma.swapListing.count({ where: { approvalStatus: 'pending' } }),
       prisma.swapListing.count({ where: { approvalStatus: 'approved' } }),
       prisma.swapListing.count({ where: { approvalStatus: 'rejected' } }),
-      prisma.swapListing.count({ where: { isReported: true } }),
+      prisma.swapListing.count({ where: { isReported: true, approvalStatus: { not: 'deleted' } } }),
     ]);
     res.json({ total, pending, approved, rejected, reported });
   } catch (error) {

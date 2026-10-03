@@ -101,6 +101,7 @@ function formatListing(row: any) {
     distanceKm: row.distanceKm,
     isActive: row.isActive,
     approvalStatus: row.approvalStatus,
+    rejectionReason: row.approvalStatus === 'rejected' ? row.reportReason ?? null : null,
     postedAt: row.createdAt,
     user: {
       id: user?.id ?? row.userId,
@@ -257,7 +258,7 @@ export const swapService = {
 
     await prisma.swapListing.update({
       where: { id },
-      data: { isActive: false },
+      data: { isActive: false, ...(listing.approvalStatus === 'rejected' ? { approvalStatus: 'deleted' } : {}) },
     });
     apiCache.delete(`user_dashboard_${listing.userId}`);
   },
@@ -498,7 +499,7 @@ export const swapService = {
 
   async fetchMyListings(userId: string) {
     const rows = await prisma.swapListing.findMany({
-      where: { userId, isActive: true },
+      where: { userId, OR: [{ isActive: true }, { approvalStatus: 'rejected' }] },
       include: profileInclude,
       orderBy: { createdAt: 'desc' },
     });

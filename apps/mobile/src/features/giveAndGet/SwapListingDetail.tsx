@@ -405,7 +405,7 @@ export function SwapListingDetail({
                       { color: listing.approvalStatus === 'rejected' ? '#991B1B' : '#92400E' }
                     ]}>
                       {listing.approvalStatus === 'rejected'
-                        ? 'This listing was not approved by the admin. Please review and edit.'
+                        ? listing.rejectionReason ? `Reason: ${listing.rejectionReason}` : 'This listing was not approved. Please review and edit.'
                         : 'Your listing is being reviewed by the admin. It will be visible once approved.'}
                     </Text>
                   </View>
