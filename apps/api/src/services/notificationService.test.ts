@@ -8,6 +8,11 @@ import { deliverNotification } from './notificationService';
 const job = { id: 'delivery', notification_id: 'n', channel: 'push', destination: 'fcm-registration-token', attempts: 1, receipt: null };
 beforeEach(() => { vi.clearAllMocks(); mocks.db.notification.findUnique.mockResolvedValue({ id: 'n', userId: 'alice', title: 'New Learn', message: 'A module is available', priority: 'low', user: { status: 'active', sessionVersion: 0, email: 'alice@example.com' } }); mocks.db.$queryRaw.mockResolvedValue([{ token: job.destination }]); mocks.sendPush.mockResolvedValue('projects/ecobud/messages/message-id'); });
 describe('push delivery isolation', () => {
+    it('preserves registration for generic Firebase argument errors', async () => {
+        mocks.sendPush.mockRejectedValue(Object.assign(new Error('payload'), { code: 'messaging/invalid-argument' }));
+        await expect(deliverNotification(job)).rejects.toMatchObject({ code: 'messaging/invalid-argument' });
+        expect(mocks.db.$executeRaw).not.toHaveBeenCalled();
+    });
     it('deactivates an invalid token without removing the in-app notification', async () => { mocks.sendPush.mockRejectedValue(Object.assign(new Error('invalid'), { code: 'messaging/registration-token-not-registered' })); expect(await deliverNotification(job)).toBe('failed'); expect(String(mocks.db.$executeRaw.mock.calls[0][0])).toContain('DELETE FROM notification_devices'); });
     it('saves the Firebase message ID after an accepted send', async () => { expect(await deliverNotification(job)).toBe('sent'); expect(mocks.db.$executeRaw.mock.calls[0]).toContain('projects/ecobud/messages/message-id'); });
     it('never sends to suspended accounts or revoked devices', async () => { mocks.db.$queryRaw.mockResolvedValue([]); expect(await deliverNotification(job)).toBe('cancelled'); expect(mocks.sendPush).not.toHaveBeenCalled(); });
