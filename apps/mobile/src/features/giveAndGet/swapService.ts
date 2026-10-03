@@ -61,6 +61,8 @@ function formatListing(row: any): SwapListing {
     postedAt: row.postedAt || row.created_at || new Date().toISOString(),
     isActive: row.isActive ?? row.is_active ?? true,
     approvalStatus: row.approvalStatus ?? row.approval_status ?? 'pending',
+    isReported: row.isReported ?? false,
+    reportCount: row.isReported ? row.reportCount ?? 0 : 0,
     rejectionReason: row.rejectionReason ?? null,
   };
 }
