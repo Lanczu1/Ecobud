@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
-const db = vi.hoisted(() => ({ swapListing: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() } }));
+const db = vi.hoisted(() => ({ $transaction: vi.fn(), swapListing: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() }, swapListingReport: { create: vi.fn(), findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn(), updateMany: vi.fn() } }));
 vi.mock('../prismaClient', () => ({ prisma: db }));
 vi.mock('./notificationService', () => ({ sendDirectNotification: vi.fn() }));
 vi.mock('./supabaseStorageService', () => ({ supabaseStorageService: {} }));
@@ -27,13 +27,15 @@ app.use(errorResponder);
 
 type Row = { id: string; userId: string; isActive: boolean; approvalStatus: string; reportReason: string | null };
 let rows: Row[];
+let reports: any[];
 function matches(row: Row, where: Record<string, any>): boolean {
   return Object.entries(where).every(([key, value]) => key === 'OR'
     ? value.some((branch: Record<string, any>) => matches(row, branch))
-    : row[key as keyof Row] === value);
+    : value && typeof value === 'object' && 'not' in value ? row[key as keyof Row] !== value.not : row[key as keyof Row] === value);
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  reports = [];
   rows = [
     { id: 'approved', userId: 'owner', isActive: true, approvalStatus: 'approved', reportReason: null },
     { id: 'pending', userId: 'owner', isActive: true, approvalStatus: 'pending', reportReason: null },
@@ -53,6 +55,23 @@ beforeEach(() => {
     for (const row of matched) Object.assign(row, data, { reportCount: ((row as any).reportCount || 0) + data.reportCount.increment });
     return { count: matched.length };
   });
+  db.$transaction.mockImplementation(async callback => {
+    const beforeRows = structuredClone(rows); const beforeReports = structuredClone(reports);
+    try { return await callback(db); }
+    catch (err) { rows = beforeRows; reports = beforeReports; throw err; }
+  });
+  db.swapListingReport.create.mockImplementation(async ({ data }) => {
+    if (reports.some(report => report.listingId === data.listingId && report.reporterId === data.reporterId && !report.resolvedAt)) throw Object.assign(new Error('Duplicate report'), { code: 'P2002' });
+    const report = { ...data, id: `report-${reports.length}`, occurrences: 1, createdAt: new Date(), resolvedAt: null, reporter: { name: data.reporterId, email: `${data.reporterId}@example.com` } };
+    reports.push(report); return report;
+  });
+  db.swapListingReport.updateMany.mockImplementation(async ({ where, data }) => {
+    const matched = reports.filter(report => matches(report, where));
+    matched.forEach(report => Object.assign(report, data)); return { count: matched.length };
+  });
+  db.swapListingReport.findMany.mockImplementation(async ({ where, skip = 0, take = 25 }) => reports.filter(report => matches(report, where)).slice(skip, skip + take));
+  db.swapListingReport.count.mockImplementation(async ({ where }) => reports.filter(report => matches(report, where)).length);
+  db.swapListingReport.aggregate.mockImplementation(async ({ where }) => ({ _sum: { occurrences: reports.filter(report => matches(report, where)).reduce((sum, report) => sum + report.occurrences, 0) } }));
 });
 
 describe('resident listing history', () => {
@@ -83,10 +102,56 @@ describe('resident listing history', () => {
   });
   it('limits repeated resident reports', async () => {
     for (let i = 0; i < 5; i++) {
-      await request(app).post('/swap/listings/approved/report').set('x-user', 'repeated-reporter').send({ reason: 'Fake item photos' }).expect(201);
+      rows.push({ id: `available-${i}`, userId: 'owner', isActive: true, approvalStatus: 'approved', reportReason: null });
+      await request(app).post(`/swap/listings/available-${i}/report`).set('x-user', 'repeated-reporter').send({ reason: 'Fake item photos' }).expect(201);
     }
     await request(app).post('/swap/listings/approved/report').set('x-user', 'repeated-reporter').send({ reason: 'Fake item photos' }).expect(429);
     expect(db.swapListing.updateMany).toHaveBeenCalledTimes(5);
+  });
+  it('keeps each account and reason, prevents duplicates, and retains resolved history', async () => {
+    await request(app).post('/swap/listings/approved/report').set('x-user', 'alice').send({ reportName: 'Fake Listing', reason: 'This item does not exist.' }).expect(201);
+    await request(app).post('/swap/listings/approved/report').set('x-user', 'bob').send({ reportName: 'Misleading Photos', reason: 'These photos are from another item.' }).expect(201);
+    await request(app).post('/swap/listings/approved/report').set('x-user', 'alice').send({ reportName: 'Other', reason: 'Duplicate complaint' }).expect(409);
+    expect(rows.find(row => row.id === 'approved')).toMatchObject({ reportCount: 2 });
+    await request(app).get('/give-and-get/swap-listings/approved/reports').set('x-role', 'user').expect(403);
+    await request(app).get('/give-and-get/swap-listings/approved/reports').set('x-anonymous', 'true').expect(401);
+    const first = await request(app).get('/give-and-get/swap-listings/approved/reports').expect(200);
+    expect(first.body).toMatchObject({ activeCount: 2, totalReports: 2 });
+    expect(first.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ account: 'alice (alice@example.com)', reportName: 'Fake Listing', reason: 'This item does not exist.' }),
+      expect.objectContaining({ account: 'bob (bob@example.com)', reportName: 'Misleading Photos', reason: 'These photos are from another item.' }),
+    ]));
+    const mobile = await request(app).get('/swap/listings/approved/reports').set('x-role', 'user').set('x-user', 'viewer').expect(200);
+    expect(mobile.body).toMatchObject({ activeCount: 2 });
+    expect(mobile.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reportName: 'Fake Listing', reason: 'This item does not exist.' }),
+      expect.objectContaining({ reportName: 'Misleading Photos', reason: 'These photos are from another item.' }),
+    ]));
+    for (const report of mobile.body.items) {
+      expect(Object.keys(report).sort()).toEqual(['createdAt', 'id', 'occurrences', 'reason', 'reportName']);
+    }
+    const paginated = await request(app).get('/swap/listings/approved/reports?page=2&pageSize=1').expect(200);
+    expect(paginated.body.items).toHaveLength(1);
+    expect(paginated.body.pagination).toMatchObject({ page: 2, total: 2, totalPages: 2 });
+    await request(app).patch('/give-and-get/swap-listings/approved/approve').send({}).expect(200);
+    expect(reports.every(report => report.resolvedAt instanceof Date)).toBe(true);
+    const resolved = await request(app).get('/give-and-get/swap-listings/approved/reports').expect(200);
+    expect(resolved.body).toMatchObject({ activeCount: 0, totalReports: 2 });
+    const mobileResolved = await request(app).get('/swap/listings/approved/reports').expect(200);
+    expect(mobileResolved.body).toMatchObject({ items: [], activeCount: 0 });
+    await request(app).post('/swap/listings/approved/report').set('x-user', 'alice').send({ reportName: 'Other', reason: 'A new issue after review.' }).expect(201);
+    expect(reports).toHaveLength(3);
+  });
+  it('shows moderator reports on mobile and restricts reports on unavailable listings to the owner', async () => {
+    await request(app).patch('/give-and-get/swap-listings/approved/report').send({ reportName: 'Unsafe Item', reason: 'The item has a dangerous exposed wire.' }).expect(200);
+    const mobile = await request(app).get('/swap/listings/approved/reports').set('x-role', 'user').set('x-user', 'viewer').expect(200);
+    expect(mobile.body.items[0]).toMatchObject({ reportName: 'Unsafe Item', reason: 'The item has a dangerous exposed wire.' });
+    await request(app).get('/swap/listings/approved/reports').set('x-anonymous', 'true').expect(401);
+    await request(app).patch('/give-and-get/swap-listings/approved/reject').send({ reason: 'Unsafe item.' }).expect(200);
+    await request(app).get('/swap/listings/approved/reports').set('x-user', 'viewer').expect(404);
+    const owner = await request(app).get('/swap/listings/approved/reports').set('x-user', 'owner').expect(200);
+    expect(owner.body.activeCount).toBe(1);
+    await request(app).get('/swap/listings/missing/reports').expect(404);
   });
   it('lets a moderator flag, reject and reapprove a listing through the same review flow', async () => {
     await request(app).patch('/give-and-get/swap-listings/approved/report').send({ reason: 'Misleading item description' }).expect(200);

@@ -20,6 +20,7 @@ import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
 import { PublicProfileModal } from './PublicProfileModal';
+import { ListingReportsSection } from './ListingReportsSection';
 import type { SwapListing } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
@@ -498,7 +499,7 @@ export function SwapListingDetail({
                 </View>
               )}
 
-              {listing.meetupMethod === 'pickup' && (
+              {listing.meetupMethod === 'pickup' && listing.lookingFor?.trim().toLowerCase() !== 'giveaway' && (
                 <View style={[localStyles.meetupInfoCard, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                   <Ionicons name="information-circle" size={20} color="#2563EB" />
                   <Text style={[localStyles.meetupInfoText, isDark && { color: '#93C5FD' }]}>
@@ -517,6 +518,7 @@ export function SwapListingDetail({
               )}
 
               {/* Description */}
+              <ListingReportsSection key={listing.id} listingId={listing.id} />
               {listing.description ? (
                 <View style={[localStyles.sectionWrapper, { borderTopColor: theme.colors.border }]}>
                   <Text style={[localStyles.sectionTitle, { color: theme.colors.textPrimary }]}>Description</Text>

@@ -319,6 +319,13 @@
   animation: modal-exit 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .listing-reports-dialog,
+  .listing-reports-overlay {
+    animation: none;
+  }
+}
+
 .animate-fade-in {
   animation: fade-in 0.25s ease-out both;
 }
@@ -612,4 +619,3 @@
 .dark .text-amber-700 {
   color: #fde047 !important;
 }
-

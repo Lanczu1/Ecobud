@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import { submitSwapReport, swapReportSchema } from '../services/swapReportService';
+import { errorBoundary } from '../http/errorResponder';
 import { parseAdminPagination } from '../utils/adminPagination';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess, type AuthenticatedRequest } from '../http/authentication';
@@ -135,11 +136,34 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
 });
 
 // Approve a swap listing
+router.get('/swap-listings/:id/reports', authenticateRequest, requireModeratorAccess, errorBoundary(async (req, res) => {
+  const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!listing) return res.status(404).json({ message: 'Listing not found.' });
+  const { page, pageSize, skip } = parseAdminPagination(req.query);
+  const where = { listingId: req.params.id };
+  const [items, total, active, history] = await Promise.all([
+    prisma.swapListingReport.findMany({ where, skip, take: pageSize, orderBy: { createdAt: 'desc' }, include: { reporter: { select: { name: true, email: true } } } }),
+    prisma.swapListingReport.count({ where }),
+    prisma.swapListingReport.aggregate({ where: { ...where, resolvedAt: null }, _sum: { occurrences: true } }),
+    prisma.swapListingReport.aggregate({ where, _sum: { occurrences: true } }),
+  ]);
+  res.json({
+    items: items.map(report => ({ id: report.id, account: report.reporter ? `${report.reporter.name} (${report.reporter.email})` : 'Account unavailable', reportName: report.reportName, reason: report.reason, occurrences: report.occurrences, createdAt: report.createdAt, resolvedAt: report.resolvedAt })),
+    activeCount: active._sum.occurrences ?? 0,
+    totalReports: history._sum.occurrences ?? 0,
+    pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+  });
+}));
+
 router.patch('/swap-listings/:id/approve', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
-    const listing = await prisma.swapListing.update({
-      where: { id: req.params.id },
-      data: { approvalStatus: 'approved', isActive: true, isReported: false, reportCount: 0, reportReason: null },
+    const listing = await prisma.$transaction(async tx => {
+      const approved = await tx.swapListing.update({
+        where: { id: req.params.id },
+        data: { approvalStatus: 'approved', isActive: true, isReported: false, reportCount: 0, reportReason: null },
+      });
+      await tx.swapListingReport.updateMany({ where: { listingId: req.params.id, resolvedAt: null }, data: { resolvedAt: new Date() } });
+      return approved;
     });
 
     await supabaseRealtimeService.publishUserNotice(listing.userId, {
@@ -214,26 +238,11 @@ router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorA
 });
 
 // Report a swap listing (user-facing, but routed through admin for moderation)
-router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
-  try {
-    const parsed = z.object({ reason: z.string().trim().min(5).max(500) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: 'Enter a report reason between 5 and 500 characters.' });
-    const { reason } = parsed.data;
-    const listing = await prisma.swapListing.update({
-      where: { id: req.params.id },
-      data: {
-        isReported: true,
-        reportCount: { increment: 1 },
-        reportReason: reason,
-      },
-    });
-    supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: listing.userId, eventType: 'listing', listingId: listing.id }).catch(() => {});
-    res.json(listing);
-  } catch (error) {
-    console.error('Error reporting swap listing:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorAccess, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const result = await submitSwapReport(req.params.id, req.auth!.userId, swapReportSchema.parse(req.body), true);
+  supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: result.ownerId, eventType: 'listing', listingId: result.listingId }).catch(() => {});
+  res.json({ message: 'Listing flagged for review.' });
+}));
 
 // Delete a swap listing (admin)
 router.delete('/swap-listings/:id', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {

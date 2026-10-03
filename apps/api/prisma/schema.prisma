@@ -62,6 +62,7 @@ model User {
   mfaEnrollments               MfaEnrollment[]
   giveAndGetItems              GiveAndGetItem[]
   swapListings                 SwapListing[]
+  swapListingReports           SwapListingReport[]
   swapRequestsSent             SwapRequest[]             @relation("SwapRequestFrom")
   swapRequestsReceived         SwapRequest[]             @relation("SwapRequestTo")
 
@@ -794,12 +795,30 @@ model SwapListing {
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   requests       SwapRequest[]
   conversations  SwapConversation[]
+  reports        SwapListingReport[]
 
   @@index([userId])
   @@index([category])
   @@index([isActive, createdAt])
   @@index([approvalStatus])
   @@map("swap_listings")
+}
+
+model SwapListingReport {
+  id          String      @id @default(cuid())
+  listingId   String      @map("listing_id")
+  reporterId  String?     @map("reporter_id")
+  reportName  String      @map("report_name")
+  reason      String
+  occurrences Int         @default(1)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  resolvedAt  DateTime?   @map("resolved_at")
+  listing     SwapListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporter    User?       @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, resolvedAt, createdAt])
+  @@index([reporterId])
+  @@map("swap_listing_reports")
 }
 
 model SwapRequest {

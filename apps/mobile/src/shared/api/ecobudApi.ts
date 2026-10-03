@@ -977,8 +977,10 @@ export const ecobudApi = {
   },
   fetchSwapListingById: (token: string, id: string) =>
     request<any>(`/swap/listings/${id}`, { token }),
-  reportSwapListing: (token: string, id: string, reason: string) =>
-    request<{ message: string }>(`/swap/listings/${id}/report`, { method: 'POST', token, body: { reason } }),
+  reportSwapListing: (token: string, id: string, reason: string, reportName: string) =>
+    request<{ message: string }>(`/swap/listings/${id}/report`, { method: 'POST', token, body: { reason, reportName } }),
+  fetchSwapListingReports: (token: string, id: string, page: number) =>
+    request<import('../../features/giveAndGet/types').ListingReportPage>(`/swap/listings/${id}/reports?page=${page}&pageSize=25`, { token }),
   createSwapListing: (token: string, body: any) =>
     request<any>('/swap/listings', { method: 'POST', token, body }),
   updateSwapListing: (token: string, id: string, body: any) =>
