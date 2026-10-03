@@ -88,6 +88,7 @@ function SwapListingCardComponent({
     : [];
   const mainImage = images[0];
   const user = listing.user;
+  const reportCount = listing.isReported ? listing.reportCount ?? 0 : 0;
   const scaleValue = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -126,7 +127,7 @@ function SwapListingCardComponent({
             recyclingKey={`${listing.id}-${activeCardImage}`}
           />
           {images.length > 1 && (
-            <View style={localStyles.cardImageCounter}>
+            <View style={[localStyles.cardImageCounter, reportCount > 0 && { left: 12, right: undefined }]}>
               <Ionicons name="images" size={11} color="#FFF" />
               <Text style={localStyles.cardImageCounterText}>
                 {activeCardImage + 1}/{images.length}
@@ -176,6 +177,11 @@ function SwapListingCardComponent({
           <Ionicons name="image-outline" size={40} color="#A7D5BA" />
         </View>
       )}
+
+      {reportCount > 0 && <View accessibilityLabel={`${reportCount} active ${reportCount === 1 ? 'report' : 'reports'}`} style={{ position: 'absolute', top: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F50046', elevation: 4, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } }}>
+        <Ionicons name="warning-outline" size={14} color="#FFFFFF" />
+        <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>{reportCount} {reportCount === 1 ? 'Report' : 'Reports'}</Text>
+      </View>}
 
       <View style={localStyles.cardBody}>
         <View style={localStyles.cardHeader}>

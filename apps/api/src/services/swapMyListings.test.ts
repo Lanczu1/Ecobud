@@ -113,6 +113,7 @@ describe('resident listing history', () => {
     await request(app).post('/swap/listings/approved/report').set('x-user', 'bob').send({ reportName: 'Misleading Photos', reason: 'These photos are from another item.' }).expect(201);
     await request(app).post('/swap/listings/approved/report').set('x-user', 'alice').send({ reportName: 'Other', reason: 'Duplicate complaint' }).expect(409);
     expect(rows.find(row => row.id === 'approved')).toMatchObject({ reportCount: 2 });
+    expect((await swapService.fetchListings({})).find(row => row.id === 'approved')).toMatchObject({ isReported: true, reportCount: 2 });
     await request(app).get('/give-and-get/swap-listings/approved/reports').set('x-role', 'user').expect(403);
     await request(app).get('/give-and-get/swap-listings/approved/reports').set('x-anonymous', 'true').expect(401);
     const first = await request(app).get('/give-and-get/swap-listings/approved/reports').expect(200);
@@ -137,6 +138,7 @@ describe('resident listing history', () => {
     expect(reports.every(report => report.resolvedAt instanceof Date)).toBe(true);
     const resolved = await request(app).get('/give-and-get/swap-listings/approved/reports').expect(200);
     expect(resolved.body).toMatchObject({ activeCount: 0, totalReports: 2 });
+    expect((await swapService.fetchListings({})).find(row => row.id === 'approved')).toMatchObject({ isReported: false, reportCount: 0 });
     const mobileResolved = await request(app).get('/swap/listings/approved/reports').expect(200);
     expect(mobileResolved.body).toMatchObject({ items: [], activeCount: 0 });
     await request(app).post('/swap/listings/approved/report').set('x-user', 'alice').send({ reportName: 'Other', reason: 'A new issue after review.' }).expect(201);

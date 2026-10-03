@@ -102,6 +102,8 @@ function formatListing(row: any) {
     distanceKm: row.distanceKm,
     isActive: row.isActive,
     approvalStatus: row.approvalStatus,
+    isReported: row.isReported ?? false,
+    reportCount: row.isReported ? row.reportCount ?? 0 : 0,
     rejectionReason: row.approvalStatus === 'rejected' ? row.reportReason ?? null : null,
     postedAt: row.createdAt,
     user: {

@@ -53,6 +53,8 @@ export interface SwapListing {
   postedAt: string;
   isActive: boolean;
   approvalStatus?: string;
+  isReported?: boolean;
+  reportCount?: number;
   rejectionReason?: string | null;
 }
 
