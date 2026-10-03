@@ -6,6 +6,7 @@ import { authenticateRequest, requireModeratorAccess, requireUserAccess, type Au
 import { redeemUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
 import { apiCache } from '../lib/cache';
+import { getTotalCoinsRedeemed } from '../services/redemptionStatsService';
 import { sendDirectNotification } from '../services/notificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import path from 'path';
@@ -238,6 +239,7 @@ router.get('/requests', authenticateRequest, requireModeratorAccess, async (req,
 // Get redemption request stats (admin)
 router.get('/requests/stats', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
+    const totalCoinsRedeemed = await getTotalCoinsRedeemed();
     const [row] = await prisma.$queryRaw<Array<{
       total: bigint;
       pending: bigint;
@@ -260,6 +262,7 @@ router.get('/requests/stats', authenticateRequest, requireModeratorAccess, async
       rejected: Number(row.rejected),
       readyToClaim: Number(row.readyToClaim),
       claimed: Number(row.claimed),
+      totalCoinsRedeemed,
     });
   } catch (error) {
     console.error('Error fetching redeem request stats:', error);
@@ -433,6 +436,8 @@ router.patch('/requests/:id/claim', authenticateRequest, requireUserAccess, asyn
       where: { id },
       data: { status: 'claimed' },
     });
+
+    apiCache.delete('admin_dashboard_stats');
 
     void supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
       reason: 'redeem-claimed',

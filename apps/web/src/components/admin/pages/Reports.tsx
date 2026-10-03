@@ -9,7 +9,7 @@ interface DashboardStats {
     signupsToday: number;
     totalLessons: number;
     totalChallenges: number;
-    totalPoints: number;
+    totalCoinsRedeemed: number;
     lessonCompletions: number;
     onlineNow: number;
     activeToday: number;
@@ -76,7 +76,7 @@ export function Reports() {
     { label: 'Total Users', value: stats.overview.totalUsers.toLocaleString(), change: `+${stats.overview.signupsToday} today`, up: true, icon: Users, color: 'text-green-600', bg: 'bg-green-50' },
     { label: 'Total Lessons', value: stats.overview.totalLessons.toLocaleString(), change: `${stats.overview.lessonCompletions} completions`, up: true, icon: BookOpen, color: 'text-blue-500', bg: 'bg-blue-50' },
     { label: 'Active Challenges', value: stats.overview.totalChallenges.toLocaleString(), change: 'in database', up: true, icon: Trophy, color: 'text-purple-500', bg: 'bg-purple-50' },
-    { label: 'Eco Points Distributed', value: stats.overview.totalPoints.toLocaleString(), change: 'all time', up: true, icon: Coins, color: 'text-orange-500', bg: 'bg-orange-50' },
+    { label: 'Eco Coins Redeemed', value: stats.overview.totalCoinsRedeemed?.toLocaleString() ?? '—', change: 'claimed rewards · all time', up: true, icon: Coins, color: 'text-orange-500', bg: 'bg-orange-50' },
   ] : [];
 
   const maxActive = stats ? Math.max(...stats.activityTrend.map(d => d.active), 1) : 1;

@@ -9,7 +9,7 @@ interface DashboardStats {
     signupsToday: number;
     totalLessons: number;
     totalChallenges: number;
-    totalPoints: number;
+    totalCoinsRedeemed: number;
     lessonCompletions: number;
     onlineNow: number;
     activeToday: number;
@@ -115,9 +115,9 @@ export function Dashboard() {
       borderColor: 'border-purple-100',
     },
     {
-      title: 'Eco Points Distributed',
-      value: stats.overview.totalPoints.toLocaleString(),
-      sub: `${stats.overview.onlineNow} online now`,
+      title: 'Eco Coins Redeemed',
+      value: stats.overview.totalCoinsRedeemed?.toLocaleString() ?? '—',
+      sub: 'Claimed rewards · All time',
       icon: Coins,
       color: 'text-orange-500',
       bgColor: 'bg-orange-50',

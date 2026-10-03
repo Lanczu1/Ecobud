@@ -5,6 +5,7 @@ import { PRESENCE_STALE_TTL_MS } from './presenceService';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { sendDirectNotification } from './notificationService';
 import { apiCache } from "../lib/cache";
+import { getTotalCoinsRedeemed } from './redemptionStatsService';
 
 type ReviewerContext = {
   role: string;
@@ -645,6 +646,7 @@ export class AdminService {
         totalLessons,
         totalChallenges,
         userPoints,
+        totalCoinsRedeemed,
         lessonCompletions,
         pendingSubmissions,
       ] = await Promise.all([
@@ -667,6 +669,7 @@ export class AdminService {
             points: true,
           },
         }),
+        getTotalCoinsRedeemed(),
         prisma.userLessonProgress.count({
           where: { status: 'completed' },
         }),
@@ -688,6 +691,7 @@ export class AdminService {
           totalChallenges,
           totalLessons,
           totalPoints: userPoints._sum.points || 0,
+          totalCoinsRedeemed,
           totalUsers,
           totalSignups: totalUsers,
         },
