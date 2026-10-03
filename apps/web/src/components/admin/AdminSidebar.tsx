@@ -14,7 +14,7 @@ import { Mascot } from 'page-mascot';
 import wordmarkImg from '../../assets/ecobud_wordmark.png';
 import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Badges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements';
+export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Badges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements' | 'ID Verification';
 interface SidebarProps {
   onLogout: () => void;
   activeSection: AdminSection;
@@ -23,6 +23,7 @@ interface SidebarProps {
 const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Dashboard', icon: LayoutDashboard },
   { name: 'Announcements', icon: Megaphone },
+  { name: 'ID Verification', icon: Users },
   { name: 'Users', icon: Users },
   { name: 'Learning Content', icon: BookOpen },
   { name: 'Challenges', icon: Trophy },
@@ -39,6 +40,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   const isModerator = user?.role === 'moderator';
 
   const visibleMenuItems = menuItems.filter((item) => {
+    if (!isModerator && item.name === 'ID Verification') return false;
     if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Badges'].includes(item.name)) {
       return false;
     }
@@ -67,7 +69,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
             alt="ECOBUD"
             className="h-6.5 w-auto object-contain hidden dark:block"
           />
-          <p className="text-[10.5px] text-green-600 dark:text-[#8acd3e] font-bold uppercase tracking-[0.18em] leading-none text-left mt-1.5">Admin Panel</p>
+          <p className="text-[10.5px] text-green-600 dark:text-[#8acd3e] font-bold uppercase tracking-[0.18em] leading-none text-left mt-1.5">{isModerator ? 'Moderator Panel' : 'Admin Panel'}</p>
         </div>
       </div>
 

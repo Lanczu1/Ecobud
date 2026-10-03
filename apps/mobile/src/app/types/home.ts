@@ -35,7 +35,7 @@ export type {
 // ─── Enums & Literals ──────────────────────────────────────────────────────────
 
 export type AppTab = 'home' | 'learn' | 'challenges' | 'tracker' | 'profile' | 'marketplace';
-export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'badgeUnlocked' | 'settings' | 'editProfile' | 'coinsHistory' | 'accessibility' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
+export type OverlayScreen = 'assistant' | 'events' | 'lesson' | 'quiz' | 'lessonCompleted' | 'leaderboard' | 'rewards' | 'transparency' | 'ai_mission' | 'claimParticles' | 'streakUnlocked' | 'streakRewards' | 'badgeUnlocked' | 'idVerification' | 'settings' | 'editProfile' | 'coinsHistory' | 'accessibility' | 'eventApproved' | 'redeemPoints' | 'notifications' | 'ecoLevels' | null;
 export type AuthMode = 'member' | 'admin';
 export type LearnFilterType = 'all' | 'not_started' | 'seen' | 'completed';
 
@@ -140,6 +140,9 @@ export interface EcoBudMobileModel {
   isHydrating: boolean;
   hasOnboarded: boolean;
   session: SessionPayload | null;
+  idVerificationStatus: import('../../shared/api/ecobudApi').IdVerificationStatus;
+  refreshIdVerification: () => Promise<void>;
+  requireIdApproval: () => boolean;
   hasUsableInternet: boolean;
   actionOverlayVisible: boolean;
   actionOverlayLabel: string;

@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   db: {
-    event: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn() },
+    event: { findUnique: vi.fn(), findMany: vi.fn() },
     eventRegistration: { create: vi.fn(), update: vi.fn() },
     challengeSubmission: { findUnique: vi.fn() },
     eventSubmission: { findUnique: vi.fn(), update: vi.fn() },
@@ -34,6 +35,8 @@ app.use('/events', eventRoutes);
 app.use(errorResponder);
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.db.user.findUnique.mockResolvedValue({ idVerificationStatus: 'approved', profile: { city: 'Yukos' } });
+  mocks.db.event.findMany.mockResolvedValue([]);
   mocks.db.event.findUnique.mockResolvedValue({ id: 'event', title: 'Cleanup', isPublished: true, startDatetime: new Date(Date.now() + 86400000), capacity: 10, registrations: [] });
   mocks.db.eventRegistration.create.mockResolvedValue({ id: 'registration' });
   mocks.db.challengeSubmission.findUnique.mockResolvedValue(null);
@@ -43,6 +46,13 @@ beforeEach(() => {
 });
 
 describe('Eco Event notifications', () => {
+  it.each(['not_submitted', 'pending', 'rejected'])('allows browsing but blocks event joining when ID is %s', async status => {
+    mocks.db.user.findUnique.mockResolvedValue({ idVerificationStatus: status, profile: { city: 'Yukos' } });
+    await request(app).get('/events').expect(200);
+    const result = await request(app).post('/events/event/join').expect(403);
+    expect(result.body.code).toBe('ID_APPROVAL_REQUIRED');
+    expect(mocks.db.eventRegistration.create).not.toHaveBeenCalled(); expect(mocks.notify).not.toHaveBeenCalled();
+  });
   it('notifies the member after joining with the event destination', async () => {
     await request(app).post('/events/event/join').expect(201);
     expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ userId: 'member', type: 'event', relatedId: 'event', notificationKey: 'event_joined:registration' }));

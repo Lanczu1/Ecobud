@@ -50,7 +50,8 @@ import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
-import { QuickMissionsOverlay, type QuickMissionGesture } from './components/QuickMissionsOverlay';
+import { QuickMissionsOverlay } from './components/QuickMissionsOverlay';
+import { createQuickMissionGestureChannel } from './utils/quickMissionGesture';
 
 /**
  * EcoBud App - Main Shell
@@ -92,14 +93,14 @@ const ScrollAwareChatbot = React.memo(React.forwardRef<ScrollAwareChatbotHandle,
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const [quickMissionsOpen, setQuickMissionsOpen] = useState(false);
-  const [quickMissionGesture, setQuickMissionGesture] = useState<QuickMissionGesture | null>(null);
+  const [quickMissionGestures] = useState(createQuickMissionGestureChannel);
   const [quickMissionsAnchor, setQuickMissionsAnchor] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const homeBottomChromeHeight = (windowWidth < 380 ? 58 : 64) + (insets.bottom > 0 ? insets.bottom : windowWidth < 380 ? 10 : 14);
   const [homeAnimations] = useState(createHomeAnimationVisibilityStore);
-  const homeScreenExposed = model.activeTab === 'home' && !model.activeOverlay && !model.coachMarksVisible && !model.actionOverlayVisible;
+  const homeScreenExposed = model.activeTab === 'home' && !model.activeOverlay && !model.coachMarksVisible && !model.actionOverlayVisible && !quickMissionsOpen;
   React.useLayoutEffect(() => {
     const updateVisibility = () => homeAnimations.setScreenVisible(homeScreenExposed && AppState.currentState === 'active');
     updateVisibility();
@@ -275,7 +276,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
-          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onQuickMissionGesture={setQuickMissionGesture} onLongPressChallenges={bounds => { setQuickMissionGesture(null); setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />
+          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onQuickMissionGesture={quickMissionGestures.emit} onLongPressChallenges={bounds => { quickMissionGestures.reset(); setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />
         )}
       </SafeAreaView>
     );
@@ -294,14 +295,14 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
             onDockChange={model.setChatbotDock}
             size={model.chatbotSize}
             position={model.chatbotPosition}
-            performanceMode={!mascotVisible || model.activeTab === 'marketplace' || (model.activeTab === 'challenges' && model.challengesViewMode === 'History') ? 'reduced' : 'default'}
+            performanceMode={quickMissionsOpen || !mascotVisible || model.activeTab === 'marketplace' || (model.activeTab === 'challenges' && model.challengesViewMode === 'History') ? 'reduced' : 'default'}
             onPositionChange={handleChatbotPositionChange}
             onPress={handleOpenAssistant}
             onLongPress={handleDisableChatbot}
           />
         </HomeAnimationVisibilityContext.Provider>
       </View>
-      {quickMissionsOpen && !model.activeOverlay && <QuickMissionsOverlay model={model} anchorBounds={quickMissionsAnchor} gesture={quickMissionGesture} onClose={() => setQuickMissionsOpen(false)} />}
+      {quickMissionsOpen && !model.activeOverlay && <QuickMissionsOverlay model={model} anchorBounds={quickMissionsAnchor} gestureChannel={quickMissionGestures} onClose={() => setQuickMissionsOpen(false)} />}
       {model.activeOverlay && (
         <View style={StyleSheet.absoluteFill}>
           <ScreenTransition key={model.activeOverlay}>
@@ -310,7 +311,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         </View>
       )}
       <CoachMarksOverlay
-        visible={Boolean(model.session && model.coachMarksVisible)}
+        visible={Boolean(model.session && model.coachMarksVisible && model.activeOverlay !== 'idVerification')}
         replay={model.coachMarksReplay}
         onFinish={model.completeCoachMarks}
         onSkip={model.completeCoachMarks}

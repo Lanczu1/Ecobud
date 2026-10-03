@@ -52,8 +52,8 @@ test('quick mission opens immediately on resume even before the profile fetch fi
   assert.deepEqual(result.opened, ['mission']);
   assert.equal(result.alerts.length, 0);
 });
-test('the required barangay prompt remains for users with genuinely missing barangay', () => {
+test('challenge details remain viewable without a registered barangay', () => {
   const result = missionAction({ id: 'resident', profile: { city: null } }, session);
-  assert.deepEqual(result.opened, []);
-  assert.equal(result.alerts[0][0], 'Barangay Location Required');
+  assert.deepEqual(result.opened, ['mission']);
+  assert.equal(result.alerts.length, 0);
 });

@@ -31,6 +31,7 @@ function hasValidStoredAdminSession(): boolean {
 }
 
 const Dashboard = lazy(() => import('./components/admin/Dashboard').then((m) => ({ default: m.Dashboard })));
+const IdVerification = lazy(() => import('./components/admin/pages/IdVerification').then(m => ({ default: m.IdVerification })));
 const ManageUsers = lazy(() => import('./components/admin/pages/ManageUsers').then((m) => ({ default: m.ManageUsers })));
 const LearningContent = lazy(() => import('./components/admin/pages/LearningContent').then((m) => ({ default: m.LearningContent })));
 const Challenges = lazy(() => import('./components/admin/pages/Challenges').then((m) => ({ default: m.Challenges })));
@@ -64,6 +65,7 @@ function renderSection(section: AdminSection, role?: string) {
       {(() => {
         switch (accessibleSection) {
           case 'Dashboard':        return <Dashboard />;
+          case 'ID Verification': return role === 'moderator' ? <IdVerification /> : <Dashboard />;
           case 'Users':            return <ManageUsers />;
           case 'Learning Content': return <LearningContent />;
           case 'Challenges':       return <Challenges />;

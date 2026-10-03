@@ -62,6 +62,7 @@ userRoutes.get(
         googleIdentityId: true,
         role: true,
         status: true,
+        idVerificationStatus: true,
         points: true,
         currentStreak: true,
         lastActionDate: true,
@@ -101,6 +102,7 @@ userRoutes.get(
 
     return res.json({
       id: user?.id,
+      idVerificationStatus: user?.idVerificationStatus,
       name: user?.name,
       email: user?.email,
       isGoogleAccount: user?.googleIdentityId != null,

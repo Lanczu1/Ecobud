@@ -224,12 +224,13 @@ export function MarketplaceHubView({
   };
 
   const handleRequestSwap = (listing: SwapListing) => {
+    if (!model.requireIdApproval()) return;
     setSelectedListing(listing);
     setShowSwapDialog(true);
   };
 
   const handleConfirmSwap = async (message: string) => {
-    if (!selectedListing) return;
+    if (!selectedListing || !model.requireIdApproval()) return;
     try {
       await swapService.sendSwapRequest(selectedListing.id, currentUserId, message);
       setShowSwapDialog(false);
@@ -314,7 +315,7 @@ export function MarketplaceHubView({
         <MarketplaceFeed
           currentUserId={currentUserId}
           onSelectListing={handleSelectListing}
-          onCreateListing={() => setScreen('create')}
+          onCreateListing={() => { if (model.requireIdApproval()) setScreen('create'); }}
           onRequestSwap={handleRequestSwap}
           activeTab={feedTab}
           onTabChange={(tab) => {
@@ -357,7 +358,7 @@ export function MarketplaceHubView({
             setScreen('feed');
             setSelectedListing(null);
           }}
-          onRequestSwap={() => setShowSwapDialog(true)}
+          onRequestSwap={() => { if (model.requireIdApproval()) setShowSwapDialog(true); }}
           onDelete={handleDeleteListing}
           onReport={handleReportListing}
           onUpdated={(updated) => {

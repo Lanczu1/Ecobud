@@ -6,7 +6,7 @@ import { errorResponder, HttpError } from '../http/errorResponder';
 import { detectionSettingsHash, signChallengeAnalysis } from '../security/challengeAnalysisToken';
 
 const { db, recognize, upload } = vi.hoisted(() => ({
-  db: { challengeInstance: { findUnique: vi.fn() }, challenge: { findUnique: vi.fn() }, challengeSubmission: { findFirst: vi.fn(), create: vi.fn() }, userChallenge: { upsert: vi.fn() }, $transaction: vi.fn(), $queryRaw: vi.fn() },
+  db: { user: { findUnique: vi.fn() }, challengeInstance: { findUnique: vi.fn() }, challenge: { findUnique: vi.fn() }, challengeSubmission: { findFirst: vi.fn(), create: vi.fn() }, userChallenge: { upsert: vi.fn() }, $transaction: vi.fn(), $queryRaw: vi.fn() },
   recognize: vi.fn(), upload: vi.fn(),
 }));
 vi.mock('../prismaClient', () => ({ prisma: db }));
@@ -31,6 +31,7 @@ const token = () => signChallengeAnalysis({ userId: 'alice', instanceId: 'week',
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 beforeEach(() => {
   vi.clearAllMocks();
+  db.user.findUnique.mockResolvedValue({ idVerificationStatus: 'approved' });
   db.challengeInstance.findUnique.mockResolvedValue({ id: 'week', endDate: new Date(Date.now() + 86400000), challenge: { id: 'template', active: true, type: 'AI Image Recognition Challenge', aiDetectionTargets: ['Plastic Wrapper'], aiMinimumConfidence: 80, expReward: 100, ecoCoinReward: 5 } });
   db.challengeSubmission.findFirst.mockResolvedValue(null);
   db.challengeSubmission.create.mockImplementation(async ({ data }) => ({ id: 'submission', ...data }));
@@ -41,6 +42,13 @@ beforeEach(() => {
 });
 
 describe('AI analysis workflow security', () => {
+  it.each(['not_submitted', 'pending', 'rejected'])('allows attempt viewing but blocks recognition when ID is %s', async status => {
+    db.user.findUnique.mockResolvedValue({ idVerificationStatus: status });
+    await request(app).get('/week/ai-attempts').set('Authorization', 'Bearer test').expect(200);
+    const response = await request(app).post('/week/analyze').set('Authorization', 'Bearer test').attach('image', png, 'photo.png').expect(403);
+    expect(response.body.code).toBe('ID_APPROVAL_REQUIRED');
+    expect(recognize).not.toHaveBeenCalled(); expect(upload).not.toHaveBeenCalled();
+  });
   it('requires authentication before accepting a photo', async () => {
     await request(app).post('/week/analyze').attach('image', png, 'photo.png').expect(401);
     expect(recognize).not.toHaveBeenCalled();
