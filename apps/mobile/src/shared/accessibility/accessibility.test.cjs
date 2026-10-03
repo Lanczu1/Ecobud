@@ -22,6 +22,27 @@ function primitives(preferences) {
   return load('primitives.tsx', { 'react-native': rn, './AccessibilityContext': { useAccessibility: () => ({ preferences }) } });
 }
 const defaults = { size: 'Small', bold: false, performance: false, largeTargets: false };
+test('larger tap areas default off and old settings migrate without losing other preferences', () => {
+  for (const [saved, expected] of [
+    [null, false],
+    [JSON.stringify({ size: 'Large', contrast: true, bold: true, performance: true, largeTargets: true }), false],
+    [JSON.stringify({ largeTargets: true, largeTargetsDefaultVersion: 1 }), true],
+    [JSON.stringify({ largeTargets: false, largeTargetsDefaultVersion: 1 }), false],
+  ]) {
+    const mockReact = { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useRef: value => ({ current: value }), useEffect() {} };
+    const storage = { getItemSync: () => saved };
+    const { AccessibilityProvider, defaultPreferences } = load('AccessibilityContext.tsx', { react: mockReact, '../storage/mobileStorage': { mobileStorage: storage } });
+    assert.equal(defaultPreferences.largeTargets, false);
+    const preferences = AccessibilityProvider({ children: null }).props.value.preferences;
+    assert.equal(preferences.largeTargets, expected);
+    if (saved && !JSON.parse(saved).largeTargetsDefaultVersion) {
+      assert.equal(preferences.size, 'Large');
+      assert.equal(preferences.contrast, true);
+      assert.equal(preferences.bold, true);
+      assert.equal(preferences.performance, true);
+    }
+  }
+});
 function markup(Component, props) { return renderToStaticMarkup(React.createElement(Component, props)); }
 test('all three sizes scale explicit text and input fonts and line heights', () => {
   for (const [size, multiplier] of [['Small', 1], ['Medium', 1.15], ['Large', 1.35]]) {
@@ -94,7 +115,7 @@ test('preferences validate stored values and persist all settings', async () => 
   assert.equal(tree.props.value.preferences.size, 'Large');
   assert.equal(tree.props.value.preferences.performance, true);
   tree.props.value.update({ size: 'Small', bold: false });
-  assert.deepEqual(JSON.parse(written), { size: 'Small', performance: true, contrast: true, bold: false, largeTargets: false });
+  assert.deepEqual(JSON.parse(written), { size: 'Small', performance: true, contrast: true, bold: false, largeTargets: false, largeTargetsDefaultVersion: 1 });
   slots = []; index = 0; effects = [];
   storage.getItemSync = () => '{invalid';
   const fallback = AccessibilityProvider({ children: null });

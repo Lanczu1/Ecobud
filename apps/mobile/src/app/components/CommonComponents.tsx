@@ -29,6 +29,7 @@ import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appU
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic } from '../utils/haptics';
+import type { QuickMissionGesture } from './QuickMissionsOverlay';
 import LottieView from '../../shared/accessibility/AccessibleLottie';
 import { Header } from './Header';
 import { useHomeAnimationVisibility } from './HomeAnimationVisibility';
@@ -1054,10 +1055,12 @@ export function BottomTabBar({
   onChange,
   onTargetLayout,
   onLongPressChallenges,
+  onQuickMissionGesture,
 }: {
   activeTab: AppTab;
   onChange: (tab: AppTab) => void;
   onLongPressChallenges?: (bounds: { x: number; y: number; width: number; height: number }) => void;
+  onQuickMissionGesture?: (gesture: QuickMissionGesture) => void;
   onTargetLayout?: (tab: 'home' | 'profile', target: { x: number; y: number }) => void;
 }) {
   const { theme, isDark } = useTheme();
@@ -1181,6 +1184,7 @@ export function BottomTabBar({
               isVeryNarrow={isVeryNarrow}
               isCenterAction={item.key === 'challenges'}
               onLongPress={item.key === 'challenges' ? onLongPressChallenges : undefined}
+              onQuickMissionGesture={item.key === 'challenges' ? onQuickMissionGesture : undefined}
             />
           );
         })}
@@ -1194,6 +1198,7 @@ function TabItem({
   isActive,
   onPress,
   onLongPress,
+  onQuickMissionGesture,
   onLayout,
   isNarrow = false,
   isVeryNarrow = false,
@@ -1203,6 +1208,7 @@ function TabItem({
   isActive: boolean;
   onPress: () => void;
   onLongPress?: (bounds: { x: number; y: number; width: number; height: number }) => void;
+  onQuickMissionGesture?: (gesture: QuickMissionGesture) => void;
   onLayout?: (target: { x: number; y: number }) => void;
   isNarrow?: boolean;
   isVeryNarrow?: boolean;
@@ -1229,8 +1235,12 @@ function TabItem({
   const inactiveColor = isDark ? theme.colors.textMuted : '#8A959F';
   const tabRef = useRef<any>(null);
   const circleRef = useRef<View>(null);
-  const openQuickMissions = () => {
+  const touchActiveRef = useRef(false);
+  const heldRef = useRef(false);
+  const openQuickMissions = (fromTouch = false) => {
+    if (fromTouch) heldRef.current = true;
     circleRef.current?.measureInWindow((x, y, width, height) => {
+      if (fromTouch && !touchActiveRef.current) return;
       if (width > 0 && height > 0) onLongPress?.({ x, y, width, height });
     });
   };
@@ -1238,6 +1248,20 @@ function TabItem({
   const centerIconSize = Math.round(iconSize * 1.35);
 
   return (
+    <View style={styles.bottomBarItem}
+      onTouchStart={onLongPress ? () => { touchActiveRef.current = true; heldRef.current = false; } : undefined}
+      onTouchMove={onLongPress ? event => {
+        if (heldRef.current) onQuickMissionGesture?.({ phase: 'move', x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+      } : undefined}
+      onTouchEnd={onLongPress ? event => {
+        touchActiveRef.current = false;
+        if (heldRef.current) onQuickMissionGesture?.({ phase: 'release', x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
+      } : undefined}
+      onTouchCancel={onLongPress ? () => {
+        touchActiveRef.current = false;
+        if (heldRef.current) onQuickMissionGesture?.({ phase: 'cancel', x: 0, y: 0 });
+      } : undefined}
+    >
     <TouchableOpacity
       ref={tabRef}
       onLayout={() => {
@@ -1245,16 +1269,16 @@ function TabItem({
           if (width > 0 && height > 0) onLayout?.({ x: x + width / 2, y: y + height / 2 });
         });
       }}
-      onPress={onPress}
-      onLongPress={onLongPress ? openQuickMissions : undefined}
-      delayLongPress={400}
+      onPress={() => { if (!heldRef.current) onPress(); }}
+      onLongPress={onLongPress ? () => openQuickMissions(true) : undefined}
+      delayLongPress={200}
       accessibilityRole="button"
       accessibilityLabel={item.label}
       accessibilityHint={onLongPress ? 'Hold to preview quick missions' : undefined}
       accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Show quick missions' }] : undefined}
       onAccessibilityAction={onLongPress ? event => { if (event.nativeEvent.actionName === 'longpress') openQuickMissions(); } : undefined}
       activeOpacity={0.75}
-      style={styles.bottomBarItem}
+      style={[styles.bottomBarItem, { width: '100%' }]}
     >
       <Animated.View
         style={[
@@ -1314,5 +1338,6 @@ function TabItem({
         </TextSizeMultiplierContext.Provider>
       </Animated.View>
     </TouchableOpacity>
+    </View>
   );
 }

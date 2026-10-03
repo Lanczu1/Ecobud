@@ -29,6 +29,7 @@ const fallbackUnlessAuthError = async <T, F>(
 
 const announcementRequests = new Map<string, Promise<import('../../shared/api/ecobudApi').ResidentAnnouncement[]>>();
 const rewardsRequests = new Map<string, Promise<RewardsData>>();
+const profileRequests = new Map<string, Promise<ProfileData>>();
 
 export const homeService = {
   // ─── Auth ───────────────────────────────────────────────────────────────────────
@@ -78,8 +79,13 @@ export const homeService = {
   getTracker: (token: string, month?: string) =>
     ecobudApi.fetchTracker(token, month),
 
-  getProfile: (token: string) =>
-    ecobudApi.fetchProfile(token),
+  getProfile: (token: string) => {
+    const pending = profileRequests.get(token);
+    if (pending) return pending;
+    const request = ecobudApi.fetchProfile(token).finally(() => profileRequests.delete(token));
+    profileRequests.set(token, request);
+    return request;
+  },
 
   getRewards: (token: string) => {
     const pending = rewardsRequests.get(token);

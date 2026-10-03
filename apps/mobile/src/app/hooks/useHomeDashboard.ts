@@ -1,4 +1,6 @@
 import { getQuizLessonProgress, getVideoProgressLimit, isLocalLessonProgressNewer } from '../utils/lessonProgress';
+import { getRegisteredBarangay } from '../utils/registeredBarangay';
+import { decodeProfileSnapshot, profileSnapshotKey } from '../utils/profileSnapshot';
 import { useNotifications } from './useNotifications';
 import { takeUnseenBadges } from '../utils/badgeUnlockQueue';
 import { type MascotDock, parseMascotDock } from '../utils/mascotDock';
@@ -187,6 +189,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const lastSecondaryRefreshAtRef = React.useRef<Record<SecondaryResource, number>>({ tracker: 0, profile: 0, leaderboard: 0, transparency: 0 });
   const currentSessionTokenRef = React.useRef<string | null>(null);
   currentSessionTokenRef.current = session?.token ?? null;
+  const latestSessionRef = React.useRef(session);
+  latestSessionRef.current = session;
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [lessons, setLessons] = useState<LessonWithProgress[]>([]);
@@ -195,6 +199,27 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [habitsToday, setHabitsToday] = useState<HabitTodayData | null>(null);
   const [tracker, setTracker] = useState<TrackerData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    const key = profileSnapshotKey(userId);
+    let disposed = false;
+    const restore = (raw: string | null) => {
+      const cached = decodeProfileSnapshot(raw, userId);
+      if (!disposed && cached) setProfile(current => current?.id === userId ? current : cached);
+    };
+    try { restore(mobileStorage.getItemSync(key)); } catch {}
+    void mobileStorage.getItem(key).then(restore).catch(() => {});
+    return () => { disposed = true; };
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    if (!profile || profile.id !== session?.user.id) return;
+    const key = profileSnapshotKey(profile.id);
+    const serialized = JSON.stringify(profile);
+    try { mobileStorage.setItemSync(key, serialized); } catch {}
+    void mobileStorage.setItem(key, serialized).catch(() => {});
+  }, [profile, session?.user.id]);
   const [rewards, setRewards] = useState<RewardsData | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -941,6 +966,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
               setSession(activeSession);
               try {
+                const cachedProfile = decodeProfileSnapshot(mobileStorage.getItemSync(profileSnapshotKey(parsed.user.id)), parsed.user.id);
+                if (cachedProfile) setProfile(cachedProfile);
+              } catch {}
+              try {
                 const rawAnnouncements = await mobileStorage.getItem(CACHED_ANNOUNCEMENTS_STORAGE_KEY);
                 const cachedAnnouncements = rawAnnouncements ? JSON.parse(rawAnnouncements) : null;
                 if (cachedAnnouncements?.userId === activeSession.user.id && Array.isArray(cachedAnnouncements.items)) {
@@ -1168,20 +1197,50 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating]);
 
   useEffect(() => {
+    if (!session?.token || !presence.hasUsableInternet) return;
+    const token = session.token;
+    let disposed = false;
+    let inFlight = false;
+    const refresh = async (force = false) => {
+      if (disposed || inFlight || AppState.currentState !== 'active' ||
+          (!force && Date.now() - lastSecondaryRefreshAtRef.current.profile < SECONDARY_REFRESH_INTERVAL_MS)) return;
+      inFlight = true;
+      try {
+        const result = await homeService.getProfile(token);
+        if (disposed || currentSessionTokenRef.current !== token || result.id !== session.user.id) return;
+        setProfile(result);
+        lastSecondaryRefreshAtRef.current.profile = Date.now();
+        const city = result.profile?.city ?? null;
+        const latestSession = latestSessionRef.current;
+        if (latestSession?.token === token && latestSession.user.city !== city) {
+          const updatedSession = { ...latestSession, user: { ...latestSession.user, city, profile: result.profile } };
+          setSession(updatedSession);
+          void persistSession(updatedSession).catch(() => {});
+        }
+      } catch (error) {
+        if (!disposed) console.warn('[ECOBUD profile refresh warning]:', error);
+      } finally { inFlight = false; }
+    };
+    void refresh(true);
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
+    const timer = setInterval(() => void refresh(), SECONDARY_REFRESH_INTERVAL_MS);
+    return () => { disposed = true; subscription.remove(); clearInterval(timer); };
+  }, [session?.token, session?.user.id, presence.hasUsableInternet, persistSession]);
+
+  useEffect(() => {
     const trackerIsVisible = activeOverlay === null && activeTab === 'tracker';
     const leaderboardIsVisible = activeOverlay === 'leaderboard';
-    if (!session?.token || !presence.hasUsableInternet || (isHydrating && !trackerIsVisible && !leaderboardIsVisible) || AppState.currentState !== 'active') return;
+    if (!session?.token || !presence.hasUsableInternet || AppState.currentState !== 'active') return;
     const token = session.token;
     const needed: SecondaryResource[] = activeOverlay === 'leaderboard' ? ['leaderboard']
       : activeOverlay === 'transparency' ? ['transparency']
-      : activeOverlay === 'editProfile' ? ['profile']
+      : activeOverlay === 'editProfile' ? []
       : activeOverlay !== null ? []
       : activeTab === 'tracker' ? ['tracker']
-      : activeTab === 'profile' ? ['profile']
-      : activeTab === 'challenges' ? ['profile']
       : [];
 
     for (const resource of needed) {
+      if (isHydrating && !trackerIsVisible && !leaderboardIsVisible) continue;
       if (secondaryRefreshInFlightRef.current.has(resource) ||
           Date.now() - lastSecondaryRefreshAtRef.current[resource] < SECONDARY_REFRESH_INTERVAL_MS) continue;
       secondaryRefreshInFlightRef.current.add(resource);
@@ -1207,9 +1266,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
               mobileStorage.setItemSync(resultCacheKey, serialized);
               void mobileStorage.setItem(resultCacheKey, serialized).catch(() => {});
             }
-          } else if (resource === 'profile') {
-            const result = await homeService.getProfile(token);
-            if (currentSessionTokenRef.current === token) setProfile(result);
           } else if (resource === 'leaderboard') {
             const result = await homeService.getLeaderboard(token);
             if (currentSessionTokenRef.current === token) setLeaderboard(result);
@@ -1229,7 +1285,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       })();
     }
-  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating, tracker?.month]);
+  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating, tracker?.month, persistSession]);
 
   useEffect(() => {
     if (!session?.token) return;
@@ -1895,7 +1951,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   ]);
 
   const openChallengeMission = useCallback((challenge: ChallengeWithProgress) => {
-    const userBarangay = profile?.profile?.city?.trim();
+    const userBarangay = getRegisteredBarangay(profile, session);
     if (!userBarangay) {
       Alert.alert(
         'Barangay Location Required',
@@ -1926,7 +1982,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     });
 
     setActiveOverlayState('ai_mission');
-  }, [profile]);
+  }, [profile, session]);
 
   const handleCompleteLesson = useCallback(async () => {
     await runWithActionLoader('Verifying lesson completion...', async () => {
@@ -2976,6 +3032,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
             name: res.name || activeSession.user.name,
             displayName: res.name || payload.displayName || activeSession.user.displayName,
             email: res.email || payload.email || activeSession.user.email,
+            city: res.profile?.city !== undefined ? res.profile.city : activeSession.user.city,
+            profile: res.profile ? { ...activeSession.user.profile, ...res.profile } : activeSession.user.profile,
           },
         };
         await persistSession(updatedSession);

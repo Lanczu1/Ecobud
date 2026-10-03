@@ -53,6 +53,7 @@ import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue'
 import type { OfflineMutationRecord } from '../../shared/offline/offlineMutationQueue.types';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
 import { RejectionModal } from './RejectionModal';
+import { LeaderboardPagination } from './LeaderboardPagination';
 import {
   formatLongDate,
   formatEventDateTag,
@@ -81,6 +82,7 @@ import { UpcomingEventCard } from './UpcomingEventCard';
 import { FireStreak } from './FireStreak';
 import { EcoLevelsOverlay } from './EcoLevelsOverlay';
 import { LegalDocumentModal, LegalDocumentType } from '../../shared/ui/LegalDocumentModal';
+import { getRegisteredBarangay } from '../utils/registeredBarangay';
 
 export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
@@ -92,7 +94,7 @@ export function AiMissionOverlay({ model }: { model: EcoBudMobileModel }) {
   const isFinalApproved = !isRejectedSubmission && !isSubmissionCompleted && (challenge?.progress?.status === 'approved' || submission?.status === 'approved' || submission?.adminFinalApproved);
 
   // Prefer the challenge-specific point configured by an admin, with the user's barangay as fallback.
-  const userBarangay = model.profile?.profile?.city?.trim();
+  const userBarangay = getRegisteredBarangay(model.profile, model.session);
   const collectionPointName = challenge?.collectionPointName?.trim()
     || (userBarangay ? `Barangay ${userBarangay} Collection Point` : 'Barangay Collection Point');
   const requirementType = challenge?.requirementType || 'quantity';
@@ -6623,6 +6625,10 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   );
   const totalPages = Math.max(1, Math.ceil(actualItems.length / itemsPerPage));
 
+  React.useEffect(() => {
+    setPage(current => Math.min(current, totalPages));
+  }, [totalPages]);
+
   const startIndex = (page - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentPageItems = actualItems.slice(startIndex, endIndex);
@@ -6814,16 +6820,8 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
               );
             })}
           </View>}
-          {!showLeaderboardSkeleton && totalPages > 1 && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 12 }}>
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous leaderboard page" disabled={page === 1} onPress={() => setPage(page - 1)} style={{ padding: 10, opacity: page === 1 ? 0.4 : 1 }}>
-                <Ionicons name="chevron-back" size={22} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{page} / {totalPages}</Text>
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next leaderboard page" disabled={page === totalPages} onPress={() => setPage(page + 1)} style={{ padding: 10, opacity: page === totalPages ? 0.4 : 1 }}>
-                <Ionicons name="chevron-forward" size={22} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
+          {!showLeaderboardSkeleton && actualItems.length > 0 && (
+            <LeaderboardPagination page={page} totalPages={totalPages} onPageChange={setPage} />
           )}
           </ScrollView>
         </Animated.View>

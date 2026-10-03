@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   BackHandler,
@@ -10,19 +10,23 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
-import { Modal, Text } from '../../shared/accessibility/primitives';
+import { Text } from '../../shared/accessibility/primitives';
 import { FastImage } from '../../shared/ui/FastImage';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
 import type { EcoBudMobileModel, ChallengeWithProgress } from '../types/home';
+
+export type QuickMissionGesture = { phase: 'move' | 'release' | 'cancel'; x: number; y: number };
 
 export function QuickMissionsOverlay({
   model,
   onClose,
   anchorBounds,
+  gesture,
 }: {
   model: EcoBudMobileModel;
   onClose: () => void;
   anchorBounds?: { x: number; y: number; width: number; height: number };
+  gesture?: QuickMissionGesture | null;
 }) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -83,13 +87,12 @@ export function QuickMissionsOverlay({
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 180,
+        duration: 80,
         useNativeDriver: true,
       }),
-      Animated.spring(fanAnim, {
+      Animated.timing(fanAnim, {
         toValue: 1,
-        tension: 80,
-        friction: 8,
+        duration: 120,
         useNativeDriver: true,
       }),
     ]).start();
@@ -210,8 +213,20 @@ export function QuickMissionsOverlay({
     }).start();
   }, [hoveredIndex, scaleAnim0, scaleAnim1, scaleAnim2]);
 
-  // Full-screen PanResponder to support hold-drag-and-release
-  const panResponder = useRef(
+  const releaseAt = useCallback((x: number, y: number) => {
+    const target = calculateHoveredIndex(x, y);
+    if (target >= 0 && missions[target]) handleSelectMission(missions[target]);
+    else handleDismiss();
+  }, [calculateHoveredIndex, missions, handleSelectMission, handleDismiss]);
+
+  useEffect(() => {
+    if (!gesture) return;
+    if (gesture.phase === 'move') updateHover(gesture.x, gesture.y);
+    else if (gesture.phase === 'release') releaseAt(gesture.x, gesture.y);
+    else handleDismiss();
+  }, [gesture, updateHover, releaseAt, handleDismiss]);
+
+  const panResponder = useMemo(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
@@ -221,21 +236,12 @@ export function QuickMissionsOverlay({
       onPanResponderMove: evt => {
         updateHover(evt.nativeEvent.pageX, evt.nativeEvent.pageY);
       },
-      onPanResponderRelease: () => {
-        const target = hoveredIndexRef.current;
-        if (target !== null && target >= 0 && missions[target]) {
-          // User released over an image -> select it!
-          handleSelectMission(missions[target]);
-        } else {
-          // User released over Challenges button or outside -> close without opening quick tasks!
-          handleDismiss();
-        }
-      },
+      onPanResponderRelease: evt => releaseAt(evt.nativeEvent.pageX, evt.nativeEvent.pageY),
+      onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
         handleDismiss();
       },
-    })
-  ).current;
+    }), [updateHover, releaseAt, handleDismiss]);
 
   // SVG Connection Lines coordinates
   const anchorTopY = anchorY - centerDiameter / 2;
@@ -267,15 +273,13 @@ export function QuickMissionsOverlay({
   );
 
   return (
-    <Modal transparent visible animationType="none" statusBarTranslucent onRequestClose={handleDismiss}>
-      <View style={styles.screen} {...panResponder.panHandlers}>
-        {/* Soft dark dimming scrim ONLY above the bottom bar, so the bottom bar remains 100% visible and untouched */}
+      <View style={[styles.screen, StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]} {...panResponder.panHandlers}>
         <Animated.View
           pointerEvents="none"
           style={[
             styles.scrim,
             {
-              bottom: screenHeight - anchorTopY,
+              bottom: 0,
               opacity: fadeAnim,
             },
           ]}
@@ -578,14 +582,18 @@ export function QuickMissionsOverlay({
               width: centerDiameter,
               height: centerDiameter,
               borderRadius: centerDiameter / 2,
+              backgroundColor: '#EDF6F1',
+              alignItems: 'center',
+              justifyContent: 'center',
               opacity: fanAnim,
               borderColor: hoveredIndex === -1 ? '#6EE7B7' : '#34D399',
               shadowColor: hoveredIndex === -1 ? '#6EE7B7' : '#34D399',
             },
           ]}
-        />
+        >
+          <Ionicons name="trophy-outline" size={Math.round(iconSize * 1.35)} color="#8A959F" />
+        </Animated.View>
       </View>
-    </Modal>
   );
 }
 

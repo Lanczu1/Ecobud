@@ -50,7 +50,7 @@ import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
-import { QuickMissionsOverlay } from './components/QuickMissionsOverlay';
+import { QuickMissionsOverlay, type QuickMissionGesture } from './components/QuickMissionsOverlay';
 
 /**
  * EcoBud App - Main Shell
@@ -92,6 +92,7 @@ const ScrollAwareChatbot = React.memo(React.forwardRef<ScrollAwareChatbotHandle,
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const [quickMissionsOpen, setQuickMissionsOpen] = useState(false);
+  const [quickMissionGesture, setQuickMissionGesture] = useState<QuickMissionGesture | null>(null);
   const [quickMissionsAnchor, setQuickMissionsAnchor] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -274,9 +275,8 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           </ScreenTransition>
         )}
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
-          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onLongPressChallenges={bounds => { setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />
+          <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onQuickMissionGesture={setQuickMissionGesture} onLongPressChallenges={bounds => { setQuickMissionGesture(null); setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />
         )}
-        {quickMissionsOpen && !model.activeOverlay && <QuickMissionsOverlay model={model} anchorBounds={quickMissionsAnchor} onClose={() => setQuickMissionsOpen(false)} />}
       </SafeAreaView>
     );
   }
@@ -301,6 +301,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
           />
         </HomeAnimationVisibilityContext.Provider>
       </View>
+      {quickMissionsOpen && !model.activeOverlay && <QuickMissionsOverlay model={model} anchorBounds={quickMissionsAnchor} gesture={quickMissionGesture} onClose={() => setQuickMissionsOpen(false)} />}
       {model.activeOverlay && (
         <View style={StyleSheet.absoluteFill}>
           <ScreenTransition key={model.activeOverlay}>

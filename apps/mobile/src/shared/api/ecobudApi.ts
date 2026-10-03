@@ -115,6 +115,8 @@ export interface SessionUser {
   currentStreak: number;
   displayName: string;
   avatarUrl: string | null;
+  city?: string | null;
+  profile?: { displayName: string; avatarUrl?: string | null; city?: string | null } | null;
 }
 
 export interface SessionPayload {
