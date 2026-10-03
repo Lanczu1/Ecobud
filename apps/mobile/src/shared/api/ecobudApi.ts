@@ -5,6 +5,7 @@ export interface ResidentAnnouncement {
 }
 
 import type { NotificationPage } from '../../app/types/notifications';
+import { singleFlightRead } from './singleFlightRead';
 import { parseStreakSummary } from './streakSummary';
 import Constants from 'expo-constants';
 import { NativeModules, Platform } from 'react-native';
@@ -686,8 +687,10 @@ const uploadFileAsync = async <T>(
   }
 };
 
+const readIdVerification = singleFlightRead((token: string) => request<IdVerificationResult>('/id-verification/me', { token }));
+
 export const ecobudApi = {
-  getIdVerification: (token: string) => request<IdVerificationResult>('/id-verification/me', { token }),
+  getIdVerification: readIdVerification,
   submitIdVerification: (token: string, uri: string, legalName: string, idType: string, onProgress?: (value: number) => void) =>
     uploadFileAsync<IdVerificationResult>('/id-verification/me', token, uri, { legalName, idType, consent: 'true' }, undefined, onProgress),
   requestPasswordReset: (email: string) => request<{ success: boolean; message: string; expiresAt: string; serverTime: string }>('/auth/password-reset/request-code', { method: 'POST', body: { email } }),

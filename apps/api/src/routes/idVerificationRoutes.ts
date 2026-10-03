@@ -17,8 +17,10 @@ const submissionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, keyGen
 const publicSubmission = { id: true, legalName: true, idType: true, status: true, reason: true, submittedAt: true, reviewedAt: true } as const;
 
 idVerificationRoutes.get('/me', errorBoundary(async (req: AuthenticatedRequest, res) => {
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId }, select: { idVerificationStatus: true } });
-  const submission = await prisma.idVerificationSubmission.findFirst({ where: { userId: req.auth!.userId }, orderBy: { submittedAt: 'desc' }, select: publicSubmission });
+  const [user, submission] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId }, select: { idVerificationStatus: true } }),
+    prisma.idVerificationSubmission.findFirst({ where: { userId: req.auth!.userId }, orderBy: { submittedAt: 'desc' }, select: publicSubmission }),
+  ]);
   return res.json({ status: user.idVerificationStatus, submission });
 }));
 

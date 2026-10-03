@@ -6,7 +6,7 @@ import { useTheme } from '../../shared/theme/ecoTheme';
 import { swapService } from './swapService';
 import type { ListingReportPage } from './types';
 
-export function ListingReportsSection({ listingId }: { listingId: string }) {
+export function ListingReportsSection({ listingId, activeReportCount }: { listingId: string; activeReportCount: number }) {
   const { theme, isDark } = useTheme();
   const [data, setData] = useState<ListingReportPage | null>(null);
   const [page, setPage] = useState(1);
@@ -17,6 +17,10 @@ export function ListingReportsSection({ listingId }: { listingId: string }) {
   const [closing, setClosing] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    if (activeReportCount <= 0) {
+      setData(null); setError(''); setLoading(false); setVisible(false); setClosing(false); setPage(1);
+      return;
+    }
     let alive = true;
     let requestId = 0;
     async function load(background = false) {
@@ -34,7 +38,7 @@ export function ListingReportsSection({ listingId }: { listingId: string }) {
     const foreground = AppState.addEventListener('change', state => { if (state === 'active') void load(true); });
     const timer = setInterval(() => { if (AppState.currentState === 'active') void load(true); }, 15_000);
     return () => { alive = false; clearInterval(timer); event.remove(); foreground.remove(); };
-  }, [listingId, page, retry]);
+  }, [listingId, activeReportCount, page, retry]);
   useEffect(() => {
     if (!visible) return;
     progress.setValue(0);
@@ -51,6 +55,7 @@ export function ListingReportsSection({ listingId }: { listingId: string }) {
   }
   function open() { setPage(1); setRetry(value => value + 1); setVisible(true); }
   const accent = isDark ? '#FDA4AF' : '#BE123C';
+  if (activeReportCount <= 0) return null;
   if (!data && loading) return <Text style={{ color: theme.colors.textMuted, paddingVertical: 12 }}>Checking listing reports…</Text>;
   if (!data && error) return <Pressable accessibilityRole="button" onPress={() => setRetry(value => value + 1)} style={{ paddingVertical: 12 }}><Text style={{ color: accent }}>Could not load reports. Tap to retry.</Text></Pressable>;
   if (!data?.activeCount && !visible) return null;

@@ -362,6 +362,11 @@ export const swapService = {
         }
       }
       return rewards;
+    }, { maxWait: 10000, timeout: 30000 }).catch(error => {
+      if (error?.code === 'P2028') {
+        throw new HttpError(503, 'Could not save the exchange status. Please refresh and try again.');
+      }
+      throw error;
     });
     for (const reward of awarded) {
       apiCache.delete(`user_dashboard_${reward.userId}`);

@@ -9,6 +9,8 @@ import {
   Easing,
   KeyboardAvoidingView,
   Platform,
+  AppState,
+  DeviceEventEmitter,
 } from 'react-native';
 import { Modal } from '../../shared/accessibility/primitives';
 import { Text, TouchableOpacity, TextInput } from '../../shared/accessibility/primitives';
@@ -106,6 +108,24 @@ export function SwapListingDetail({
   const scrollRef = useRef<ScrollView>(null);
   const mainImageScrollRef = useRef<ScrollView>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  React.useEffect(() => {
+    let alive = true;
+    let inFlight = false;
+    async function refreshReports() {
+      if (inFlight || AppState.currentState !== 'active') return;
+      inFlight = true;
+      try {
+        const latest = await swapService.fetchListingById(initialListing.id);
+        if (alive && latest) setListing(previous => ({ ...previous, isReported: latest.isReported, reportCount: latest.reportCount }));
+      } finally { inFlight = false; }
+    }
+    void refreshReports();
+    const changed = DeviceEventEmitter.addListener('giveAndGetListingsChanged', () => void refreshReports());
+    const foreground = AppState.addEventListener('change', state => { if (state === 'active') void refreshReports(); });
+    const timer = setInterval(() => void refreshReports(), 15_000);
+    return () => { alive = false; clearInterval(timer); changed.remove(); foreground.remove(); };
+  }, [initialListing.id]);
 
   React.useEffect(() => {
     setListing(initialListing);
@@ -518,7 +538,7 @@ export function SwapListingDetail({
               )}
 
               {/* Description */}
-              <ListingReportsSection key={listing.id} listingId={listing.id} />
+              <ListingReportsSection key={listing.id} listingId={listing.id} activeReportCount={listing.isReported ? listing.reportCount ?? 0 : 0} />
               {listing.description ? (
                 <View style={[localStyles.sectionWrapper, { borderTopColor: theme.colors.border }]}>
                   <Text style={[localStyles.sectionTitle, { color: theme.colors.textPrimary }]}>Description</Text>

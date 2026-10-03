@@ -75,6 +75,11 @@ beforeEach(() => {
 });
 
 describe('resident listing history', () => {
+  it('returns a successful empty report page for an available listing with zero reports', async () => {
+    const result = await request(app).get('/swap/listings/approved/reports').set('x-user', 'viewer').set('x-role', 'user').expect(200);
+    expect(result.body).toMatchObject({ items: [], activeCount: 0, pagination: { page: 1, total: 0, totalPages: 1 } });
+    expect((await swapService.fetchListings({})).find(row => row.id === 'approved')).toMatchObject({ isReported: false, reportCount: 0 });
+  });
   it('saves a resident report while keeping the listing visible, then clears it on reapproval', async () => {
     await request(app).post('/swap/listings/approved/report').set('x-user', 'reporter').set('x-role', 'user').send({ reason: '  Misleading item photos  ' }).expect(201);
     expect(rows.find(row => row.id === 'approved')).toMatchObject({ isReported: true, reportCount: 1, reportReason: 'Misleading item photos', isActive: true, approvalStatus: 'approved' });

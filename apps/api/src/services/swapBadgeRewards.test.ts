@@ -3,6 +3,7 @@ const db = vi.hoisted(() => ({ $transaction: vi.fn(), $queryRaw: vi.fn(), swapRe
 vi.mock('../prismaClient', () => ({ prisma: db }));
 vi.mock('./notificationService', () => ({ sendDirectNotification: vi.fn(async () => {}) }));
 import { swapService } from './swapService';
+import { sendDirectNotification } from './notificationService';
 const listing = { approvalStatus: 'approved', lookingFor: 'giveaway' };
 const request = { id: 'request', listingId: 'listing', fromUserId: 'receiver', toUserId: 'owner', status: 'accepted', listing };
 beforeEach(() => {
@@ -12,6 +13,16 @@ beforeEach(() => {
   db.badge.findFirst.mockResolvedValue({ id: 'badge', name: 'Reuse Partner' });
 });
 describe('exchange badge rewards', () => {
+  it('allows enough transaction time for completion and reward queries', async () => {
+    await swapService.updateSwapRequestStatus('request', 'owner', 'user', 'completed');
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { maxWait: 10000, timeout: 30000 });
+    expect(db.swapConversation.updateMany).toHaveBeenCalledWith({ where: { swapRequestId: 'request' }, data: { status: 'completed' } });
+  });
+  it('returns a retryable error without reward notifications when the transaction expires', async () => {
+    db.$transaction.mockRejectedValue(Object.assign(new Error('Transaction not found'), { code: 'P2028' }));
+    await expect(swapService.updateSwapRequestStatus('request', 'owner', 'user', 'completed')).rejects.toMatchObject({ statusCode: 503, message: 'Could not save the exchange status. Please refresh and try again.' });
+    expect(sendDirectNotification).not.toHaveBeenCalled();
+  });
   it('awards the listing badge to both giveaway participants', async () => {
     await swapService.updateSwapRequestStatus('request', 'owner', 'user', 'completed');
     expect(db.userBadge.createMany).toHaveBeenCalledWith({ data: [{ userId: 'receiver', badgeId: 'badge' }], skipDuplicates: true });
