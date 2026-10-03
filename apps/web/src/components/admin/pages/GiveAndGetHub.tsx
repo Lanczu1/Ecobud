@@ -443,6 +443,7 @@ function SwapListingCard({
                 <AlertTriangle className="w-3.5 h-3.5" /> Moderation Notice:
               </div>
               <p className="text-[11px] leading-snug">{listing.reportReason}</p>
+              <p className="text-[11px] leading-snug">Latest report reason. Review the listing, then reject it or re-approve to clear the report flag.</p>
             </div>
           )}
         </div>
@@ -473,7 +474,7 @@ function SwapListingCard({
               <Ban className="w-3.5 h-3.5" /> Reject
             </button>
           )}
-          {listing.approvalStatus === 'rejected' && (
+          {(listing.approvalStatus === 'rejected' || (listing.approvalStatus === 'approved' && listing.isReported)) && (
             <button
               onClick={() => onApprove(listing.id)}
               className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 text-xs font-semibold rounded-xl transition-colors shadow-sm"
@@ -733,7 +734,7 @@ function ListingFullDetailsModal({
         {/* Modal Footer */}
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/90 flex items-center justify-between shrink-0">
           <div className="flex gap-2">
-            {listing.approvalStatus !== 'approved' && (
+            {(listing.approvalStatus !== 'approved' || listing.isReported) && (
               <button
                 type="button"
                 onClick={() => {
@@ -742,7 +743,7 @@ function ListingFullDetailsModal({
                 }}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm flex items-center gap-1"
               >
-                <CheckCircle className="w-3.5 h-3.5" /> Approve Listing
+                <CheckCircle className="w-3.5 h-3.5" /> {listing.approvalStatus === 'pending' ? 'Approve Listing' : 'Re-Approve Listing'}
               </button>
             )}
             {listing.approvalStatus !== 'rejected' && (
@@ -1087,6 +1088,7 @@ function ReportListingModal({
   const [reason, setReason] = useState('');
   const [isClosing, setIsClosing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const container = document.getElementById('admin-scroll-container');
@@ -1108,10 +1110,14 @@ function ReportListingModal({
   };
 
   const handleSubmit = async () => {
+    if (submitting || reason.trim().length < 5) return;
     setSubmitting(true);
+    setError('');
     try {
-      await onConfirm(reason);
+      await onConfirm(reason.trim());
       handleClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not flag this listing. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -1129,13 +1135,16 @@ function ReportListingModal({
         onClick={e => e.stopPropagation()}
       >
         <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-2">Report Listing</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Flag this listing for moderation review.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Flag this listing for moderation review. It stays visible if approved. Reject it to hide it, or re-approve after review to clear the flag.</p>
         <textarea
           value={reason}
           onChange={e => setReason(e.target.value)}
           placeholder="e.g. Fake listing, offensive content..."
+          maxLength={500}
           className="w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-200 dark:focus:ring-amber-900 focus:border-amber-400 resize-none h-24"
         />
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Reason: 5–500 characters. The latest reason is shown in the Moderation Notice.</p>
+        {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
         <div className="flex gap-3 mt-4">
           <button
             onClick={handleClose}
@@ -1145,7 +1154,7 @@ function ReportListingModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || reason.trim().length < 5}
             className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Reporting...' : 'Report'}
@@ -1234,8 +1243,9 @@ export function GiveAndGetHub() {
   const handleApprove = async (id: string) => {
     try {
       await adminPatch(`/give-and-get/swap-listings/${id}/approve`, {});
-      setListings(prev => prev.map(l => (l.id === id ? { ...l, approvalStatus: 'approved', isReported: false, reportCount: 0 } : l)));
-      if (stats) setStats({ ...stats, pending: stats.pending - 1, approved: stats.approved + 1 });
+      setListings(prev => prev.map(l => (l.id === id ? { ...l, approvalStatus: 'approved', isActive: true, isReported: false, reportCount: 0, reportReason: null } : l)));
+      clearAdminApiCache('/give-and-get/swap-listings');
+      await fetchListingsRef.current(page, filterStatus, search, true, true);
       toast.success('Listing approved.');
     } catch (error: any) {
       console.error('Failed to approve listing', error);
@@ -1250,7 +1260,8 @@ export function GiveAndGetHub() {
       setListings(prev =>
         prev.map(l => (l.id === rejectModal.listingId ? { ...l, approvalStatus: 'rejected', isActive: false, reportReason: reason } : l))
       );
-      if (stats) setStats({ ...stats, pending: stats.pending - 1, rejected: stats.rejected + 1 });
+      clearAdminApiCache('/give-and-get/swap-listings');
+      await fetchListingsRef.current(page, filterStatus, search, true, true);
       toast.success('Listing rejected.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to reject listing');
@@ -1264,11 +1275,13 @@ export function GiveAndGetHub() {
       setListings(prev =>
         prev.map(l => (l.id === reportModal.listingId ? { ...l, isReported: true, reportCount: l.reportCount + 1, reportReason: reason } : l))
       );
-      if (stats) setStats({ ...stats, reported: stats.reported + 1 });
+      clearAdminApiCache('/give-and-get/swap-listings');
+      await fetchListingsRef.current(page, filterStatus, search, true, true);
       toast.success('Listing reported.');
     } catch (error: any) {
       console.error('Failed to report listing', error);
       toast.error(error.message || 'Failed to report listing');
+      throw error;
     }
   };
 
@@ -1322,8 +1335,7 @@ export function GiveAndGetHub() {
           listing={detailsModalListing}
           onClose={() => setDetailsModalListing(null)}
           onApprove={(id) => {
-            handleApprove(id);
-            setDetailsModalListing(prev => (prev && prev.id === id ? { ...prev, approvalStatus: 'approved', isReported: false, reportCount: 0 } : prev));
+            void handleApprove(id);
           }}
           onOpenReject={(id) => {
             setDetailsModalListing(null);

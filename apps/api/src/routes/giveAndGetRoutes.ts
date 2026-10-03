@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { parseAdminPagination } from '../utils/adminPagination';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess, type AuthenticatedRequest } from '../http/authentication';
@@ -138,7 +139,7 @@ router.patch('/swap-listings/:id/approve', authenticateRequest, requireModerator
   try {
     const listing = await prisma.swapListing.update({
       where: { id: req.params.id },
-      data: { approvalStatus: 'approved', isReported: false, reportCount: 0, reportReason: null },
+      data: { approvalStatus: 'approved', isActive: true, isReported: false, reportCount: 0, reportReason: null },
     });
 
     await supabaseRealtimeService.publishUserNotice(listing.userId, {
@@ -215,13 +216,15 @@ router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorA
 // Report a swap listing (user-facing, but routed through admin for moderation)
 router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
-    const { reason } = req.body;
+    const parsed = z.object({ reason: z.string().trim().min(5).max(500) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Enter a report reason between 5 and 500 characters.' });
+    const { reason } = parsed.data;
     const listing = await prisma.swapListing.update({
       where: { id: req.params.id },
       data: {
         isReported: true,
         reportCount: { increment: 1 },
-        reportReason: reason || 'Reported by user',
+        reportReason: reason,
       },
     });
     supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: listing.userId, eventType: 'listing', listingId: listing.id }).catch(() => {});

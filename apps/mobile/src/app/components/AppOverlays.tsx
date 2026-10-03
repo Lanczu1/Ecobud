@@ -1,3 +1,4 @@
+import { ApprovedIdCard } from './ApprovedIdCard';
 import { IdVerificationOverlay, idStatusLabel } from './IdVerificationOverlay';
 import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { NotificationInbox } from './NotificationInbox';
@@ -7595,11 +7596,13 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView ref={formScroll.scrollRef} showsVerticalScrollIndicator={false} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
+          {model.idVerificationStatus === 'approved' ? <ApprovedIdCard onPress={() => model.setActiveOverlay('idVerification')} /> : (
           <SurfaceCard style={{ padding: 16, gap: 10 }}>
             <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700' }}>{idStatusLabel[model.idVerificationStatus]}</Text>
             <Text style={{ color: theme.colors.textMuted }}>ID approval is required for Challenges, joining Eco Events, and creating listings or requests. Learn remains available.</Text>
             <PrimaryButton label="View ID verification" onPress={() => model.setActiveOverlay('idVerification')} />
           </SurfaceCard>
+          )}
           {isGoogleAccount ? <SurfaceCard style={{ padding: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
             <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? theme.colors.surfaceMuted : '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="logo-google" size={19} color="#4285F4" />

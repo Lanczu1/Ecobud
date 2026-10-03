@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   StyleSheet,
   Alert,
+  Linking,
   Keyboard,
   Switch,
   type StyleProp,
@@ -3125,6 +3126,29 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               <View style={profileStyles.actionTextCol}>
                 <Text style={[profileStyles.actionLabel, { color: isDark ? theme.colors.primary : '#059669' }]}>Replay Tutorial</Text>
                 <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Re-watch the app walkthrough guide</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
+            </TouchableOpacity>
+
+            <View style={[profileStyles.divider, { backgroundColor: theme.colors.border }]} />
+
+            <TouchableOpacity
+              style={profileStyles.actionItem}
+              accessibilityRole="button"
+              accessibilityLabel="Help & Support. Email appecobud@gmail.com"
+              onPress={() => {
+                triggerSelectionHaptic();
+                void Linking.openURL('mailto:appecobud@gmail.com?subject=EcoBud%20Support').catch(() => {
+                  Alert.alert('Help & Support', 'Unable to open your email app. Please email appecobud@gmail.com for help.');
+                });
+              }}
+            >
+              <View style={[profileStyles.actionIconWrapper, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4' }]}>
+                <Ionicons name="mail-outline" size={20} color={isDark ? theme.colors.primary : '#059669'} />
+              </View>
+              <View style={profileStyles.actionTextCol}>
+                <Text style={[profileStyles.actionLabel, { color: theme.colors.textPrimary }]}>Help & Support</Text>
+                <Text style={[profileStyles.actionSub, { color: theme.colors.textMuted }]}>Email us for help with EcoBud</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.border} />
             </TouchableOpacity>

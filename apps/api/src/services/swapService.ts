@@ -129,6 +129,20 @@ function formatMessage(row: any) {
 }
 
 export const swapService = {
+  async reportListing(id: string, reporterId: string, reason: string) {
+    const listing = await prisma.swapListing.findUnique({ where: { id } });
+    if (!listing || !listing.isActive || listing.approvalStatus !== 'approved') {
+      throw new HttpError(404, 'This listing is no longer available for reporting.');
+    }
+    if (listing.userId === reporterId) throw new HttpError(400, 'You cannot report your own listing.');
+    const updated = await prisma.swapListing.updateMany({
+      where: { id, isActive: true, approvalStatus: 'approved' },
+      data: { isReported: true, reportCount: { increment: 1 }, reportReason: reason },
+    });
+    if (!updated.count) throw new HttpError(404, 'This listing is no longer available for reporting.');
+    return { listingId: id, ownerId: listing.userId };
+  },
+
   async fetchListings(params: {
     search?: string;
     category?: string;

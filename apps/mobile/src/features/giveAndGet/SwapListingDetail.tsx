@@ -667,13 +667,6 @@ export function SwapListingDetail({
                     <Ionicons name="flag-outline" size={20} color={theme.colors.error || '#DC2626'} />
                     <Text style={[localStyles.actionText, { color: theme.colors.error || '#DC2626' }]}>Report Listing</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setShowActions(false)}
-                    style={[localStyles.actionItem, { borderBottomColor: theme.colors.border }]}
-                  >
-                    <Ionicons name="person-remove-outline" size={20} color={theme.colors.error || '#DC2626'} />
-                    <Text style={[localStyles.actionText, { color: theme.colors.error || '#DC2626' }]}>Block User</Text>
-                  </TouchableOpacity>
                 </>
               )}
               <TouchableOpacity

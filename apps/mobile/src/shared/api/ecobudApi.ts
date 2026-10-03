@@ -977,6 +977,8 @@ export const ecobudApi = {
   },
   fetchSwapListingById: (token: string, id: string) =>
     request<any>(`/swap/listings/${id}`, { token }),
+  reportSwapListing: (token: string, id: string, reason: string) =>
+    request<{ message: string }>(`/swap/listings/${id}/report`, { method: 'POST', token, body: { reason } }),
   createSwapListing: (token: string, body: any) =>
     request<any>('/swap/listings', { method: 'POST', token, body }),
   updateSwapListing: (token: string, id: string, body: any) =>
