@@ -1,31 +1,39 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, ScrollView } from 'react-native';
 import { Modal, Pressable, Text, TextInput } from '../../shared/accessibility/primitives';
 import { useTheme } from '../../shared/theme/ecoTheme';
+const reportNames = ['Fake Listing', 'Misleading Photos', 'Misleading Description', 'Unsafe Item', 'Inappropriate Content', 'Other'];
 
 export function ReportListingDialog({ title, onClose, onSubmit }: {
   title: string;
   onClose: () => void;
-  onSubmit: (reason: string) => Promise<void>;
+  onSubmit: (reason: string, reportName: string) => Promise<void>;
 }) {
   const { theme } = useTheme();
   const [reason, setReason] = useState('');
+  const [reportName, setReportName] = useState('Fake Listing');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function submit() {
     if (busy || reason.trim().length < 5) return;
     setBusy(true);
     setError('');
-    try { await onSubmit(reason.trim()); onClose(); }
+    try { await onSubmit(reason.trim(), reportName); onClose(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not submit your report. Please try again.'); }
     finally { setBusy(false); }
   }
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => { if (!busy) onClose(); }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ width: '100%', maxWidth: 420, flexGrow: 0 }} contentContainerStyle={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
           <Text accessibilityRole="header" style={[styles.title, { color: theme.colors.textPrimary }]}>Report Listing</Text>
           <Text style={{ color: theme.colors.textSecondary }}>Report “{title}” if it is fake, misleading, unsafe, or inappropriate. A moderator will review it. The listing stays visible unless rejected.</Text>
+          <Text style={{ color: theme.colors.textPrimary }}>Report Name</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {reportNames.map(name => <Pressable key={name} accessibilityRole="radio" accessibilityState={{ checked: reportName === name }} disabled={busy} onPress={() => setReportName(name)} style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: reportName === name ? theme.colors.primary : theme.colors.cardBorder }}>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: reportName === name ? '700' : '400' }}>{name}</Text>
+            </Pressable>)}
+          </View>
           <Text style={{ color: theme.colors.textPrimary }}>Reason (5–500 characters)</Text>
           <TextInput
             accessibilityLabel="Report reason"
@@ -47,7 +55,7 @@ export function ReportListingDialog({ title, onClose, onSubmit }: {
               <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{busy ? 'Submitting…' : 'Submit Report'}</Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );

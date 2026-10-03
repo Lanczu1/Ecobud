@@ -33,6 +33,8 @@ import { adminGet, adminDelete, adminPatch, adminPut, API_HOST, clearAdminApiCac
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
+import { ListingReportsModal } from './ListingReportsModal';
+const reportNames = ['Fake Listing', 'Misleading Photos', 'Misleading Description', 'Unsafe Item', 'Inappropriate Content', 'Other'];
 
 interface SwapListingItem {
   id: string;
@@ -163,6 +165,7 @@ interface SwapListingCardProps {
   onApprove: (id: string) => void;
   onOpenReject: (id: string) => void;
   onOpenReport: (id: string) => void;
+  onViewReports: (listing: SwapListingItem) => void;
   onDelete: (id: string) => void;
   onPreviewImages: (images: string[], initialIdx: number, title: string) => void;
   onViewDetails: (listing: SwapListingItem) => void;
@@ -173,6 +176,7 @@ function SwapListingCard({
   onApprove,
   onOpenReject,
   onOpenReport,
+  onViewReports,
   onDelete,
   onPreviewImages,
   onViewDetails,
@@ -437,13 +441,13 @@ function SwapListingCard({
           )}
 
           {/* Report Alert Banner (if reported) */}
-          {listing.isReported && listing.reportReason && (
+          {listing.isReported && (
             <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 rounded-xl border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 space-y-0.5">
               <div className="flex items-center gap-1 font-bold text-xs text-rose-700 dark:text-rose-400">
                 <AlertTriangle className="w-3.5 h-3.5" /> Moderation Notice:
               </div>
-              <p className="text-[11px] leading-snug">{listing.reportReason}</p>
-              <p className="text-[11px] leading-snug">Latest report reason. Review the listing, then reject it or re-approve to clear the report flag.</p>
+              <p className="text-[11px] leading-snug">{listing.reportCount} active {listing.reportCount === 1 ? 'report' : 'reports'} awaiting review.</p>
+              <button type="button" onClick={() => onViewReports(listing)} className="mt-1 rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold hover:bg-rose-100 dark:border-rose-800 dark:hover:bg-rose-900">View Reports</button>
             </div>
           )}
         </div>
@@ -509,12 +513,14 @@ function ListingFullDetailsModal({
   onApprove,
   onOpenReject,
   onPreviewImages,
+  onViewReports,
 }: {
   listing: SwapListingItem;
   onClose: () => void;
   onApprove: (id: string) => void;
   onOpenReject: (id: string) => void;
   onPreviewImages: (images: string[], idx: number, title: string) => void;
+  onViewReports: (listing: SwapListingItem) => void;
 }) {
   const isAdmin = (() => { try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'admin'; } catch { return false; } })();
   const badgeReward = useContentBadgeReward('exchange', listing.id, isAdmin);
@@ -725,7 +731,7 @@ function ListingFullDetailsModal({
                 <AlertTriangle className="w-4 h-4" /> Moderation Reports ({listing.reportCount})
               </div>
               <p className="text-xs leading-relaxed bg-white/70 dark:bg-gray-900/70 p-3 rounded-xl border border-rose-100 dark:border-rose-900/50 font-medium">
-                Reason: {listing.reportReason || 'No specific reason provided.'}
+                {listing.reportCount} active reports awaiting review.
               </p>
             </div>
           )}
@@ -734,6 +740,7 @@ function ListingFullDetailsModal({
         {/* Modal Footer */}
         <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/90 flex items-center justify-between shrink-0">
           <div className="flex gap-2">
+            <button type="button" onClick={() => { handleClose(); onViewReports(listing); }} className="rounded-xl border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:text-amber-300">Report History</button>
             {(listing.approvalStatus !== 'approved' || listing.isReported) && (
               <button
                 type="button"
@@ -1083,9 +1090,10 @@ function ReportListingModal({
   onConfirm,
 }: {
   onClose: () => void;
-  onConfirm: (reason: string) => Promise<void>;
+  onConfirm: (reason: string, reportName: string) => Promise<void>;
 }) {
   const [reason, setReason] = useState('');
+  const [reportName, setReportName] = useState('Fake Listing');
   const [isClosing, setIsClosing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -1114,7 +1122,7 @@ function ReportListingModal({
     setSubmitting(true);
     setError('');
     try {
-      await onConfirm(reason.trim());
+      await onConfirm(reason.trim(), reportName);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not flag this listing. Please try again.');
@@ -1136,6 +1144,11 @@ function ReportListingModal({
       >
         <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-2">Report Listing</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Flag this listing for moderation review. It stays visible if approved. Reject it to hide it, or re-approve after review to clear the flag.</p>
+        <label className="mb-3 block text-sm font-semibold">Report Name
+          <select value={reportName} onChange={event => setReportName(event.target.value)} disabled={submitting} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800">
+            {reportNames.map(name => <option key={name}>{name}</option>)}
+          </select>
+        </label>
         <textarea
           value={reason}
           onChange={e => setReason(e.target.value)}
@@ -1143,7 +1156,7 @@ function ReportListingModal({
           maxLength={500}
           className="w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-200 dark:focus:ring-amber-900 focus:border-amber-400 resize-none h-24"
         />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Reason: 5–500 characters. The latest reason is shown in the Moderation Notice.</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Reason: 5–500 characters. Your account, report name, and reason will be saved for review.</p>
         {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
         <div className="flex gap-3 mt-4">
           <button
@@ -1179,6 +1192,7 @@ export function GiveAndGetHub() {
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [reportModal, setReportModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [detailsModalListing, setDetailsModalListing] = useState<SwapListingItem | null>(null);
+  const [reportsListing, setReportsListing] = useState<SwapListingItem | null>(null);
 
   const [deleteListingModal, setDeleteListingModal] = useState<{ open: boolean; listing: SwapListingItem | null }>({ open: false, listing: null });
   const [deletingListing, setDeletingListing] = useState(false);
@@ -1268,12 +1282,12 @@ export function GiveAndGetHub() {
     }
   };
 
-  const handleReportConfirm = async (reason: string) => {
+  const handleReportConfirm = async (reason: string, reportName: string) => {
     if (!reportModal.listingId) return;
     try {
-      await adminPatch(`/give-and-get/swap-listings/${reportModal.listingId}/report`, { reason });
+      await adminPatch(`/give-and-get/swap-listings/${reportModal.listingId}/report`, { reason, reportName });
       setListings(prev =>
-        prev.map(l => (l.id === reportModal.listingId ? { ...l, isReported: true, reportCount: l.reportCount + 1, reportReason: reason } : l))
+        prev.map(l => (l.id === reportModal.listingId ? { ...l, isReported: true, reportCount: l.reportCount + 1, ...(l.approvalStatus !== 'rejected' ? { reportReason: reason } : {}) } : l))
       );
       clearAdminApiCache('/give-and-get/swap-listings');
       await fetchListingsRef.current(page, filterStatus, search, true, true);
@@ -1342,6 +1356,7 @@ export function GiveAndGetHub() {
             setRejectModal({ open: true, listingId: id });
           }}
           onPreviewImages={handlePreviewImages}
+          onViewReports={listing => { setDetailsModalListing(null); setReportsListing(listing); }}
         />
       )}
 
@@ -1373,6 +1388,7 @@ export function GiveAndGetHub() {
       )}
 
       {/* Header */}
+      {reportsListing && <ListingReportsModal key={reportsListing.id} listing={reportsListing} onClose={() => setReportsListing(null)} />}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">Manage Listings</h2>
@@ -1449,6 +1465,7 @@ export function GiveAndGetHub() {
               onApprove={handleApprove}
               onOpenReject={id => setRejectModal({ open: true, listingId: id })}
               onOpenReport={id => setReportModal({ open: true, listingId: id })}
+              onViewReports={setReportsListing}
               onDelete={handleDeleteListing}
               onPreviewImages={handlePreviewImages}
               onViewDetails={setDetailsModalListing}

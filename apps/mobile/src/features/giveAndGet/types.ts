@@ -56,6 +56,12 @@ export interface SwapListing {
   rejectionReason?: string | null;
 }
 
+export interface ListingReportPage {
+  items: { id: string; reportName: string; reason: string; occurrences: number; createdAt: string }[];
+  activeCount: number;
+  pagination: { page: number; total: number; totalPages: number };
+}
+
 export interface SwapRequest {
   id: string;
   listingId: string;

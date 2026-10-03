@@ -1,8 +1,9 @@
 import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { z } from 'zod';
+import { swapReportSchema } from '../services/swapReportService';
 import { errorBoundary } from '../http/errorResponder';
+import { parseAdminPagination } from '../utils/adminPagination';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
 import { swapService } from '../services/swapService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
@@ -21,10 +22,25 @@ const listingReportLimiter = rateLimit({
 });
 
 router.post('/listings/:id/report', authenticateRequest, listingReportLimiter, errorBoundary<AuthenticatedRequest>(async (req, res) => {
-  const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).parse(req.body);
-  const result = await swapService.reportListing(req.params.id, req.auth!.userId, reason);
+  const { reason, reportName } = swapReportSchema.parse(req.body);
+  const result = await swapService.reportListing(req.params.id, req.auth!.userId, reason, reportName);
   supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: result.ownerId, eventType: 'listing', listingId: result.listingId }).catch(() => {});
   res.status(201).json({ message: 'Report submitted for moderator review.' });
+}));
+
+router.get('/listings/:id/reports', authenticateRequest, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { userId: true, isActive: true, approvalStatus: true } });
+  if (!listing || listing.approvalStatus === 'deleted' || (!(listing.isActive && listing.approvalStatus === 'approved') && listing.userId !== req.auth!.userId)) {
+    return res.status(404).json({ message: 'Listing not available.' });
+  }
+  const { page, pageSize, skip } = parseAdminPagination(req.query);
+  const where = { listingId: req.params.id, resolvedAt: null };
+  const [items, total, count] = await Promise.all([
+    prisma.swapListingReport.findMany({ where, skip, take: pageSize, orderBy: { createdAt: 'desc' }, select: { id: true, reportName: true, reason: true, occurrences: true, createdAt: true } }),
+    prisma.swapListingReport.count({ where }),
+    prisma.swapListingReport.aggregate({ where, _sum: { occurrences: true } }),
+  ]);
+  res.json({ items: items.map(report => ({ id: report.id, reportName: report.reportName, reason: report.reason, occurrences: report.occurrences, createdAt: report.createdAt })), activeCount: count._sum.occurrences ?? 0, pagination: { page, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
 }));
 
 // Fetch marketplace listings

@@ -299,9 +299,9 @@ export function MarketplaceHubView({
       {showReportDialog && selectedListing && <ReportListingDialog
         title={selectedListing.title}
         onClose={() => setShowReportDialog(false)}
-        onSubmit={async (reason) => {
+        onSubmit={async (reason, reportName) => {
           swapService.init(token);
-          await swapService.reportListing(selectedListing.id, reason);
+          await swapService.reportListing(selectedListing.id, reason, reportName);
           showNotification({ title: 'Report submitted', message: 'Your report was saved for moderator review.', tone: 'success' });
         }}
       />}
@@ -413,4 +413,3 @@ const localStyles = StyleSheet.create({
     backgroundColor: ecoTheme.colors.background,
   },
 });
-

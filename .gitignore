@@ -98,3 +98,4 @@ releases/ecobud-announcement-push-supabase-migrated-20261002.zip
 !apps/api/prisma/migrations/20261002020000_event_target_audience/migration.sql
 
 !apps/api/prisma/migrations/20261003000000_id_verification/migration.sql
+!apps/api/prisma/migrations/20261003130000_swap_listing_reports/migration.sql
