@@ -72,6 +72,7 @@ export interface AssistantNotice {
 // ─── Component Props ───────────────────────────────────────────────────────────
 
 export interface HeaderProps {
+  showProfileAvatar?: boolean;
   userDisplayName: string;
   userAvatarUrl?: string;
   notificationCount: number;

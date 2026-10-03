@@ -7455,7 +7455,7 @@ function SettingsDialogModal({
 }
 
 export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
-  const { theme, isDark, themeMode, setThemeMode } = useTheme();
+  const { theme, isDark } = useTheme();
   const formScroll = useKeyboardFormScroll();
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
@@ -7590,7 +7590,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
   return (
     <OverlayScaffold
       title="Privacy & Settings"
-      subtitle="Manage your privacy, appearance, and account security"
+      subtitle="Manage your privacy and account security"
       onBack={() => model.setActiveOverlay(null)}
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -7744,74 +7744,6 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
               <Text style={{ color: isDark ? '#0E1512' : '#FFF', fontSize: 14, fontWeight: '800' }}>{totpBusy ? 'Starting setup...' : 'Set up authenticator app'}</Text>
             </TouchableOpacity> : null}
           </SurfaceCard>
-          <Text style={[styles.sectionHeadline, { marginTop: 0, color: theme.colors.textPrimary }]}>App Appearance</Text>
-          <SurfaceCard style={{ padding: 16, gap: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? '#262626' : '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={isDark ? '#FBBF24' : '#7C3AED'} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.textPrimary }}>App Appearance</Text>
-                <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
-                  {themeMode === 'light' ? 'Light Mode (Day)' : themeMode === 'dark' ? 'Dark Mode (Night)' : 'Onyx Mode (Pure Black)'}
-                </Text>
-              </View>
-            </View>
-            <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surfaceMuted, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
-              <TouchableOpacity
-                onPress={() => { triggerSelectionHaptic(); void setThemeMode('light'); }}
-                activeOpacity={0.8}
-                style={{
-                  flex: 1,
-                  paddingVertical: 7,
-                  borderRadius: 11,
-                  backgroundColor: themeMode === 'light' ? '#126027' : 'transparent',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                }}
-              >
-                <Ionicons name="sunny" size={14} color={themeMode === 'light' ? '#FFF' : theme.colors.textMuted} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'light' ? '#FFF' : theme.colors.textMuted }}>Light</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => { triggerSelectionHaptic(); void setThemeMode('dark'); }}
-                activeOpacity={0.8}
-                style={{
-                  flex: 1,
-                  paddingVertical: 7,
-                  borderRadius: 11,
-                  backgroundColor: themeMode === 'dark' ? theme.colors.primary : 'transparent',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                }}
-              >
-                <Ionicons name="moon" size={14} color={themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'dark' ? '#0E1512' : theme.colors.textMuted }}>Dark</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => { triggerSelectionHaptic(); void setThemeMode('onyx'); }}
-                activeOpacity={0.8}
-                style={{
-                  flex: 1,
-                  paddingVertical: 7,
-                  borderRadius: 11,
-                  backgroundColor: themeMode === 'onyx' ? '#FFF' : 'transparent',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 5,
-                }}
-              >
-                <Ionicons name="moon-outline" size={14} color={themeMode === 'onyx' ? '#000' : theme.colors.textMuted} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: themeMode === 'onyx' ? '#000' : theme.colors.textMuted }}>Onyx</Text>
-              </TouchableOpacity>
-            </View>
-          </SurfaceCard>
-
           <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>Legal</Text>
           <SurfaceCard style={{ paddingHorizontal: 16 }}>
             {([
