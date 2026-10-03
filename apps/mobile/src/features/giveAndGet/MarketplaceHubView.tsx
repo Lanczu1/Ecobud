@@ -41,6 +41,8 @@ export function MarketplaceHubView({
   const conversationsRequestId = useRef(0);
   const conversationsInFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const conversationsLoadedFor = useRef<string | null>(null);
+  const completionInFlight = useRef(false);
+  const [completing, setCompleting] = useState(false);
   const handleLogoutRef = useRef(model.handleLogout);
   handleLogoutRef.current = model.handleLogout;
   const [showReportDialog, setShowReportDialog] = useState(false);
@@ -68,7 +70,7 @@ export function MarketplaceHubView({
 
   const currentUserId = model.session?.user.id || '';
   const token = model.session?.token || '';
-  const loadConversations = useCallback(async (showLoading = false) => {
+  const loadConversations = useCallback(async (showLoading = false, refreshAfterPending = false) => {
     if (!currentUserId || !token) {
       setConversationsLoading(false);
       return;
@@ -76,11 +78,15 @@ export function MarketplaceHubView({
     const key = `${currentUserId}:${token}`;
     swapService.init(token);
     const cached = swapService.getCachedConversations(currentUserId);
-    if (cached) {
+    if (cached && conversationsLoadedFor.current !== key) {
       setConversations(cached);
       setConversationsLoading(false);
     } else if (showLoading && conversationsLoadedFor.current !== key) setConversationsLoading(true);
-    if (conversationsInFlight.current?.key === key) return conversationsInFlight.current.promise;
+    if (conversationsInFlight.current?.key === key) {
+      await conversationsInFlight.current.promise;
+      if (refreshAfterPending) await loadConversations();
+      return;
+    }
 
     const requestId = ++conversationsRequestId.current;
     const promise = Promise.resolve().then(async () => {
@@ -89,6 +95,9 @@ export function MarketplaceHubView({
         const convs = await swapService.fetchConversations(currentUserId);
         if (requestId === conversationsRequestId.current) {
           setConversations(convs);
+          setSelectedConversation(previous => previous
+            ? convs.find(item => item.id === previous.id) ?? previous
+            : null);
           setConversationsError(false);
           conversationsLoadedFor.current = key;
         }
@@ -115,12 +124,12 @@ export function MarketplaceHubView({
   }, [loadConversations]);
 
   useEffect(() => {
-    if (!model.hasUsableInternet || screen !== 'feed' || feedTab !== 'chats') return;
+    if (!model.hasUsableInternet || (screen !== 'chat' && (screen !== 'feed' || feedTab !== 'chats'))) return;
     const refresh = () => {
       if (AppState.currentState === 'active') void loadConversations();
     };
     refresh();
-    const timer = setInterval(refresh, 10_000);
+    const timer = setInterval(refresh, screen === 'chat' ? 5000 : 10_000);
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') refresh();
     });
@@ -195,7 +204,7 @@ export function MarketplaceHubView({
             if (payload?.eventType === 'listing') {
               DeviceEventEmitter.emit('giveAndGetListingsChanged');
             } else {
-              loadConversations();
+              void loadConversations(false, true);
             }
             if (payload?.eventType === 'message' && payload?.swapRequestId) {
               DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
@@ -271,14 +280,23 @@ export function MarketplaceHubView({
   };
 
   const handleMarkCompleted = async () => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || completionInFlight.current) return;
+    const requestId = selectedConversation.swapRequestId;
+    completionInFlight.current = true;
+    setCompleting(true);
     try {
-      await swapService.updateSwapRequestStatus(selectedConversation.swapRequestId, 'completed');
-      await loadConversations();
+      await swapService.updateSwapRequestStatus(requestId, 'completed');
+      ++conversationsRequestId.current;
+      setSelectedConversation(previous => previous?.swapRequestId === requestId ? { ...previous, status: 'completed' } : previous);
+      setConversations(previous => previous.map(item => item.swapRequestId === requestId ? { ...item, status: 'completed' } : item));
+      void loadConversations(false, true);
       showNotification({ title: 'Exchange completed', message: 'The Give & Get exchange is now marked complete.', tone: 'success' });
     } catch (err: any) {
       console.error('Failed to mark as completed:', err);
       showNotification({ title: 'Could not complete exchange', message: err?.message || 'Failed to mark as completed', tone: 'error' });
+    } finally {
+      completionInFlight.current = false;
+      setCompleting(false);
     }
   };
 
@@ -308,7 +326,7 @@ export function MarketplaceHubView({
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (
-        <ScreenTransition key={`feed-${feedTab}`}>
+        <ScreenTransition key={`feed-${currentUserId}`}>
         <MarketplaceFeed
           currentUserId={currentUserId}
           onSelectListing={handleSelectListing}
@@ -379,6 +397,7 @@ export function MarketplaceHubView({
           onAcceptSwap={handleAcceptSwap}
           onDeclineSwap={handleDeclineSwap}
           onMarkCompleted={handleMarkCompleted}
+          completing={completing}
         />
         </ScreenTransition>
       )}
