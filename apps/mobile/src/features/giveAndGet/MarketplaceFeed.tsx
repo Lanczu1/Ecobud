@@ -60,7 +60,7 @@ export function MarketplaceFeed({
 }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const [listings, setListings] = useState<SwapListing[]>([]);
+  const [listings, setListings] = useState<SwapListing[]>(() => swapService.getCachedListings({ sortBy: 'newest', limit: 20, offset: 0 }) ?? []);
   const [hasMoreListings, setHasMoreListings] = useState(false);
   const [loadingMoreListings, setLoadingMoreListings] = useState(false);
   const listingsRequestRef = useRef(0);
@@ -69,7 +69,7 @@ export function MarketplaceFeed({
   const listingFiltersRef = useRef('');
   const internetReadyRef = useRef(true);
   internetReadyRef.current = model?.hasUsableInternet !== false;
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !swapService.getCachedListings({ sortBy: 'newest', limit: 20, offset: 0 }));
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -78,8 +78,8 @@ export function MarketplaceFeed({
   const [selectedMeetup, setSelectedMeetup] = useState<MeetupMethod | 'all'>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
-  const [myListings, setMyListings] = useState<SwapListing[]>([]);
-  const [myListingsLoading, setMyListingsLoading] = useState(false);
+  const [myListings, setMyListings] = useState<SwapListing[]>(() => currentUserId ? swapService.getCachedMyListings(currentUserId) ?? [] : []);
+  const [myListingsLoading, setMyListingsLoading] = useState(() => Boolean(currentUserId && !swapService.getCachedMyListings(currentUserId)));
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const createBtnScale = useRef(new Animated.Value(1)).current;
   const feedScrollRef = useRef<FlatList<typeof feedRows[number]>>(null);
@@ -206,7 +206,10 @@ export function MarketplaceFeed({
     if (!currentUserId) return;
     const cached = swapService.getCachedMyListings(currentUserId);
     if (cached) setMyListings(cached);
-    if (!internetReadyRef.current) return;
+    if (!internetReadyRef.current) {
+      setMyListingsLoading(false);
+      return;
+    }
     try {
       setMyListingsLoading(!cached);
       const data = await swapService.fetchMyListings(currentUserId);
@@ -240,14 +243,12 @@ export function MarketplaceFeed({
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'browse') loadListings();
-  }, [activeTab, loadListings, model?.hasUsableInternet]);
+    void loadListings();
+  }, [loadListings, model?.hasUsableInternet]);
 
   useEffect(() => {
-    if (activeTab === 'mylistings') {
-      loadMyListings();
-    }
-  }, [activeTab, loadMyListings, model?.hasUsableInternet]);
+    void loadMyListings();
+  }, [loadMyListings, model?.hasUsableInternet]);
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener('giveAndGetListingsChanged', () => {
@@ -267,9 +268,7 @@ export function MarketplaceFeed({
   }, []);
 
   const handleRefresh = useCallback(() => {
-    if (activeTab === 'mylistings') {
-      loadMyListings();
-    } else {
+    void loadMyListings(); else {
       setRefreshing(true);
       loadListings();
     }

@@ -213,6 +213,7 @@ export function SwapChatView({
   onAcceptSwap,
   onDeclineSwap,
   onMarkCompleted,
+  completing = false,
 }: {
   conversation: SwapConversation;
   currentUserId: string;
@@ -220,6 +221,7 @@ export function SwapChatView({
   onAcceptSwap: () => void;
   onDeclineSwap: () => void;
   onMarkCompleted: () => void;
+  completing?: boolean;
 }) {
   const { theme, isDark } = useTheme();
   const { showNotification } = useInAppNotification();
@@ -410,18 +412,21 @@ export function SwapChatView({
           <Text style={[localStyles.headerName, { color: isDark ? theme.colors.textPrimary : theme.colors.surface }]} numberOfLines={1}>
             {conversation.otherUser.displayName}
           </Text>
-          <Text style={[localStyles.headerStatus, { color: isDark ? theme.colors.textMuted : theme.colors.surfaceMuted }]}>
-            {getStatusLabel(status)}
-          </Text>
+          <View style={[localStyles.headerStatusPill, { backgroundColor: isDark ? theme.colors.surfaceMuted : 'rgba(255,255,255,0.12)' }]}>
+            <View style={[localStyles.headerStatusDot, { backgroundColor: isDark ? getStatusColor(status) : status === 'completed' ? '#93C5FD' : status === 'pending' ? '#FCD34D' : status === 'accepted' ? '#6EE7B7' : '#FCA5A5' }]} />
+            <Text style={[localStyles.headerStatus, { color: isDark ? theme.colors.textPrimary : '#FFFFFF' }]}>
+              {getStatusLabel(status)}
+            </Text>
+          </View>
         </View>
-        <TouchableOpacity style={[localStyles.headerAvatar, { backgroundColor: theme.colors.surfaceMuted }]} onPress={() => setShowProfileModal(true)}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${conversation.otherUser.displayName}'s profile`} style={[localStyles.headerAvatar, { backgroundColor: theme.colors.surfaceMuted, borderColor: isDark ? theme.colors.border : 'rgba(255,255,255,0.4)' }]} onPress={() => setShowProfileModal(true)}>
           {conversation.otherUser.avatarUrl ? (
             <Image
               source={{ uri: getValidImageUrl(conversation.otherUser.avatarUrl) }}
               style={localStyles.headerAvatarImage}
             />
           ) : (
-            <Text style={[localStyles.headerAvatarText, { color: isDark ? theme.colors.textPrimary : theme.colors.surface }]}>
+            <Text style={[localStyles.headerAvatarText, { color: isDark ? theme.colors.textPrimary : theme.colors.primaryDark }]}>
               {getInitials(conversation.otherUser.displayName)}
             </Text>
           )}
@@ -434,7 +439,7 @@ export function SwapChatView({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[localStyles.swapInfoBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
-          <View style={localStyles.swapInfoItem}>
+          <View style={[localStyles.swapInfoItem, { backgroundColor: isDark ? theme.colors.card : '#F3FAF6' }]}>
             <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Offering</Text>
             <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {conversation.listing.quantity} {conversation.listing.title}
@@ -474,9 +479,10 @@ export function SwapChatView({
           <View style={[localStyles.actionBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
             <TouchableOpacity
               onPress={onMarkCompleted}
+              disabled={completing}
               style={[localStyles.completeBtn, { backgroundColor: theme.colors.primary }]}
             >
-              <Ionicons name="checkmark-done-circle-outline" size={18} color={theme.colors.background} />
+              {completing ? <ActivityIndicator size="small" color={theme.colors.background} /> : <Ionicons name="checkmark-done-circle-outline" size={18} color={theme.colors.background} />}
               <Text style={[localStyles.completeBtnText, { color: theme.colors.background }]}>Mark as Completed</Text>
             </TouchableOpacity>
           </View>
@@ -602,6 +608,7 @@ const localStyles = StyleSheet.create({
   },
   headerInfo: {
     flex: 1,
+    minWidth: 0,
   },
   headerName: {
     fontSize: responsiveFontSize(15),
@@ -611,10 +618,26 @@ const localStyles = StyleSheet.create({
   },
   headerStatus: {
     fontSize: responsiveFontSize(11),
+    fontWeight: '600',
     color: 'rgba(255,255,255,0.7)',
-    marginTop: 1,
+  },
+  headerStatusPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(5),
+    paddingHorizontal: scale(7),
+    paddingVertical: verticalScale(2),
+    borderRadius: moderateScale(8),
+    marginTop: verticalScale(3),
+  },
+  headerStatusDot: {
+    width: scale(5),
+    height: scale(5),
+    borderRadius: scale(3),
   },
   headerAvatar: {
+    borderWidth: 2,
     width: scale(42),
     height: scale(42),
     borderRadius: scale(21),
@@ -624,8 +647,8 @@ const localStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   headerAvatarImage: {
-    width: scale(42),
-    height: scale(42),
+    width: '100%',
+    height: '100%',
   },
   headerAvatarText: {
     fontSize: responsiveFontSize(13),
@@ -640,6 +663,7 @@ const localStyles = StyleSheet.create({
   },
   swapInfoItem: {
     flex: 1,
+    minWidth: 0,
     paddingVertical: verticalScale(10),
     paddingHorizontal: scale(14),
   },
@@ -647,9 +671,9 @@ const localStyles = StyleSheet.create({
     fontSize: responsiveFontSize(10),
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.8,
     color: ecoTheme.colors.textSoft,
-    marginBottom: 2,
+    marginBottom: verticalScale(4),
   },
   swapInfoValue: {
     fontSize: responsiveFontSize(13),

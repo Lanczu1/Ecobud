@@ -208,7 +208,12 @@ router.patch('/requests/:id/status', authenticateRequest, async (req: Authentica
         });
         const actorName = actor?.profile?.displayName || actor?.name || 'The other member';
         const statusCopy: Record<string, { title: string; message: string }> = {
-          accepted: { title: 'Swap request accepted', message: `${actorName} accepted your Give & Get request.` },
+          accepted: {
+            title: conv.listing.lookingFor?.trim().toLowerCase() === 'giveaway' ? 'Request Accepted' : 'Swap request accepted',
+            message: conv.listing.lookingFor?.trim().toLowerCase() === 'giveaway'
+              ? `${actorName} accepted your giveaway request.`
+              : `${actorName} accepted your Give & Get request.`,
+          },
           declined: { title: 'Swap request declined', message: `${actorName} declined your Give & Get request.` },
           completed: { title: 'Exchange completed', message: `${actorName} marked your Give & Get exchange as complete.` },
           cancelled: { title: 'Swap request cancelled', message: `${actorName} cancelled the Give & Get request.` },
