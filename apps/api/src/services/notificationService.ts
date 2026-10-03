@@ -109,7 +109,7 @@ export async function deliverNotification(d: Delivery) {
     }
     catch (error: any) {
         const code = String(error?.code || '');
-        if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token', 'messaging/invalid-argument'].includes(code)) {
+        if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(code)) {
             await prisma.$executeRaw `DELETE FROM notification_devices WHERE token=${d.destination}`;
             console.warn('notification_delivery_rejected', d.id, code);
             return 'failed';
@@ -139,14 +139,14 @@ export async function notificationTick() {
                 }
                 catch (error: any) {
                     state = d.channel === 'realtime' || error?.retrySafe || (d.channel === 'email' && (['ECONNECTION', 'EDNS'].includes(error?.code) || (error?.responseCode >= 400 && error?.responseCode < 500))) ? 'pending' : 'uncertain';
-                    console.error('notification_delivery_failed', d.id, state);
+                    console.error('notification_delivery_failed', d.id, state, String(error?.code || 'unknown'));
                 }
                 await prisma.$executeRaw `UPDATE notification_deliveries SET state=${state},next_at=${new Date(Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(d.attempts, 6)))} WHERE id=${d.id}`;
             }));
         }
     }
-    catch {
-        console.error('notification_worker_failed');
+    catch (error: any) {
+        console.error('notification_worker_failed', String(error?.code || 'unknown'));
     }
     finally {
         running = false;

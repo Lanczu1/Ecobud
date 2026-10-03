@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, DeviceEventEmitter, Platform } from 'react-native';
 import { isRunningInExpoGo } from 'expo';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -28,45 +28,51 @@ if (nativePush) {
 
 export function useNotifications(token?: string, pushEnabled: boolean = true) {
   const [count, setCount] = useState(0);
+  const deviceTokenRef = useRef<string | undefined>(undefined);
+  const registrationQueue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     let alive = true;
-    let registering = false;
-    let deviceToken: string | undefined;
     if (!token) { setCount(0); return; }
     const refresh = () => {
       void ecobudApi.notifications(token).then(page => { if (alive) setCount(page.unreadCount); }).catch(() => {});
     };
-    const register = async () => {
-      if (!nativePush || registering || !alive) return;
-      if (!pushEnabled) {
-        if (deviceToken) {
-          await ecobudApi.unregisterPush(token, deviceToken).catch(() => {});
-          deviceToken = undefined;
-        }
-        return;
-      }
-      registering = true;
-      try {
-        if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('ecobud', { name: 'ECOBUD', importance: Notifications.AndroidImportance.HIGH });
-        let permissions = await Notifications.getPermissionsAsync();
-        if (!permissions.granted && permissions.canAskAgain) permissions = await Notifications.requestPermissionsAsync();
-        if (!permissions.granted) {
-          if (deviceToken) await ecobudApi.unregisterPush(token, deviceToken);
-          return;
-        }
-        // Android returns an FCM registration token, which the API sends through
-        // Firebase Admin directly. This avoids routing device pushes through Expo.
-        deviceToken = String((await Notifications.getDevicePushTokenAsync()).data);
-        if (alive) {
-          await ecobudApi.registerPush(token, deviceToken);
-          if (!alive) await ecobudApi.unregisterPush(token, deviceToken);
-        }
-      } catch { console.warn('Push registration unavailable; in-app notifications remain available.'); }
-      finally { registering = false; }
+    const register = (updatedToken?: string) => {
+      if (!nativePush || !alive) return Promise.resolve();
+      registrationQueue.current = registrationQueue.current.then(async () => {
+        if (!alive) return;
+        try {
+          if (!pushEnabled) {
+            const deviceToken = deviceTokenRef.current ?? String((await Notifications.getDevicePushTokenAsync()).data);
+            if (!alive) return;
+            await ecobudApi.unregisterPush(token, deviceToken);
+            deviceTokenRef.current = undefined;
+            return;
+          }
+          if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('ecobud', { name: 'ECOBUD', importance: Notifications.AndroidImportance.HIGH });
+          let permissions = await Notifications.getPermissionsAsync();
+          if (!permissions.granted && permissions.canAskAgain) permissions = await Notifications.requestPermissionsAsync();
+          if (!alive) return;
+          if (!permissions.granted) {
+            if (deviceTokenRef.current) {
+              await ecobudApi.unregisterPush(token, deviceTokenRef.current);
+              deviceTokenRef.current = undefined;
+            }
+            return;
+          }
+          // Android returns an FCM registration token, which the API sends through
+          // Firebase Admin directly. This avoids routing device pushes through Expo.
+          const deviceToken = updatedToken ?? String((await Notifications.getDevicePushTokenAsync()).data);
+          if (alive) {
+            await ecobudApi.registerPush(token, deviceToken);
+            deviceTokenRef.current = deviceToken;
+          }
+        } catch { console.warn('Push registration unavailable; in-app notifications remain available.'); }
+      });
+      return registrationQueue.current;
     };
     refresh();
     void register();
-    const interval = setInterval(() => { if (AppState.currentState === 'active') refresh(); }, 30000);
+    const interval = setInterval(() => { if (AppState.currentState === 'active') { refresh(); void register(); } }, 30000);
     const app = AppState.addEventListener('change', state => { if (state === 'active') { refresh(); void register(); } });
     const changed = DeviceEventEmitter.addListener('notificationsChanged', refresh);
     const inboxChanged = DeviceEventEmitter.addListener('notificationsInboxRefresh', refresh);
@@ -82,7 +88,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
           if (alive && typeof id === 'string') { refresh(); DeviceEventEmitter.emit('openNotification', id); }
         };
         subscriptions.push(Notifications.addNotificationResponseReceivedListener(response));
-        subscriptions.push(Notifications.addPushTokenListener(() => void register()));
+        subscriptions.push(Notifications.addPushTokenListener(device => void register(String(device.data))));
         void Notifications.getLastNotificationResponseAsync().then(result => {
           if (result && alive) { response(result); void Notifications.clearLastNotificationResponseAsync(); }
         }).catch(() => {});
@@ -93,7 +99,6 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     return () => {
       alive = false;
       clearInterval(interval); app.remove(); changed.remove(); inboxChanged.remove(); subscriptions.forEach(subscription => subscription.remove());
-      if (deviceToken) void ecobudApi.unregisterPush(token, deviceToken).catch(() => {});
     };
   }, [token, pushEnabled]);
   return count;
