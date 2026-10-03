@@ -51,6 +51,7 @@ export function Header({
   notificationCount,
   hasUsableInternet,
   showBack,
+  showProfileAvatar = true,
   title,
   onBack,
   onProfilePress,
@@ -91,12 +92,12 @@ export function Header({
         { paddingTop: topPadding, backgroundColor: theme.colors.navBackground },
         isSmallDevice && { paddingHorizontal: scale(16), paddingBottom: scale(12) }
       ]}>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <View style={{ flex: 1, minHeight: !showBack && !showProfileAvatar ? avatarSize : undefined, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' }}>
           {showBack ? (
             <TouchableOpacity onPress={onBack} style={{ marginRight: isSmallDevice ? 8 : 12, padding: 4 }}>
               <Feather name="arrow-left" size={iconSize} color={theme.colors.icon} />
             </TouchableOpacity>
-          ) : (
+          ) : showProfileAvatar ? (
             <TouchableOpacity
               style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}
               activeOpacity={0.7}
@@ -130,7 +131,7 @@ export function Header({
                 style={styles.connectionIndicator}
               />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
 
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: actionGap }}>

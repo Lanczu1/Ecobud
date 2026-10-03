@@ -614,12 +614,14 @@ export function TopNavbar({
   showBack,
   onBack,
   showAssistantInHeader,
+  showProfileAvatar,
 }: {
   model: EcoBudMobileModel;
   title?: string;
   showBack?: boolean;
   onBack?: () => void;
   showAssistantInHeader?: boolean;
+  showProfileAvatar?: boolean;
 }) {
   // The user requested to remove the sparkle icon (AI assistant) from the top navigation header on all screens,
   // since the new floating Chatbot FAB handles this access point.
@@ -632,6 +634,7 @@ export function TopNavbar({
       notificationCount={model.notificationCount}
       hasUsableInternet={model.hasUsableInternet}
       showBack={showBack}
+      showProfileAvatar={showProfileAvatar}
       title={title}
       onBack={onBack || (() => model.setActiveOverlay(null))}
       onProfilePress={() => {

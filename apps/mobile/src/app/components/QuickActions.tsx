@@ -88,7 +88,7 @@ export function QuickActions({
   const actions: ActionItem[] = [
     {
       id: 'habits',
-      label: 'Log Habit',
+      label: 'My Progress',
       subLabel: 'Track daily',
       iconType: 'material',
       iconName: 'leaf-circle',

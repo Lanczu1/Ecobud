@@ -13,12 +13,11 @@ flowchart TD
     F --> G["User Goes to Event Location"]
     G --> H["Takes a Photo as Proof"]
     H --> I["Scans QR Code at Venue"]
-    I --> J["Photo + QR Sent for Review"]
-
-    J --> K{"Admin/Moderator\nReviews Submission"}
-    K -->|"Approved ✓"| L["User Sees 'Claim Reward'"]
-    K -->|"Rejected ✗"| M["User Can Resubmit\nif Event Still Ongoing"]
-    M --> H
+    I --> J{"Valid QR for Ongoing Event?"}
+    J -->|"Yes"| K["Attendance Automatically Approved"]
+    K --> L["User Sees 'Claim Reward'"]
+    J -->|"No"| M["Scan Error Shown\nUser Can Try Again"]
+    M --> I
 
     L --> N["User Taps 'Claim Reward'"]
     N --> O["Earns Eco-Points\n& Eco-Coins 🎉"]
@@ -41,9 +40,7 @@ flowchart TD
     C -->|"Generate QR Code"| I["Creates QR Code\nfor Event Venue"]
     I --> J["QR Ready to Display ✓"]
 
-    C -->|"Review Submissions"| K{"Approve or\nReject?"}
-    K -->|"Approve ✓"| L["User Gets Notified\n& Can Claim Reward"]
-    K -->|"Reject ✗"| M["User Notified\nwith Reason"]
+    C -->|"View Attendance"| K["View Participant Photos\nand Automatically Approved Attendance"]
 ```
 
 ## Event Status Lifecycle
@@ -56,10 +53,7 @@ stateDiagram-v2
 
     state Ongoing {
         [*] --> OpenForAttendance
-        OpenForAttendance --> WaitingForReview : User Submits Proof
-        WaitingForReview --> Approved : Admin Approves
-        WaitingForReview --> Rejected : Admin Rejects
-        Rejected --> OpenForAttendance : User Resubmits
+        OpenForAttendance --> Approved : User Submits Photo and Valid QR
         Approved --> RewardClaimed : User Claims
     }
 ```
@@ -68,9 +62,6 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    A["REGISTERED\nJoined Event"] --> B["PENDING_APPROVAL\nProof Submitted"]
-    B --> C["ATTENDED\nApproved ✓"]
-    B --> D["REGISTERED\nRejected ✗"]
+    A["REGISTERED\nJoined Event"] --> C["ATTENDED\nValid QR Automatically Approved ✓"]
     C --> E["REWARD_CLAIMED\nDone 🎉"]
-    D --> B["Resubmit Proof"]
 ```

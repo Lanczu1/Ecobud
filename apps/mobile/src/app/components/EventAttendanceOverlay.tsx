@@ -148,9 +148,9 @@ export function EventAttendanceOverlay({ eventId, model, onClose }: EventAttenda
       <View style={styles.overlayContainer}>
         <TopNavbar model={model} showBack={false} onBack={() => {}} />
         <View style={styles.centerContent}>
-          <Ionicons name="time" size={80} color={theme.colors.warning} />
-          <Text style={styles.titleText}>Waiting for Approval</Text>
-          <Text style={styles.descText}>Your picture and QR code scan have been submitted. An organizer will review it shortly.</Text>
+          <Ionicons name="checkmark-circle" size={80} color={theme.colors.primary} />
+          <Text style={styles.titleText}>Attendance Approved</Text>
+          <Text style={styles.descText}>Your event QR code has been verified and your attendance is confirmed. You can now claim your reward.</Text>
           <PrimaryButton label="Done" onPress={onClose} style={{ marginTop: 24, width: '100%' }} />
         </View>
       </View>

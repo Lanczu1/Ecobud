@@ -268,7 +268,9 @@ export function MarketplaceFeed({
   }, []);
 
   const handleRefresh = useCallback(() => {
-    void loadMyListings(); else {
+    if (activeTab === 'mylistings') {
+      void loadMyListings();
+    } else {
       setRefreshing(true);
       loadListings();
     }

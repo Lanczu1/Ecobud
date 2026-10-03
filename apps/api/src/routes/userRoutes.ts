@@ -124,7 +124,10 @@ userRoutes.get(
         activeChallenges:
           user?.challengeProgress.filter((item) => item.status !== 'COMPLETED').length ?? 0,
       },
-      recentLogs,
+      recentLogs: recentLogs.map((log) => ({
+        ...log,
+        metadata: log.metadata ? JSON.parse(log.metadata) : {},
+      })),
     });
   }),
 );

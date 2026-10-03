@@ -2665,13 +2665,11 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
 
   return (
     <>
-      <TopNavbar model={model} />
-
       {/* Background Decor Orbs */}
       <View style={profileStyles.backgroundOrbOne} />
       <View style={profileStyles.backgroundOrbTwo} />
 
-      <View style={styles.homeContent}>
+      <View style={[styles.homeContent, { paddingTop: verticalScale(6) }]}>
 
         {/* Profile Card Banner */}
         <LinearGradient

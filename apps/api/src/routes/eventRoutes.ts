@@ -178,6 +178,10 @@ eventRoutes.post(
     const { qrData } = req.body;
     const userId = req.auth!.userId;
 
+    if (typeof qrData !== 'string' || !qrData.trim()) {
+      throw new HttpError(400, 'Please scan the event QR code to confirm attendance.');
+    }
+
     const [event, registration, qrCode] = await Promise.all([
       prisma.event.findUnique({
         where: { id: eventId },
@@ -197,7 +201,7 @@ eventRoutes.post(
       throw new HttpError(400, 'You must join the event before recording attendance.');
     }
 
-    if (registration.status === 'ATTENDED') {
+    if (registration.status === 'ATTENDED' || registration.status === 'REWARD_CLAIMED') {
       throw new HttpError(400, 'You have already recorded attendance for this event.');
     }
 
@@ -233,28 +237,32 @@ eventRoutes.post(
         req.file.mimetype
       );
 
-      const [submission] = await Promise.all([
-        prisma.eventSubmission.upsert({
+      const submission = await prisma.$transaction(async (tx) => {
+        const updated = await tx.eventRegistration.updateMany({
+          where: { id: registration.id, status: { in: ['REGISTERED', 'PENDING_APPROVAL'] } },
+          data: { status: 'ATTENDED', attendedAt: now },
+        });
+        if (!updated.count) {
+          throw new HttpError(409, 'Attendance has already been confirmed for this event.');
+        }
+        return tx.eventSubmission.upsert({
           where: { userId_eventId: { userId, eventId } },
-          update: { attendanceImageUrl: imageUrl, qrVerified: Boolean(qrData), status: 'pending' },
+          update: { attendanceImageUrl: imageUrl, qrVerified: true, status: 'approved', reviewedAt: now, rejectionReason: null },
           create: {
             userId,
             eventId,
             attendanceImageUrl: imageUrl,
-            qrVerified: Boolean(qrData),
-            status: 'pending',
+            qrVerified: true,
+            status: 'approved',
+            reviewedAt: now,
           },
-        }),
-        // Preserve the existing review state while writing both independent records together.
-        prisma.eventRegistration.update({
-          where: { id: registration.id },
-          data: { status: 'PENDING_APPROVAL' },
-        }),
-      ]);
+        });
+      });
       void supabaseRealtimeService.publishUserEventsRefresh(userId, { entityId: eventId, reason: 'event-attendance-submitted' });
 
-      return res.json({ success: true, message: 'Submission uploaded. Pending review.', submission });
+      return res.json({ success: true, message: 'Attendance automatically approved. You can now claim your reward.', submission });
     } catch (error: any) {
+      if (error instanceof HttpError) throw error;
       throw new HttpError(500, `Failed to upload event attendance proof: ${error.message}`);
     }
   })
