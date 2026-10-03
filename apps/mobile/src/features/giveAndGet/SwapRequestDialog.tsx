@@ -30,6 +30,7 @@ export function SwapRequestDialog({
   const [sending, setSending] = useState(false);
 
   if (!listing) return null;
+  const isGiveaway = listing.lookingFor?.trim().toLowerCase() === 'giveaway';
 
   const handleConfirm = async () => {
     setSending(true);
@@ -54,12 +55,12 @@ export function SwapRequestDialog({
         >
           <View style={[localStyles.dialog, { backgroundColor: theme.colors.card }]} onStartShouldSetResponder={() => true}>
             <View style={localStyles.iconWrap}>
-              <Ionicons name="swap-horizontal" size={28} color="#FFF" />
+              <Ionicons name={isGiveaway ? 'gift-outline' : 'swap-horizontal'} size={28} color="#FFF" />
             </View>
 
-            <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>Request Swap?</Text>
+            <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>{isGiveaway ? 'Request Item?' : 'Request Swap?'}</Text>
             <Text style={[localStyles.subtitle, { color: theme.colors.textMuted }]}>
-              Do you want to request this item swap?
+              {isGiveaway ? 'Would you like to request this giveaway item?' : 'Do you want to request this item swap?'}
             </Text>
 
             <View style={[localStyles.previewCard, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
@@ -86,7 +87,7 @@ export function SwapRequestDialog({
             <Text style={[localStyles.messageLabel, { color: theme.colors.textPrimary }]}>Add a message (optional):</Text>
             <TextInput
               style={[localStyles.messageInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
-              placeholder="Hi! I'm interested in swapping..."
+              placeholder={isGiveaway ? "Hi! I'm interested in this giveaway item..." : "Hi! I'm interested in swapping..."}
               placeholderTextColor={theme.colors.textMuted}
               value={message}
               onChangeText={setMessage}
@@ -137,6 +138,7 @@ export function SwapAcceptedDialog({
 }) {
   const { theme, isDark } = useTheme();
   if (!listing) return null;
+  const isGiveaway = listing.lookingFor?.trim().toLowerCase() === 'giveaway';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -151,9 +153,9 @@ export function SwapAcceptedDialog({
               <Ionicons name="checkmark-circle" size={32} color="#FFF" />
             </View>
 
-            <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>Swap Accepted!</Text>
+            <Text style={[localStyles.title, { color: theme.colors.textPrimary }]}>{isGiveaway ? 'Request Accepted!' : 'Swap Accepted!'}</Text>
             <Text style={[localStyles.subtitle, { color: theme.colors.textMuted }]}>
-              Both users have agreed to the swap. You can now continue chatting to coordinate the exchange.
+              {isGiveaway ? 'The giveaway request has been accepted. You can now continue chatting to arrange the handover.' : 'Both users have agreed to the swap. You can now continue chatting to coordinate the exchange.'}
             </Text>
 
             {meetupMethod === 'public' && listing.meetupLocation && (
@@ -169,7 +171,7 @@ export function SwapAcceptedDialog({
               </View>
             )}
 
-            {meetupMethod === 'pickup' && (
+            {!isGiveaway && meetupMethod === 'pickup' && (
               <View style={[localStyles.infoBox, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                 <Ionicons name="arrow-down" size={18} color="#2563EB" />
                 <Text style={[localStyles.infoBoxText, { color: theme.colors.textPrimary }]}>

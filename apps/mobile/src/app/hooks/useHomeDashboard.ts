@@ -3125,9 +3125,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [persistSession]);
 
-  const refreshIdVerification = useCallback(async () => {
+  const refreshIdVerification = useCallback(async (knownResult?: import('../../shared/api/ecobudApi').IdVerificationResult) => {
     if (!session?.token) return;
-    const result = await ecobudApi.getIdVerification(session.token);
+    const result = knownResult ?? await ecobudApi.getIdVerification(session.token);
     applyIdVerificationStatus(result.status, session.user.id);
   }, [session?.token, applyIdVerificationStatus]);
 

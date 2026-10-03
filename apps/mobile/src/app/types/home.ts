@@ -13,6 +13,7 @@ import {
   type TrackerData,
   type TransparencyFeed,
   type HabitSummary,
+  type IdVerificationResult,
 } from '../../shared/api/ecobudApi';
 
 export type {
@@ -141,7 +142,7 @@ export interface EcoBudMobileModel {
   hasOnboarded: boolean;
   session: SessionPayload | null;
   idVerificationStatus: import('../../shared/api/ecobudApi').IdVerificationStatus;
-  refreshIdVerification: () => Promise<void>;
+  refreshIdVerification: (result?: IdVerificationResult) => Promise<void>;
   requireIdApproval: () => boolean;
   hasUsableInternet: boolean;
   actionOverlayVisible: boolean;
