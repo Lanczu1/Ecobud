@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { adminUserActivityRoutes } from './adminUserActivityRoutes';
 import { barangayReportRoutes } from './barangayReportRoutes';
 import { adminBadgeRoutes } from './adminBadgeRoutes';
 import { authorizeEventWrite, validateEventAudience, eventBarangay } from '../services/eventAccess';
@@ -17,6 +18,7 @@ const adminRoutes = Router();
 // Apply global admin/moderator check for all sub-routes
 adminRoutes.use(authenticateRequest);
 adminRoutes.use(requireModeratorAccess);
+adminRoutes.use('/user-activity', adminUserActivityRoutes);
 adminRoutes.use('/reports/barangay', barangayReportRoutes);
 adminRoutes.use('/badges', adminBadgeRoutes);
 

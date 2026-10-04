@@ -8,7 +8,7 @@ import {
   Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
   Loader2, UploadCloud, Power, Star, XCircle, ShieldCheck, 
   ChevronDown, ChevronRight, User, Layers, Filter, 
-  RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, Info, FileText, CheckSquare
+  RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, EyeOff, Info, FileText, CheckSquare
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
@@ -718,7 +718,7 @@ export function Challenges() {
   const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>('challenges');
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(1);
-  const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 3, total: 0, totalPages: 1, totalResidents: 0 });
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const userJson = localStorage.getItem('ecobud_admin_user');
   const loggedInUser = useMemo(() => {
@@ -735,6 +735,11 @@ export function Challenges() {
 
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const submissionsRefreshInFlight = useRef(false);
+  const submissionsRefreshQueued = useRef(false);
+  const loadSubmissionsRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
+  const [submissionFilterOptions, setSubmissionFilterOptions] = useState<{
+    users: { id: string; name: string }[]; barangays: string[];
+  }>({ users: [], barangays: [] });
   const loadChallengesRef = useRef<() => Promise<void>>(async () => {});
   const [selectedImage, setSelectedImage] = useState<PreviewModalImage | null>(null);
   const [subSearch, setSubSearch] = useState('');
@@ -749,6 +754,7 @@ export function Challenges() {
   const [collapsedBarangays, setCollapsedBarangays] = useState<Record<string, boolean>>({});
   const [collapsedUsers, setCollapsedUsers] = useState<Record<string, boolean>>({});
   const [collapsedChallenges, setCollapsedChallenges] = useState<Record<string, boolean>>({});
+  const [hideSubmissionsByDefault, setHideSubmissionsByDefault] = useState(false);
 
   const isChallengeSubmission = (submission: ChallengeSubmission) =>
     submission.submissionType === 'CHALLENGE' ||
@@ -781,14 +787,25 @@ export function Challenges() {
   loadChallengesRef.current = load;
 
   const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
-    if (submissionsRefreshInFlight.current) return;
+    if (submissionsRefreshInFlight.current) { submissionsRefreshQueued.current = true; return; }
     submissionsRefreshInFlight.current = true;
     if (showLoading) setSubmissionsLoading(true);
     try {
-      const data = await adminGet<{ items: ChallengeSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?type=challenge&page=${page}&pageSize=25`, { bypassCache: true });
+      const params = new URLSearchParams({ type: 'challenge', groupBy: 'barangay', page: String(page) });
+      if (subSearch.trim()) params.set('search', subSearch.trim());
+      if (subStatusFilter !== 'All') params.set('status', subStatusFilter);
+      if (selectedUserIdFilter !== 'All') params.set('userId', selectedUserIdFilter);
+      if (selectedBarangayFilter !== 'All') params.set('barangay', selectedBarangayFilter);
+      const data = await adminGet<{
+        items: ChallengeSubmission[]; pagination: typeof submissionsPagination;
+        filterOptions: typeof submissionFilterOptions;
+      }>(`/admin/submissions?${params}`, { bypassCache: true });
+      if (submissionsRefreshQueued.current) return;
       // Filter to only challenge submissions; event submissions belong in the Events page.
       setSubmissions(data.items.filter(isChallengeSubmission));
       setSubmissionsPagination(data.pagination);
+      setSubmissionsPage(data.pagination.page);
+      setSubmissionFilterOptions(data.filterOptions);
     } catch (err: any) { 
       console.error('Failed to load submissions', err); 
       if (showLoading) toast.error(err.message || 'Failed to load submissions');
@@ -796,8 +813,14 @@ export function Challenges() {
     finally {
       submissionsRefreshInFlight.current = false;
       if (showLoading) setSubmissionsLoading(false);
+      if (submissionsRefreshQueued.current) {
+        submissionsRefreshQueued.current = false;
+        void loadSubmissionsRef.current();
+      }
     }
   };
+
+  loadSubmissionsRef.current = (showLoading = true) => loadSubmissions(showLoading);
 
   useEffect(() => {
     const timer = setTimeout(() => void load(true), 250);
@@ -806,7 +829,7 @@ export function Challenges() {
     }, 30000);
     const onFocus = () => {
       if (document.visibilityState !== 'visible') return;
-      if (activeTab === 'submissions') void loadSubmissions(false);
+      if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
       else void load(true);
     };
     window.addEventListener('focus', onFocus);
@@ -832,7 +855,7 @@ export function Challenges() {
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [activeTab, submissionsPage]);
+  }, [activeTab, submissionsPage, subSearch, subStatusFilter, selectedUserIdFilter, selectedBarangayFilter]);
 
   // Preliminary approval: approves Before Photo and prompts user to take After Photo
   const handlePreliminaryApprove = async (id: string) => {
@@ -928,23 +951,7 @@ export function Challenges() {
 
   // Group submissions hierarchically: Barangay -> User -> Challenge -> Submissions
   const groupedSubmissions = useMemo(() => {
-    // 1. Filter submissions based on search, status filter, user filter, and barangay filter
-    const filteredSubs = submissions.filter(sub => {
-      const userName = sub.user?.profile?.displayName || sub.user?.name || 'Unknown';
-      const userBarangay = sub.user?.profile?.city || 'Unassigned Barangay';
-      const challengeTitle = sub.challenge?.title || (sub as any).challengeInstance?.challenge?.title || 'Eco Challenge';
-      const matchSearch = subSearch.trim() === '' || 
-        userName.toLowerCase().includes(subSearch.toLowerCase()) || 
-        userBarangay.toLowerCase().includes(subSearch.toLowerCase()) ||
-        challengeTitle.toLowerCase().includes(subSearch.toLowerCase()) ||
-        (sub.moderatorNotes && sub.moderatorNotes.toLowerCase().includes(subSearch.toLowerCase()));
-      
-      const matchStatus = subStatusFilter === 'All' || sub.status === subStatusFilter;
-      const matchUser = selectedUserIdFilter === 'All' || sub.userId === selectedUserIdFilter;
-      const matchBarangay = selectedBarangayFilter === 'All' || userBarangay === selectedBarangayFilter;
-
-      return matchSearch && matchStatus && matchUser && matchBarangay;
-    });
+    const filteredSubs = submissions;
 
     // 2. Compute true chronological submission numbering per (userId + challengeId)
     const getSubChallengeId = (sub: ChallengeSubmission) =>
@@ -1134,59 +1141,42 @@ export function Challenges() {
       }
       return a.barangay.localeCompare(b.barangay);
     });
-  }, [submissions, subSearch, subStatusFilter, selectedUserIdFilter, selectedBarangayFilter]);
-
-  // Unique list of users for dropdown filter
-  const uniqueUsers = useMemo(() => {
-    const map = new Map<string, string>();
-    submissions.forEach(s => {
-      if (s.userId) {
-        map.set(s.userId, s.user?.profile?.displayName || s.user?.name || 'Unknown User');
-      }
-    });
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [submissions]);
 
-  // Unique list of barangays found in active submissions
-  const activeSubmissionBarangays = useMemo(() => {
-    const set = new Set<string>();
-    submissions.forEach(s => {
-      if (s.user?.profile?.city) {
-        set.add(s.user.profile.city.trim());
-      }
-    });
-    return Array.from(set);
-  }, [submissions]);
+  const allSubmissionsShown = groupedSubmissions.length > 0 && groupedSubmissions.every(b =>
+    !(collapsedBarangays[b.barangay] ?? hideSubmissionsByDefault) && b.users.every(u =>
+      !(collapsedUsers[u.userId] ?? hideSubmissionsByDefault) && u.challenges.every(c =>
+        !(collapsedChallenges[`${u.userId}___${c.challengeId}`] ?? hideSubmissionsByDefault))));
+  const allSubmissionsHidden = groupedSubmissions.length === 0 || groupedSubmissions.every(b =>
+    collapsedBarangays[b.barangay] ?? hideSubmissionsByDefault);
+
+  const uniqueUsers = submissionFilterOptions.users;
+  const activeSubmissionBarangays = submissionFilterOptions.barangays;
 
   const toggleBarangayCollapse = (barangay: string) => {
-    setCollapsedBarangays(prev => ({ ...prev, [barangay]: !prev[barangay] }));
+    setCollapsedBarangays(prev => ({ ...prev, [barangay]: !(prev[barangay] ?? hideSubmissionsByDefault) }));
   };
 
   const toggleUserCollapse = (userId: string) => {
-    setCollapsedUsers(prev => ({ ...prev, [userId]: !prev[userId] }));
+    setCollapsedUsers(prev => ({ ...prev, [userId]: !(prev[userId] ?? hideSubmissionsByDefault) }));
   };
 
   const toggleChallengeCollapse = (key: string) => {
-    setCollapsedChallenges(prev => ({ ...prev, [key]: !prev[key] }));
+    setCollapsedChallenges(prev => ({ ...prev, [key]: !(prev[key] ?? hideSubmissionsByDefault) }));
   };
 
   const expandAll = () => {
+    setHideSubmissionsByDefault(false);
     setCollapsedBarangays({});
     setCollapsedUsers({});
     setCollapsedChallenges({});
   };
 
   const collapseAll = () => {
-    const brgyCol: Record<string, boolean> = {};
-    const userCol: Record<string, boolean> = {};
-    groupedSubmissions.forEach(b => {
-      brgyCol[b.barangay] = true;
-      b.users.forEach(u => {
-        userCol[u.userId] = true;
-      });
-    });
-    setCollapsedBarangays(brgyCol);
-    setCollapsedUsers(userCol);
+    setHideSubmissionsByDefault(true);
+    setCollapsedBarangays({});
+    setCollapsedUsers({});
+    setCollapsedChallenges({});
   };
 
   const handleAdd = async (form: FormData) => {
@@ -1479,7 +1469,6 @@ export function Challenges() {
         /* ─── SUBMISSIONS TAB (HIERARCHICAL USER -> CHALLENGE -> SUBMISSION) ─── */
         <div className="space-y-6">
           {/* Submissions stats */}
-          <AdminPagination page={submissionsPagination.page} totalPages={submissionsPagination.totalPages} total={submissionsPagination.total} onPageChange={setSubmissionsPage} />
           <div className="grid grid-cols-4 gap-4">
             {[
               { label: 'Pending Review', value: submissions.filter(s => s.status === 'pending').length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-100 dark:border-orange-800' },
@@ -1520,7 +1509,7 @@ export function Challenges() {
                   type="text" 
                   placeholder="Search by user, barangay, challenge title, or notes..." 
                   value={subSearch} 
-                  onChange={e => setSubSearch(e.target.value)} 
+                  onChange={e => { setSubmissionsPage(1); setSubSearch(e.target.value); }}
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:text-white transition-all" 
                 />
               </div>
@@ -1544,7 +1533,7 @@ export function Challenges() {
                     <MapPin className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
                     <select 
                       value={selectedBarangayFilter} 
-                      onChange={e => setSelectedBarangayFilter(e.target.value)}
+                      onChange={e => { setSubmissionsPage(1); setSelectedBarangayFilter(e.target.value); }}
                       className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer max-w-37.5 truncate"
                     >
                       <option value="All">All Barangays ({activeSubmissionBarangays.length})</option>
@@ -1565,7 +1554,7 @@ export function Challenges() {
                   <User className="w-4 h-4 text-gray-400 shrink-0" />
                   <select 
                     value={selectedUserIdFilter} 
-                    onChange={e => setSelectedUserIdFilter(e.target.value)}
+                    onChange={e => { setSubmissionsPage(1); setSelectedUserIdFilter(e.target.value); }}
                     className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer max-w-35 truncate"
                   >
                     <option value="All">All Users ({uniqueUsers.length})</option>
@@ -1575,23 +1564,6 @@ export function Challenges() {
                   </select>
                 </div>
 
-                {/* Expand / Collapse All buttons */}
-                <div className="flex items-center gap-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-                  <button 
-                    onClick={expandAll} 
-                    className="px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="Expand All Barangays, Users & Challenges"
-                  >
-                    Expand All
-                  </button>
-                  <button 
-                    onClick={collapseAll} 
-                    className="px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="Collapse All Barangays"
-                  >
-                    Collapse All
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -1613,7 +1585,7 @@ export function Challenges() {
                   return (
                     <button
                       key={f.key}
-                      onClick={() => setSubStatusFilter(f.key)}
+                      onClick={() => { setSubmissionsPage(1); setSubStatusFilter(f.key); }}
                       className={`inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-medium text-xs transition-all shrink-0 ${
                         isActive 
                           ? 'bg-green-600 text-white shadow-sm font-semibold' 
@@ -1624,6 +1596,21 @@ export function Challenges() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800 pt-3">
+              <span className="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+                {submissionsPagination.total.toLocaleString()} records · {submissionsPagination.totalResidents.toLocaleString()} residents
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={expandAll} disabled={submissionsLoading || groupedSubmissions.length === 0 || (allSubmissionsShown && !hideSubmissionsByDefault)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-40">
+                  <Eye className="h-4 w-4" /> Show all submissions
+                </button>
+                <button type="button" onClick={collapseAll} disabled={submissionsLoading || groupedSubmissions.length === 0 || (allSubmissionsHidden && hideSubmissionsByDefault)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-40">
+                  <EyeOff className="h-4 w-4" /> Hide all submissions
+                </button>
               </div>
             </div>
           </div>
@@ -1653,7 +1640,7 @@ export function Challenges() {
           ) : (
             <div className="space-y-6">
               {groupedSubmissions.map((brgyGroup) => {
-                const isBarangayCollapsed = !!collapsedBarangays[brgyGroup.barangay];
+                const isBarangayCollapsed = collapsedBarangays[brgyGroup.barangay] ?? hideSubmissionsByDefault;
 
                 return (
                   <div 
@@ -1701,7 +1688,7 @@ export function Challenges() {
                     {!isBarangayCollapsed && (
                       <div className="p-5 sm:p-6 space-y-5 bg-gray-50/50 dark:bg-gray-950/60">
                         {brgyGroup.users.map((userGroup) => {
-                          const isUserCollapsed = !!collapsedUsers[userGroup.userId];
+                          const isUserCollapsed = collapsedUsers[userGroup.userId] ?? hideSubmissionsByDefault;
 
                           return (
                             <div 
@@ -1762,7 +1749,7 @@ export function Challenges() {
                                 <div className="p-4 sm:p-5 space-y-4 bg-gray-50/30 dark:bg-gray-950/30">
                                   {userGroup.challenges.map((challengeGroup) => {
                                     const challengeKey = `${userGroup.userId}___${challengeGroup.challengeId}`;
-                                    const isChallengeCollapsed = !!collapsedChallenges[challengeKey];
+                                    const isChallengeCollapsed = collapsedChallenges[challengeKey] ?? hideSubmissionsByDefault;
 
                                     return (
                                       <div 
@@ -2053,6 +2040,15 @@ export function Challenges() {
               })}
             </div>
           )}
+          <fieldset disabled={submissionsLoading} aria-label="Challenge submissions pagination" className="min-w-0">
+            <AdminPagination
+              page={submissionsPagination.page}
+              totalPages={submissionsPagination.totalPages}
+              total={submissionsPagination.total}
+              onPageChange={setSubmissionsPage}
+              showSinglePage
+            />
+          </fieldset>
         </div>
       )}
 

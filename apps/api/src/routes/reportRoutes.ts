@@ -8,6 +8,7 @@ import path from 'path';
 import { authorizeEventReport } from '../services/barangayReports';
 import { errorBoundary } from '../http/errorResponder';
 import { AuthenticatedRequest } from '../http/authentication';
+import { readEventReportPhoto } from '../services/eventReportPhoto';
 
 const router = Router();
 const requireEventReportAccess = errorBoundary<AuthenticatedRequest>(async (req, _res, next) => {
@@ -330,8 +331,6 @@ router.get('/events/:id/pdf', authenticateRequest, requireModeratorAccess, requi
 
       for (let i = 0; i < photos.length; i++) {
         const photoUrl = photos[i];
-        const filename = photoUrl.split('/').pop() || '';
-        const filePath = path.join(uploadsBase, 'EventSubmissions', filename);
 
         const row = Math.floor(i / cols);
         const col = i % cols;
@@ -354,8 +353,8 @@ router.get('/events/:id/pdf', authenticateRequest, requireModeratorAccess, requi
         // Draw photo
         let drawn = false;
         try {
-          if (fs.existsSync(filePath)) {
-            const imgBuffer = fs.readFileSync(filePath);
+          const imgBuffer = await readEventReportPhoto(photoUrl, uploadsBase);
+          if (imgBuffer) {
             doc.image(imgBuffer, curX, curY, {
               width: photoSize,
               height: photoSize,

@@ -1,4 +1,5 @@
 import { prisma } from "../prismaClient";
+import { selectChallengeSubmissionPage, type ChallengeSubmissionPageFilters } from './challengeSubmissionPages';
 import { contentBadgeWrite } from './contentBadgeService';
 import { presenceQueryService } from './presenceQueryService';
 import { PRESENCE_STALE_TTL_MS } from './presenceService';
@@ -711,19 +712,22 @@ export class AdminService {
     submissionType: 'all' | 'challenge' | 'event' = 'all',
     page = 1,
     pageSize = 25,
+    groupFilters?: ChallengeSubmissionPageFilters,
   ) {
     const skip = (page - 1) * pageSize;
     const readSkip = submissionType === 'all' ? 0 : skip;
     const readTake = submissionType === 'all' ? skip + pageSize : pageSize;
     const barangay = filterBarangay?.trim() || undefined;
-    const where = barangay
+    const groupedPage = submissionType === 'challenge' && groupFilters
+      ? await selectChallengeSubmissionPage(barangay, page, groupFilters) : null;
+    const where = groupedPage ? { id: { in: groupedPage.ids } } : barangay
       ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
       : undefined;
     const challengeSubs = submissionType === 'event' ? [] : await prisma.challengeSubmission.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      skip: readSkip,
-      take: readTake,
+      skip: groupedPage ? undefined : readSkip,
+      take: groupedPage ? undefined : readTake,
       select: {
         id: true,
         userId: true,
@@ -756,8 +760,8 @@ export class AdminService {
     const eventSubs = submissionType === 'challenge' ? [] : await prisma.eventSubmission.findMany({
       where,
       orderBy: { submittedAt: 'desc' },
-      skip: readSkip,
-      take: readTake,
+      skip: groupedPage ? undefined : readSkip,
+      take: groupedPage ? undefined : readTake,
       select: {
         id: true,
         userId: true,
@@ -810,6 +814,7 @@ export class AdminService {
     ];
 
     unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (groupedPage) return { items: unified, pagination: groupedPage.pagination, filterOptions: groupedPage.filterOptions };
     const [challengeTotal, eventTotal] = await Promise.all([
       submissionType === 'event' ? 0 : prisma.challengeSubmission.count({ where }),
       submissionType === 'challenge' ? 0 : prisma.eventSubmission.count({ where }),

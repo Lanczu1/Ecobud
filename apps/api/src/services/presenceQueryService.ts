@@ -1,6 +1,7 @@
 import { Prisma, type PresenceAppState, type PresenceConnectionState, type PrismaClient } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { PresenceService } from './presenceService';
+import { getAdminUserStats } from './adminUserStats';
 
 interface PresenceAggregateRow {
   userId: string;
@@ -141,7 +142,7 @@ export class PresenceQueryService {
         { profile: { is: { displayName: { contains: search, mode: 'insensitive' } } } },
       ] } : {}),
     };
-    const [users, total] = await Promise.all([
+    const [users, total, stats] = await Promise.all([
       this.database.user.findMany({
         where,
         orderBy: {
@@ -168,6 +169,7 @@ export class PresenceQueryService {
         },
       }),
       this.database.user.count({ where }),
+      getAdminUserStats(this.database, role, snapshotDate),
     ]);
 
     const presenceSummaryRows = await this.getPresenceSummaryRows(snapshotDate, users.map((user) => user.id));
@@ -201,6 +203,7 @@ export class PresenceQueryService {
     return {
       items,
       pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+      stats,
     };
   }
 

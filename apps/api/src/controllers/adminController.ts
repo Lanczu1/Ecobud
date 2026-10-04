@@ -519,7 +519,13 @@ export class AdminController {
       const requestedType = req.query.type;
       const submissionType = requestedType === 'challenge' || requestedType === 'event' ? requestedType : 'all';
       const { page, pageSize } = parseAdminPagination(req.query);
-      const items = await AdminService.getSubmissions(filterBarangay, submissionType, page, pageSize);
+      const groupFilters = submissionType === 'challenge' && req.query.groupBy === 'barangay'
+        ? {
+          search: typeof req.query.search === 'string' ? req.query.search : undefined,
+          status: typeof req.query.status === 'string' ? req.query.status : undefined,
+          userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
+        } : undefined;
+      const items = await AdminService.getSubmissions(filterBarangay, submissionType, page, pageSize, groupFilters);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch submissions." });

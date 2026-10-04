@@ -1,0 +1,38 @@
+.activity-page-records {
+  scroll-margin-top: 1rem;
+  transition: opacity 140ms ease-out;
+}
+
+.activity-page-records.activity-page-loading {
+  opacity: 0.35;
+}
+
+.activity-page-records[data-direction="forward"] {
+  animation: activity-page-forward 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.activity-page-records[data-direction="backward"] {
+  animation: activity-page-backward 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.activity-page-records.activity-page-loading[data-direction] {
+  animation: none;
+}
+
+@keyframes activity-page-forward {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes activity-page-backward {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-page-records,
+  .activity-page-records[data-direction] {
+    animation: none;
+    transition: none;
+  }
+}

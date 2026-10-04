@@ -781,6 +781,7 @@ export function Events() {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
   }, []);
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
+  const refreshReportRef = useRef<() => void>(() => {});
   useEffect(() => {
     void adminGet<typeof audience>('/admin/events/barangays').then(data => {
       setAudience(data);
@@ -881,6 +882,7 @@ export function Events() {
         clearAdminApiCache('/admin/events');
         if (activeTab === 'events') void loadEventsRef.current();
         if (activeTab === 'submissions') void loadSubmissions(false);
+        if (activeTab === 'reports') refreshReportRef.current();
       },
     }).then((unsub) => { unsubscribe = unsub; });
     return () => unsubscribe?.();
@@ -899,19 +901,38 @@ export function Events() {
 
   // Load report details only for the event the admin expands.
   useEffect(() => {
-    if (activeTab !== 'reports' || !expandedReport || reportDataCache[expandedReport]) return;
+    if (activeTab !== 'reports' || !expandedReport) return;
     let active = true;
-    setReportLoading(expandedReport);
-    void adminGet<EventReportData>(`/reports/events/${expandedReport}`)
-      .then(data => {
+    let inFlight = false;
+    const refresh = async () => {
+      if (inFlight || document.visibilityState !== 'visible') return;
+      inFlight = true;
+      setReportLoading(expandedReport);
+      try {
+        const data = await adminGet<EventReportData>(`/reports/events/${expandedReport}`, { bypassCache: true });
         if (active) setReportDataCache(prev => ({ ...prev, [expandedReport]: data }));
-      })
-      .catch(() => undefined)
-      .finally(() => {
+      } catch {
+        if (active) setReviewNotice({ type: 'error', message: 'Could not refresh the event report. Please try again.' });
+      } finally {
+        inFlight = false;
         if (active) setReportLoading(null);
-      });
-    return () => { active = false; setReportLoading(current => current === expandedReport ? null : current); };
-  }, [activeTab, expandedReport, reportDataCache]);
+      }
+    };
+    refreshReportRef.current = () => { void refresh(); };
+    void refresh();
+    const interval = setInterval(() => void refresh(), 30000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      active = false;
+      refreshReportRef.current = () => {};
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      setReportLoading(current => current === expandedReport ? null : current);
+    };
+  }, [activeTab, expandedReport]);
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter(sub => {
@@ -1860,7 +1881,7 @@ export function Events() {
                                       {reportData.photos.map((photoUrl, idx) => (
                                         <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
                                           <img
-                                            src={`${API_HOST}${photoUrl}`}
+                                            src={resolveEventImageUrl(photoUrl) || undefined}
                                             alt={`Attendance ${idx + 1}`}
                                             className="w-full h-full object-cover"
                                             onError={(e) => {

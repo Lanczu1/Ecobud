@@ -7,14 +7,14 @@ import {
   ArrowLeftRight, 
   FileText, 
   LogOut,
-  Gift, Megaphone, Award
+  Gift, Megaphone, Award, Activity
 } from 'lucide-react';
 import { Mascot } from 'page-mascot';
 
 import wordmarkImg from '../../assets/ecobud_wordmark.png';
 import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
 
-export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Badges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements' | 'ID Verification';
+export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Badges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements' | 'ID Verification' | 'User Activity & Transactions';
 interface SidebarProps {
   onLogout: () => void;
   activeSection: AdminSection;
@@ -31,6 +31,7 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Events', icon: Calendar },
   { name: 'Give and Get Hub', icon: ArrowLeftRight },
   { name: 'Redeem', icon: Gift },
+  { name: 'User Activity & Transactions', icon: Activity },
   { name: 'Reports', icon: FileText },
 ];
 
@@ -40,8 +41,9 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   const isModerator = user?.role === 'moderator';
 
   const visibleMenuItems = menuItems.filter((item) => {
+    if (item.name === 'User Activity & Transactions' && user?.role !== 'admin') return false;
     if (!isModerator && item.name === 'ID Verification') return false;
-    if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Badges'].includes(item.name)) {
+    if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Badges', 'User Activity & Transactions'].includes(item.name)) {
       return false;
     }
     return true;
