@@ -38,7 +38,16 @@ announcementAdminRoutes.get('/barangays', errorBoundary<AuthenticatedRequest>(as
   res.json({ items: BARANGAYS, assignedBarangay: assignedBarangay(req), canCreate: req.auth!.role === 'admin' || !!assignedBarangay(req) });
 }));
 announcementAdminRoutes.get('/', errorBoundary<AuthenticatedRequest>(async (req, res) => {
-  const items = await prisma.announcement.findMany({ include, orderBy: { createdAt: 'desc' } });
+  const barangay = assignedBarangay(req);
+  if (req.auth!.role === 'moderator' && !barangay) return res.json({ items: [] });
+  const items = await prisma.announcement.findMany({
+    where: req.auth!.role === 'moderator' ? {
+      createdBy: { role: 'moderator' },
+      targetAudience: { in: ['Specific Barangay', 'Multiple Barangays'] },
+      barangays: { has: barangay! },
+    } : { createdBy: { role: 'admin' } },
+    include, orderBy: { createdAt: 'desc' },
+  });
   res.json({ items: items.map(item => ({ ...serialize(item), canManage: canManage(req, item) })) });
 }));
 announcementAdminRoutes.post('/', errorBoundary<AuthenticatedRequest>(async (req, res) => {

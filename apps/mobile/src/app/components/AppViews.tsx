@@ -839,7 +839,7 @@ export function GroupedChallengeSkeleton() {
     >
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
         {/* Thumbnail bone */}
-        <View style={{ width: 68, height: 68, borderRadius: 14, backgroundColor: boneBg }} />
+        <View style={{ width: 68, height: 68, flexShrink: 0, borderRadius: 14, backgroundColor: boneBg }} />
 
         {/* Content bones */}
         <View style={{ flex: 1 }}>
@@ -1063,10 +1063,8 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
       const isApproved = !isClaimed && (status === 'approved' || status === 'unclaimed');
 
       if (status === 'completed' || status === 'approved' || status === 'unclaimed') {
-        const earnedExp = sub.expAwarded || c.expReward;
-        const earnedCoins = sub.ecoCoinsAwarded !== undefined
-          ? sub.ecoCoinsAwarded
-          : c.ecoCoinReward;
+        const earnedExp = isClaimed ? (sub.expAwarded ?? c.expReward) : c.expReward;
+        const earnedCoins = isClaimed ? (sub.ecoCoinsAwarded ?? c.ecoCoinReward) : c.ecoCoinReward;
 
         const fullChallengeItem: ChallengeWithProgress = {
           ...c,
@@ -1544,9 +1542,12 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                       { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
                     ]}
                   >
+                    <View pointerEvents="none" style={{ position: 'absolute', top: 16, right: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={24} color={isDark ? theme.colors.primary : "#126027"} />
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
                       {/* Image Thumbnail */}
-                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
+                      <View style={{ width: 68, height: 68, flexShrink: 0, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
                         {challenge.imageUrl ? (
                           <FastImage source={{ uri: challenge.imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" thumbnailWidth={500} imageQuality={80} />
                         ) : (
@@ -1557,18 +1558,30 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                       </View>
 
                       {/* Main Group Content */}
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 36, gap: 8, minHeight: 28, marginBottom: 6 }}>
+                          <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                             <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
                             <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#047857', backgroundColor: isDark ? theme.colors.surfaceMuted : '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
                           </View>
-                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color={isDark ? theme.colors.primary : "#126027"} />
                         </View>
 
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6 }} numberOfLines={1}>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6 }} numberOfLines={2}>
                           {challenge.title}
                         </Text>
+
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <Ionicons name="leaf" size={12} color={theme.colors.primary} />
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>+{challenge.expReward} Pts</Text>
+                          </View>
+                          {challenge.ecoCoinReward > 0 && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5, gap: 3 }}>
+                              <Image source={require('../../../assets/coin.png')} style={{ width: 10, height: 10, resizeMode: 'contain' }} />
+                              <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{challenge.ecoCoinReward} Coins</Text>
+                            </View>
+                          )}
+                        </View>
 
                         {/* Summary Badges */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -1806,9 +1819,12 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                       { padding: 16, backgroundColor: pressed ? (isDark ? theme.colors.surfaceMuted : '#F9FAFB') : theme.colors.card }
                     ]}
                   >
+                    <View pointerEvents="none" style={{ position: 'absolute', top: 16, right: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={24} color={isDark ? theme.colors.primary : "#126027"} />
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
                       {/* Image Thumbnail */}
-                      <View style={{ width: 68, height: 68, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
+                      <View style={{ width: 68, height: 68, flexShrink: 0, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }}>
                         {challenge.imageUrl ? (
                           <FastImage source={{ uri: challenge.imageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="disk" thumbnailWidth={500} imageQuality={80} />
                         ) : (
@@ -1819,11 +1835,20 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                       </View>
 
                       {/* Main Group Content */}
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 36, gap: 8, minHeight: 28, marginBottom: 6 }}>
+                          <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                             <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#126027' }]}>{challenge.difficulty.toUpperCase()}</Text>
                             <Text style={[styles.taskMetaLabel, { color: isDark ? theme.colors.primary : '#047857', backgroundColor: isDark ? theme.colors.surfaceMuted : '#D1FAE5' }]}>{((challenge as any).category || 'GENERAL').toUpperCase()}</Text>
+                          </View>
+
+                        </View>
+
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6 }} numberOfLines={2}>
+                          {challenge.title}
+                        </Text>
+
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                               <Ionicons name="leaf" size={12} color={theme.colors.primary} />
                               <Text style={{ fontSize: 11, fontWeight: '800', color: theme.colors.primary }}>+{totalEarnedExp} Pts</Text>
@@ -1831,16 +1856,10 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                             {totalEarnedCoins > 0 && (
                               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5, gap: 3 }}>
                                 <Image source={require('../../../assets/coin.png')} style={{ width: 10, height: 10, resizeMode: 'contain' }} />
-                                <Text style={{ fontSize: 9, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{totalEarnedCoins}</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{totalEarnedCoins} Coins</Text>
                               </View>
                             )}
-                          </View>
-                          <Ionicons name={isExpanded ? "chevron-up-circle" : "chevron-down-circle"} size={22} color={isDark ? theme.colors.primary : "#126027"} />
                         </View>
-
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, marginBottom: 6 }} numberOfLines={1}>
-                          {challenge.title}
-                        </Text>
 
                         {/* Summary Badges */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -1944,16 +1963,16 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                             )}
 
                             {/* Rewards / Claim Button */}
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <View style={{ marginTop: 4, gap: 10 }}>
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                                <View style={{ flexGrow: 1, flexBasis: 120, minWidth: 0, minHeight: 34, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? theme.colors.surfaceMuted : '#F0FDF4', paddingHorizontal: 8, paddingVertical: 7, borderRadius: 8, gap: 4 }}>
                                   <Ionicons name="leaf" size={13} color={theme.colors.primary} />
                                   <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.primary }}>+{item.earnedExp} Eco Points</Text>
                                 </View>
                                 {item.earnedCoins > 0 && (
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, gap: 4 }}>
+                                  <View style={{ flexGrow: 1, flexBasis: 120, minWidth: 0, minHeight: 34, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#2D2415' : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 7, borderRadius: 8, gap: 4 }}>
                                     <Image source={require('../../../assets/coin.png')} style={{ width: 12, height: 12, resizeMode: 'contain' }} />
-                                    <Text style={{ fontSize: 10, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{item.earnedCoins} COINS</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>+{item.earnedCoins} Eco Coins</Text>
                                   </View>
                                 )}
                               </View>
@@ -1961,7 +1980,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                               {item.isApproved ? (
                                 <TouchableOpacity
                                   disabled={isClaiming}
-                                  style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                  style={{ width: '100%', minHeight: 44, backgroundColor: '#F59E0B', opacity: isClaiming ? 0.65 : 1, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}
                                   onPress={(e) => {
                                     // Claims in History may belong to an older cycle. Use that
                                     // concrete instance so the API never resolves it to a newer cycle.
@@ -1977,7 +1996,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                                   <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>{isClaiming ? 'CLAIMING...' : 'CLAIM REWARD'}</Text>
                                 </TouchableOpacity>
                               ) : (
-                                <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <View style={{ width: '100%', minHeight: 40, backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
                                   <Ionicons name="checkmark-circle" size={14} color="#059669" />
                                   <Text style={{ fontSize: 11, fontWeight: '800', color: '#059669' }}>CLAIMED</Text>
                                 </View>

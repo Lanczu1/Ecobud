@@ -19,6 +19,25 @@ const app = express(); app.use(express.json()); app.use('/admin', announcementAd
 const payload = { title: 'Test announcement', content: 'Test content', category: 'General', status: 'Draft', priority: 'Normal', targetAudience: 'All Residents', barangays: [], publishAt: null, expiresAt: null, ctaLabel: null, ctaType: 'No Action', ctaValue: null };
 beforeEach(() => { vi.resetAllMocks(); db.announcement.findMany.mockResolvedValue([]); db.announcement.create.mockResolvedValue({ id: 'new' }); });
 describe('announcement permissions and lifecycle', () => {
+  it('scopes moderator lists to moderator posts for their assigned barangay regardless of query parameters', async () => {
+    await request(app).get('/admin?barangay=Yukos').auth('moderator', { type: 'bearer' }).set('x-city', ' abo ').expect(200);
+    expect(db.announcement.findMany.mock.calls[0][0].where).toEqual({
+      createdBy: { role: 'moderator' },
+      targetAudience: { in: ['Specific Barangay', 'Multiple Barangays'] },
+      barangays: { has: 'Abo' },
+    });
+  });
+  it('returns an empty moderator list without a valid barangay assignment', async () => {
+    for (const city of ['', 'Unknown Barangay']) {
+      const response = await request(app).get('/admin').auth('moderator', { type: 'bearer' }).set('x-city', city).expect(200);
+      expect(response.body.items).toEqual([]);
+    }
+    expect(db.announcement.findMany).not.toHaveBeenCalled();
+  });
+  it('only lists admin posts in the admin panel', async () => {
+    await request(app).get('/admin').auth('admin', { type: 'bearer' }).expect(200);
+    expect(db.announcement.findMany.mock.calls[0][0].where).toEqual({ createdBy: { role: 'admin' } });
+  });
   it('rejects anonymous requests and all non-admin mutations', async () => {
     await request(app).get('/admin').expect(401);
     for (const role of ['user']) {

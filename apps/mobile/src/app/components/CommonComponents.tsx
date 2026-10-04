@@ -25,6 +25,7 @@ import { useAccessibility } from '../../shared/accessibility/AccessibilityContex
 import { TextSizeMultiplierContext } from '../../shared/accessibility/primitives';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { LoadingGlyph, LoadingScreenVisual } from '../../shared/ui/OptimizedLoading';
+import { FastImage } from '../../shared/ui/FastImage';
 import { AppTab, EcoBadge, EcoBudMobileModel } from '../types/home';
 import { initialsFromLabel, usePressScale, resolveMediaUrl } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -839,22 +840,26 @@ export function PrimaryButton({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.97);
   return (
-    <TouchableOpacity
-      activeOpacity={0.88}
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.primaryButton, disabled && { opacity: 0.5 }, style]}
-    >
-      <LinearGradient
-        colors={['#126027', '#17A07E']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.primaryButtonGradient}
+    <Animated.View style={[styles.primaryButton, disabled && { opacity: 0.5 }, style, { transform: [{ scale: pressScale }] }]}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        disabled={disabled}
       >
-        <Text style={styles.primaryButtonText}>{label}</Text>
-      </LinearGradient>
-    </TouchableOpacity>
+        <LinearGradient
+          colors={['#126027', '#17A07E']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.primaryButtonGradient}
+        >
+          <Text style={styles.primaryButtonText}>{label}</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -869,17 +874,21 @@ export function SecondaryButton({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.97);
   return (
-    <TouchableOpacity
-      activeOpacity={0.88}
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.secondaryButton, disabled && { opacity: 0.5 }, style]}
-    >
-      <View style={styles.secondaryButtonGradient}>
-        <Text style={styles.secondaryButtonText}>{label}</Text>
-      </View>
-    </TouchableOpacity>
+    <Animated.View style={[styles.secondaryButton, disabled && { opacity: 0.5 }, style, { transform: [{ scale: pressScale }] }]}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        disabled={disabled}
+      >
+        <View style={styles.secondaryButtonGradient}>
+          <Text style={styles.secondaryButtonText}>{label}</Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -891,25 +900,37 @@ export function SurfaceCard({ children, style, onLayout }: { children: React.Rea
 
 export function ProgressBar({ progress }: { progress: number }) {
   const { theme, isDark } = useTheme();
-  const widthAnim = React.useRef(new Animated.Value(progress)).current;
+  const clamped = Math.max(0, Math.min(100, progress));
+  const fillAnim = React.useRef(new Animated.Value(clamped)).current;
+  const [trackWidth, setTrackWidth] = React.useState(0);
 
   React.useEffect(() => {
-    Animated.timing(widthAnim, {
-      toValue: Math.max(0, Math.min(100, progress)),
-      duration: 1000,
+    const animation = Animated.timing(fillAnim, {
+      toValue: clamped,
+      duration: 700,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progress, widthAnim]);
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [clamped, fillAnim]);
 
-  const width = widthAnim.interpolate({
+  // The fill is full width and slides in from the left, clipped by the track,
+  // so the bar animates on the native driver instead of re-laying out each frame.
+  const translateX = fillAnim.interpolate({
     inputRange: [0, 100],
-    outputRange: ['0%', '100%']
+    outputRange: [-trackWidth, 0],
   });
 
   return (
-    <View style={[styles.progressTrack, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-      <Animated.View style={[styles.progressFill, { width }, isDark && { backgroundColor: theme.colors.primary }]} />
+    <View
+      onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+      style={[styles.progressTrack, isDark && { backgroundColor: theme.colors.surfaceMuted }]}
+    >
+      {trackWidth > 0 && (
+        <Animated.View style={[styles.progressFill, { width: '100%', transform: [{ translateX }] }, isDark && { backgroundColor: theme.colors.primary }]} />
+      )}
     </View>
   );
 }
@@ -984,7 +1005,7 @@ export function AvatarBubble({
   if (parsedUrl) {
     return (
       <View style={[styles.avatarBubble, style, { width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }]}>
-        <Image source={{ uri: parsedUrl }} style={{ width: size, height: size, resizeMode: 'cover' }} />
+        <FastImage source={{ uri: parsedUrl }} style={{ width: size, height: size }} contentFit="cover" />
       </View>
     );
   }

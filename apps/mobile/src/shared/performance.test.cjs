@@ -273,6 +273,7 @@ test('failed prefetch can retry and backgrounding prevents the next pair of down
 test('FastImage recovers for a replacement source and keeps equivalent source objects stable', () => {
   const runtime = hooks();
   const preferences = { performance: false };
+  const device = { lowEnd: false };
   const { FastImage } = load('ui/FastImage.tsx', {
     react: runtime.react,
     'react-native': { View: 'view', AppState: { currentState: 'active' } },
@@ -281,6 +282,7 @@ test('FastImage recovers for a replacement source and keeps equivalent source ob
     '../../app/utils/appUtils': { resolveMediaUrl: url => url },
     '../api/ecobudApi': { ecobudApiOrigin: 'https://example.test' },
     './imagePrefetch': { createImagePrefetcher },
+    '../performance/deviceTier': { isLowEndDevice: () => device.lowEnd },
   });
   const render = source => {
     runtime.begin(); const tree = FastImage({ source }); runtime.flush(); return tree;
@@ -295,6 +297,26 @@ test('FastImage recovers for a replacement source and keeps equivalent source ob
   assert.equal(reduced.props.cachePolicy, 'disk');
   assert.equal(reduced.props.transition, 0);
   assert.equal(reduced.props.priority, 'normal');
+  preferences.performance = false;
+  assert.ok(render({ uri: 'b' }).props.placeholder);
+  device.lowEnd = true;
+  const lowEnd = render({ uri: 'b' });
+  assert.equal(lowEnd.props.cachePolicy, 'memory-disk');
+  assert.equal(lowEnd.props.transition, 0);
+  assert.equal(lowEnd.props.placeholder, undefined);
+});
+
+test('budget Android hardware is detected from OS version and panel resolution only', () => {
+  const { detectLowEndDevice } = load('performance/deviceTier.ts', {
+    'react-native': {}, '../accessibility/AccessibilityContext': {},
+  });
+  assert.equal(detectLowEndDevice({ os: 'android', version: 28, shortSidePx: 1080 }), true);
+  assert.equal(detectLowEndDevice({ os: 'android', version: 34, shortSidePx: 720 }), true);
+  assert.equal(detectLowEndDevice({ os: 'android', version: 34, shortSidePx: 800 }), true);
+  assert.equal(detectLowEndDevice({ os: 'android', version: 34, shortSidePx: 1080 }), false);
+  assert.equal(detectLowEndDevice({ os: 'android', version: 34, shortSidePx: 0 }), false);
+  assert.equal(detectLowEndDevice({ os: 'ios', version: '17.0', shortSidePx: 750 }), false);
+  assert.equal(detectLowEndDevice({ os: 'web', version: 0, shortSidePx: 600 }), false);
 });
 
 test('animation consumers share one foreground listener and the last unmount removes it', () => {
