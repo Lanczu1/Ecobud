@@ -6,6 +6,7 @@ import { type MascotDock, parseMascotDock } from '../utils/mascotDock';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
 import { homeService } from '../services/homeService';
+import { HOME_REFRESH_INTERVAL_MS, HOME_RESOURCES, affectedHomeResources, type HomeResource } from '../utils/homeRefreshPolicy';
 import {
   type AppTab,
   type AssistantMessage,
@@ -131,6 +132,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   });
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [idVerificationStatus, setIdVerificationStatus] = useState<IdVerificationStatus>('not_submitted');
+  const [idVerificationReason, setIdVerificationReason] = useState<string | null>(null);
   const [notificationDestination, setNotificationDestination] = useState<{type:string;id:string}|null>(null);
   const [pendingNotificationId, setPendingNotificationId] = useState<string|null>(null);
   const [pushNotificationsEnabled, setPushNotificationsEnabledState] = useState(true);
@@ -179,6 +181,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const eventRewardClaimInFlightRef = React.useRef(new Set<string>());
   const eventJoinInFlightRef = React.useRef(new Set<string>());
   const realtimeRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const homeRefreshAtRef = useRef<Partial<Record<HomeResource, number>>>({});
+  const homeResourceRequestsRef = useRef(new Map<HomeResource, Promise<void>>());
+  const pendingHomeResourcesRef = useRef(new Set<HomeResource>());
   const offlineSyncInFlightRef = React.useRef(false);
   const isHydratingRef = React.useRef(false);
   const resumeRefreshInFlightRef = React.useRef(false);
@@ -228,10 +233,23 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [events, setEvents] = useState<EcoEvent[]>([]);
 
   useEffect(() => {
+    if (!session?.token || !dashboard || isHydrating) return;
+    const token = session.token;
+    const timer = setTimeout(() => {
+      if (currentSessionTokenRef.current !== token) return;
+      void mobileStorage.setItem(CACHED_HOME_DATA_STORAGE_KEY, JSON.stringify({
+        userId: session.user.id, dashboard, lessons, challenges, habitsToday, events, cachedAt: Date.now(),
+      })).catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [session?.token, dashboard, lessons, challenges, habitsToday, events, isHydrating]);
+
+  useEffect(() => {
     if (!session?.token) return;
     const token = session.token;
     let alive = true;
     const refreshAnnouncements = () => {
+      if (AppState.currentState !== 'active' || isHydratingRef.current) return;
       void homeService.getAnnouncements(token).then(items => {
         if (!alive || currentSessionTokenRef.current !== token) return;
         setAnnouncements(current => JSON.stringify(current) === JSON.stringify(items) ? current : items);
@@ -241,13 +259,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }).catch(() => {});
     };
     const changed = DeviceEventEmitter.addListener('announcementsChanged', refreshAnnouncements);
-    const foreground = AppState.addEventListener('change', state => {
-      if (state === 'active') refreshAnnouncements();
-    });
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') refreshAnnouncements();
-    }, 30000);
-    return () => { alive = false; changed.remove(); foreground.remove(); clearInterval(interval); };
+    }, HOME_REFRESH_INTERVAL_MS);
+    return () => { alive = false; changed.remove(); clearInterval(interval); };
   }, [session?.token]);
 
 
@@ -482,6 +497,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const clearAppData = useCallback(() => {
+    homeRefreshAtRef.current = {};
+    homeResourceRequestsRef.current.clear();
+    pendingHomeResourcesRef.current.clear();
+    if (realtimeRefreshTimer.current) clearTimeout(realtimeRefreshTimer.current);
     setDashboard(null);
     setLessons([]);
     setChallenges([]);
@@ -758,6 +777,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             })).catch(() => {});
           }
         });
+        if (currentSessionTokenRef.current !== existingSession.token) return;
 
         const safeLessons = uniqueLessonsById(Array.isArray(homeData?.lessons) ? [...homeData.lessons] : []);
         safeLessons.sort((a: any, b: any) => {
@@ -792,6 +812,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         setEvents(Array.isArray(homeData?.events) ? homeData.events : []);
         if (homeData.leaderboard) setLeaderboard(homeData.leaderboard);
         const hydratedAt = Date.now();
+        homeRefreshAtRef.current = Object.fromEntries(HOME_RESOURCES.map(resource => [resource, hydratedAt]));
         lastFocusedRefreshAtRef.current = { lessons: hydratedAt, challenges: hydratedAt, events: hydratedAt };
         setSelectedLessonId((current) => current ?? safeLessons[0]?.id ?? null);
 
@@ -819,6 +840,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         void mobileStorage.setItem(
           CACHED_HOME_DATA_STORAGE_KEY,
           JSON.stringify({
+            userId: existingSession.user.id,
             dashboard: homeData?.dashboard ?? null,
             lessons: safeLessons,
             challenges: Array.isArray(homeData?.challenges) ? homeData.challenges : [],
@@ -849,7 +871,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           const cachedJson = await mobileStorage.getItem(CACHED_HOME_DATA_STORAGE_KEY);
           if (cachedJson) {
             const cached = JSON.parse(cachedJson);
-            if (cached && typeof cached === 'object') {
+            if (cached && typeof cached === 'object' && (!cached.userId || cached.userId === existingSession.user.id) && currentSessionTokenRef.current === existingSession.token) {
               setChallenges((curr) => (curr.length === 0 && Array.isArray(cached.challenges) ? cached.challenges : curr));
               setDashboard((curr) => (!curr && cached.dashboard ? cached.dashboard : curr));
               setLessons((curr) => (curr.length === 0 && Array.isArray(cached.lessons) ? uniqueLessonsById(cached.lessons) : curr));
@@ -1119,6 +1141,69 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, []);
 
+  const refreshHomeResources = useCallback(async (resources: HomeResource[], force = false) => {
+    const token = currentSessionTokenRef.current;
+    if (!token || !presence.hasUsableInternet || AppState.currentState !== 'active') return;
+    await Promise.all(resources.map(async resource => {
+      const existing = homeResourceRequestsRef.current.get(resource);
+      if (existing) {
+        if (force) pendingHomeResourcesRef.current.add(resource);
+        return existing;
+      }
+      if (!force && Date.now() - (homeRefreshAtRef.current[resource] ?? 0) < HOME_REFRESH_INTERVAL_MS) return;
+      const unchanged = <T,>(previous: T, next: T): T => JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+      const request = (async () => {
+        if (resource === 'dashboard') {
+          const data = await homeService.getDashboard(token);
+          if (currentSessionTokenRef.current === token) setDashboard(current => unchanged(current, data));
+        } else if (resource === 'habits') {
+          const data = await homeService.getHabitsToday(token);
+          if (currentSessionTokenRef.current === token) setHabitsToday(current => unchanged(current, data));
+        } else if (resource === 'lessons') {
+          const data = uniqueLessonsById(await homeService.getLessons(token)).sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)));
+          if (currentSessionTokenRef.current !== token) return;
+          for (const lesson of data) {
+            try {
+              const userId = latestSessionRef.current?.user.id;
+              const raw = mobileStorage.getItemSync('@lesson_progress_' + userId + ':' + lesson.id);
+              const saved = raw ? JSON.parse(raw) : null;
+              if (saved && Number.isFinite(saved.progress) && Number.isFinite(saved.timestamp) &&
+                  isLocalLessonProgressNewer(saved.savedAt, lesson.progressUpdatedAt) && lesson.status !== 'completed') {
+                lesson.progress = saved.progress;
+                lesson.videoTimestamp = saved.timestamp;
+              }
+            } catch {}
+          }
+          if (currentSessionTokenRef.current === token) setLessons(current => unchanged(current, mergeLessonDetails(current, data)));
+        } else if (resource === 'challenges') {
+          const data = await homeService.getChallenges(token);
+          if (currentSessionTokenRef.current === token) { setChallenges(current => unchanged(current, data.items)); setIsCycleActive(data.isCycleActive); }
+        } else if (resource === 'events') {
+          const data = await homeService.getEvents(token);
+          if (currentSessionTokenRef.current === token) setEvents(current => unchanged(current, data));
+        } else {
+          const data = await homeService.getLeaderboard(token);
+          if (currentSessionTokenRef.current === token) setLeaderboard(current => unchanged(current, data));
+        }
+        if (currentSessionTokenRef.current === token) {
+          homeRefreshAtRef.current[resource] = Date.now();
+          if (resource === 'lessons' || resource === 'challenges' || resource === 'events') lastFocusedRefreshAtRef.current[resource] = Date.now();
+        }
+      })().catch(error => {
+        if (currentSessionTokenRef.current === token && (error as { status?: number })?.status === 401) {
+          currentSessionTokenRef.current = null;
+          setSession(null);
+          clearAppData();
+          void persistSession(null);
+        }
+      }).finally(() => {
+        if (homeResourceRequestsRef.current.get(resource) === request) homeResourceRequestsRef.current.delete(resource);
+      });
+      homeResourceRequestsRef.current.set(resource, request);
+      await request;
+    }));
+  }, [presence.hasUsableInternet, clearAppData, persistSession]);
+
   useEffect(() => {
     if (!session?.token || !presence.hasUsableInternet || activeTab !== 'home' || activeOverlay !== null) return;
     let disposed = false;
@@ -1127,7 +1212,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       if (disposed || inFlight || isHydratingRef.current || AppState.currentState !== 'active') return;
       inFlight = true;
       try {
-        await hydrateApp(session, true);
+        await refreshHomeResources(HOME_RESOURCES);
       } catch {
         // Preserve the last successful feed during temporary network failures.
       } finally {
@@ -1135,18 +1220,15 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
     };
     void refresh();
-    const timer = setInterval(() => void refresh(), 10_000);
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
-    return () => { disposed = true; clearInterval(timer); subscription.remove(); };
-  }, [session, presence.hasUsableInternet, activeTab, activeOverlay, hydrateApp]);
+    const timer = setInterval(() => void refresh(), HOME_REFRESH_INTERVAL_MS);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [session, presence.hasUsableInternet, activeTab, activeOverlay, refreshHomeResources]);
 
   // Refresh only the data visible on the current page.
   useEffect(() => {
     if (!session?.token) return;
     const token = session.token;
-    const visibleResources: FocusedResource[] = activeOverlay === 'events'
-      ? ['events']
-      : activeOverlay !== null
+    const visibleResources: FocusedResource[] = activeOverlay !== null
         ? []
         : activeTab === 'home'
           ? []
@@ -1180,7 +1262,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             } else {
               const result = await homeService.getEvents(token);
               if (currentSessionTokenRef.current !== token || lastFocusedRefreshAtRef.current[resource] > requestStartedAt) return;
-              setEvents(Array.isArray(result) ? result : Array.isArray(result?.items) ? result.items : []);
+              setEvents(result);
             }
             lastFocusedRefreshAtRef.current[resource] = Date.now();
           } catch {
@@ -1790,23 +1872,47 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [clearAppData, hydrateApp, persistSession, presence.hasUsableInternet, session, syncQueuedOfflineActions]);
 
   const queueRealtimeRefresh = useCallback(
-    (reason: string) => {
+    (channel: string, reason = '') => {
       if (!session) {
         return;
       }
+
+      const resources = affectedHomeResources(channel, reason);
+      if (!resources.length && channel !== 'resume') return;
+      resources.forEach(resource => pendingHomeResourcesRef.current.add(resource));
 
       if (realtimeRefreshTimer.current) {
         clearTimeout(realtimeRefreshTimer.current);
       }
 
-      realtimeRefreshTimer.current = setTimeout(() => {
-        void hydrateApp(session, true).catch((error) => {
-          console.warn(`Realtime refresh failed after ${reason}.`, error);
-        });
-      }, 450);
+      const flush = async () => {
+        if (currentSessionTokenRef.current !== session.token) return;
+        if (AppState.currentState !== 'active') {
+          realtimeRefreshTimer.current = setTimeout(() => void flush(), HOME_REFRESH_INTERVAL_MS);
+          return;
+        }
+        if (isHydratingRef.current) {
+          realtimeRefreshTimer.current = setTimeout(() => void flush(), 1000);
+          return;
+        }
+        const resources = [...pendingHomeResourcesRef.current];
+        pendingHomeResourcesRef.current.clear();
+        await refreshHomeResources(resources, true);
+        if (pendingHomeResourcesRef.current.size) realtimeRefreshTimer.current = setTimeout(() => void flush(), 450);
+      };
+      realtimeRefreshTimer.current = setTimeout(() => void flush(), 450);
     },
-    [hydrateApp, session],
+    [refreshHomeResources, session],
   );
+
+  useEffect(() => {
+    const flushPending = () => {
+      if (AppState.currentState === 'active' && pendingHomeResourcesRef.current.size) queueRealtimeRefresh('resume');
+    };
+    flushPending();
+    const subscription = AppState.addEventListener('change', flushPending);
+    return () => subscription.remove();
+  }, [queueRealtimeRefresh]);
 
   useEffect(() => {
     if (!session || !presence.shouldMaintainRealtimeConnection) {
@@ -1858,7 +1964,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
             DeviceEventEmitter.emit('announcementsChanged');
             return;
           }
-          queueRealtimeRefresh(`notice:${notice.scope}`);
+          if (notice.relatedType === 'event') DeviceEventEmitter.emit('eventsChanged');
+          queueRealtimeRefresh(notice.scope, notice.relatedType);
         },
         onSignal: (signal) => {
           if (!isMounted) {
@@ -1866,18 +1973,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
           }
 
           DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
-          if (signal.reason.startsWith('event-') || signal.reason === 'habit-check-in') {
-            focusedRefreshInFlightRef.current.delete('events');
-            lastFocusedRefreshAtRef.current.events = 0;
-            const activeSession = session;
-            if (activeSession?.token && activeTab === 'home') {
-              void homeService.getEvents(activeSession.token).then((items) => {
-                if (currentSessionTokenRef.current === activeSession.token) setEvents(items);
-              }).catch(() => {});
-            }
-          }
-          if (signal.reason.startsWith('event-') || signal.reason === 'habit-check-in') return;
-          queueRealtimeRefresh(`${signal.channel}:${signal.reason}`);
+          if (signal.channel === 'events' || signal.reason.startsWith('event-')) DeviceEventEmitter.emit('eventsChanged');
+          queueRealtimeRefresh(signal.channel, signal.reason);
         },
       })
       .then((disconnect) => {
@@ -3114,10 +3211,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
     await persistSession(updatedSession);
   }, [ensureSession, persistSession]);
 
-  const applyIdVerificationStatus = useCallback((status: IdVerificationStatus, userId: string) => {
+  const applyIdVerificationStatus = useCallback((status: IdVerificationStatus, userId: string, reason: string | null = null) => {
     const current = latestSessionRef.current;
     if (!current || current.user.id !== userId) return;
     setIdVerificationStatus(status);
+    setIdVerificationReason(status === 'rejected' ? reason : null);
     if (current.user.idVerificationStatus !== status) {
       const next = { ...current, user: { ...current.user, idVerificationStatus: status } };
       setSession(next);
@@ -3128,16 +3226,17 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const refreshIdVerification = useCallback(async (knownResult?: import('../../shared/api/ecobudApi').IdVerificationResult) => {
     if (!session?.token) return;
     const result = knownResult ?? await ecobudApi.getIdVerification(session.token);
-    applyIdVerificationStatus(result.status, session.user.id);
+    applyIdVerificationStatus(result.status, session.user.id, result.submission?.reason);
   }, [session?.token, applyIdVerificationStatus]);
 
   useEffect(() => {
+    setIdVerificationReason(null);
     if (!session?.token || session.user.role !== 'user') return;
     let alive = true;
     const sync = async () => {
       try {
         const result = await ecobudApi.getIdVerification(session.token);
-        if (alive) applyIdVerificationStatus(result.status, session.user.id);
+        if (alive) applyIdVerificationStatus(result.status, session.user.id, result.submission?.reason);
       } catch { /* Keep the last known status; the API enforces every restricted action. */ }
     };
     setIdVerificationStatus(session.user.idVerificationStatus ?? 'not_submitted');
@@ -3175,6 +3274,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     hasOnboarded,
     session,
     idVerificationStatus,
+    idVerificationReason,
     refreshIdVerification,
     requireIdApproval,
     actionOverlayVisible,

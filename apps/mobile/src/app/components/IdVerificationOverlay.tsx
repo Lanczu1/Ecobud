@@ -9,6 +9,7 @@ import { OverlayScaffold, PrimaryButton, SurfaceCard } from './CommonComponents'
 import type { EcoBudMobileModel } from '../types/home';
 import { PendingIdReviewCard } from './PendingIdReviewCard';
 import { SubmitIdIntroCard } from './SubmitIdIntroCard';
+import { ApprovedIdCard } from './ApprovedIdCard';
 
 export const idStatusLabel = {
   not_submitted: 'Submit your ID', pending: 'Waiting for ID approval',
@@ -30,6 +31,8 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
   const preparedPhoto = useRef<{ source: string; uri: string } | null>(null);
   const [consent, setConsent] = useState(false);
   const [progress, setProgress] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const formTop = useRef(0);
   const token = model.session?.token;
   const status = result?.status ?? model.idVerificationStatus;
   const editable = status === 'not_submitted' || status === 'rejected';
@@ -96,8 +99,8 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   return <OverlayScaffold title="ID verification" subtitle="Reviewed by your barangay moderator" onBack={() => model.setActiveOverlay(null)}>
-    <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
-      {status === 'not_submitted' ? <SubmitIdIntroCard /> : status === 'pending' ? <PendingIdReviewCard loading={loading} disabled={busy} onRefresh={() => void load()} /> : <SurfaceCard style={{ padding: 18, gap: 10 }}>
+    <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+      {status === 'not_submitted' ? <SubmitIdIntroCard /> : status === 'pending' ? <PendingIdReviewCard loading={loading} disabled={busy} onRefresh={() => void load()} /> : status === 'rejected' ? <ApprovedIdCard status="rejected" reason={result?.submission?.reason ?? model.idVerificationReason} onPress={() => scrollRef.current?.scrollTo({ y: Math.max(0, formTop.current - 20), animated: true })} /> : <SurfaceCard style={{ padding: 18, gap: 10 }}>
         <Text accessibilityRole="header" style={{ color: theme.colors.textPrimary, fontSize: 20, fontWeight: '700' }}>{idStatusLabel[status]}</Text>
         <Text style={{ color: theme.colors.textMuted, lineHeight: 21 }}>
           {status === 'approved' ? 'You can now participate in Challenges, Eco Events, and Give & Get Hub.' : 'You can browse Challenges, Eco Events, and Give & Get Hub while waiting. Learn videos, quizzes, and Learn rewards remain available.'}
@@ -106,7 +109,7 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
       </SurfaceCard>}
       {loading && status !== 'pending' && <ActivityIndicator accessibilityLabel="Loading ID status" color={theme.colors.primary} />}
       {error !== '' && <Text accessibilityRole="alert" style={{ color: theme.colors.textPrimary }}>{error}</Text>}
-      {editable && <SurfaceCard style={{ padding: 18, gap: 14 }}>
+      {editable && <View onLayout={(event) => { formTop.current = event.nativeEvent.layout.y; }}><SurfaceCard style={{ padding: 18, gap: 14 }}>
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Full name as shown on your ID</Text>
         <TextInput accessibilityLabel="Full name on ID" value={legalName} editable={!busy} maxLength={120} onChangeText={setLegalName} autoCapitalize="words" style={{ color: theme.colors.textPrimary, borderWidth: 1, borderColor: theme.colors.inputBorder, borderRadius: 10, padding: 12 }} />
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>ID type</Text>
@@ -127,7 +130,7 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
           <Text style={{ flex: 1, color: theme.colors.textPrimary }}>I agree to submit this ID for moderator review.</Text>
         </View>
         <PrimaryButton label={busy ? progress === 0 ? 'Preparing ID photo…' : `Uploading ID… ${progress}%` : status === 'rejected' ? 'Resubmit ID' : 'Submit ID'} disabled={loading || busy || choosingPhoto || !photo || !consent || legalName.trim().length < 2} onPress={() => void submit()} />
-      </SurfaceCard>}
+      </SurfaceCard></View>}
       {status === 'pending' ? <PrimaryButton label="Continue browsing Eco Bud" disabled={busy} onPress={() => model.setActiveOverlay(null)} /> : <>
         <PrimaryButton label="Refresh verification status" disabled={loading || busy} onPress={() => void load()} />
         <TouchableOpacity disabled={busy} onPress={() => model.setActiveOverlay(null)} style={{ padding: 14, alignItems: 'center' }}><Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Continue browsing Eco Bud</Text></TouchableOpacity>

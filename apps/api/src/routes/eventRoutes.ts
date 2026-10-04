@@ -10,6 +10,8 @@ import { GamificationService } from '../services/GamificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import { sendDirectNotification } from '../services/notificationService';
 import path from 'path';
+import type { Prisma } from '@prisma/client';
+import { decodeCursor, encodeCursor, pageLimit } from '../http/cursorPagination';
 
 const eventRoutes = Router();
 const gamificationService = new GamificationService();
@@ -33,8 +35,30 @@ eventRoutes.get(
 
     const viewer = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { profile: { select: { city: true } } } }) : null;
     const barangay = eventBarangay(viewer?.profile?.city);
+    const limit = pageLimit(req.query.limit, 20);
+    const cursor = decodeCursor(req.query.cursor);
+    const scope = req.query.scope ?? 'all';
+    if (!['all', 'home', 'browse', 'joined', 'past'].includes(scope as string)) throw new HttpError(400, 'Invalid event filter.');
+    if (cursor && typeof cursor.featured !== 'boolean') throw new HttpError(400, 'Invalid event cursor.');
+    if (req.query.id !== undefined && (typeof req.query.id !== 'string' || req.query.id.length > 128)) throw new HttpError(400, 'Invalid event ID.');
+    const filters: Prisma.EventWhereInput[] = [
+      { isPublished: true, OR: [{ barangay: null }, ...(barangay ? [{ barangay }] : [])] },
+    ];
+    if (req.query.id) filters.push({ id: req.query.id as string });
+    else if (scope === 'home') filters.push({ OR: [
+      { endDatetime: { gt: new Date() } },
+      ...(userId ? [{ registrations: { some: { userId, status: { in: ['ATTENDED', 'PENDING_APPROVAL'] } } } }] : []),
+    ] });
+    else if (scope === 'past') filters.push({ endDatetime: { lte: new Date() } });
+    else if (scope === 'joined') filters.push(userId ? { registrations: { some: { userId } } } : { id: '__signed_out__' });
+    else if (scope === 'browse') filters.push({ endDatetime: { gt: new Date() }, ...(userId ? { registrations: { none: { userId } } } : {}) });
+    if (cursor) filters.push({ OR: [
+      ...(cursor.featured ? [{ isFeatured: false }] : []),
+      { isFeatured: cursor.featured, startDatetime: { gt: new Date(cursor.at) } },
+      { isFeatured: cursor.featured, startDatetime: new Date(cursor.at), id: { gt: cursor.id } },
+    ] });
     const events = await prisma.event.findMany({
-      where: { isPublished: true, OR: [{ barangay: null }, ...(barangay ? [{ barangay }] : [])] },
+      where: { AND: filters },
       include: {
         _count: {
           select: { registrations: true }
@@ -49,11 +73,16 @@ eventRoutes.get(
       orderBy: [
         { isFeatured: 'desc' },
         { startDatetime: 'asc' },
+        { id: 'asc' },
       ],
+      take: limit + 1,
     });
 
+    const page = events.slice(0, limit);
+    const edge = page[page.length - 1];
     return res.json({
-      items: events.map((event) => {
+      nextCursor: events.length > limit && edge ? encodeCursor({ id: edge.id, at: edge.startDatetime.toISOString(), featured: edge.isFeatured }) : null,
+      items: page.map((event) => {
         let userStatus = null;
         let rejectionReason = undefined;
         if (userId) {

@@ -233,6 +233,11 @@ export const swapService = {
     return (data || []).map(formatMessage);
   },
 
+  async fetchMessagePage(conversationId: string, page: { before?: string; after?: string } = {}) {
+    const data = await ecobudApi.fetchSwapMessagePage(authToken, conversationId, page);
+    return { items: data.items.map(formatMessage), nextCursor: data.nextCursor, newestCursor: data.newestCursor };
+  },
+
   async sendMessage(
     swapRequestId: string,
     senderId: string,

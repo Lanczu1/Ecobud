@@ -966,20 +966,20 @@ export function Announcements() {
 
                   {/* Hover Action Buttons */}
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pt-2 border-t border-gray-100 dark:border-gray-800/80">
-                    <button
+                    {(!isModerator || item.canManage) && <button
                       onClick={() => setDetails(item)}
                       className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
                       title="View details"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>View</span>
-                    </button>
+                    </button>}
                     <button
                       onClick={() => isModerator && !item.canManage ? setDetails(item) : edit(item)}
                       className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
                     >
                       {isModerator && !item.canManage ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
-                      <span>{isModerator && !item.canManage ? 'View only' : 'Edit'}</span>
+                      <span>{isModerator && !item.canManage ? 'View' : 'Edit'}</span>
                     </button>
                     {(!isModerator || item.canManage) && <>
                     <button

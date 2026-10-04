@@ -1,8 +1,12 @@
 import React, { useEffect } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
+import { useAppActive } from '../../shared/accessibility/useAppActive';
 import { useVideoPlayer, VideoView } from '../../shared/platform/VideoCompat';
 
 export const AuthBackgroundVideo = React.memo(function AuthBackgroundVideo() {
+  const { preferences } = useAccessibility();
+  const active = useAppActive();
   const player = useVideoPlayer(require('../../../assets/mobile-bg.mp4'), video => {
     video.loop = true;
     video.muted = true;
@@ -12,16 +16,9 @@ export const AuthBackgroundVideo = React.memo(function AuthBackgroundVideo() {
   });
 
   useEffect(() => {
-    const updatePlayback = (state: string | null) => {
-      if (state === 'active') player.play();
-      else player.pause();
-    };
-    updatePlayback(AppState.currentState);
-    const subscription = AppState.addEventListener('change', updatePlayback);
-    return () => {
-      subscription.remove();
-    };
-  }, [player]);
+    if (active && !preferences.performance) player.play();
+    else player.pause();
+  }, [player, active, preferences.performance]);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

@@ -1,3 +1,4 @@
+import { useScreenActive } from '../../shared/ui/ScreenActivity';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
@@ -65,6 +66,7 @@ export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(func
             source={{ uri: resolvedImageUrl }}
             style={styles.cardImage}
             contentFit="cover"
+            thumbnailWidth={500}
             onError={() => setImgError(true)}
           />
         ) : (
@@ -406,7 +408,9 @@ export function LearnLessonSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = React.useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   React.useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -423,7 +427,7 @@ export function LearnLessonSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [screenActive, pulseAnim, isDark]);
 
   return (
     <Animated.View

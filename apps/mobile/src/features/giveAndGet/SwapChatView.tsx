@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useListPerformance } from '../../shared/ui/useListPerformance';
 import {
   View,
   ScrollView,
@@ -19,6 +20,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
+import { mergeMessages } from './messagePaging';
 import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapChatMessage, SwapConversation, SwapRequestStatus } from './types';
 import { MEETUP_LABELS } from './types';
@@ -108,11 +110,11 @@ export function SwapChatList({
 
   return (
     <View style={localStyles.chatList}>
-      {conversations.map((conv) => (
+      {conversations.map((conv, index) => (
         <TouchableOpacity
           key={conv.id}
           onPress={() => onSelectConversation(conv)}
-          style={[localStyles.chatItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
+          style={[localStyles.chatItem, index === conversations.length - 1 && { marginBottom: 0 }, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
         >
           <View style={localStyles.chatAvatar}>
             {conv.otherUser.avatarUrl ? (
@@ -226,6 +228,7 @@ export function SwapChatView({
   const { theme, isDark } = useTheme();
   const { showNotification } = useInAppNotification();
   const [messages, setMessages] = useState<SwapChatMessage[]>([]);
+  const listPerformance = useListPerformance();
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -240,6 +243,20 @@ export function SwapChatView({
   const pendingRealtimeRefreshRef = useRef(false);
   const lastMessagesLoadedAtRef = useRef(0);
   const mountedRef = useRef(true);
+  const scopeRef = useRef('');
+  const scope = `${conversation.id}:${currentUserId}`;
+  scopeRef.current = scope;
+  const olderCursorRef = useRef<string | null>(null);
+  const newestCursorRef = useRef<string | null>(null);
+  const hasInitialPageRef = useRef(false);
+  const olderRequestRef = useRef(false);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const failedPageRef = useRef<'latest' | 'older'>('latest');
+  const nearBottomRef = useRef(true);
+  const initialScrollRef = useRef(true);
+  const allowOlderRef = useRef(false);
 
   const updateKeyboardOverlap = useCallback(() => {
     if (Platform.OS !== 'android' || keyboardTopRef.current === null) return;
@@ -258,35 +275,85 @@ export function SwapChatView({
   const loadMessages = useCallback((): Promise<void> => {
     if (messagesRequestRef.current) return messagesRequestRef.current;
     const request = Promise.resolve().then(async () => {
-      const msgs = await swapService.fetchMessages(conversation.id);
-      if (!mountedRef.current) return;
-      setMessages((previous) => {
-        if (previous.length === msgs.length && previous.every((message, index) =>
-          message.id === msgs[index].id && message.read === msgs[index].read &&
-          message.text === msgs[index].text && message.imageUrl === msgs[index].imageUrl
-        )) return previous;
-        return msgs;
-      });
+      const after = newestCursorRef.current;
+      const page = await swapService.fetchMessagePage(conversation.id, after ? { after } : {});
+      if (!mountedRef.current || scopeRef.current !== scope) return;
+      let msgs = page.items;
+      if (!hasInitialPageRef.current) {
+        olderCursorRef.current = page.nextCursor;
+        setHasOlder(Boolean(page.nextCursor));
+        hasInitialPageRef.current = true;
+      } else if (page.nextCursor) {
+        pendingRealtimeRefreshRef.current = true;
+      } else {
+        const recent = await swapService.fetchMessagePage(conversation.id);
+        if (!mountedRef.current || scopeRef.current !== scope) return;
+        msgs = mergeMessages(msgs, recent.items);
+      }
+      if (page.newestCursor) newestCursorRef.current = page.newestCursor;
+      setMessages(previous => mergeMessages(previous, msgs));
+      setMessagesError(null);
+      if (!initialScrollRef.current && nearBottomRef.current && page.items.length > 0) {
+        requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+      }
       lastMessagesLoadedAtRef.current = Date.now();
       if (msgs.some((message) => !message.read && String(message.senderId) !== String(currentUserId))) {
-        await swapService.markMessagesRead(conversation.id, currentUserId);
+        await swapService.markMessagesRead(conversation.id, currentUserId).catch(() => {});
       }
-    }).catch((err) => {
-      console.error('Failed to load messages:', err);
+    }).catch(() => {
+      if (mountedRef.current && scopeRef.current === scope) {
+        failedPageRef.current = 'latest';
+        setMessagesError('Unable to load messages. Tap to try again.');
+      }
     }).finally(() => {
-      messagesRequestRef.current = null;
-      if (mountedRef.current) setLoading(false);
-      if (pendingRealtimeRefreshRef.current && mountedRef.current && AppState.currentState === 'active') {
+      if (messagesRequestRef.current === request) messagesRequestRef.current = null;
+      if (mountedRef.current && scopeRef.current === scope) setLoading(false);
+      if (pendingRealtimeRefreshRef.current && mountedRef.current && scopeRef.current === scope && AppState.currentState === 'active') {
         pendingRealtimeRefreshRef.current = false;
         void loadMessages();
       }
     });
     messagesRequestRef.current = request;
     return request;
-  }, [conversation.id, currentUserId]);
+  }, [conversation.id, currentUserId, scope]);
+
+  const loadOlderMessages = useCallback(async () => {
+    const before = olderCursorRef.current;
+    if (!before || olderRequestRef.current || !hasInitialPageRef.current) return;
+    olderRequestRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const page = await swapService.fetchMessagePage(conversation.id, { before });
+      if (!mountedRef.current || scopeRef.current !== scope) return;
+      setMessages(previous => mergeMessages(previous, page.items));
+      olderCursorRef.current = page.nextCursor;
+      setHasOlder(Boolean(page.nextCursor));
+      setMessagesError(null);
+    } catch {
+      if (mountedRef.current && scopeRef.current === scope) {
+        failedPageRef.current = 'older';
+        setMessagesError('Unable to load older messages. Tap to try again.');
+      }
+    } finally {
+      if (scopeRef.current === scope) { olderRequestRef.current = false; setLoadingOlder(false); }
+    }
+  }, [conversation.id, scope]);
 
   useEffect(() => {
     mountedRef.current = true;
+    messagesRequestRef.current = null;
+    olderCursorRef.current = null;
+    newestCursorRef.current = null;
+    hasInitialPageRef.current = false;
+    olderRequestRef.current = false;
+    initialScrollRef.current = true;
+    allowOlderRef.current = false;
+    nearBottomRef.current = true;
+    setMessages([]);
+    setHasOlder(false);
+    setLoadingOlder(false);
+    setMessagesError(null);
+    setLoading(true);
     void loadMessages();
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void loadMessages();
@@ -345,14 +412,6 @@ export function SwapChatView({
     };
   }, [updateKeyboardOverlap]);
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-          scrollRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages.length]);
-
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || sending) return;
@@ -380,12 +439,13 @@ export function SwapChatView({
         currentUserId,
         text
       );
-      setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? realMsg : m)));
+      if (scopeRef.current === scope) setMessages(prev => mergeMessages(prev.filter(m => m.id !== optimisticMsg.id), [realMsg]));
     } catch {
+      if (scopeRef.current !== scope) return;
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
       showNotification({ title: 'Message not sent', message: 'Check your connection and try again.', tone: 'error' });
     } finally {
-      setSending(false);
+      if (scopeRef.current === scope) setSending(false);
     }
   };
 
@@ -496,10 +556,31 @@ export function SwapChatView({
           <FlatList
             ref={scrollRef}
             data={messages}
+            maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
+            onContentSizeChange={() => {
+              if (initialScrollRef.current && messages.length > 0) {
+                initialScrollRef.current = false;
+                scrollRef.current?.scrollToEnd({ animated: false });
+              }
+            }}
+            onScrollBeginDrag={() => { allowOlderRef.current = true; }}
+            onScroll={({ nativeEvent }) => {
+              const { contentOffset, contentSize, layoutMeasurement } = nativeEvent;
+              nearBottomRef.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 100;
+              if (allowOlderRef.current && contentOffset.y < 80 && !messagesError) void loadOlderMessages();
+            }}
+            scrollEventThrottle={100}
+            ListHeaderComponent={loadingOlder ? <ActivityIndicator color={theme.colors.primary} /> : (hasOlder || messagesError) ? (
+              <TouchableOpacity accessibilityRole="button" onPress={() => void (messagesError && failedPageRef.current === 'latest' ? loadMessages() : hasInitialPageRef.current && hasOlder ? loadOlderMessages() : loadMessages())} style={{ padding: 16, alignItems: 'center' }}>
+                <Text style={{ color: theme.colors.primary }}>{messagesError ?? 'Load older messages'}</Text>
+              </TouchableOpacity>
+            ) : null}
             keyExtractor={(msg) => msg.id}
             initialNumToRender={16}
             maxToRenderPerBatch={12}
             windowSize={7}
+            updateCellsBatchingPeriod={50}
+            {...listPerformance}
             removeClippedSubviews={Platform.OS === 'android'}
             style={[localStyles.messagesScroll, { backgroundColor: theme.colors.background }]}
             contentContainerStyle={[localStyles.messagesContent, { backgroundColor: theme.colors.background }]}

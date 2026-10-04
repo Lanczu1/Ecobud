@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useEffect, useMemo } from 'react';
+import { TabPressActivation } from '../utils/tabPressActivation';
 import {
   View,
   Image,
@@ -30,7 +31,6 @@ import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { triggerSelectionHaptic } from '../utils/haptics';
 import type { QuickMissionGesture } from '../utils/quickMissionGesture';
-import LottieView from '../../shared/accessibility/AccessibleLottie';
 import { Header } from './Header';
 import { useHomeAnimationVisibility } from './HomeAnimationVisibility';
 import { HomeMascotAnimation } from './HomeMascotAnimation';
@@ -69,8 +69,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   const dock = controlledDock === undefined ? localDock : controlledDock;
   const setDock = onDockChange ?? setLocalDock;
   const isDocked = dock !== null;
-  const reduceMascotMotion = performanceMode === 'reduced' || isDocked;
-  const legacyMascotAnimation = useRef<React.ElementRef<typeof LottieView>>(null);
+  const reduceMascotMotion = performanceMode !== 'default' || isDocked;
   const homeVisibility = useHomeAnimationVisibility();
   const { scale: pressScale, onPressIn, onPressOut } = usePressScale(0.92);
 
@@ -128,11 +127,6 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
     }).start();
   }, [animatedPosition, targetPosition.x, targetPosition.y, dock]);
 
-  useEffect(() => {
-    if (homeVisibility.managed) return;
-    if (reduceMascotMotion) legacyMascotAnimation.current?.pause();
-    else legacyMascotAnimation.current?.resume();
-  }, [homeVisibility.managed, reduceMascotMotion]);
 
   const handleMascotPress = useCallback(() => {
     if (isDragging.current || Date.now() < suppressPressUntilRef.current) return;
@@ -465,17 +459,7 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
         accessibilityLabel={isDocked ? 'Restore EcoBud mascot to bottom right' : 'Chat with EcoBud AI. Drag to reposition or dock mascot at screen edge.'}
         accessibilityRole="button"
       >
-        {isDocked ? <DockedMascot size={mascotSize} side={dock.side} animated={performanceMode !== 'reduced'} /> : homeVisibility.managed ? <HomeMascotAnimation size={mascotSize} animated={!reduceMascotMotion} /> : <LottieView
-          ref={legacyMascotAnimation}
-          source={require('../../../assets/Ecobud Mascot/New Lottie files/Wave.lottie')}
-          autoPlay={!reduceMascotMotion}
-          loop={!reduceMascotMotion}
-          progress={reduceMascotMotion ? 0 : undefined}
-          renderMode="AUTOMATIC"
-          cacheComposition={true}
-          hardwareAccelerationAndroid={Platform.OS === 'android'}
-          style={{ width: mascotSize, height: mascotSize }}
-        />}
+        {isDocked ? <DockedMascot size={mascotSize} side={dock.side} animated={performanceMode === 'default'} /> : <HomeMascotAnimation size={mascotSize} animated={!reduceMascotMotion} />}
       </Pressable>
       </Animated.View>
     </Animated.View>
@@ -1177,8 +1161,9 @@ export function BottomTabBar({
               item={{ ...item, label: displayLabel }}
               isActive={item.key === activeTab}
               onPress={() => {
-                triggerSelectionHaptic();
+                if (item.key === activeTab) return;
                 onChange(item.key);
+                triggerSelectionHaptic();
               }}
               onLayout={onTargetLayout && (item.key === 'home' || item.key === 'profile')
                 ? (target) => onTargetLayout(item.key as 'home' | 'profile', target)
@@ -1221,6 +1206,9 @@ function TabItem({
   const scaleAnim = useRef(new Animated.Value(isActive ? 1.05 : 1)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
   const pressFeedback = useRef<Animated.CompositeAnimation | null>(null);
+  const activation = useRef(new TabPressActivation()).current;
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => { if (releaseTimer.current) clearTimeout(releaseTimer.current); }, []);
   React.useEffect(() => () => { pressFeedback.current?.stop(); }, []);
   const animatePress = (pressed: boolean) => {
     pressFeedback.current?.stop();
@@ -1275,10 +1263,11 @@ function TabItem({
         touchActiveRef.current = false;
         if (heldRef.current) onQuickMissionGesture?.({ phase: 'release', x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
       } : undefined}
-      onTouchCancel={onLongPress ? () => {
+      onTouchCancel={() => {
+        activation.cancel();
         touchActiveRef.current = false;
         if (heldRef.current) onQuickMissionGesture?.({ phase: 'cancel', x: 0, y: 0 });
-      } : undefined}
+      }}
     >
     <TouchableOpacity
       ref={tabRef}
@@ -1287,9 +1276,19 @@ function TabItem({
           if (width > 0 && height > 0) onLayout?.({ x: x + width / 2, y: y + height / 2 });
         });
       }}
-      onPress={() => { if (!heldRef.current) onPress(); }}
-      onPressIn={isCenterAction ? () => animatePress(true) : undefined}
-      onPressOut={isCenterAction ? () => animatePress(false) : undefined}
+      onPress={() => {
+        if (releaseTimer.current) clearTimeout(releaseTimer.current);
+        activation.commit(onPress, heldRef.current);
+      }}
+      onPressIn={() => {
+        if (releaseTimer.current) clearTimeout(releaseTimer.current);
+        if (isCenterAction) animatePress(true);
+        activation.begin(onPress);
+      }}
+      onPressOut={() => {
+        if (isCenterAction) animatePress(false);
+        releaseTimer.current = setTimeout(() => activation.cancel(), 0);
+      }}
       onLongPress={onLongPress ? () => openQuickMissions(true) : undefined}
       delayLongPress={200}
       accessibilityRole="button"

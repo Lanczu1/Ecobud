@@ -1,3 +1,4 @@
+import { useScreenActive } from '../../shared/ui/ScreenActivity';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -58,6 +59,7 @@ import { QuickActions } from './QuickActions';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard, DiscoverChallengeSkeleton } from './DiscoverChallengeCard';
 import { FastImage } from '../../shared/ui/FastImage';
+import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { LearnLessonCard } from './LearnLessonCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
@@ -796,7 +798,9 @@ export function GroupedChallengeSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -813,7 +817,7 @@ export function GroupedChallengeSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [pulseAnim, isDark, screenActive]);
 
   return (
     <Animated.View
@@ -875,6 +879,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
   keyboardHeight?: number;
 }) {
   const { theme, isDark } = useTheme();
+  const screenActive = useScreenActive();
   const { width, height } = useWindowDimensions();
   const { preferences } = useAccessibility();
   const largeText = preferences.size === 'Large';
@@ -882,13 +887,14 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
   const searchBarRef = useRef<View>(null);
   const searchFocusedRef = useRef(false);
   const challengeListRef = useRef<FlatList<ChallengeListItem>>(null);
+  const listPerformance = useListPerformance();
   const challengeScrollOffsetRef = useRef(0);
   const tutorialTargetRef = useRef<View>(null);
   const tutorialScrollStartedRef = useRef(false);
   const tutorialScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const measureTutorialTarget = () => {
-    if (!model.coachMarksVisible || model.coachMarksCurrentStep !== 3) return;
+    if (!screenActive || !model.coachMarksVisible || model.coachMarksCurrentStep !== 3) return;
     tutorialTargetRef.current?.measureInWindow((x, y, targetWidth, targetHeight) => {
       if (targetWidth > 0 && targetHeight > 0) {
         model.setSpotlightTargetRect?.({ x, y, width: targetWidth, height: targetHeight, borderRadius: moderateScale(22) });
@@ -906,17 +912,18 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
   };
 
   useEffect(() => {
-    if (model.coachMarksVisible && model.coachMarksCurrentStep === 3) return;
+    if (screenActive && model.coachMarksVisible && model.coachMarksCurrentStep === 3) return;
     tutorialScrollStartedRef.current = false;
     if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
     tutorialScrollTimerRef.current = null;
-  }, [model.coachMarksVisible, model.coachMarksCurrentStep]);
+  }, [model.coachMarksVisible, model.coachMarksCurrentStep, screenActive]);
 
   useEffect(() => () => {
     if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
   }, []);
 
   useEffect(() => {
+    if (!screenActive) { searchFocusedRef.current = false; return; }
     const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
       if (!searchFocusedRef.current) return;
       searchBarRef.current?.measureInWindow((_x, y) => {
@@ -929,7 +936,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [onSearchKeyboardChange]);
+  }, [onSearchKeyboardChange, screenActive]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searchQuery, setSearchQuery] = useState('');
@@ -950,13 +957,16 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
   const categories = ['All', 'General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
 
   useEffect(() => {
-    Animated.loop(
+    if (!screenActive) return;
+    const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
-    ).start();
-  }, []);
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [screenActive, pulseAnim]);
 
   const isFiltering = searchQuery.trim() !== '' || selectedCategory !== 'All';
 
@@ -1160,8 +1170,10 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
   challengeItemsRef.current = challengeItems;
   const prefetchedChallengeUrlsRef = useRef(new Set<string>());
   const prefetchInFlightRef = useRef(false);
+  const screenActiveRef = useRef(screenActive);
+  screenActiveRef.current = screenActive;
   const prefetchUpcomingChallenges = useRef(({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
-    if (prefetchInFlightRef.current || viewableItems.length === 0) return;
+    if (!screenActiveRef.current || prefetchInFlightRef.current || viewableItems.length === 0) return;
     const lastVisibleIndex = Math.max(...viewableItems.map((entry) => entry.index ?? -1));
     const upcoming = challengeItemsRef.current.slice(lastVisibleIndex + 1, lastVisibleIndex + 3);
     const urls = upcoming.flatMap((item) => item.kind === 'discover'
@@ -1171,13 +1183,14 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
       .filter((url) => !prefetchedChallengeUrlsRef.current.has(url))
       .slice(0, 4);
     if (urls.length === 0) return;
-    urls.forEach((url) => prefetchedChallengeUrlsRef.current.add(url));
-    if (prefetchedChallengeUrlsRef.current.size > 32) {
-      const oldest = prefetchedChallengeUrlsRef.current.values().next().value;
-      if (oldest) prefetchedChallengeUrlsRef.current.delete(oldest);
-    }
     prefetchInFlightRef.current = true;
-    void FastImage.prefetch(urls).catch(() => {}).finally(() => { prefetchInFlightRef.current = false; });
+    void FastImage.prefetch(urls).then(success => {
+      if (!success) return;
+      urls.forEach(url => prefetchedChallengeUrlsRef.current.add(url));
+      while (prefetchedChallengeUrlsRef.current.size > 32) {
+        prefetchedChallengeUrlsRef.current.delete(prefetchedChallengeUrlsRef.current.values().next().value!);
+      }
+    }).catch(() => {}).finally(() => { prefetchInFlightRef.current = false; });
   }).current;
 
   return (
@@ -1197,9 +1210,11 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
         initialNumToRender={viewMode === 'History' ? 3 : 5}
         maxToRenderPerBatch={viewMode === 'History' ? 3 : 5}
         windowSize={viewMode === 'History' ? 3 : 5}
+        updateCellsBatchingPeriod={50}
+        {...listPerformance}
         removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 + keyboardHeight }}
+        contentContainerStyle={{ paddingBottom: 8 + keyboardHeight }}
         refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.refreshEverything()}
           tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
         ListHeaderComponent={<>
@@ -2022,7 +2037,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
       />
 
       <RejectionModal
-        visible={rejectionModal.visible}
+        visible={screenActive && rejectionModal.visible}
         title="Submission Rejected"
         reason={rejectionModal.reason}
         onClose={() => setRejectionModal(prev => ({ ...prev, visible: false }))}
@@ -2031,7 +2046,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
         } : undefined}
       />
 
-      <Modal visible={!!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+      <Modal visible={screenActive && !!previewImage} transparent={true} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
           <TouchableOpacity
             style={{
@@ -2062,12 +2077,14 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
 
 export function TrackerView({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
+  const screenActive = useScreenActive();
   // ── Real-time Philippines (PHT) month ──────────────────────────────────────
   // Re-evaluate every minute so the calendar's "today" highlight rolls over
   // live at local midnight and the month auto-advances at the turn of the month,
   // even while the screen stays open.
   const [liveMonth, setLiveMonth] = useState(() => getPhMonthKey());
   useEffect(() => {
+    if (!screenActive) return;
     const interval = setInterval(() => {
       setLiveMonth((current) => {
         const next = getPhMonthKey();
@@ -2075,66 +2092,32 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
       });
     }, 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [screenActive]);
 
   const isCardsLoading = !model.tracker && (model.isHydrating || model.initializing || model.booting);
 
   const trackerMonth = model.tracker?.month ?? liveMonth;
   const completedDays = model.tracker?.completedDays ?? [];
-  const calendarCells = buildCalendarCells(trackerMonth, completedDays);
+  const calendarCells = React.useMemo(() => buildCalendarCells(trackerMonth, model.tracker?.completedDays ?? []), [trackerMonth, model.tracker?.completedDays]);
 
   // ── Derived gamification state ─────────────────────────────────────────────
   const totalPoints = model.tracker?.points ?? model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0;
-  const ecoLevel = getEcoLevel(totalPoints);
-  const streak = getVisibleStreak(getDisplayStreak(model));
-
-  // Last 7 days progress dots (oldest → newest). A day counts if it's in the
-  // completed set; today is always the rightmost dot.
-  const lastSevenDays = Array.from({ length: 7 }, (_, offset) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - offset));
-    return date;
-  });
 
   // ── Segmented switch: Activity Calendar / Leaderboard ──────────────────────
   const [segment, setSegment] = useState<'calendar' | 'leaderboard'>('calendar');
   const [segmentWidth, setSegmentWidth] = useState(0);
   const switchAnim = useRef(new Animated.Value(segment === 'calendar' ? 0 : 1)).current;
   useEffect(() => {
-    Animated.spring(switchAnim, {
+    const animation = Animated.spring(switchAnim, {
       toValue: segment === 'calendar' ? 0 : 1,
       useNativeDriver: true,
       friction: 8,
       tension: 120,
-    }).start();
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
   }, [segment, switchAnim]);
-
-  // ── Animated level progress bar ────────────────────────────────────────────
-  const levelBarAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(levelBarAnim, {
-      toValue: Math.max(0, Math.min(100, ecoLevel.progressPercentage)),
-      duration: 900,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [ecoLevel.progressPercentage, levelBarAnim]);
-
-  // ── Streak flame pulse ─────────────────────────────────────────────────────
-  const flameScale = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (streak === 0) {
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(flameScale, { toValue: 1.12, duration: 700, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(flameScale, { toValue: 1, duration: 700, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [flameScale, streak]);
 
 
   // ── Day detail popup ───────────────────────────────────────────────────────
@@ -2174,13 +2157,16 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
   const lbSlideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
+    if (!screenActive || segment !== 'leaderboard') return;
     lbFadeAnim.setValue(0);
     lbSlideAnim.setValue(20);
-    Animated.parallel([
-      Animated.timing(lbFadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
-      Animated.spring(lbSlideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true })
-    ]).start();
-  }, [leaderboardPage, lbFadeAnim, lbSlideAnim, segment]);
+    const animation = Animated.parallel([
+      Animated.timing(lbFadeAnim, { toValue: 1, duration: 350, useNativeDriver: true, isInteraction: false }),
+      Animated.spring(lbSlideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true, isInteraction: false })
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [leaderboardPage, lbFadeAnim, lbSlideAnim, segment, screenActive]);
 
   const intensityStyle = (cell: (typeof calendarCells)[number]) => {
     if (!cell.dateKey || !cell.completed) {
@@ -2207,7 +2193,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
     <>
       <TopNavbar model={model} showBack={false} title="Tracker" />
 
-      <View style={styles.homeContent}>
+      <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         {isCardsLoading ? (
           <TrackerCardsSkeleton />
         ) : (
@@ -2236,7 +2222,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
 
         {/* ── Level Progress Card ────────────────────────────────────────── */}
         <View style={{ marginTop: 24 }}>
-          <LevelCard ecoPoints={totalPoints} />
+          <LevelCard ecoPoints={totalPoints} animatePoints={false} />
         </View>
 
         {/* ── Segmented Switch ─────────────────────────────────────────────── */}
@@ -2529,7 +2515,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
           </>
         )}
 
-        <View style={{ height: 110 }} />
+
       </View>
 
       {/* ── Day Detail Popup ──────────────────────────────────────────────── */}
@@ -2669,7 +2655,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
       <View style={profileStyles.backgroundOrbOne} />
       <View style={profileStyles.backgroundOrbTwo} />
 
-      <View style={[styles.homeContent, { paddingTop: verticalScale(6) }]}>
+      <View style={[styles.homeContent, { paddingTop: verticalScale(6), paddingBottom: 0 }]}>
 
         {/* Profile Card Banner */}
         <LinearGradient
@@ -3363,7 +3349,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
           </View>
         </View>
 
-        <View style={{ height: 100 }} />
+
       </View>
       {isViewingAvatar && (
         <Modal visible={isViewingAvatar} transparent={true} animationType="fade" onRequestClose={() => setIsViewingAvatar(false)}>

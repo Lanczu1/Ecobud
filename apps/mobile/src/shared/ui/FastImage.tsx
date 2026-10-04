@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { useAccessibility } from '../accessibility/AccessibilityContext';
-import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAccessibility, getAccessibilityPreferences } from '../accessibility/AccessibilityContext';
+import { AppState, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import type { ImageProps as ExpoImageProps } from 'expo-image/build/Image.types';
 import type { ImageStyle } from 'react-native';
 import { resolveMediaUrl } from '../../app/utils/appUtils';
 import { ecobudApiOrigin } from '../api/ecobudApi';
+import { createImagePrefetcher } from './imagePrefetch';
 
 export interface FastImageProps extends Omit<ExpoImageProps, 'source'> {
   source?: { uri?: string | null } | number | string | null;
@@ -17,11 +18,6 @@ export interface FastImageProps extends Omit<ExpoImageProps, 'source'> {
   imageQuality?: number;
 }
 
-/**
- * FastImage - Ultra-fast cached image component powered by expo-image.
- * Automatically enables memory-disk caching, smooth fade-in transitions,
- * URL resolution for backend assets, and fallback error handling.
- */
 export function FastImage({
   source,
   style,
@@ -29,35 +25,30 @@ export function FastImage({
   resizeMode,
   fallback,
   containerStyle,
-  cachePolicy = 'memory-disk',
+  cachePolicy,
   transition = 150,
   thumbnailWidth,
   thumbnailHeight,
   imageQuality,
   onError,
+  priority = 'normal',
   ...props
 }: FastImageProps) {
   const { preferences } = useAccessibility();
-  const [hasError, setHasError] = useState(false);
+  const [failedSource, setFailedSource] = useState<string | number | null>(null);
+  const sourceValue = typeof source === 'object' ? source?.uri : source;
+  const resolvedSource = useMemo(() => {
+    if (typeof sourceValue === 'number') return sourceValue;
+    if (!sourceValue) return null;
+    const options = thumbnailWidth || thumbnailHeight || imageQuality ? {
+      width: thumbnailWidth, height: thumbnailHeight, quality: imageQuality ?? 80,
+    } : undefined;
+    return { uri: resolveMediaUrl(sourceValue, ecobudApiOrigin, options) || sourceValue };
+  }, [sourceValue, thumbnailWidth, thumbnailHeight, imageQuality]);
+  const sourceKey = typeof resolvedSource === 'object' ? resolvedSource?.uri ?? null : resolvedSource;
+  useEffect(() => { setFailedSource(null); }, [sourceKey]);
 
-  const thumbOptions = thumbnailWidth || imageQuality ? {
-    width: thumbnailWidth,
-    height: thumbnailHeight,
-    quality: imageQuality || 80,
-  } : undefined;
-
-  let resolvedSource: any = null;
-
-  if (typeof source === 'number') {
-    // Local require(...) asset
-    resolvedSource = source;
-  } else if (typeof source === 'string') {
-    resolvedSource = { uri: resolveMediaUrl(source, ecobudApiOrigin, thumbOptions) || source };
-  } else if (source && typeof source === 'object' && source.uri) {
-    resolvedSource = { uri: resolveMediaUrl(source.uri, ecobudApiOrigin, thumbOptions) || source.uri };
-  }
-
-  if (!resolvedSource || (typeof resolvedSource === 'object' && !resolvedSource.uri) || hasError) {
+  if (!resolvedSource || failedSource === sourceKey) {
     if (fallback) {
       return <View style={containerStyle || (style as StyleProp<ViewStyle>)}>{fallback}</View>;
     }
@@ -72,14 +63,16 @@ export function FastImage({
       source={resolvedSource}
       style={style as ImageStyle}
       contentFit={fit}
-      cachePolicy={cachePolicy}
+      cachePolicy={cachePolicy ?? (preferences.performance ? 'disk' : 'memory-disk')}
       transition={preferences.performance ? 0 : transition}
-      priority="high"
+      priority={priority}
+      allowDownscaling
+      enforceEarlyResizing
       recyclingKey={typeof resolvedSource === 'object' ? resolvedSource.uri : undefined}
-      placeholder={props.placeholder || { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+      placeholder={props.placeholder ?? (preferences.performance ? undefined : { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' })}
       placeholderContentFit={fit}
       onError={(e: any) => {
-        setHasError(true);
+        setFailedSource(sourceKey);
         if (onError) onError(e);
       }}
       {...props}
@@ -87,9 +80,12 @@ export function FastImage({
   );
 }
 
-/**
- * Prefetches an array of remote image URLs into disk memory so they display immediately with zero pop-in during scroll.
- */
+const prefetchImages = createImagePrefetcher(
+  url => ExpoImage.prefetch(url, 'disk'),
+  () => !getAccessibilityPreferences().performance &&
+    (AppState.currentState === null || AppState.currentState === 'active'),
+);
+
 FastImage.prefetch = (urls: string[]) => {
   if (!urls || urls.length === 0) return Promise.resolve(false);
   const validUrls = urls
@@ -97,5 +93,5 @@ FastImage.prefetch = (urls: string[]) => {
     .filter((url): url is string => Boolean(url && (url.startsWith('http://') || url.startsWith('https://'))));
 
   if (validUrls.length === 0) return Promise.resolve(false);
-  return ExpoImage.prefetch(validUrls, 'disk');
+  return prefetchImages(validUrls);
 };

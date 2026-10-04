@@ -326,7 +326,7 @@ export function MarketplaceHubView({
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (
-        <ScreenTransition key={`feed-${currentUserId}`}>
+        <ScreenTransition key={`feed-${currentUserId}`} enabled={false}>
         <MarketplaceFeed
           currentUserId={currentUserId}
           onSelectListing={handleSelectListing}

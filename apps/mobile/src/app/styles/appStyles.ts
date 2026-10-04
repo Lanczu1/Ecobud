@@ -1611,7 +1611,7 @@ export const styles = StyleSheet.create({
     lineHeight: moderateScale(20),
   },
   mainScrollContent: {
-    paddingBottom: verticalScale(84),
+    paddingBottom: 8,
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',

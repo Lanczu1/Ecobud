@@ -8,6 +8,7 @@ import { triggerImpactLight } from '../utils/haptics';
 
 export interface LevelCardProps {
   ecoPoints: number;
+  animatePoints?: boolean;
   onPress?: () => void;
   /** Called after layout with the progress bar's absolute screen position */
   onProgressBarMeasured?: (layout: { x: number; y: number; width: number; height: number }) => void;
@@ -41,12 +42,13 @@ export function getLevelFromPoints(points: number) {
   return { currentLevelObj, nextLevelObj };
 }
 
-export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCardProps) {
+export function LevelCard({ ecoPoints, animatePoints = true, onPress, onProgressBarMeasured }: LevelCardProps) {
   const progressBarRef = React.useRef<View>(null);
 
   const [displayPoints, setDisplayPoints] = React.useState(ecoPoints);
 
   React.useEffect(() => {
+    if (!animatePoints) { setDisplayPoints(ecoPoints); return; }
     let animationFrameId: number;
     let startTime: number | null = null;
     const duration = 1000; // 1 second count animation
@@ -75,19 +77,20 @@ export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCa
     animationFrameId = requestAnimationFrame(step);
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [ecoPoints]);
+  }, [ecoPoints, animatePoints]);
 
-  const { currentLevelObj, nextLevelObj } = getLevelFromPoints(displayPoints);
+  const visiblePoints = animatePoints ? displayPoints : ecoPoints;
+  const { currentLevelObj, nextLevelObj } = getLevelFromPoints(visiblePoints);
 
   const isMaxLevel = currentLevelObj.level === 10;
   let progressPercent = 100;
   let pointsToNext = 0;
 
   if (!isMaxLevel) {
-    const pointsInCurrentLevel = displayPoints - currentLevelObj.points;
+    const pointsInCurrentLevel = visiblePoints - currentLevelObj.points;
     const pointsNeededForNextLevel = nextLevelObj.points - currentLevelObj.points;
     progressPercent = (pointsInCurrentLevel / pointsNeededForNextLevel) * 100;
-    pointsToNext = nextLevelObj.points - displayPoints;
+    pointsToNext = nextLevelObj.points - visiblePoints;
   }
 
   const handlePress = () => {
@@ -134,7 +137,7 @@ export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCa
           </View>
 
           <View style={styles.pointsRow}>
-            <Text style={styles.pointsNumber}>{displayPoints}</Text>
+            <Text style={styles.pointsNumber}>{visiblePoints}</Text>
             <Text style={styles.pointsUnit}>Eco Points</Text>
           </View>
 
@@ -145,7 +148,7 @@ export function LevelCard({ ecoPoints, onPress, onProgressBarMeasured }: LevelCa
               ) : (
                 <>
                   <Text style={styles.progressText}>Progress to {nextLevelObj.name}</Text>
-                  <Text style={styles.progressText}>{displayPoints} / {nextLevelObj.points}</Text>
+                  <Text style={styles.progressText}>{visiblePoints} / {nextLevelObj.points}</Text>
                 </>
               )}
             </View>

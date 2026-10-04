@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { TabPressActivation } = require('../utils/tabPressActivation.ts');
 
 function reactHarness() {
   const refs = [], states = [], memos = [], effectSlots = [];
@@ -102,6 +103,7 @@ function harness({ delayedMeasure = false, delayedMount = false, performance = f
   const ast = ts.createSourceFile('component.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const functionSource = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'TabItem').getText(ast);
   const buttonContext = {
+    TabPressActivation, setTimeout, clearTimeout,
     React: buttonReact.react, useRef: buttonReact.react.useRef, Animated: accessibleAnimated, Easing: native.Easing,
     useTheme: () => ({ theme: { colors: { primary: 'green', primaryDark: 'green' } }, isDark: false }),
     View: 'View', TouchableOpacity: 'Touchable', Text: 'Text', Ionicons: 'Icon', TextSizeMultiplierContext: { Provider: 'Provider' }, styles: {},
@@ -127,16 +129,16 @@ function harness({ delayedMeasure = false, delayedMount = false, performance = f
     opened, selected, closed: () => closed, taps: () => taps, animationConfigs, gestureChannel,
     stateUpdates: overlayReact.stateUpdates, renderOverlay, unmount: overlayReact.unmount,
     pressIn: () => tree.props.children[0].props.onPressIn(), pressOut: () => tree.props.children[0].props.onPressOut(),
-    start: () => tree.props.onTouchStart(), hold: () => tree.props.children[0].props.onLongPress(),
+    start: () => { tree.props.onTouchStart(); tree.props.children[0].props.onPressIn(); }, hold: () => tree.props.children[0].props.onLongPress(),
     move: (x, y) => tree.props.onTouchMove(event(x, y)), release: (x, y) => tree.props.onTouchEnd(event(x, y)),
     tap: () => tree.props.children[0].props.onPress(), cancel: () => tree.props.onTouchCancel(),
     finishMeasurement: () => measured(bounds.x, bounds.y, bounds.width, bounds.height),
   };
 }
 
-test('one hold, drag and release opens a mission once without navigating the tab', () => {
+test('Challenges opens on touch-down and hold, drag and release selects a mission without navigating twice', () => {
   const h = harness(); h.start(); h.hold(); h.move(205, 607); h.release(205, 607); h.tap();
-  assert.equal(h.opened.length, 1); assert.deepEqual(h.selected, ['center']); assert.equal(h.closed(), 1); assert.equal(h.taps(), 0);
+  assert.equal(h.opened.length, 1); assert.deepEqual(h.selected, ['center']); assert.equal(h.closed(), 1); assert.equal(h.taps(), 1);
 });
 test('release back on the trophy dismisses without selecting', () => {
   const h = harness(); h.start(); h.hold(); h.move(205, 607); h.release(205, 803);

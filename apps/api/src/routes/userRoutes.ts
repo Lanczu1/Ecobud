@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaClient';
 import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
 import { errorBoundary, HttpError } from '../http/errorResponder';
+import { decodeCursor, encodeCursor, pageLimit } from '../http/cursorPagination';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
@@ -16,6 +17,25 @@ import crypto from 'crypto';
 import { createTotpSecret, createTotpUri, encryptTotpSecret, decryptTotpSecret, verifyTotp, makeRecoveryCodes, hashRecoveryCode } from '../security/totp';
 
 const userRoutes = Router();
+
+userRoutes.get('/me/history', authenticateRequest, requireUserAccess, errorBoundary(async (req: AuthenticatedRequest, res) => {
+  const limit = pageLimit(req.query.limit, 20);
+  const cursor = decodeCursor(req.query.cursor);
+  const rows = await prisma.transparencyLog.findMany({
+    where: { userId: req.auth!.userId, ...(cursor ? { OR: [
+      { timestamp: { lt: new Date(cursor.at) } },
+      { timestamp: new Date(cursor.at), id: { lt: cursor.id } },
+    ] } : {}) },
+    orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+  const page = rows.slice(0, limit);
+  const edge = page[page.length - 1];
+  res.json({
+    items: page.map(log => ({ ...log, metadata: log.metadata ? JSON.parse(log.metadata) : {} })),
+    nextCursor: rows.length > limit && edge ? encodeCursor({ id: edge.id, at: edge.timestamp.toISOString() }) : null,
+  });
+}));
 
 const securityUpdateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -80,6 +100,7 @@ userRoutes.get(
             event: true,
           },
           orderBy: { registeredAt: 'desc' },
+          take: 21,
         },
         lessonProgress: {
           select: {
@@ -113,11 +134,12 @@ userRoutes.get(
       profile: user?.profile,
       badges: user?.badges.map((item) => item.badge) ?? [],
       eventHistory:
-        user?.eventRegistrations.map((item) => ({
+        user?.eventRegistrations.slice(0, 20).map((item) => ({
           ...item.event,
           status: item.status,
           attendedAt: item.attendedAt,
         })) ?? [],
+      eventHistoryHasMore: (user?.eventRegistrations.length ?? 0) > 20,
       progress: {
         lessonsCompleted:
           user?.lessonProgress.filter((item) => item.status === 'completed').length ?? 0,

@@ -1,5 +1,7 @@
+import { useScreenActive } from '../../shared/ui/ScreenActivity';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
+import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { View, ScrollView, FlatList, RefreshControl, Image, useWindowDimensions, StyleSheet, Keyboard, Platform } from 'react-native';
 import { Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { styles } from '../styles/appStyles';
@@ -152,7 +154,7 @@ export const HomeView = React.memo(function HomeView({ model, section }: HomeDas
   return (
     <>
       {(section === undefined || section === 0) && <TopNavbar model={model} />}
-      <View style={[styles.homeContent, section !== undefined && section !== 3 && { paddingBottom: 0 }]}>
+      <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         {(section === undefined || section === 0) && <>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
           <View style={{ flex: 1, paddingRight: scale(8) }}>
@@ -247,16 +249,18 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
   keyboardHeight?: number;
 }) {
   const { theme, isDark } = useTheme();
+  const screenActive = useScreenActive();
   const { width, height } = useWindowDimensions();
   const searchBarRef = React.useRef<View>(null);
   const searchFocusedRef = React.useRef(false);
   const listRef = React.useRef<FlatList<LessonWithProgress[]>>(null);
+  const listPerformance = useListPerformance();
   const scrollOffsetRef = React.useRef(0);
   const tutorialTargetRef = React.useRef<View>(null);
   const tutorialScrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const tutorialScrolledRef = React.useRef(false);
   React.useEffect(() => {
-    if (!model.coachMarksVisible || model.coachMarksCurrentStep !== 4) {
+    if (!screenActive || !model.coachMarksVisible || model.coachMarksCurrentStep !== 4) {
       tutorialScrolledRef.current = false;
       if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
       tutorialScrollTimerRef.current = null;
@@ -265,7 +269,7 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
       if (tutorialScrollTimerRef.current !== null) clearTimeout(tutorialScrollTimerRef.current);
       tutorialScrollTimerRef.current = null;
     };
-  }, [model.coachMarksVisible, model.coachMarksCurrentStep]);
+  }, [model.coachMarksVisible, model.coachMarksCurrentStep, screenActive]);
 
   const finishTutorialScroll = () => {
     if (tutorialScrollTimerRef.current === null) return;
@@ -285,6 +289,7 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
   };
 
   React.useEffect(() => {
+    if (!screenActive) { searchFocusedRef.current = false; return; }
     const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
       if (!searchFocusedRef.current) return;
       searchBarRef.current?.measureInWindow((_x, y) => {
@@ -297,7 +302,7 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [onSearchKeyboardChange]);
+  }, [onSearchKeyboardChange, screenActive]);
   const [layoutMode, setLayoutMode] = useLearnLayoutPreference();
   const gridColumnCount = width >= 900 ? 3 : 2;
   const gridGap = scale(width < 360 ? 8 : 12);
@@ -347,9 +352,10 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
       windowSize={5}
       removeClippedSubviews={Platform.OS === 'android'}
       updateCellsBatchingPeriod={50}
+      {...listPerformance}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: verticalScale(80) + keyboardHeight }}
+      contentContainerStyle={{ paddingBottom: 8 + keyboardHeight }}
       refreshControl={<RefreshControl refreshing={model.refreshing} onRefresh={() => void model.refreshEverything()}
         tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
       ListHeaderComponent={<>

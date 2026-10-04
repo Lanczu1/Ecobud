@@ -312,7 +312,7 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       style={{ flex: 1 }}
       data={items}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={[inboxStyles.container, { paddingBottom: insets.bottom + verticalScale(24) }]}
+      contentContainerStyle={[inboxStyles.container, { paddingBottom: insets.bottom + 8 }]}
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(0, 'refresh')} tintColor={c.primary} />}
       initialNumToRender={8}

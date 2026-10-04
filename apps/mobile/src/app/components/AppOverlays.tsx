@@ -1,3 +1,6 @@
+import { useCursorFeed } from '../../shared/ui/useCursorFeed';
+import { PaginationFooter } from '../../shared/ui/PaginationFooter';
+import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { ApprovedIdCard } from './ApprovedIdCard';
 import { IdVerificationOverlay, idStatusLabel } from './IdVerificationOverlay';
 import { getVideoDurationForProgress, getVideoLessonProgress, getVideoProgressLimit, getQuizLessonProgress, isLocalLessonProgressNewer } from '../utils/lessonProgress';
@@ -9,6 +12,7 @@ import LottieView from '../../shared/accessibility/AccessibleLottie';
 import {
   View,
   ScrollView,
+  FlatList,
   KeyboardAvoidingView,
   Keyboard,
   Platform,
@@ -48,7 +52,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { AiThinkingBubble } from './AiThinkingBubble';
-import { EcoBadge, EcoBudMobileModel } from '../types/home';
+import { EcoBadge, EcoBudMobileModel, type EcoEvent } from '../types/home';
 import { BARANGAYS } from '../../shared/constants/barangays';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue';
@@ -2815,9 +2819,11 @@ function CustomAnimatedMap({ model, userLocation }: { model: any; userLocation: 
 export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => () => model.setFocusedEventId(null), []);
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past'>('browse');
   const [joinedEventId, setJoinedEventId] = React.useState<string | null>(null);
+  const joinedEventRef = React.useRef<EcoEvent | null>(null);
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
   const [attendanceEvent, setAttendanceEvent] = React.useState<string | null>(null);
   const [rejectionModal, setRejectionModal] = React.useState<{ visible: boolean; reason: string; eventId: string | null }>({
@@ -2826,10 +2832,6 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     eventId: null,
   });
 
-  React.useEffect(() => {
-    // Auto-sync / auto-update when the page is opened
-    void model.refreshEverything();
-  }, []);
 
   React.useEffect(() => {
     if (viewMode === 'map') {
@@ -2860,14 +2862,23 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     }
   }, [viewMode]);
 
-  const featuredEvent = model.events[0] ?? null;
-  const otherEvents = featuredEvent ? model.events.slice(1) : model.events;
+  const listPerformance = useListPerformance();
+  const token = model.session?.token;
+  const scope = viewMode === 'map' ? 'all' : activeTab;
+  const focusedId = model.focusedEventId;
+  const fetchPage = React.useCallback((cursor?: string) => ecobudApi.fetchEvents(token, {
+    cursor, limit: 20, scope, id: focusedId ?? undefined,
+  }), [token, scope, focusedId]);
+  const feed = useCursorFeed(fetchPage, 'eventsChanged');
+
+  const featuredEvent = feed.items[0] ?? null;
+  const otherEvents = featuredEvent ? feed.items.slice(1) : feed.items;
   const allEvents = featuredEvent ? [featuredEvent, ...otherEvents] : otherEvents;
 
   const displayedEvents = allEvents.filter((event) => {
     if (model.focusedEventId) return event.id === model.focusedEventId;
     const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
-    const hasJoined = event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
+    const hasJoined = Boolean(event.userStatus);
 
     if (activeTab === 'joined') return hasJoined;
     if (activeTab === 'browse') return lc !== 'ended' && !hasJoined;
@@ -2906,21 +2917,303 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     return new Date(a.startDatetime).getTime() - new Date(b.startDatetime).getTime();
   });
 
+  const renderEvent = (event: EcoEvent) => {
+    const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
+    const hasJoined = !!event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
+    const capacity = event.capacity || 0;
+    const spotsLeft = typeof event.spotsLeft === 'number' ? event.spotsLeft : capacity;
+    const joinedCount = Math.max(0, capacity - spotsLeft);
+    const progressPercent = capacity > 0 ? Math.min(100, Math.max(0, Math.round((joinedCount / capacity) * 100))) : 0;
+    const isFull = spotsLeft <= 0;
+
+    return (
+      <View
+        key={event.id}
+        style={[
+          styles.eventListCard,
+          { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.06 },
+          event.isFeatured && {
+            borderColor: '#FCD34D',
+            borderWidth: 1.5,
+            shadowColor: '#F59E0B',
+            shadowOpacity: 0.15,
+            shadowRadius: 10,
+            elevation: 4,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          activeOpacity={0.92}
+          disabled={!['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(event.userStatus ?? '')}
+          onPress={() => setJoinedEventId(event.id)}
+        >
+          <ImageBackground
+            source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
+            style={styles.eventListImg}
+            imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+          >
+            <View style={{ position: 'absolute', left: 14, top: 14, flexDirection: 'row', gap: 6, zIndex: 2 }}>
+            {event.isFeatured && (
+              <View
+                style={{
+                  backgroundColor: '#F59E0B',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 10,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 2,
+                  elevation: 2,
+                }}
+              >
+                <Ionicons name="star" size={11} color="#FFF" />
+                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 }}>FEATURED</Text>
+              </View>
+            )}
+            <View
+              style={{
+                backgroundColor: lc === 'ongoing' ? 'rgba(220,38,38,0.9)' : lc === 'ended' ? 'rgba(100,116,139,0.9)' : 'rgba(26,33,29,0.75)',
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: 10,
+              }}
+            >
+              <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
+                {lc === 'ongoing' ? 'ONGOING' : lc === 'ended' ? 'ENDED' : 'UPCOMING'}
+              </Text>
+            </View>
+            </View>
+            <View style={[styles.dateTagRight, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: isDark ? 1 : 0 }]}>
+              <Text style={[styles.dateTagRightText, { color: theme.colors.textPrimary }]}>{formatEventDateTag(event.startDatetime)}</Text>
+            </View>
+          </ImageBackground>
+        </TouchableOpacity>
+        <View style={styles.eventListBody}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            disabled={!['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(event.userStatus ?? '')}
+            onPress={() => setJoinedEventId(event.id)}
+          >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+            {event.isFeatured && <Ionicons name="star" size={12} color="#F59E0B" />}
+            <Text style={[styles.welcomeLabel, { color: event.isFeatured ? '#D97706' : (isDark ? theme.colors.primary : '#126027') }, event.isFeatured && { marginBottom: 0 }]}>
+              {event.isFeatured ? 'FEATURED EVENT' : 'PUBLIC EVENT'}
+            </Text>
+          </View>
+          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
+          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>{event.description}</Text>
+          <View style={[styles.rowMeta, { marginTop: 12 }]}>
+            <Ionicons name="location" size={14} color={theme.colors.textMuted} />
+            <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.location}</Text>
+          </View>
+          <View style={[styles.rowMeta, { marginBottom: event.ecoCoinsReward ? 4 : 12 }]}>
+            <Ionicons name="leaf-outline" size={14} color={isDark ? theme.colors.primary : '#10B981'} />
+            <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.expReward} ECO points reward</Text>
+          </View>
+          {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
+            <View style={[styles.rowMeta, { marginBottom: 12 }]}>
+              <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
+              <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.ecoCoinsReward} ECO coins reward</Text>
+            </View>
+          )}
+
+          {capacity > 0 && (
+            <View
+              style={{
+                marginTop: 10,
+                marginBottom: 14,
+                backgroundColor: isDark ? theme.colors.surfaceMuted : '#F7FAF8',
+                padding: 10,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: isDark ? theme.colors.border : '#EAF0EC',
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="people-outline" size={14} color={theme.colors.textMuted} />
+                  <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontWeight: '500' }}>
+                    Capacity: <Text style={{ fontWeight: '700', color: theme.colors.textPrimary }}>{joinedCount}/{capacity}</Text>{' '}
+                    <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : (isDark ? theme.colors.primary : '#126027'),
+                  }}
+                >
+                  {progressPercent}%
+                </Text>
+              </View>
+              <View style={{ height: 6, width: '100%', backgroundColor: isDark ? theme.colors.card : '#E2EAE5', borderRadius: 3, overflow: 'hidden' }}>
+                <View
+                  style={{
+                    height: '100%',
+                    width: `${progressPercent}%`,
+                    backgroundColor: isFull ? '#DC2626' : progressPercent >= 80 ? '#F59E0B' : (isDark ? theme.colors.primary : '#126027'),
+                    borderRadius: 3,
+                  }}
+                />
+              </View>
+            </View>
+          )}
+          </TouchableOpacity>
+
+          {(() => {
+            if (activeTab === 'past' && hasJoined) {
+              return (
+                <TouchableOpacity
+                  style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
+                  onPress={() => setJoinedEventId(event.id)}
+                >
+                  <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>View Details</Text>
+                </TouchableOpacity>
+              );
+            }
+
+            if (lc === 'ended' && !event.userStatus) {
+              return (
+                <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Ended</Text>
+                </View>
+              );
+            }
+
+            if (event.userStatus === 'rejected') {
+              return (
+                <TouchableOpacity
+                  style={[styles.quickJoinBtn, { backgroundColor: '#DC2626' }]}
+                  onPress={() => {
+                    setRejectionModal({
+                      visible: true,
+                      reason: event.rejectionReason || 'No reason provided.',
+                      eventId: event.id,
+                    });
+                  }}
+                >
+                  <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Rejected - Resubmit</Text>
+                </TouchableOpacity>
+              );
+            }
+            if (event.userStatus === 'reward_claimed') {
+              return (
+                <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: 'rgba(18,96,39,0.15)' }, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
+                  <Ionicons name="checkmark-circle" size={14} color={isDark ? theme.colors.primary : '#126027'} />
+                  <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Reward Claimed</Text>
+                </View>
+              );
+            }
+            if (event.userStatus === 'attended') {
+              return (
+                <TouchableOpacity
+                  style={[styles.quickJoinBtn, { backgroundColor: '#F59E0B' }]}
+                  onPress={() => void model.handleClaimEventReward(event.id)}
+                >
+                  <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Claim Reward</Text>
+                </TouchableOpacity>
+              );
+            }
+            if (event.userStatus === 'pending_approval') {
+              return (
+                <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: '#3D2C0C' } : { backgroundColor: '#FEF3C7' }]}>
+                  <Text style={[styles.quickJoinBtnText, { color: isDark ? '#FBBF24' : '#92400E' }]}>Waiting for Approval</Text>
+                </View>
+              );
+            }
+            if (event.userStatus === 'joined') {
+              if (lc === 'ongoing') {
+                return (
+                  <TouchableOpacity
+                    style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.primary } : { backgroundColor: '#126027' }]}
+                    onPress={() => setAttendanceEvent(event.id)}
+                  >
+                    <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>Record Attendance</Text>
+                  </TouchableOpacity>
+                );
+              } else {
+                return (
+                  <View style={{ gap: 8 }}>
+                    <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: '#E0EBE4' }]}>
+                      <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Joined - Starts Soon</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
+                      onPress={() => setJoinedEventId(event.id)}
+                    >
+                      <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>View Details</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+            }
+
+            if (lc === 'ongoing') {
+              return (
+                <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Registration Closed</Text>
+                </View>
+              );
+            }
+            if (lc === 'ended') {
+              return (
+                <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Ended</Text>
+                </View>
+              );
+            }
+
+            if (isFull) {
+              return (
+                <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Full</Text>
+                </View>
+              );
+            }
+
+            return (
+              <TouchableOpacity style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.primary }]} onPress={async () => {
+                if (await model.handleJoinEvent(event.id)) { joinedEventRef.current = event; setJoinedEventId(event.id); void feed.refresh(); }
+              }}>
+                <Text style={[styles.quickJoinBtnText, isDark && { color: '#0E1512' }]}>Join Event</Text>
+              </TouchableOpacity>
+            );
+          })()}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
-      <ScrollView
+      <FlatList
+        data={viewMode === 'list' ? displayedEvents : []}
+        keyExtractor={event => event.id}
+        renderItem={({ item }) => renderEvent(item)}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+        {...listPerformance}
+        onEndReached={() => { if (!feed.error) void feed.loadMore(); }}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={<PaginationFooter loading={feed.loading || feed.loadingMore} error={feed.error} hasMore={!!feed.nextCursor} onLoad={() => void (feed.error ? feed.retry() : feed.nextCursor ? feed.loadMore() : feed.refresh())} />}
         showsVerticalScrollIndicator={false}
         style={{ backgroundColor: theme.colors.background }}
-        contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background, paddingBottom: insets.bottom + 8 }]}
         refreshControl={
           <RefreshControl
-            refreshing={model.refreshing}
-            onRefresh={() => void model.refreshEverything()}
+            refreshing={feed.refreshing}
+            onRefresh={() => void feed.refresh()}
             tintColor={isDark ? theme.colors.primary : '#126027'}
           />
         }
-      >
+        ListHeaderComponent={<>
         <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>DIRECTORY</Text>
         <View style={styles.rowBetween}>
           <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Eco Events</Text>
@@ -2952,11 +3245,11 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
         {viewMode === 'map' ? (
           <View style={{ width: '100%', marginTop: verticalScale(8) }}>
-            <CustomAnimatedMap model={model} userLocation={userLocation} />
+            <CustomAnimatedMap model={{ ...model, events: feed.items }} userLocation={userLocation} />
           </View>
         ) : (
           <>
-            {displayedEvents.length === 0 && (
+            {displayedEvents.length === 0 && !feed.loading && !feed.error && (
               <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
                 <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>
                   {activeTab === 'joined' ? "You haven't joined any events" : `No ${activeTab === 'past' ? 'past' : 'public'} events yet`}
@@ -2967,287 +3260,17 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
               </SurfaceCard>
             )}
 
-            {displayedEvents.map((event) => {
-              const lc = getEventLifecycleStatus(event.startDatetime, event.endDatetime);
-              const hasJoined = !!event.userStatus && ['joined', 'pending_approval', 'approved', 'attended', 'reward_claimed'].includes(event.userStatus);
-              const capacity = event.capacity || 0;
-              const spotsLeft = typeof event.spotsLeft === 'number' ? event.spotsLeft : capacity;
-              const joinedCount = Math.max(0, capacity - spotsLeft);
-              const progressPercent = capacity > 0 ? Math.min(100, Math.max(0, Math.round((joinedCount / capacity) * 100))) : 0;
-              const isFull = spotsLeft <= 0;
 
-              return (
-                <View
-                  key={event.id}
-                  style={[
-                    styles.eventListCard,
-                    { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, shadowOpacity: isDark ? 0.2 : 0.06 },
-                    event.isFeatured && {
-                      borderColor: '#FCD34D',
-                      borderWidth: 1.5,
-                      shadowColor: '#F59E0B',
-                      shadowOpacity: 0.15,
-                      shadowRadius: 10,
-                      elevation: 4,
-                    },
-                  ]}
-                >
-                  <TouchableOpacity
-                    activeOpacity={0.92}
-                    disabled={!['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(event.userStatus ?? '')}
-                    onPress={() => setJoinedEventId(event.id)}
-                  >
-                    <ImageBackground
-                      source={{ uri: event.imageUrl ? (event.imageUrl.startsWith('http') ? event.imageUrl : `${ecobudApiOrigin}${event.imageUrl}`) : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop' }}
-                      style={styles.eventListImg}
-                      imageStyle={{ borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-                    >
-                      <View style={{ position: 'absolute', left: 14, top: 14, flexDirection: 'row', gap: 6, zIndex: 2 }}>
-                      {event.isFeatured && (
-                        <View
-                          style={{
-                            backgroundColor: '#F59E0B',
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 4,
-                            paddingHorizontal: 10,
-                            paddingVertical: 5,
-                            borderRadius: 10,
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: 1 },
-                            shadowOpacity: 0.2,
-                            shadowRadius: 2,
-                            elevation: 2,
-                          }}
-                        >
-                          <Ionicons name="star" size={11} color="#FFF" />
-                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 }}>FEATURED</Text>
-                        </View>
-                      )}
-                      <View
-                        style={{
-                          backgroundColor: lc === 'ongoing' ? 'rgba(220,38,38,0.9)' : lc === 'ended' ? 'rgba(100,116,139,0.9)' : 'rgba(26,33,29,0.75)',
-                          paddingHorizontal: 10,
-                          paddingVertical: 5,
-                          borderRadius: 10,
-                        }}
-                      >
-                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
-                          {lc === 'ongoing' ? 'ONGOING' : lc === 'ended' ? 'ENDED' : 'UPCOMING'}
-                        </Text>
-                      </View>
-                      </View>
-                      <View style={[styles.dateTagRight, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: isDark ? 1 : 0 }]}>
-                        <Text style={[styles.dateTagRightText, { color: theme.colors.textPrimary }]}>{formatEventDateTag(event.startDatetime)}</Text>
-                      </View>
-                    </ImageBackground>
-                  </TouchableOpacity>
-                  <View style={styles.eventListBody}>
-                    <TouchableOpacity
-                      activeOpacity={0.9}
-                      disabled={!['joined', 'pending_approval', 'attended', 'reward_claimed'].includes(event.userStatus ?? '')}
-                      onPress={() => setJoinedEventId(event.id)}
-                    >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                      {event.isFeatured && <Ionicons name="star" size={12} color="#F59E0B" />}
-                      <Text style={[styles.welcomeLabel, { color: event.isFeatured ? '#D97706' : (isDark ? theme.colors.primary : '#126027') }, event.isFeatured && { marginBottom: 0 }]}>
-                        {event.isFeatured ? 'FEATURED EVENT' : 'PUBLIC EVENT'}
-                      </Text>
-                    </View>
-                    <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
-                    <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>{event.description}</Text>
-                    <View style={[styles.rowMeta, { marginTop: 12 }]}>
-                      <Ionicons name="location" size={14} color={theme.colors.textMuted} />
-                      <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.location}</Text>
-                    </View>
-                    <View style={[styles.rowMeta, { marginBottom: event.ecoCoinsReward ? 4 : 12 }]}>
-                      <Ionicons name="leaf-outline" size={14} color={isDark ? theme.colors.primary : '#10B981'} />
-                      <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.expReward} ECO points reward</Text>
-                    </View>
-                    {!!event.ecoCoinsReward && event.ecoCoinsReward > 0 && (
-                      <View style={[styles.rowMeta, { marginBottom: 12 }]}>
-                        <Image source={require('../../../assets/coin.png')} style={{ width: 14, height: 14, resizeMode: 'contain' }} />
-                        <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {event.ecoCoinsReward} ECO coins reward</Text>
-                      </View>
-                    )}
-
-                    {capacity > 0 && (
-                      <View
-                        style={{
-                          marginTop: 10,
-                          marginBottom: 14,
-                          backgroundColor: isDark ? theme.colors.surfaceMuted : '#F7FAF8',
-                          padding: 10,
-                          borderRadius: 12,
-                          borderWidth: 1,
-                          borderColor: isDark ? theme.colors.border : '#EAF0EC',
-                        }}
-                      >
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Ionicons name="people-outline" size={14} color={theme.colors.textMuted} />
-                            <Text style={{ fontSize: 12, color: theme.colors.textMuted, fontWeight: '500' }}>
-                              Capacity: <Text style={{ fontWeight: '700', color: theme.colors.textPrimary }}>{joinedCount}/{capacity}</Text>{' '}
-                              <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>({isFull ? 'Full' : `${spotsLeft} spots left`})</Text>
-                            </Text>
-                          </View>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontWeight: '800',
-                              color: isFull ? '#DC2626' : progressPercent >= 80 ? '#D97706' : (isDark ? theme.colors.primary : '#126027'),
-                            }}
-                          >
-                            {progressPercent}%
-                          </Text>
-                        </View>
-                        <View style={{ height: 6, width: '100%', backgroundColor: isDark ? theme.colors.card : '#E2EAE5', borderRadius: 3, overflow: 'hidden' }}>
-                          <View
-                            style={{
-                              height: '100%',
-                              width: `${progressPercent}%`,
-                              backgroundColor: isFull ? '#DC2626' : progressPercent >= 80 ? '#F59E0B' : (isDark ? theme.colors.primary : '#126027'),
-                              borderRadius: 3,
-                            }}
-                          />
-                        </View>
-                      </View>
-                    )}
-                    </TouchableOpacity>
-
-                    {(() => {
-                      if (activeTab === 'past' && hasJoined) {
-                        return (
-                          <TouchableOpacity
-                            style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
-                            onPress={() => setJoinedEventId(event.id)}
-                          >
-                            <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>View Details</Text>
-                          </TouchableOpacity>
-                        );
-                      }
-
-                      if (lc === 'ended' && !event.userStatus) {
-                        return (
-                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Ended</Text>
-                          </View>
-                        );
-                      }
-
-                      if (event.userStatus === 'rejected') {
-                        return (
-                          <TouchableOpacity
-                            style={[styles.quickJoinBtn, { backgroundColor: '#DC2626' }]}
-                            onPress={() => {
-                              setRejectionModal({
-                                visible: true,
-                                reason: event.rejectionReason || 'No reason provided.',
-                                eventId: event.id,
-                              });
-                            }}
-                          >
-                            <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Rejected - Resubmit</Text>
-                          </TouchableOpacity>
-                        );
-                      }
-                      if (event.userStatus === 'reward_claimed') {
-                        return (
-                          <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: 'rgba(18,96,39,0.15)' }, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
-                            <Ionicons name="checkmark-circle" size={14} color={isDark ? theme.colors.primary : '#126027'} />
-                            <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Reward Claimed</Text>
-                          </View>
-                        );
-                      }
-                      if (event.userStatus === 'attended') {
-                        return (
-                          <TouchableOpacity
-                            style={[styles.quickJoinBtn, { backgroundColor: '#F59E0B' }]}
-                            onPress={() => void model.handleClaimEventReward(event.id)}
-                          >
-                            <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Claim Reward</Text>
-                          </TouchableOpacity>
-                        );
-                      }
-                      if (event.userStatus === 'pending_approval') {
-                        return (
-                          <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: '#3D2C0C' } : { backgroundColor: '#FEF3C7' }]}>
-                            <Text style={[styles.quickJoinBtnText, { color: isDark ? '#FBBF24' : '#92400E' }]}>Waiting for Approval</Text>
-                          </View>
-                        );
-                      }
-                      if (event.userStatus === 'joined') {
-                        if (lc === 'ongoing') {
-                          return (
-                            <TouchableOpacity
-                              style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.primary } : { backgroundColor: '#126027' }]}
-                              onPress={() => setAttendanceEvent(event.id)}
-                            >
-                              <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>Record Attendance</Text>
-                            </TouchableOpacity>
-                          );
-                        } else {
-                          return (
-                            <View style={{ gap: 8 }}>
-                              <View style={[styles.quickJoinBtn, isDark ? { backgroundColor: theme.colors.surfaceMuted } : { backgroundColor: '#E0EBE4' }]}>
-                                <Text style={[styles.quickJoinBtnText, { color: isDark ? theme.colors.primary : '#126027' }]}>Joined - Starts Soon</Text>
-                              </View>
-                              <TouchableOpacity
-                                style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
-                                onPress={() => setJoinedEventId(event.id)}
-                              >
-                                <Text style={[styles.quickJoinBtnText, { color: isDark ? '#0E1512' : '#FFF' }]}>View Details</Text>
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        }
-                      }
-
-                      if (lc === 'ongoing') {
-                        return (
-                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Registration Closed</Text>
-                          </View>
-                        );
-                      }
-                      if (lc === 'ended') {
-                        return (
-                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Ended</Text>
-                          </View>
-                        );
-                      }
-
-                      if (isFull) {
-                        return (
-                          <View style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.surfaceMuted }]}>
-                            <Text style={[styles.quickJoinBtnText, isDark && { color: theme.colors.textMuted }]}>Event Full</Text>
-                          </View>
-                        );
-                      }
-
-                      return (
-                        <TouchableOpacity style={[styles.quickJoinBtn, isDark && { backgroundColor: theme.colors.primary }]} onPress={async () => {
-                          if (await model.handleJoinEvent(event.id)) setJoinedEventId(event.id);
-                        }}>
-                          <Text style={[styles.quickJoinBtnText, isDark && { color: '#0E1512' }]}>Join Event</Text>
-                        </TouchableOpacity>
-                      );
-                    })()}
-                  </View>
-                </View>
-              );
-            })}
           </>
         )}
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+        </>}
+      />
       {attendanceEvent && (
         <EventAttendanceOverlay
           eventId={attendanceEvent}
           model={model}
-          onClose={() => setAttendanceEvent(null)}
+          onClose={() => { setAttendanceEvent(null); void feed.refresh(); }}
         />
       )}
       <RejectionModal
@@ -3260,7 +3283,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         } : undefined}
       />
       {(() => {
-        const joinedEvent = model.events.find((event) => event.id === joinedEventId);
+        const joinedEvent = feed.items.find((event) => event.id === joinedEventId) ?? (joinedEventRef.current?.id === joinedEventId ? joinedEventRef.current : null);
         if (!joinedEvent) return null;
         const formatTime = (value: string) => new Date(value).toLocaleTimeString('en-PH', {
           timeZone: 'Asia/Manila',
@@ -7596,7 +7619,7 @@ export function SettingsOverlay({ model }: { model: EcoBudMobileModel }) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View ref={formScroll.viewportRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView ref={formScroll.scrollRef} showsVerticalScrollIndicator={false} onScroll={formScroll.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.overlayScroll, { paddingBottom: verticalScale(36) + formScroll.keyboardHeight }]} keyboardShouldPersistTaps="handled">
-          {model.idVerificationStatus === 'approved' ? <ApprovedIdCard onPress={() => model.setActiveOverlay('idVerification')} /> : (
+          {model.idVerificationStatus === 'approved' || model.idVerificationStatus === 'rejected' ? <ApprovedIdCard status={model.idVerificationStatus} reason={model.idVerificationReason} onPress={() => model.setActiveOverlay('idVerification')} /> : (
           <SurfaceCard style={{ padding: 16, gap: 10 }}>
             <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700' }}>{idStatusLabel[model.idVerificationStatus]}</Text>
             <Text style={{ color: theme.colors.textMuted }}>ID approval is required for Challenges, joining Eco Events, and creating listings or requests. Learn remains available.</Text>
@@ -7988,23 +8011,38 @@ const localStyles = StyleSheet.create({
 
 export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
-  const logs = model.profile?.recentLogs ?? [];
+  const token = model.session?.token ?? '';
+  const fetchPage = React.useCallback((cursor?: string) => ecobudApi.fetchRewardHistory(token, cursor), [token]);
+  const feed = useCursorFeed(fetchPage, 'ECO_REDEEM_SYNC');
+  const logs = feed.items;
+  const listPerformance = useListPerformance();
 
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
-      <ScrollView
+      <FlatList
+        data={logs}
+        keyExtractor={log => log.id}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        {...listPerformance}
         showsVerticalScrollIndicator={false}
-        style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background }]}
-      >
-        <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>HISTORY</Text>
-        <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Coins & Points</Text>
-
-        <View style={{ marginTop: 24, gap: 12 }}>
-          {logs.length > 0 ? (
-            logs.map((log) => (
-              <SurfaceCard
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        refreshControl={<RefreshControl refreshing={feed.refreshing} onRefresh={() => void feed.refresh()} tintColor={theme.colors.primary} />}
+        onEndReached={() => { if (!feed.error) void feed.loadMore(); }}
+        onEndReachedThreshold={0.3}
+        ListHeaderComponent={<View style={{ marginBottom: 24 }}>
+          <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>HISTORY</Text>
+          <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Coins & Points</Text>
+        </View>}
+        ListEmptyComponent={!feed.loading && !feed.error ? (            <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+              <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>No history yet</Text>
+              <Text style={[styles.metaTextSmallDark, { color: theme.colors.textMuted }]}>Complete missions to earn points and coins!</Text>
+            </SurfaceCard>) : null}
+        ListFooterComponent={<PaginationFooter loading={feed.loading || feed.loadingMore} error={feed.error} hasMore={!!feed.nextCursor} onLoad={() => void (feed.error ? feed.retry() : feed.nextCursor ? feed.loadMore() : feed.refresh())} />}
+        renderItem={({ item: log }) => (              <SurfaceCard
                 key={log.id}
                 style={{
                   padding: 16,
@@ -8034,17 +8072,8 @@ export function CoinsHistoryOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
                 <Text style={[styles.metaTextSmallDark, { marginTop: 4, color: theme.colors.textSecondary }]}>Action: {log.actionType}</Text>
                 <Text style={[styles.metaTextSmallDark, { marginTop: 4, color: theme.colors.textMuted }]}>Date: {formatLongDate(log.timestamp)}</Text>
-              </SurfaceCard>
-            ))
-          ) : (
-            <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
-              <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>No history yet</Text>
-              <Text style={[styles.metaTextSmallDark, { color: theme.colors.textMuted }]}>Complete missions to earn points and coins!</Text>
-            </SurfaceCard>
-          )}
-        </View>
-        <View style={{ height: 100 }} />
-      </ScrollView>
+              </SurfaceCard>)}
+      />
     </View>
   );
 }

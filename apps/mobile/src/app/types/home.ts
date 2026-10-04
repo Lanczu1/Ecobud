@@ -143,6 +143,7 @@ export interface EcoBudMobileModel {
   hasOnboarded: boolean;
   session: SessionPayload | null;
   idVerificationStatus: import('../../shared/api/ecobudApi').IdVerificationStatus;
+  idVerificationReason: string | null;
   refreshIdVerification: (result?: IdVerificationResult) => Promise<void>;
   requireIdApproval: () => boolean;
   hasUsableInternet: boolean;

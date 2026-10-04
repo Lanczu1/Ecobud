@@ -1,3 +1,4 @@
+import { useScreenActive } from '../../shared/ui/ScreenActivity';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState, useEffect } from 'react';
 import {
@@ -28,14 +29,18 @@ export function ActiveChallengeCard({ dailyChallenge, onComplete, onClaim, isVie
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [isPressing, setIsPressing] = useState(false);
 
+  const screenActive = useScreenActive();
   useEffect(() => {
-    Animated.loop(
+    if (!screenActive) return;
+    const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
-    ).start();
-  }, [pulseAnim]);
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [screenActive, pulseAnim]);
 
   const isAI = !dailyChallenge.type || dailyChallenge.type === 'AI Image Recognition Challenge' || dailyChallenge.type === 'GENERAL';
   const isApproved = status === 'approved' || status === 'unclaimed';

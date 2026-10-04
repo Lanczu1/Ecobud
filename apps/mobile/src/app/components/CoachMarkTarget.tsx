@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { View, ViewProps, LayoutChangeEvent } from 'react-native';
+import { useScreenActive } from '../../shared/ui/ScreenActivity';
 
 export interface SpotlightRect {
   x: number;
@@ -27,6 +28,9 @@ export interface CoachMarkTargetProps extends ViewProps {
 export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
   ({ name, borderRadius, active = true, pollWhileActive = true, measureRef, onMeasure, style, children, onLayout, ...props }, forwardedRef) => {
     const internalRef = useRef<View | null>(null);
+    const screenActive = useScreenActive();
+    const screenActiveRef = useRef(screenActive);
+    screenActiveRef.current = screenActive;
 
     const onMeasureRef = useRef(onMeasure);
     onMeasureRef.current = onMeasure;
@@ -34,9 +38,11 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
     const lastRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
     const measureTarget = useCallback(() => {
+      if (!screenActive) return;
       const target = measureRef?.current ?? internalRef.current;
       if (!target) return;
       target.measureInWindow((x, y, width, height) => {
+        if (!screenActiveRef.current) return;
         if (width > 0 && height > 0) {
           const last = lastRectRef.current;
           // Avoid triggering redundant state updates if coordinates haven't changed
@@ -59,11 +65,11 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
           });
         }
       });
-    }, [borderRadius, measureRef]);
+    }, [borderRadius, measureRef, screenActive]);
 
     // Re-measure when target becomes active and settle smoothly without heavy bridge thrashing
     useEffect(() => {
-      if (!active) {
+      if (!active || !screenActive) {
         lastRectRef.current = null;
         return;
       }
@@ -88,7 +94,7 @@ export const CoachMarkTarget = React.forwardRef<View, CoachMarkTargetProps>(
         clearTimeout(timer4);
         if (interval !== null) clearInterval(interval);
       };
-    }, [active, pollWhileActive, measureTarget]);
+    }, [active, screenActive, pollWhileActive, measureTarget]);
 
     const handleLayout = (e: LayoutChangeEvent) => {
       onLayout?.(e);

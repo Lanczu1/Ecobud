@@ -1,3 +1,4 @@
+import { useScreenActive } from '../../shared/ui/ScreenActivity';
 import React from 'react';
 import {
   View,
@@ -397,7 +398,9 @@ export function DiscoverChallengeSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = React.useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   React.useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -414,7 +417,7 @@ export function DiscoverChallengeSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [screenActive, pulseAnim, isDark]);
 
   return (
     <Animated.View
