@@ -1,8 +1,7 @@
-import { useAccessibility } from '../accessibility/AccessibilityContext';
+import { useLiteMode } from '../performance/deviceTier';
 
 export function useListPerformance() {
-  const { preferences } = useAccessibility();
-  return preferences.performance ? reducedListProps : standardListProps;
+  return useLiteMode() ? reducedListProps : standardListProps;
 }
 
 const standardListProps = {};

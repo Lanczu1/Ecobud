@@ -7,6 +7,7 @@ import type { ImageStyle } from 'react-native';
 import { resolveMediaUrl } from '../../app/utils/appUtils';
 import { ecobudApiOrigin } from '../api/ecobudApi';
 import { createImagePrefetcher } from './imagePrefetch';
+import { isLowEndDevice } from '../performance/deviceTier';
 
 export interface FastImageProps extends Omit<ExpoImageProps, 'source'> {
   source?: { uri?: string | null } | number | string | null;
@@ -35,6 +36,8 @@ export function FastImage({
   ...props
 }: FastImageProps) {
   const { preferences } = useAccessibility();
+  // Decoding a blurhash and cross-fading each cell costs frames while a list scrolls.
+  const lite = preferences.performance || isLowEndDevice();
   const [failedSource, setFailedSource] = useState<string | number | null>(null);
   const sourceValue = typeof source === 'object' ? source?.uri : source;
   const resolvedSource = useMemo(() => {
@@ -64,12 +67,12 @@ export function FastImage({
       style={style as ImageStyle}
       contentFit={fit}
       cachePolicy={cachePolicy ?? (preferences.performance ? 'disk' : 'memory-disk')}
-      transition={preferences.performance ? 0 : transition}
+      transition={lite ? 0 : transition}
       priority={priority}
       allowDownscaling
       enforceEarlyResizing
       recyclingKey={typeof resolvedSource === 'object' ? resolvedSource.uri : undefined}
-      placeholder={props.placeholder ?? (preferences.performance ? undefined : { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' })}
+      placeholder={props.placeholder ?? (lite ? undefined : { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' })}
       placeholderContentFit={fit}
       onError={(e: any) => {
         setFailedSource(sourceKey);

@@ -1,5 +1,4 @@
 import { RetainedTabHost } from './components/RetainedTabHost';
-import { useAccessibility } from '../shared/accessibility/AccessibilityContext';
 import { AccessibilityProvider } from '../shared/accessibility/AccessibilityContext';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState, useCallback } from 'react';
@@ -52,6 +51,8 @@ import { styles } from './styles/appStyles';
 import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
 import { useListPerformance } from '../shared/ui/useListPerformance';
+import { useLiteMode } from '../shared/performance/deviceTier';
+import { Reveal, TabEntrance } from '../shared/ui/Motion';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
 import { QuickMissionsOverlay } from './components/QuickMissionsOverlay';
@@ -96,7 +97,7 @@ const ScrollAwareChatbot = React.memo(React.forwardRef<ScrollAwareChatbotHandle,
 ));
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
-  const { preferences } = useAccessibility();
+  const liteMode = useLiteMode();
   const listPerformance = useListPerformance();
   const [quickMissionsOpen, setQuickMissionsOpen] = useState(false);
   const [quickMissionGestures] = useState(createQuickMissionGestureChannel);
@@ -143,7 +144,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const handleDisableChatbot = useCallback(() => void model.setChatbotEnabled(false), [model.setChatbotEnabled]);
   const renderHomeRow = useCallback(({ item }: { item: HomeDashboardSection }) => (
     <HomeAnimationVisibilityContext.Provider value={homeAnimations}>
-      <HomeView model={model} section={item} />
+      <Reveal id={`home-${item}`} index={item}>
+        <HomeView model={model} section={item} />
+      </Reveal>
     </HomeAnimationVisibilityContext.Provider>
   ), [model, homeAnimations]);
   const measureHomeViewport = useCallback((event: LayoutChangeEvent) => {
@@ -224,9 +227,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <RetainedTabHost key={model.session.user.id} model={model}
           bottomInset={model.activeTab === 'marketplace' && hideMarketplaceChrome ? 0 : bottomTabClearance}
-          limit={preferences.performance ? 2 : 3}
+          limit={liteMode ? 2 : 3}
           exposed={!model.activeOverlay && !model.actionOverlayVisible && !quickMissionsOpen}
-          render={(tab, model) => {
+          render={(tab, model) => <TabEntrance active={tab === model.activeTab}>{(() => {
             if (tab === 'marketplace') return <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />;
             if (tab === 'learn') return <LearnView model={model} onSearchKeyboardChange={handleSearchKeyboardChange} keyboardHeight={searchKeyboardHeight} />;
             if (tab === 'challenges') return <ChallengesView model={model} onSearchKeyboardChange={handleSearchKeyboardChange} keyboardHeight={searchKeyboardHeight} />;
@@ -278,7 +281,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
               }
             />
             );
-          }}
+          })()}</TabEntrance>}
         />
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
           <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onQuickMissionGesture={quickMissionGestures.emit} onLongPressChallenges={bounds => { quickMissionGestures.reset(); setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />

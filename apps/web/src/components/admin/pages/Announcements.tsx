@@ -56,7 +56,7 @@ export interface Announcement {
   ctaValue: string | null;
   createdAt?: string;
   updatedAt?: string;
-  createdBy?: { name: string };
+  createdBy?: { name: string; role?: string };
 }
 
 const blank = (): Announcement => ({
@@ -528,6 +528,8 @@ export function Announcements() {
         : Infinity;
 
     return items.filter(a => {
+      if (a.createdBy?.role !== (isModerator ? 'moderator' : 'admin')) return false;
+      if (isModerator && (!assignedBarangay || a.targetAudience === 'All Residents' || !a.barangays.includes(assignedBarangay))) return false;
       const matchQuery =
         !query ||
         `${a.title} ${a.content}`.toLowerCase().includes(query.toLowerCase());
@@ -541,7 +543,7 @@ export function Announcements() {
       const matchBarangay = !filterBarangay || a.targetAudience === 'All Residents' || a.barangays.includes(filterBarangay);
       return matchQuery && matchCategory && matchStatus && matchPeriod && matchBarangay;
     });
-  }, [items, query, category, status, period, from, to, filterBarangay]);
+  }, [items, query, category, status, period, from, to, filterBarangay, isModerator, assignedBarangay]);
 
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -685,7 +687,7 @@ export function Announcements() {
 
       {/* Header */}
       {isModerator && <p className="text-sm text-gray-600 dark:text-gray-300" role="status">
-        {assignedBarangay ? `Your barangay: ${assignedBarangay}. You can create announcements and manage your own posts for this barangay. Admin posts and other moderators' posts are view only.` : barangayError || 'An assigned barangay is required before you can create an announcement.'}
+        {assignedBarangay ? `Your barangay: ${assignedBarangay}. Only moderator announcements for this barangay are shown. You can manage your own posts; other moderators' posts are view only.` : barangayError || 'An assigned barangay is required before you can create an announcement.'}
       </p>}
       <div className="flex items-center justify-between">
         <div>
@@ -808,8 +810,8 @@ export function Announcements() {
             ))}
           </select>
 
-          <select aria-label="Filter by barangay" value={filterBarangay} onChange={e => { setFilterBarangay(e.target.value); setPage(1); }} className="px-3 py-2 text-xs font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-xl">
-            <option value="">All 52 Barangays</option>
+          <select aria-label="Filter by barangay" value={isModerator ? assignedBarangay ?? '' : filterBarangay} disabled={isModerator} onChange={e => { setFilterBarangay(e.target.value); setPage(1); }} className="px-3 py-2 text-xs font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed">
+            <option value="">{isModerator ? 'No assigned barangay' : 'All 52 Barangays'}</option>
             {barangays.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
