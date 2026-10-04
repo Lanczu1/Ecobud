@@ -4,6 +4,7 @@ import { awardContentBadge } from './contentBadgeService';
 import { awardMilestoneBadges } from './badgeMilestoneService';
 import { sendDirectNotification } from './notificationService';
 import { HttpError } from '../http/errorResponder';
+import { decodeCursor, encodeCursor } from '../http/cursorPagination';
 import { apiCache } from '../lib/cache';
 import { supabaseStorageService } from './supabaseStorageService';
 import path from 'path';
@@ -436,7 +437,7 @@ export const swapService = {
     return results;
   },
 
-  async fetchMessages(conversationOrSwapRequestId: string, userId: string, role: string) {
+  async fetchMessages(conversationOrSwapRequestId: string, userId: string, role: string, page: { limit?: number; before?: string; after?: string } = {}) {
     // Check conversation ownership
     const conv = await prisma.swapConversation.findFirst({
       where: {
@@ -447,16 +448,31 @@ export const swapService = {
       },
     });
 
-    if (conv && conv.user1Id !== userId && conv.user2Id !== userId && role !== 'admin' && role !== 'moderator') {
-      throw new Error('You are not authorized to view this conversation');
+    if (!conv) throw new HttpError(404, 'Conversation not found.');
+    if (conv.user1Id !== userId && conv.user2Id !== userId && role !== 'admin' && role !== 'moderator') {
+      throw new HttpError(403, 'You are not authorized to view this conversation');
     }
 
-    const swapRequestId = conv ? conv.id : conversationOrSwapRequestId;
+    if (page.before && page.after) throw new HttpError(400, 'Choose one paging direction.');
+    const cursor = decodeCursor(page.before ?? page.after);
+    const limit = Math.min(50, Math.max(1, page.limit ?? 40));
+    const forward = Boolean(page.after);
+    const swapRequestId = conv.id;
     const rows = await prisma.swapMessage.findMany({
-      where: { swapRequestId },
-      orderBy: { timestamp: 'asc' },
+      where: { swapRequestId, ...(cursor ? { OR: [
+        { timestamp: { [forward ? 'gt' : 'lt']: new Date(cursor.at) } },
+        { timestamp: new Date(cursor.at), id: { [forward ? 'gt' : 'lt']: cursor.id } },
+      ] } : {}) },
+      orderBy: [{ timestamp: forward ? 'asc' : 'desc' }, { id: forward ? 'asc' : 'desc' }],
+      take: limit + 1,
     });
-    return rows.map(formatMessage);
+    const items = rows.slice(0, limit);
+    const edge = items[items.length - 1];
+    const nextCursor = rows.length > limit && edge ? encodeCursor({ id: edge.id, at: edge.timestamp.toISOString() }) : null;
+    const chronological = forward ? items : items.reverse();
+    const newest = chronological[chronological.length - 1];
+    return { items: chronological.map(formatMessage), nextCursor,
+      newestCursor: newest ? encodeCursor({ id: newest.id, at: newest.timestamp.toISOString() }) : null };
   },
 
   async sendMessage(conversationOrSwapRequestId: string, senderId: string, role: string, text: string, imageUrl?: string) {
@@ -469,11 +485,12 @@ export const swapService = {
       },
     });
 
-    if (conv && conv.user1Id !== senderId && conv.user2Id !== senderId && role !== 'admin' && role !== 'moderator') {
-      throw new Error('You are not authorized to send messages in this conversation');
+    if (!conv) throw new HttpError(404, 'Conversation not found.');
+    if (conv.user1Id !== senderId && conv.user2Id !== senderId && role !== 'admin' && role !== 'moderator') {
+      throw new HttpError(403, 'You are not authorized to send messages in this conversation');
     }
 
-    const swapRequestId = conv ? conv.id : conversationOrSwapRequestId;
+    const swapRequestId = conv.id;
     const row = await prisma.swapMessage.create({
       data: {
         swapRequestId,
@@ -497,7 +514,9 @@ export const swapService = {
         ],
       },
     });
-    const swapRequestId = conv ? conv.id : conversationOrSwapRequestId;
+    if (!conv) throw new HttpError(404, 'Conversation not found.');
+    if (conv.user1Id !== userId && conv.user2Id !== userId) throw new HttpError(403, 'You are not authorized to view this conversation');
+    const swapRequestId = conv.id;
 
     await prisma.swapMessage.updateMany({
       where: {

@@ -74,11 +74,13 @@ function SwapListingCardComponent({
   onPress,
   onSwap,
   isOwnListing,
+  lastInList = false,
 }: {
   listing: SwapListing;
   onPress: () => void;
   onSwap?: () => void;
   isOwnListing?: boolean;
+  lastInList?: boolean;
 }) {
   const { theme, isDark } = useTheme();
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -115,7 +117,7 @@ function SwapListingCardComponent({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
-      <Animated.View style={[localStyles.card, { transform: [{ scale: scaleValue }], backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+      <Animated.View style={[localStyles.card, lastInList && { marginBottom: 0 }, { transform: [{ scale: scaleValue }], backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
       {images.length > 0 ? (
         <View style={localStyles.cardImageWrapper}>
           <Image
@@ -641,5 +643,6 @@ export const SwapListingCard = memo(
   SwapListingCardComponent,
   (prevProps, nextProps) =>
     prevProps.listing === nextProps.listing &&
-    prevProps.isOwnListing === nextProps.isOwnListing
+    prevProps.isOwnListing === nextProps.isOwnListing &&
+    prevProps.lastInList === nextProps.lastInList
 );

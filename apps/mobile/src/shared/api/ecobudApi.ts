@@ -373,6 +373,8 @@ export interface EcoEvent {
   rejectionReason?: string;
 }
 
+export interface CursorPage<T> { items: T[]; nextCursor: string | null }
+
 export interface TransparencyFeed {
   metrics: {
     totalActions: number;
@@ -409,6 +411,7 @@ export interface ProfileData {
   } | null;
   badges: EcoBadge[];
   eventHistory: (EcoEvent & { status: string; attendedAt?: string | null })[];
+  eventHistoryHasMore?: boolean;
   progress: {
     lessonsCompleted: number;
     activeChallenges: number;
@@ -914,8 +917,13 @@ export const ecobudApi = {
     request<LeaderboardData>('/experience/leaderboard', { token }),
   fetchAnnouncements: (token: string, id?: string) =>
     request<{ items: ResidentAnnouncement[] }>(`/announcements${id ? `?id=${encodeURIComponent(id)}` : ''}`, { token }),
-  fetchEvents: (token?: string) =>
-    request<{ items: EcoEvent[] }>('/events', token ? { token } : undefined),
+  fetchEvents: (token?: string, page: { cursor?: string; limit?: number; scope?: 'all' | 'home' | 'browse' | 'joined' | 'past'; id?: string } = {}) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(page)) if (value !== undefined) query.set(key, String(value));
+    return request<CursorPage<EcoEvent>>(`/events?${query}`, token ? { token } : undefined);
+  },
+  fetchRewardHistory: (token: string, cursor?: string) =>
+    request<CursorPage<TransparencyFeed['logs'][number]>>(`/users/me/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { token }),
   joinEvent: (token: string, eventId: string) =>
     request(`/events/${eventId}/join`, { method: 'POST', token, body: {} }),
   submitEventAttendance: (token: string, eventId: string, imageUri: string, qrData: string, onProgress?: (progress: number) => void) => {
@@ -1002,6 +1010,12 @@ export const ecobudApi = {
     request<any[]>('/swap/conversations', { token }),
   fetchSwapMessages: (token: string, swapRequestId: string) =>
     request<any[]>(`/swap/conversations/${swapRequestId}/messages`, { token }),
+  fetchSwapMessagePage: (token: string, conversationId: string, page: { before?: string; after?: string } = {}) => {
+    const query = new URLSearchParams({ paged: '1', limit: '40' });
+    if (page.before) query.set('before', page.before);
+    if (page.after) query.set('after', page.after);
+    return request<CursorPage<any> & { newestCursor: string | null }>(`/swap/conversations/${conversationId}/messages?${query}`, { token });
+  },
   sendSwapMessage: (token: string, swapRequestId: string, text: string, imageUrl?: string) =>
     request<any>(`/swap/conversations/${swapRequestId}/messages`, {
       method: 'POST',

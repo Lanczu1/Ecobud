@@ -518,6 +518,7 @@ model Event {
   rewards        RewardTransaction[]
 
   @@index([startDatetime, endDatetime])
+  @@index([isPublished, isFeatured(sort: Desc), startDatetime, id], map: "events_mobile_cursor_idx")
   @@index([isFeatured])
   @@index([managedById])
 }
@@ -618,6 +619,7 @@ model TransparencyLog {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, timestamp])
+  @@index([userId, timestamp, id], map: "history_user_cursor_idx")
   @@index([timestamp])
 }
 
@@ -873,6 +875,7 @@ model SwapMessage {
 
   @@index([swapRequestId])
   @@index([senderId])
+  @@index([swapRequestId, timestamp, id], map: "swap_messages_cursor_idx")
   @@map("swap_messages")
 }
 

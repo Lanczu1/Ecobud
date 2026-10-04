@@ -2,7 +2,8 @@ import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { swapReportSchema } from '../services/swapReportService';
-import { errorBoundary } from '../http/errorResponder';
+import { errorBoundary, HttpError } from '../http/errorResponder';
+import { pageLimit, decodeCursor } from '../http/cursorPagination';
 import { parseAdminPagination } from '../utils/adminPagination';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
 import { swapService } from '../services/swapService';
@@ -253,16 +254,15 @@ router.get('/conversations', authenticateRequest, async (req: AuthenticatedReque
 });
 
 // Fetch messages for a conversation (with IDOR protection)
-router.get('/conversations/:conversationId/messages', authenticateRequest, async (req: AuthenticatedRequest, res) => {
-  try {
-    const messages = await swapService.fetchMessages(req.params.conversationId, req.auth!.userId, req.auth!.role);
-    res.json(messages);
-  } catch (error: any) {
-    console.error('Error fetching messages:', error);
-    const status = error.message?.includes('authorized') ? 403 : 500;
-    res.status(status).json({ message: error.message || 'Internal server error' });
-  }
-});
+router.get('/conversations/:conversationId/messages', authenticateRequest, errorBoundary(async (req: AuthenticatedRequest, res) => {
+  const limit = pageLimit(req.query.limit);
+  decodeCursor(req.query.before);
+  decodeCursor(req.query.after);
+  const page = await swapService.fetchMessages(req.params.conversationId, req.auth!.userId, req.auth!.role, {
+    limit, before: req.query.before as string | undefined, after: req.query.after as string | undefined,
+  });
+  res.json(req.query.paged === '1' ? page : page.items);
+}));
 
 // Send message (with IDOR protection)
 router.post('/conversations/:conversationId/messages', authenticateRequest, async (req: AuthenticatedRequest, res) => {
@@ -312,21 +312,16 @@ router.post('/conversations/:conversationId/messages', authenticateRequest, asyn
     res.status(201).json(message);
   } catch (error: any) {
     console.error('Error sending message:', error);
-    const status = error.message?.includes('authorized') ? 403 : 500;
-    res.status(status).json({ message: error.message || 'Internal server error' });
+    const status = error instanceof HttpError ? error.statusCode : error.message?.includes('authorized') ? 403 : 500;
+    res.status(status).json({ message: status === 500 ? 'Internal server error' : error.message });
   }
 });
 
 // Mark messages read
-router.patch('/conversations/:conversationId/read', authenticateRequest, async (req: AuthenticatedRequest, res) => {
-  try {
-    await swapService.markMessagesRead(req.params.conversationId, req.auth!.userId);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error marking messages read:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+router.patch('/conversations/:conversationId/read', authenticateRequest, errorBoundary(async (req: AuthenticatedRequest, res) => {
+  await swapService.markMessagesRead(req.params.conversationId, req.auth!.userId);
+  res.json({ success: true });
+}));
 
 // Fetch user's own listings
 router.get('/my-listings', authenticateRequest, async (req: AuthenticatedRequest, res) => {

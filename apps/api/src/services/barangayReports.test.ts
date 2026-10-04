@@ -110,6 +110,8 @@ describe('barangay report isolation and exports', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(excel.body);
     expect(workbook.getWorksheet('Barangay Report')?.getCell('B2').value).toBe('Yukos');
+    expect(workbook.getWorksheet('Barangay Report')?.getCell('C2').value).toBe('October 1, 2026 to October 3, 2026');
+    expect(workbook.getWorksheet('Barangay Report')?.getCell('B3').value).toContain('(Philippine Time)');
     expect(workbook.worksheets.map(sheet => sheet.name)).toContain('Announcements (latest 20)');
   });
   it('allows admins to aggregate all barangays or select a specific barangay', async () => {

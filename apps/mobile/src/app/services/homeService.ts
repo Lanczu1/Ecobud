@@ -108,7 +108,7 @@ export const homeService = {
   },
 
   getEvents: (token?: string) =>
-    ecobudApi.fetchEvents(token).then((res: any) => (Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [])),
+    ecobudApi.fetchEvents(token, { scope: 'home', limit: 20 }).then(res => res.items),
 
   getTransparency: (token: string) =>
     ecobudApi.fetchTransparency(token),

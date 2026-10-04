@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { DeviceEventEmitter } from 'react-native';
 import {
   View,
@@ -80,9 +81,10 @@ export function MarketplaceFeed({
   const [showFilters, setShowFilters] = useState(false);
   const [myListings, setMyListings] = useState<SwapListing[]>(() => currentUserId ? swapService.getCachedMyListings(currentUserId) ?? [] : []);
   const [myListingsLoading, setMyListingsLoading] = useState(() => Boolean(currentUserId && !swapService.getCachedMyListings(currentUserId)));
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const createBtnScale = useRef(new Animated.Value(1)).current;
   const feedScrollRef = useRef<FlatList<typeof feedRows[number]>>(null);
+  const listPerformance = useListPerformance();
   const searchBarY = useRef(0);
   const searchFocused = useRef(false);
   const pendingSearchScroll = useRef(false);
@@ -258,14 +260,6 @@ export function MarketplaceFeed({
     return () => subscription.remove();
   }, [activeTab]);
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 400,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, []);
 
   const handleRefresh = useCallback(() => {
     if (activeTab === 'mylistings') {
@@ -310,18 +304,18 @@ export function MarketplaceFeed({
   }, [searchKeyboardHeight, activeTab, scrollToSearch]);
 
   const myListingsQuery = searchQuery.trim().toLocaleLowerCase();
-  const visibleMyListings = myListingsQuery
+  const visibleMyListings = useMemo(() => myListingsQuery
     ? myListings.filter((listing) =>
         [listing.title, listing.description, listing.category, listing.lookingFor]
           .some((value) => value?.toLocaleLowerCase().includes(myListingsQuery))
       )
-    : myListings;
+    : myListings, [myListingsQuery, myListings]);
 
-  const feedRows: Array<{ kind: 'hero' } | { kind: 'tabs' } | { kind: 'content' } | { kind: 'listing' | 'myListing'; listing: SwapListing }> = [
+  const feedRows = useMemo<Array<{ kind: 'hero' } | { kind: 'tabs' } | { kind: 'content' } | { kind: 'listing' | 'myListing'; listing: SwapListing }>>(() => [
     { kind: 'hero' }, { kind: 'tabs' }, { kind: 'content' },
     ...(activeTab === 'browse' && !loading ? listings.map((listing) => ({ kind: 'listing' as const, listing })) : []),
     ...(activeTab === 'mylistings' && !myListingsLoading ? visibleMyListings.map((listing) => ({ kind: 'myListing' as const, listing })) : []),
-  ];
+  ], [activeTab, loading, listings, myListingsLoading, visibleMyListings]);
 
   return (
     <>
@@ -332,10 +326,12 @@ export function MarketplaceFeed({
       initialNumToRender={6}
       maxToRenderPerBatch={5}
       windowSize={5}
+      updateCellsBatchingPeriod={50}
+      {...listPerformance}
       onEndReached={loadMoreListings}
       onEndReachedThreshold={0.5}
       ListFooterComponent={loadingMoreListings ? <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: verticalScale(14) }} /> : null}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         if (item.kind === 'hero') return (<>
       <View>
         {/* Compact page header â€” TopNavbar in MarketplaceHubView handles profile/logo/events/notifications */}
@@ -601,7 +597,7 @@ export function MarketplaceFeed({
                 {status === 'pending' && <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Waiting for admin approval</Text>}
               </View>}
 
-              <SwapListingCard listing={listing} isOwnListing={true} onPress={() => onSelectListing(listing)} />
+              <SwapListingCard listing={listing} lastInList={index === feedRows.length - 1} isOwnListing={true} onPress={() => onSelectListing(listing)} />
             </View>
           </Animated.View>;
         }
@@ -618,6 +614,7 @@ export function MarketplaceFeed({
                     </View>
                     <SwapListingCard
                       listing={listing}
+                      lastInList={index === feedRows.length - 1}
                       isOwnListing={listing.user.id === currentUserId}
                       onPress={() => onSelectListing(listing)}
                       onSwap={
@@ -635,7 +632,7 @@ export function MarketplaceFeed({
         scrollToSearch();
       }}
       style={[localStyles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={{ paddingBottom: verticalScale(96) + insets.bottom + searchKeyboardHeight, backgroundColor: theme.colors.background }}
+      contentContainerStyle={{ paddingBottom: 8 + searchKeyboardHeight, backgroundColor: theme.colors.background }}
       stickyHeaderIndices={[1]}
       removeClippedSubviews={Platform.OS === 'android'}
       scrollEventThrottle={32}

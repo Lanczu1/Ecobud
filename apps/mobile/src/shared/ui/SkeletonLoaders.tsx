@@ -1,3 +1,4 @@
+import { useScreenActive } from './ScreenActivity';
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle, useWindowDimensions, Easing } from 'react-native';
 import { Animated } from '../accessibility/animations';
@@ -18,7 +19,9 @@ export function SkeletonBox({
   const { theme, isDark } = useTheme();
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -37,7 +40,7 @@ export function SkeletonBox({
     );
     animation.start();
     return () => animation.stop();
-  }, [pulseAnim]);
+  }, [screenActive, pulseAnim]);
 
   return (
     <Animated.View
@@ -65,7 +68,9 @@ export function HomeViewSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -82,7 +87,7 @@ export function HomeViewSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [screenActive, pulseAnim, isDark]);
 
   const cardStyle = [
     {
@@ -204,7 +209,9 @@ export function HomeCardsSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -221,7 +228,7 @@ export function HomeCardsSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [screenActive, pulseAnim, isDark]);
 
   const cardStyle = [
     {
@@ -320,7 +327,9 @@ export function LearnViewSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -337,7 +346,7 @@ export function LearnViewSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [screenActive, pulseAnim, isDark]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -440,7 +449,9 @@ export function TrackerCardsSkeleton() {
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
   const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -457,7 +468,7 @@ export function TrackerCardsSkeleton() {
     );
     anim.start();
     return () => anim.stop();
-  }, [pulseAnim, isDark]);
+  }, [screenActive, pulseAnim, isDark]);
 
   const cardStyle = [
     {
@@ -537,7 +548,9 @@ export function LeaderboardSkeleton() {
   const opacity = useRef(new Animated.Value(0.52)).current;
   const bone = isDark ? theme.colors.cardBorder : '#E2EBE5';
 
+  const screenActive = useScreenActive();
   useEffect(() => {
+    if (!screenActive) return;
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.88, duration: 850, useNativeDriver: true }),
@@ -546,7 +559,7 @@ export function LeaderboardSkeleton() {
     );
     animation.start();
     return () => animation.stop();
-  }, [opacity]);
+  }, [screenActive, opacity]);
 
   const boneBar = (width: number | `${number}%`, height: number, borderRadius: number = 7) => (
     <View style={{ width, height, borderRadius, backgroundColor: bone }} />
