@@ -34,7 +34,6 @@ import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
 import { ListingReportsModal } from './ListingReportsModal';
-const reportNames = ['Fake Listing', 'Misleading Photos', 'Misleading Description', 'Unsafe Item', 'Inappropriate Content', 'Other'];
 
 interface SwapListingItem {
   id: string;
@@ -164,7 +163,6 @@ interface SwapListingCardProps {
   listing: SwapListingItem;
   onApprove: (id: string) => void;
   onOpenReject: (id: string) => void;
-  onOpenReport: (id: string) => void;
   onViewReports: (listing: SwapListingItem) => void;
   onDelete: (id: string) => void;
   onPreviewImages: (images: string[], initialIdx: number, title: string) => void;
@@ -175,7 +173,6 @@ function SwapListingCard({
   listing,
   onApprove,
   onOpenReject,
-  onOpenReport,
   onViewReports,
   onDelete,
   onPreviewImages,
@@ -486,13 +483,7 @@ function SwapListingCard({
               <CheckCircle className="w-3.5 h-3.5" /> Re-Approve
             </button>
           )}
-          <button
-            onClick={() => onOpenReport(listing.id)}
-            className="flex items-center justify-center px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 dark:border-amber-800/60 text-xs font-semibold rounded-xl transition-colors"
-            title="Flag/Report listing"
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-          </button>
+
           <button
             onClick={() => onDelete(listing.id)}
             className="flex items-center justify-center px-3 py-2 bg-gray-50 hover:bg-rose-50 text-gray-600 hover:text-rose-600 border border-gray-200 dark:bg-gray-800 dark:hover:bg-rose-950/60 dark:text-gray-400 dark:hover:text-rose-300 dark:border-gray-700 text-xs font-semibold rounded-xl transition-colors"
@@ -1084,101 +1075,6 @@ function RejectListingModal({
   );
 }
 
-// Report Modal using createPortal
-function ReportListingModal({
-  onClose,
-  onConfirm,
-}: {
-  onClose: () => void;
-  onConfirm: (reason: string, reportName: string) => Promise<void>;
-}) {
-  const [reason, setReason] = useState('');
-  const [reportName, setReportName] = useState('Fake Listing');
-  const [isClosing, setIsClosing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    const container = document.getElementById('admin-scroll-container');
-    const origContainerOverflow = container?.style.overflowY || '';
-    const origBodyOverflow = document.body.style.overflow;
-
-    if (container) container.style.overflowY = 'hidden';
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      if (container) container.style.overflowY = origContainerOverflow;
-      document.body.style.overflow = origBodyOverflow;
-    };
-  }, []);
-
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(onClose, 280);
-  };
-
-  const handleSubmit = async () => {
-    if (submitting || reason.trim().length < 5) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      await onConfirm(reason.trim(), reportName);
-      handleClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not flag this listing. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={handleClose}
-    >
-      <div
-        className={`relative z-10 bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col ${
-          isClosing ? 'animate-modal-exit' : 'animate-modal'
-        }`}
-        onClick={e => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-serif font-bold text-gray-900 dark:text-white mb-2">Report Listing</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Flag this listing for moderation review. It stays visible if approved. Reject it to hide it, or re-approve after review to clear the flag.</p>
-        <label className="mb-3 block text-sm font-semibold">Report Name
-          <select value={reportName} onChange={event => setReportName(event.target.value)} disabled={submitting} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800">
-            {reportNames.map(name => <option key={name}>{name}</option>)}
-          </select>
-        </label>
-        <textarea
-          value={reason}
-          onChange={e => setReason(e.target.value)}
-          placeholder="e.g. Fake listing, offensive content..."
-          maxLength={500}
-          className="w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-200 dark:focus:ring-amber-900 focus:border-amber-400 resize-none h-24"
-        />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Reason: 5–500 characters. Your account, report name, and reason will be saved for review.</p>
-        {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-        <div className="flex gap-3 mt-4">
-          <button
-            onClick={handleClose}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || reason.trim().length < 5}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-60"
-          >
-            {submitting ? 'Reporting...' : 'Report'}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 export function GiveAndGetHub() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -1190,7 +1086,6 @@ export function GiveAndGetHub() {
   const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean, background?: boolean) => Promise<void>>(async () => {});
   const fetchInFlightRef = useRef(false);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
-  const [reportModal, setReportModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [detailsModalListing, setDetailsModalListing] = useState<SwapListingItem | null>(null);
   const [reportsListing, setReportsListing] = useState<SwapListingItem | null>(null);
 
@@ -1282,23 +1177,6 @@ export function GiveAndGetHub() {
     }
   };
 
-  const handleReportConfirm = async (reason: string, reportName: string) => {
-    if (!reportModal.listingId) return;
-    try {
-      await adminPatch(`/give-and-get/swap-listings/${reportModal.listingId}/report`, { reason, reportName });
-      setListings(prev =>
-        prev.map(l => (l.id === reportModal.listingId ? { ...l, isReported: true, reportCount: l.reportCount + 1, ...(l.approvalStatus !== 'rejected' ? { reportReason: reason } : {}) } : l))
-      );
-      clearAdminApiCache('/give-and-get/swap-listings');
-      await fetchListingsRef.current(page, filterStatus, search, true, true);
-      toast.success('Listing reported.');
-    } catch (error: any) {
-      console.error('Failed to report listing', error);
-      toast.error(error.message || 'Failed to report listing');
-      throw error;
-    }
-  };
-
   const handleDeleteListing = (id: string) => {
     const found = listings.find(l => l.id === id) || null;
     setDeleteListingModal({ open: true, listing: found || ({ id, title: 'this listing' } as SwapListingItem) });
@@ -1379,14 +1257,6 @@ export function GiveAndGetHub() {
         />
       )}
 
-      {/* Report Modal via Portal */}
-      {reportModal.open && reportModal.listingId && (
-        <ReportListingModal
-          onClose={() => setReportModal({ open: false, listingId: null })}
-          onConfirm={handleReportConfirm}
-        />
-      )}
-
       {/* Header */}
       {reportsListing && <ListingReportsModal key={reportsListing.id} listing={reportsListing} onClose={() => setReportsListing(null)} />}
       <div className="flex items-center justify-between">
@@ -1464,7 +1334,6 @@ export function GiveAndGetHub() {
               listing={listing}
               onApprove={handleApprove}
               onOpenReject={id => setRejectModal({ open: true, listingId: id })}
-              onOpenReport={id => setReportModal({ open: true, listingId: id })}
               onViewReports={setReportsListing}
               onDelete={handleDeleteListing}
               onPreviewImages={handlePreviewImages}

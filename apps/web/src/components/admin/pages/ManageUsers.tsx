@@ -59,8 +59,9 @@ function UserAvatar({ user }: { user: AdminUser }) {
 
 export function ManageUsers() {
   const [userPage, setUserPage] = useState(1);
-  const [userPagination, setUserPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [userPagination, setUserPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userStats, setUserStats] = useState({ total: 0, online: 0, offline: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -71,11 +72,12 @@ export function ManageUsers() {
 
   const loadUsers = async (page = userPage, query = search, tab = viewTab) => {
     try {
-      const params = new URLSearchParams({ page: String(page), pageSize: '25', role: tab === 'Members' ? 'user' : 'staff' });
+      const params = new URLSearchParams({ page: String(page), pageSize: '10', role: tab === 'Members' ? 'user' : 'staff' });
       if (query.trim()) params.set('search', query.trim());
-      const data = await adminGet<{ items: AdminUser[]; pagination: typeof userPagination }>(`/admin/users?${params.toString()}`, { bypassCache: true });
+      const data = await adminGet<{ items: AdminUser[]; pagination: typeof userPagination; stats: typeof userStats }>(`/admin/users?${params.toString()}`, { bypassCache: true });
       setUsers(data.items);
       setUserPagination(data.pagination);
+      setUserStats(data.stats);
       setError(null);
     } catch (err: any) {
       if (users.length === 0) {
@@ -96,6 +98,7 @@ export function ManageUsers() {
         void loadUsersRef.current();
       },
       onPresenceChange: (presence) => {
+        void loadUsersRef.current();
         const now = new Date().toISOString();
         setUsers(prev => prev.map(u => {
           const isOnlineNow = presence.onlineUserIds.includes(u.id);
@@ -120,6 +123,7 @@ export function ManageUsers() {
   }, [search, viewTab]);
 
   useEffect(() => {
+    setLoading(true);
     const timer = setTimeout(() => void loadUsers(userPage, search, viewTab), 300);
     return () => clearTimeout(timer);
   }, [userPage, search, viewTab]);
@@ -162,9 +166,6 @@ export function ManageUsers() {
       return matchTab && matchStatus && matchSearch;
     }), [users, search, filterStatus, viewTab]);
 
-  const tabUsers = users;
-  const totalOnline = tabUsers.filter(u => u.isOnlineNow).length;
-  const totalOffline = tabUsers.filter(u => !u.isOnlineNow).length;
 
   return (
     <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">
@@ -204,9 +205,9 @@ export function ManageUsers() {
       {/* Stats Row */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: `Total ${viewTab}`, value: loading ? '—' : tabUsers.length, color: 'text-gray-900', bg: 'bg-white' },
-          { label: 'Online', value: loading ? '—' : totalOnline, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Offline', value: loading ? '—' : totalOffline, color: 'text-red-600', bg: 'bg-red-50' },
+          { label: `Total ${viewTab}`, value: loading ? '—' : userStats.total, color: 'text-gray-900', bg: 'bg-white' },
+          { label: 'Online', value: loading ? '—' : userStats.online, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Offline', value: loading ? '—' : userStats.offline, color: 'text-red-600', bg: 'bg-red-50' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
@@ -381,7 +382,15 @@ export function ManageUsers() {
             ) : 'No users match your search.'}
           </div>
         )}
-        {!loading && <AdminPagination page={userPagination.page} totalPages={userPagination.totalPages} total={userPagination.total} onPageChange={setUserPage} />}
+        <fieldset disabled={loading} aria-label={`${viewTab} pagination`} className="min-w-0">
+          <AdminPagination
+            page={userPagination.page}
+            totalPages={userPagination.totalPages}
+            total={userPagination.total}
+            onPageChange={setUserPage}
+            showSinglePage
+          />
+        </fieldset>
       </div>
     </div>
   );

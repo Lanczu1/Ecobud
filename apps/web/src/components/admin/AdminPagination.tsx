@@ -3,10 +3,11 @@ interface AdminPaginationProps {
   totalPages: number;
   total: number;
   onPageChange: (page: number) => void;
+  showSinglePage?: boolean;
 }
 
-export function AdminPagination({ page, totalPages, total, onPageChange }: AdminPaginationProps) {
-  if (totalPages <= 1) return null;
+export function AdminPagination({ page, totalPages, total, onPageChange, showSinglePage = false }: AdminPaginationProps) {
+  if (!showSinglePage && totalPages <= 1) return null;
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-500">

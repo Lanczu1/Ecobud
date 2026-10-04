@@ -30,7 +30,7 @@ class AdminRealtimeService {
     this.timer = setInterval(() => {
       if (document.visibilityState === 'visible') this.notifyAll();
     }, 30_000);
-    window.addEventListener('visibilitychange', this.handleVisibility);
+    document.addEventListener('visibilitychange', this.handleVisibility);
     window.addEventListener('focus', this.handleFocus);
     window.addEventListener('online', this.handleOnline);
   }
@@ -38,7 +38,7 @@ class AdminRealtimeService {
   private stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    window.removeEventListener('visibilitychange', this.handleVisibility);
+    document.removeEventListener('visibilitychange', this.handleVisibility);
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('online', this.handleOnline);
   }
