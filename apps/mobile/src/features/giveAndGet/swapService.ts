@@ -130,12 +130,6 @@ export const swapService = {
   reportListing(id: string, reason: string, reportName: string) {
     return ecobudApi.reportSwapListing(authToken, id, reason, reportName);
   },
-  fetchListingRating(id: string) {
-    return ecobudApi.fetchSwapListingRating(authToken, id);
-  },
-  rateListing(id: string, stars: number) {
-    return ecobudApi.rateSwapListing(authToken, id, stars);
-  },
   fetchListingReports(id: string, page = 1) {
     return ecobudApi.fetchSwapListingReports(authToken, id, page);
   },

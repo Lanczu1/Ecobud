@@ -1,5 +1,4 @@
 import { prisma } from '../prismaClient';
-import { Prisma } from '@prisma/client';
 import { submitSwapReport, swapReportSchema } from './swapReportService';
 import { awardContentBadge } from './contentBadgeService';
 import { awardMilestoneBadges } from './badgeMilestoneService';
@@ -120,23 +119,6 @@ function formatListing(row: any) {
   };
 }
 
-/** Average stars across each owner's listings, rounded to one decimal. Owners with no ratings are absent. */
-export async function ownerRatingAverages(userIds: string[]): Promise<Map<string, number>> {
-  const ids = [...new Set(userIds.filter(Boolean))];
-  if (!ids.length) return new Map();
-  const rows = await prisma.$queryRaw<{ user_id: string; average: number }[]>`
-    SELECT l."user_id", AVG(r."stars")::float AS average
-    FROM "swap_listing_ratings" r JOIN "swap_listings" l ON l."id" = r."listing_id"
-    WHERE l."user_id" IN (${Prisma.join(ids)}) GROUP BY l."user_id"`;
-  return new Map(rows.map(row => [row.user_id, Math.round(row.average * 10) / 10]));
-}
-
-async function withOwnerRatings<T extends { user: { id: string; rating: number } }>(listings: T[]): Promise<T[]> {
-  const averages = await ownerRatingAverages(listings.map(listing => listing.user.id));
-  for (const listing of listings) listing.user.rating = averages.get(listing.user.id) ?? 0;
-  return listings;
-}
-
 function formatMessage(row: any) {
   return {
     id: row.id,
@@ -193,7 +175,7 @@ export const swapService = {
       take: limit,
     });
 
-    return withOwnerRatings(rows.map(formatListing));
+    return rows.map(formatListing);
   },
 
   async fetchListingById(id: string) {
@@ -202,7 +184,7 @@ export const swapService = {
       include: profileInclude,
     });
     if (!row) return null;
-    return (await withOwnerRatings([formatListing(row)]))[0];
+    return formatListing(row);
   },
 
   async createListing(input: CreateListingInput) {
@@ -552,7 +534,7 @@ export const swapService = {
       include: profileInclude,
       orderBy: { createdAt: 'desc' },
     });
-    return withOwnerRatings(rows.map(formatListing));
+    return rows.map(formatListing);
   },
 
   async uploadImage(userId: string, file: Express.Multer.File) {
