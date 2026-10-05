@@ -11,6 +11,7 @@ import {
   ExternalLink, ChevronLeft, ChevronRight, Tag
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './Announcements.css';
@@ -402,6 +403,12 @@ export function Announcements() {
   const [editor, setEditor] = useState<Announcement | null>(null);
   useDraftAutosave(drafts, { form: editor ?? blank(), imageFiles: pendingImages }, !!editor && !editor.id);
   const [details, setDetails] = useState<Announcement | null>(null);
+  useEffect(() => {
+    const target=notificationTarget('announcement'); if (!target) return;
+    let cancelled=false;
+    void adminGet<Announcement>(`/admin/announcements/${encodeURIComponent(target)}`,{ bypassCache:true }).then(item=>{ if (!cancelled) setDetails(item); }).catch(e=>{ if (!cancelled) setError(e.message); });
+    return () => { cancelled=true; };
+  },[]);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; item: Announcement | null }>({
     open: false,

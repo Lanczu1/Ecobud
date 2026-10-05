@@ -30,6 +30,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPut, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
@@ -1112,6 +1113,7 @@ export function GiveAndGetHub() {
     try {
       if (!background) setLoading(true);
       const params = new URLSearchParams({ page: String(pageToLoad), pageSize: '25' });
+      const target=notificationTarget('listing','listing_report'); if (target) params.set('recordId',target);
       if (['pending', 'approved', 'rejected'].includes(statusToLoad)) params.set('status', statusToLoad);
       if (statusToLoad === 'reported') params.set('reported', 'true');
       if (searchToLoad.trim()) params.set('search', searchToLoad.trim());

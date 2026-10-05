@@ -4,6 +4,8 @@ import { WebAuthView } from './components/WebAuthView';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminSection } from './components/admin/AdminSidebar';
 import { ToastProvider } from './context/ToastContext';
+import { AdminNotificationProvider } from './components/admin/AdminNotificationProvider';
+import { adminHref, revokeAdminPushSession } from './services/adminNotifications';
 
 const WEB_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 const WEB_ABSOLUTE_TIMEOUT_MS = 12 * 60 * 60 * 1000;
@@ -11,6 +13,7 @@ const WEB_SESSION_STARTED_KEY = 'ecobud_admin_session_started_at';
 const WEB_LAST_ACTIVITY_KEY = 'ecobud_admin_last_activity_at';
 
 function clearStoredAdminSession() {
+  if (localStorage.getItem('ecobud_admin_token')) void revokeAdminPushSession().catch(() => {});
   localStorage.removeItem('ecobud_admin_token');
   localStorage.removeItem('ecobud_admin_user');
   localStorage.removeItem('ecobud_admin_authenticated');
@@ -32,6 +35,7 @@ function hasValidStoredAdminSession(): boolean {
 
 const Dashboard = lazy(() => import('./components/admin/Dashboard').then((m) => ({ default: m.Dashboard })));
 const IdVerification = lazy(() => import('./components/admin/pages/IdVerification').then(m => ({ default: m.IdVerification })));
+const Notifications = lazy(() => import('./components/admin/pages/Notifications').then(m => ({ default: m.Notifications })));
 const ManageUsers = lazy(() => import('./components/admin/pages/ManageUsers').then((m) => ({ default: m.ManageUsers })));
 const UserActivityTransactions = lazy(() => import('./components/admin/pages/UserActivityTransactions').then(m => ({ default: m.UserActivityTransactions })));
 const LearningContent = lazy(() => import('./components/admin/pages/LearningContent').then((m) => ({ default: m.LearningContent })));
@@ -66,6 +70,7 @@ function renderSection(section: AdminSection, role?: string) {
       {(() => {
         switch (accessibleSection) {
           case 'Dashboard':        return <Dashboard />;
+          case 'Notifications':    return <Notifications />;
           case 'ID Verification': return role === 'moderator' ? <IdVerification /> : <Dashboard />;
           case 'Users':            return <ManageUsers />;
           case 'User Activity & Transactions': return role === 'admin' ? <UserActivityTransactions /> : <Challenges />;
@@ -73,7 +78,7 @@ function renderSection(section: AdminSection, role?: string) {
           case 'Challenges':       return <Challenges />;
           case 'Badges':           return <Badges />;
           case 'Events':           return <Events />;
-          case 'Give and Get Hub': return <GiveAndGetHub />;
+          case 'Give and Get Hub': return role === 'moderator' ? <GiveAndGetHub /> : <Dashboard />;
           case 'Redeem':          return <Redeem />;
           case 'Reports':          return role === 'moderator' ? <BarangayReports role="moderator" /> : <Reports />;
           case 'Announcements':    return <Announcements />;
@@ -85,6 +90,7 @@ function renderSection(section: AdminSection, role?: string) {
 }
 
 export default function App() {
+  const [routeHash,setRouteHash]=useState(window.location.hash);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return hasValidStoredAdminSession();
@@ -113,6 +119,21 @@ export default function App() {
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('ecobud_dark_mode') === 'true';
   });
+
+  useEffect(() => {
+    const update=() => setRouteHash(window.location.hash);
+    window.addEventListener('hashchange',update);
+    return () => window.removeEventListener('hashchange',update);
+  },[]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const section=new URLSearchParams(routeHash.split('?')[1] || '').get('section');
+    const allowed: AdminSection[]=['Dashboard','Announcements','Notifications','ID Verification','Users','Learning Content','Challenges','Badges','Events','Give and Get Hub','Redeem','User Activity & Transactions','Reports'];
+    if (section === 'Give and Get Hub' && adminUserRole !== 'moderator') {
+      setActiveSection('Dashboard');
+      window.location.hash = adminHref('Dashboard');
+    } else if (allowed.includes(section as AdminSection)) setActiveSection(section as AdminSection);
+  },[routeHash,isAuthenticated,adminUserRole]);
 
   useEffect(() => {
     // Temporarily suppress all transitions so all elements switch theme simultaneously in one instant pass
@@ -228,8 +249,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
     clearStoredAdminSession();
+    setIsAuthenticated(false);
+    window.location.hash='';
   };
 
   const toggleDarkMode = () => {
@@ -239,15 +261,20 @@ export default function App() {
   if (isAuthenticated) {
     return (
       <ToastProvider>
+        <AdminNotificationProvider>
         <AdminLayout
           onLogout={handleLogout}
           activeSection={activeSection}
-          onNavigate={setActiveSection}
+          onNavigate={section => { window.location.hash=adminHref(section); setActiveSection(section); }}
           isDark={isDark}
           onToggleDark={toggleDarkMode}
         >
-          {renderSection(activeSection, adminUserRole)}
+          <div key={activeSection==='Notifications' ? 'notifications' : routeHash}>
+            {new URLSearchParams(routeHash.split('?')[1] || '').has('record') && <div className="m-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Showing the linked record. If it was removed or your access changed, it may no longer be available. <a className="underline" href={adminHref(activeSection)}>Return to all records</a></div>}
+            {renderSection(activeSection, adminUserRole)}
+          </div>
         </AdminLayout>
+        </AdminNotificationProvider>
       </ToastProvider>
     );
   }

@@ -41,7 +41,7 @@ export class AdminController {
       const { page, pageSize } = parseAdminPagination(req.query);
       const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-      const lessons = await AdminService.getAllLessons(page, pageSize, search, status);
+      const lessons = await AdminService.getAllLessons(page, pageSize, search, status, typeof req.query.recordId==='string' ? req.query.recordId : undefined);
       return res.status(200).json(lessons);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to retrieve lessons." });
@@ -397,7 +397,7 @@ export class AdminController {
       const { page, pageSize } = parseAdminPagination(req.query);
       const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-      const items = await AdminService.getAllChallenges(page, pageSize, search, status);
+      const items = await AdminService.getAllChallenges(page, pageSize, search, status, typeof req.query.recordId==='string' ? req.query.recordId : undefined);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch challenges." });
@@ -510,6 +510,7 @@ export class AdminController {
   static async getSubmissions(req: AuthenticatedRequest, res: Response) {
     try {
       const isModerator = req.auth?.role === 'moderator';
+      if (isModerator && !req.auth?.city?.trim()) return res.status(403).json({ message:'A barangay assignment is required to review submissions.' });
       // For moderators: strictly enforce their assigned barangay, completely ignore query param
       // For admins: optionally allow filtering by query param if provided
       const filterBarangay = isModerator
@@ -525,7 +526,7 @@ export class AdminController {
           status: typeof req.query.status === 'string' ? req.query.status : undefined,
           userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
         } : undefined;
-      const items = await AdminService.getSubmissions(filterBarangay, submissionType, page, pageSize, groupFilters);
+      const items = await AdminService.getSubmissions(filterBarangay, submissionType, page, pageSize, groupFilters, typeof req.query.recordId==='string' ? req.query.recordId : undefined);
       return res.status(200).json(items);
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch submissions." });
@@ -642,7 +643,12 @@ export class AdminController {
       const { page, pageSize } = parseAdminPagination(req.query);
       const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
       const barangay = typeof req.query.barangay === 'string' ? req.query.barangay : undefined;
-      const items = await AdminService.getAllEvents(page, pageSize, search, barangay);
+      const recordId = typeof req.query.recordId==='string' ? req.query.recordId : undefined;
+      if (recordId && req.auth!.role==='moderator') {
+        const target=await prisma.event.findUnique({ where:{ id:recordId },select:{ barangay:true } });
+        if (!req.auth!.city || (target?.barangay && target.barangay.toLowerCase()!==req.auth!.city.trim().toLowerCase())) return res.status(404).json({ message:'Event is outside your assigned barangay.' });
+      }
+      const items = await AdminService.getAllEvents(page, pageSize, search, barangay, recordId);
       return res.status(200).json({ ...items, items: items.items.map(item => ({ ...item, canManage: canManageEvent(req.auth!, item) })) });
     } catch (error: any) {
       return res.status(500).json({ message: "Failed to fetch events." });

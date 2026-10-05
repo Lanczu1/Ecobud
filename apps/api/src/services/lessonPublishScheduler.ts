@@ -1,5 +1,6 @@
 import { prisma } from '../prismaClient';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
+import { recordAdminWorkerFailure, resolveAdminWorkerFailure } from './adminPushService';
 
 const PUBLISH_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 
@@ -41,8 +42,10 @@ const runPublishTick = async () => {
       ]);
       console.log(`Auto-published lesson: ${lesson.title}`);
     }
+    await resolveAdminWorkerFailure('lesson-publisher');
   } catch (error) {
     console.error('Lesson publish check tick failed.', error);
+    await recordAdminWorkerFailure('lesson-publisher');
   } finally {
     publishInFlight = false;
   }

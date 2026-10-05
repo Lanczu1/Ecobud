@@ -24,13 +24,14 @@ function runSubmissionFollowUps(label: string, tasks: Array<() => Promise<unknow
 }
 
 export class AdminService {
-  static async getAllLessons(page = 1, pageSize = 25, search?: string, status?: string) {
+  static async getAllLessons(page = 1, pageSize = 25, search?: string, status?: string, recordId?: string) {
     const where: any = {};
+    if (recordId) where.id=recordId;
     if (search) where.title = { contains: search, mode: 'insensitive' };
     if (status === 'Published') where.isPublished = true;
     if (status === 'Draft') { where.isPublished = false; where.scheduledAt = null; }
     if (status === 'Auto Publish') { where.isPublished = false; where.scheduledAt = { not: null }; }
-    return apiCache.getOrSet(`admin_lessons_list:${page}:${pageSize}:${status || 'All'}:${search || ''}`, 30, async () => {
+    return apiCache.getOrSet(`admin_lessons_list:${page}:${pageSize}:${status || 'All'}:${search || ''}:${recordId || ''}`, 30, async () => {
       const startedAt = Date.now();
 
       try {
@@ -413,14 +414,15 @@ export class AdminService {
   }
 
   // Challenge Management
-  static async getAllChallenges(page = 1, pageSize = 25, search?: string, status?: string) {
+  static async getAllChallenges(page = 1, pageSize = 25, search?: string, status?: string, recordId?: string) {
     const now = new Date();
     const where: any = {};
+    if (recordId) where.id=recordId;
     if (search) where.title = { contains: search, mode: 'insensitive' };
     if (status === 'Expired') where.endDate = { lt: now };
     if (status === 'Active') { where.active = true; where.OR = [{ endDate: null }, { endDate: { gte: now } }]; }
     if (status === 'Inactive') { where.active = false; where.OR = [{ endDate: null }, { endDate: { gte: now } }]; }
-    return apiCache.getOrSet(`admin_challenges_list:${page}:${pageSize}:${status || 'All'}:${search || ''}`, 30, async () => {
+    return apiCache.getOrSet(`admin_challenges_list:${page}:${pageSize}:${status || 'All'}:${search || ''}:${recordId || ''}`, 30, async () => {
       const [items, total] = await Promise.all([
         prisma.challenge.findMany({ where, skip: (page - 1) * pageSize, take: pageSize, orderBy: { createdAt: 'desc' } }),
         prisma.challenge.count({ where }),
@@ -713,16 +715,18 @@ export class AdminService {
     page = 1,
     pageSize = 25,
     groupFilters?: ChallengeSubmissionPageFilters,
+    recordId?: string,
   ) {
     const skip = (page - 1) * pageSize;
     const readSkip = submissionType === 'all' ? 0 : skip;
     const readTake = submissionType === 'all' ? skip + pageSize : pageSize;
     const barangay = filterBarangay?.trim() || undefined;
-    const groupedPage = submissionType === 'challenge' && groupFilters
+    const groupedPage = submissionType === 'challenge' && groupFilters && !recordId
       ? await selectChallengeSubmissionPage(barangay, page, groupFilters) : null;
-    const where = groupedPage ? { id: { in: groupedPage.ids } } : barangay
+    const scope = groupedPage ? { id: { in: groupedPage.ids } } : barangay
       ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
       : undefined;
+    const where = recordId ? { ...scope,id:recordId } : scope;
     const challengeSubs = submissionType === 'event' ? [] : await prisma.challengeSubmission.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -821,6 +825,11 @@ export class AdminService {
     ]);
     const items = submissionType === 'all' ? unified.slice(skip, skip + pageSize) : unified;
     const total = challengeTotal + eventTotal;
+    if (recordId && submissionType==='challenge' && groupFilters) {
+      const residents=new Map(challengeSubs.map(item=>[item.userId,{ id:item.userId,name:item.user.profile?.displayName || item.user.name }]));
+      const barangays=[...new Set(challengeSubs.map(item=>item.user.profile?.city?.trim() || 'Unassigned Barangay'))];
+      return { items,pagination:{ page,pageSize,total,totalPages:Math.max(1,Math.ceil(total/pageSize)),totalResidents:residents.size,totalBarangays:barangays.length },filterOptions:{ users:[...residents.values()],barangays } };
+    }
     return { items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
@@ -1208,10 +1217,11 @@ export class AdminService {
   }
 
   // Event Management
-  static async getAllEvents(page = 1, pageSize = 25, search?: string, barangay?: string) {
+  static async getAllEvents(page = 1, pageSize = 25, search?: string, barangay?: string, recordId?: string) {
     const where: any = search ? { title: { contains: search, mode: 'insensitive' } } : {};
+    if (recordId) where.id=recordId;
     if (barangay) where.barangay = barangay === 'all-residents' ? null : barangay;
-    return apiCache.getOrSet(`admin_events:${page}:${pageSize}:${search || ''}:${barangay || ''}`, 15, async () => {
+    return apiCache.getOrSet(`admin_events:${page}:${pageSize}:${search || ''}:${barangay || ''}:${recordId || ''}`, 15, async () => {
       const now = new Date();
       const upcomingWhere = { ...where, startDatetime: { gte: now } };
       const pastWhere = { ...where, startDatetime: { lt: now } };

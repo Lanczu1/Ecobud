@@ -55,7 +55,8 @@ function assignedBarangay(req: AuthenticatedRequest) {
 idVerificationRoutes.get('/review', errorBoundary(async (req: AuthenticatedRequest, res) => {
   const status = z.enum(['pending', 'approved', 'rejected']).default('pending').parse(req.query.status);
   const page = z.coerce.number().int().min(1).max(10000).default(1).parse(req.query.page);
-  const where = { barangay: assignedBarangay(req), status };
+  const recordId = typeof req.query.recordId==='string' ? req.query.recordId : undefined;
+  const where = { barangay: assignedBarangay(req), ...(recordId ? { id:recordId } : { status }) };
   const [items, total] = await Promise.all([
     prisma.idVerificationSubmission.findMany({ where, orderBy: { submittedAt: 'asc' }, skip: (page - 1) * 20, take: 20, select: { ...publicSubmission, barangay: true, user: { select: { name: true, email: true } }, reviewer: { select: { name: true } } } }),
     prisma.idVerificationSubmission.count({ where }),

@@ -1,5 +1,7 @@
 import { startIdDocumentCleanup, stopIdDocumentCleanup } from './services/idDocumentCleanup';
 import { notificationRoutes } from './routes/notificationRoutes';
+import { adminNotificationRoutes } from './routes/adminNotificationRoutes';
+import { startAdminNotificationWorker, stopAdminNotificationWorker } from './services/adminPushService';
 import { idVerificationRoutes } from './routes/idVerificationRoutes';
 import { announcementAdminRoutes, announcementResidentRoutes } from './routes/announcementRoutes';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationService';
@@ -202,6 +204,7 @@ app.use('/api/transparency', transparencyRoutes);
 app.use('/api/experience', experienceRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/notifications', adminNotificationRoutes);
 app.use('/api/admin/announcements', announcementAdminRoutes);
 app.use('/api/announcements', announcementResidentRoutes);
 app.use('/api/give-and-get', giveAndGetRoutes);
@@ -220,6 +223,7 @@ const server = app.listen(port, process.env.HOST || (production ? '127.0.0.1' : 
 
 startPresenceCleanupScheduler();
 startLessonPublishScheduler(); startNotificationWorker(); startIdDocumentCleanup();
+startAdminNotificationWorker();
 
 let shuttingDown = false;
 const shutdownSchedulers = () => {
@@ -227,6 +231,7 @@ const shutdownSchedulers = () => {
   shuttingDown = true;
   stopPresenceCleanupScheduler();
   stopLessonPublishScheduler(); stopNotificationWorker(); stopIdDocumentCleanup();
+  stopAdminNotificationWorker();
   server.close(() => {
     void prisma.$disconnect().finally(() => process.exit(0));
   });

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -776,7 +777,7 @@ export function Events() {
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; event: AdminEvent | null }>({ open: false, event: null });
   const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null, expiresAt?: string, createdAt?: string }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
-  const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>(notificationTarget('event_submission') ? 'submissions' : 'events');
   const adminUser = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
   }, []);
@@ -814,6 +815,7 @@ export function Events() {
     if (showLoading) setSubmissionsLoading(true);
     try {
       const params = new URLSearchParams({ type: 'event', page: String(page), pageSize: '25' });
+      const target=notificationTarget('event_submission'); if (target) params.set('recordId',target);
       if (adminUser?.role === 'moderator' && adminUser.city) params.set('barangay', adminUser.city);
       const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?${params.toString()}`, { bypassCache: true });
       setSubmissions(data.items.filter(submission =>
@@ -834,6 +836,7 @@ export function Events() {
     eventsRefreshInFlight.current = true;
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      const target=notificationTarget('event'); if (target) params.set('recordId',target);
       if (search.trim()) params.set('search', search.trim());
       if (barangayFilter) params.set('barangay', barangayFilter);
       const data = await adminGet<{ items: AdminEvent[]; pagination: typeof eventPagination }>(`/admin/events?${params.toString()}`, { bypassCache: fresh });
