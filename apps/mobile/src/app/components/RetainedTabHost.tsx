@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
-import type { AppTab, EcoBudMobileModel } from '../types/home';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AppState, Easing, StyleSheet, View } from 'react-native';import type { AppTab, EcoBudMobileModel } from '../types/home';
 import { retainTabs, warmTab, nextWarmTab } from '../utils/retainedTabs';
 import { ScreenActivityContext } from '../../shared/ui/ScreenActivity';
+import { Animated } from '../../shared/accessibility/animations';
+import { isLowEndDevice } from '../../shared/performance/deviceTier';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 type PageProps = {
   tab: AppTab;
@@ -12,15 +14,36 @@ type PageProps = {
   render: (tab: AppTab, model: EcoBudMobileModel) => React.ReactNode;
 };
 
+const fade = Easing.out(Easing.quad);
+
+// A page that is being hidden keeps its last frame instead of rendering again,
+// so a tab switch only pays for the page that is coming in.
+const RetainedTabContent = React.memo(function RetainedTabContent({ tab, model, render }: Pick<PageProps, 'tab' | 'visible' | 'model' | 'render'>) {
+  return <>{render(tab, model)}</>;
+}, (_previous, next) => !next.visible);
+
 export const RetainedTabPage = React.memo(function RetainedTabPage({ tab, visible, exposed, model, render }: PageProps) {
-  return <View style={[StyleSheet.absoluteFill, { opacity: visible ? 1 : 0, zIndex: visible ? 1 : 0 }]}
+  const lite = isLowEndDevice();
+  const { theme } = useTheme();
+  const progress = useRef(new Animated.Value(0)).current;
+  const duration = lite ? 140 : 260;
+  // Cross-fade: the incoming page fades in on top while the outgoing page stays
+  // put underneath, then drops out once the incoming page has covered it.
+  useLayoutEffect(() => {
+    const animation = visible
+      ? Animated.timing(progress, { toValue: 1, duration, easing: fade, useNativeDriver: true, isInteraction: false })
+      : Animated.timing(progress, { toValue: 0, duration: 1, delay: duration, useNativeDriver: true, isInteraction: false });
+    animation.start();
+    return () => animation.stop();
+  }, [visible, progress, duration]);
+  return <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress, zIndex: visible ? 1 : 0, backgroundColor: theme.colors.background }]}
     pointerEvents={visible && exposed ? 'auto' : 'none'}
     accessibilityElementsHidden={!visible || !exposed}
     importantForAccessibility={visible && exposed ? 'auto' : 'no-hide-descendants'}>
     <ScreenActivityContext.Provider value={visible && exposed}>
-      {render(tab, model)}
+      <RetainedTabContent tab={tab} visible={visible} model={model} render={render} />
     </ScreenActivityContext.Provider>
-  </View>;
+  </Animated.View>;
 }, (previous, next) => !previous.visible && !next.visible);
 
 export function RetainedTabHost({ model, limit, exposed, bottomInset = 0, render }: {

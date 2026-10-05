@@ -12,10 +12,12 @@ import {
   LogBox,
   Platform,
   AppState,
+  Easing,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
 import { Text, TextInput } from '../shared/accessibility/primitives';
+import { Animated } from '../shared/accessibility/animations';
 
 // Suppress the Expo/React Native DevTools client connection warnings
 LogBox.ignoreLogs([
@@ -52,7 +54,7 @@ import { useHomeDashboard } from './hooks/useHomeDashboard';
 import { ScreenTransition } from '../shared/ui/ScreenTransition';
 import { useListPerformance } from '../shared/ui/useListPerformance';
 import { useLiteMode } from '../shared/performance/deviceTier';
-import { Reveal, TabEntrance } from '../shared/ui/Motion';
+import { Reveal } from '../shared/ui/Motion';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
 import { QuickMissionsOverlay } from './components/QuickMissionsOverlay';
@@ -95,6 +97,47 @@ const ScrollAwareChatbot = React.memo(React.forwardRef<ScrollAwareChatbotHandle,
     return <ChatbotFAB {...props} performanceMode={props.performanceMode === 'default' && scrolling ? 'quiet' : props.performanceMode} />;
   },
 ));
+
+/**
+ * Hosts the active overlay screen. When the overlay closes (back button or
+ * hardware back), the last frame keeps rendering from the model it was open
+ * with and fades out instead of disappearing.
+ */
+function OverlayHost({ model }: { model: EcoBudMobileModel }) {
+  const open = Boolean(model.activeOverlay);
+  const lastOpenModel = React.useRef<EcoBudMobileModel | null>(null);
+  const fade = React.useRef(new Animated.Value(1)).current;
+  const [, finishExit] = React.useReducer((count: number) => count + 1, 0);
+  if (open) lastOpenModel.current = model;
+
+  React.useLayoutEffect(() => {
+    if (open) { fade.setValue(1); return; }
+    if (!lastOpenModel.current) return;
+    const animation = Animated.timing(fade, {
+      toValue: 0,
+      duration: 200,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start(({ finished }) => {
+      if (!finished) return;
+      lastOpenModel.current = null;
+      finishExit();
+    });
+    return () => animation.stop();
+  }, [open, fade]);
+
+  const shown = open ? model : lastOpenModel.current;
+  if (!shown) return null;
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: open ? 1 : fade }]} pointerEvents={open ? 'auto' : 'none'}>
+      <ScreenTransition key={shown.activeOverlay}>
+        <OverlayRouter model={shown} />
+      </ScreenTransition>
+    </Animated.View>
+  );
+}
 
 function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const liteMode = useLiteMode();
@@ -227,9 +270,9 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <RetainedTabHost key={model.session.user.id} model={model}
           bottomInset={model.activeTab === 'marketplace' && hideMarketplaceChrome ? 0 : bottomTabClearance}
-          limit={liteMode ? 2 : 3}
+          limit={liteMode ? 2 : 5}
           exposed={!model.activeOverlay && !model.actionOverlayVisible && !quickMissionsOpen}
-          render={(tab, model) => <TabEntrance active={tab === model.activeTab}>{(() => {
+          render={(tab, model) => {
             if (tab === 'marketplace') return <MarketplaceView model={model} onHideChrome={handleMarketplaceChromeChange} />;
             if (tab === 'learn') return <LearnView model={model} onSearchKeyboardChange={handleSearchKeyboardChange} keyboardHeight={searchKeyboardHeight} />;
             if (tab === 'challenges') return <ChallengesView model={model} onSearchKeyboardChange={handleSearchKeyboardChange} keyboardHeight={searchKeyboardHeight} />;
@@ -281,7 +324,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
               }
             />
             );
-          })()}</TabEntrance>}
+          }}
         />
         {!(model.activeTab === 'marketplace' && hideMarketplaceChrome) && (
           <BottomTabBar activeTab={model.activeTab} onChange={model.setActiveTab} onTargetLayout={model.setClaimRewardTarget} onQuickMissionGesture={quickMissionGestures.emit} onLongPressChallenges={bounds => { quickMissionGestures.reset(); setQuickMissionsAnchor(bounds); setQuickMissionsOpen(true); }} />
@@ -311,13 +354,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         </HomeAnimationVisibilityContext.Provider>
       </View>
       {quickMissionsOpen && !model.activeOverlay && <QuickMissionsOverlay model={model} anchorBounds={quickMissionsAnchor} gestureChannel={quickMissionGestures} onClose={() => setQuickMissionsOpen(false)} />}
-      {model.activeOverlay && (
-        <View style={StyleSheet.absoluteFill}>
-          <ScreenTransition key={model.activeOverlay}>
-            <OverlayRouter model={model} />
-          </ScreenTransition>
-        </View>
-      )}
+      <OverlayHost model={model} />
       <CoachMarksOverlay
         visible={Boolean(model.session && model.coachMarksVisible && model.activeOverlay !== 'idVerification')}
         replay={model.coachMarksReplay}

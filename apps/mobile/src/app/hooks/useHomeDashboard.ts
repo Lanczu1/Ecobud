@@ -40,6 +40,7 @@ import { shiftMonth } from '../utils/appUtils';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
 import { coachMarkSpotlightStore } from '../utils/coachMarkSpotlightStore';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { resetLargeTargetsForNewUser } from '../../shared/accessibility/AccessibilityContext';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 
@@ -1681,6 +1682,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             }
 
 
+            if (isNewUser) resetLargeTargetsForNewUser();
             setSession(nextSession);
             await persistSession(nextSession);
             void hydrateApp(nextSession, true).then(() => {
@@ -1728,6 +1730,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
       try {
         const nextSession = await homeService.register(email.trim(), pass, username.trim(), city, otpCode?.trim() || '');
+        resetLargeTargetsForNewUser();
         setSession(nextSession);
         await persistSession(nextSession);
         void hydrateApp(nextSession, true).then(() => {

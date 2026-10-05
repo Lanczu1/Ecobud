@@ -992,6 +992,10 @@ export const ecobudApi = {
     request<{ message: string }>(`/swap/listings/${id}/report`, { method: 'POST', token, body: { reason, reportName } }),
   fetchSwapListingReports: (token: string, id: string, page: number) =>
     request<import('../../features/giveAndGet/types').ListingReportPage>(`/swap/listings/${id}/reports?page=${page}&pageSize=25`, { token }),
+  fetchSwapListingRating: (token: string, id: string) =>
+    request<import('../../features/giveAndGet/types').ListingRatingSummary>(`/swap/listings/${id}/rating`, { token }),
+  rateSwapListing: (token: string, id: string, stars: number) =>
+    request<import('../../features/giveAndGet/types').ListingRatingSummary>(`/swap/listings/${id}/rating`, { method: 'PUT', token, body: { stars } }),
   createSwapListing: (token: string, body: any) =>
     request<any>('/swap/listings', { method: 'POST', token, body }),
   updateSwapListing: (token: string, id: string, body: any) =>

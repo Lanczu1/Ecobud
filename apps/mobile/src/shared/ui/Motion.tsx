@@ -50,39 +50,3 @@ export function Reveal({ children, id, index = 0, style }: {
     </Animated.View>
   );
 }
-
-/**
- * Entrance for a retained tab page. The page stays mounted while hidden, so
- * the value is rewound on exit and the next visit starts from a clean frame.
- */
-export function TabEntrance({ active, children }: { active: boolean; children: React.ReactNode }) {
-  const lite = isLowEndDevice();
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!active) {
-      progress.setValue(0);
-      return;
-    }
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration: lite ? 140 : 240,
-      easing: settle,
-      useNativeDriver: true,
-      isInteraction: false,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [active, progress, lite]);
-
-  return (
-    <Animated.View
-      style={[
-        { flex: 1, opacity: progress },
-        !lite && { transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] },
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
-}

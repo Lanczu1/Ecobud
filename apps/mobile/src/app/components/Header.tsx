@@ -151,13 +151,16 @@ export function Header({
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onNotificationsPress} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-            <Ionicons name="notifications" size={iconSize} color={actionIconColor} />
-            {notificationCount > 0 && (
-              <View style={[
-                styles.topNavBadge,
-                isSmallDevice && { width: scale(8), height: scale(8), borderRadius: scale(4) }
-              ]} />
-            )}
+            {/* Anchor the unread dot to the icon itself so it stays on the bell when the touchable grows. */}
+            <View style={{ width: iconSize, height: iconSize }}>
+              <Ionicons name="notifications" size={iconSize} color={actionIconColor} />
+              {notificationCount > 0 && (
+                <View style={[
+                  styles.topNavBadge,
+                  isSmallDevice && { width: scale(8), height: scale(8), borderRadius: scale(4) }
+                ]} />
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>

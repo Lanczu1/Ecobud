@@ -42,6 +42,7 @@ export function MarketplaceHubView({
   const conversationsInFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const conversationsLoadedFor = useRef<string | null>(null);
   const completionInFlight = useRef(false);
+  const returningToFeed = useRef(false);
   const [completing, setCompleting] = useState(false);
   const handleLogoutRef = useRef(model.handleLogout);
   handleLogoutRef.current = model.handleLogout;
@@ -311,6 +312,8 @@ export function MarketplaceHubView({
   };
 
   const isRootScreen = screen === 'feed';
+  // The first feed is faded in by the tab itself; fade it here only when coming back to it.
+  if (!isRootScreen) returningToFeed.current = true;
 
   return (
     <View style={[localStyles.container, { backgroundColor: theme.colors.background }]}>
@@ -326,7 +329,7 @@ export function MarketplaceHubView({
       {isRootScreen && <TopNavbar model={model} />}
 
       {screen === 'feed' && (
-        <ScreenTransition key={`feed-${currentUserId}`} enabled={false}>
+        <ScreenTransition key={`feed-${currentUserId}`} enabled={returningToFeed.current}>
         <MarketplaceFeed
           currentUserId={currentUserId}
           onSelectListing={handleSelectListing}

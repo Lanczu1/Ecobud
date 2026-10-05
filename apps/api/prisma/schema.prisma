@@ -66,6 +66,7 @@ model User {
   giveAndGetItems              GiveAndGetItem[]
   swapListings                 SwapListing[]
   swapListingReports           SwapListingReport[]
+  swapListingRatings           SwapListingRating[]
   swapRequestsSent             SwapRequest[]             @relation("SwapRequestFrom")
   swapRequestsReceived         SwapRequest[]             @relation("SwapRequestTo")
 
@@ -868,6 +869,7 @@ model SwapListing {
   requests       SwapRequest[]
   conversations  SwapConversation[]
   reports        SwapListingReport[]
+  ratings        SwapListingRating[]
 
   @@index([userId])
   @@index([category])
@@ -891,6 +893,21 @@ model SwapListingReport {
   @@index([listingId, resolvedAt, createdAt])
   @@index([reporterId])
   @@map("swap_listing_reports")
+}
+
+model SwapListingRating {
+  id        String      @id @default(cuid())
+  listingId String      @map("listing_id")
+  userId    String      @map("user_id")
+  stars     Int
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  listing   SwapListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, userId])
+  @@index([userId])
+  @@map("swap_listing_ratings")
 }
 
 model SwapRequest {
