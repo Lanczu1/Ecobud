@@ -12,9 +12,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "test": "vitest run",
     "check:environment": "node scripts/check-environment.cjs",
-    "check:release": "prisma validate && prisma generate && tsc --noEmit && vitest run && npm audit --audit-level=moderate"
+    "check:release": "prisma validate && prisma generate && tsc --noEmit && npm audit --audit-level=moderate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

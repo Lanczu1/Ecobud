@@ -18,6 +18,29 @@ import {
 } from 'lucide-react';
 import logoImg from '../../logo/logo.png';
 
+function StepNumber({ step, background, borderColor, color }: { step: number; background: string; borderColor: string; color: string }) {
+  return (
+    <div
+      style={{
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        background,
+        border: `1px solid ${borderColor}`,
+        color,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '1.25rem',
+        fontWeight: 900,
+        marginBottom: 20
+      }}
+    >
+      {step}
+    </div>
+  );
+}
+
 export default function App() {
   const [copied, setCopied] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -369,24 +392,7 @@ export default function App() {
             >
               {/* Step 1 */}
               <div className="glass-panel" style={{ padding: 32, position: 'relative' }}>
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 14,
-                    background: 'rgba(16,185,129,0.15)',
-                    border: '1px solid rgba(52,211,153,0.3)',
-                    color: '#34d399',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.25rem',
-                    fontWeight: 900,
-                    marginBottom: 20
-                  }}
-                >
-                  1
-                </div>
+                <StepNumber step={1} background="rgba(16,185,129,0.15)" borderColor="rgba(52,211,153,0.3)" color="#34d399" />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: 12 }}>
                   Download the File
                 </h3>
@@ -397,24 +403,7 @@ export default function App() {
 
               {/* Step 2 */}
               <div className="glass-panel" style={{ padding: 32, position: 'relative' }}>
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 14,
-                    background: 'rgba(132,204,22,0.15)',
-                    border: '1px solid rgba(132,204,22,0.3)',
-                    color: '#a3e635',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.25rem',
-                    fontWeight: 900,
-                    marginBottom: 20
-                  }}
-                >
-                  2
-                </div>
+                <StepNumber step={2} background="rgba(132,204,22,0.15)" borderColor="rgba(132,204,22,0.3)" color="#a3e635" />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: 12 }}>
                   Allow Unknown Apps
                 </h3>
@@ -425,24 +414,7 @@ export default function App() {
 
               {/* Step 3 */}
               <div className="glass-panel" style={{ padding: 32, position: 'relative' }}>
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 14,
-                    background: 'rgba(56,189,248,0.15)',
-                    border: '1px solid rgba(56,189,248,0.3)',
-                    color: '#38bdf8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.25rem',
-                    fontWeight: 900,
-                    marginBottom: 20
-                  }}
-                >
-                  3
-                </div>
+                <StepNumber step={3} background="rgba(56,189,248,0.15)" borderColor="rgba(56,189,248,0.3)" color="#38bdf8" />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: 12 }}>
                   Install & Test EcoBud
                 </h3>

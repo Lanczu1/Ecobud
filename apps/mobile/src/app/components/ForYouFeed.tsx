@@ -95,261 +95,207 @@ export function ForYouFeed({
       >
         {/* CARD 1: Lesson Card */}
         {lesson && (
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => {
-              triggerImpactLight();
-              onOpenLesson(lesson.id);
-            }}
-            style={[
-              styles.card,
-              {
-                width: cardWidth,
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.cardBorder,
-                shadowOpacity: isDark ? 0.2 : 0.08,
-              },
-            ]}
-          >
-            {/* Media Area (Fixed height prevents CLS) */}
-            <View style={styles.mediaWrap}>
-              {lessonImg && !lessonImgErr ? (
-                <FastImage
-                  source={{ uri: lessonImg }}
-                  style={styles.cardImage}
-                  contentFit="cover"
-                  onError={() => setLessonImgErr(true)}
-                />
-              ) : (
-                <View style={[styles.cardImage, styles.fallbackImage, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9' }]}>
-                  <Ionicons name="book-outline" size={scale(36)} color={isDark ? theme.colors.primary : '#126027'} />
-                </View>
-              )}
-              {/* Type & Category Pill */}
-              <View style={[styles.typeBadge, { backgroundColor: '#0284C7' }]}>
-                <Ionicons name="book" size={scale(10)} color="#FFF" />
-                <Text style={styles.typeBadgeText}>LESSON</Text>
-              </View>
-              {lesson.pointsReward ? (
-                <View style={styles.rewardBadge}>
-                  <Ionicons name="leaf" size={scale(11)} color="#FFF" />
-                  <Text style={styles.rewardBadgeText}>+{lesson.pointsReward} pts</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Card Content Body */}
-            <View style={styles.bodyWrap}>
-              <Text style={[styles.metaCategory, { color: theme.colors.textMuted }]}>
-                {(lesson.category || 'General').toUpperCase()} • {lesson.durationMinutes || 5} MIN
-              </Text>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {lesson.title}
-              </Text>
-              <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                {lesson.description || 'Interactive bite-sized eco learning.'}
-              </Text>
-
-              {/* Single Secondary CTA (or primary if habit is already logged) */}
-              <View
-                style={[
-                  styles.ctaButton,
-                  hasPendingHabit
-                    ? [styles.ctaSecondary, { borderColor: isDark ? theme.colors.border : '#D4EBD9', backgroundColor: isDark ? theme.colors.surfaceMuted : '#F4FAF6' }]
-                    : [styles.ctaPrimary, { backgroundColor: isDark ? theme.colors.primary : '#126027' }],
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.ctaText,
-                    hasPendingHabit
-                      ? { color: isDark ? theme.colors.primary : '#126027' }
-                      : { color: isDark ? '#0E1512' : '#FFFFFF' },
-                  ]}
-                >
-                  {lesson.status === 'completed' ? 'Review Lesson' : lesson.status === 'seen' ? 'Continue' : 'Start Learning'}
-                </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={scale(13)}
-                  color={hasPendingHabit ? (isDark ? theme.colors.primary : '#126027') : (isDark ? '#0E1512' : '#FFFFFF')}
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
+          <FeedCard
+            width={cardWidth}
+            onPress={() => onOpenLesson(lesson.id)}
+            imageUri={lessonImg}
+            imageFailed={lessonImgErr}
+            onImageError={() => setLessonImgErr(true)}
+            fallbackBg="#E8F5E9"
+            fallbackIcon="book-outline"
+            fallbackIconColor={isDark ? theme.colors.primary : '#126027'}
+            badgeColor="#0284C7"
+            badgeIcon="book"
+            badgeLabel="LESSON"
+            rewardLabel={lesson.pointsReward ? `+${lesson.pointsReward} pts` : null}
+            meta={`${(lesson.category || 'General').toUpperCase()} • ${lesson.durationMinutes || 5} MIN`}
+            title={lesson.title}
+            description={lesson.description || 'Interactive bite-sized eco learning.'}
+            ctaLabel={lesson.status === 'completed' ? 'Review Lesson' : lesson.status === 'seen' ? 'Continue' : 'Start Learning'}
+            hasPendingHabit={hasPendingHabit}
+          />
         )}
 
         {/* CARD 2: Challenge Card */}
         {challenge && (
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => {
-              triggerImpactLight();
-              onOpenChallenge(challenge);
-            }}
-            style={[
-              styles.card,
-              {
-                width: cardWidth,
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.cardBorder,
-                shadowOpacity: isDark ? 0.2 : 0.08,
-              },
-            ]}
-          >
-            {/* Media Area (Fixed height prevents CLS) */}
-            <View style={styles.mediaWrap}>
-              {challengeImg && !challengeImgErr ? (
-                <FastImage
-                  source={{ uri: challengeImg }}
-                  style={styles.cardImage}
-                  contentFit="cover"
-                  onError={() => setChallengeImgErr(true)}
-                />
-              ) : (
-                <View style={[styles.cardImage, styles.fallbackImage, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#FEF3C7' }]}>
-                  <Ionicons name="trophy-outline" size={scale(36)} color="#D97706" />
-                </View>
-              )}
-              {/* Type & Category Pill */}
-              <View style={[styles.typeBadge, { backgroundColor: '#D97706' }]}>
-                <Ionicons name="trophy" size={scale(10)} color="#FFF" />
-                <Text style={styles.typeBadgeText}>CHALLENGE</Text>
-              </View>
-              <View style={styles.rewardBadge}>
-                <Ionicons name="leaf" size={scale(11)} color="#FFF" />
-                <Text style={styles.rewardBadgeText}>+{challenge.expReward} pts</Text>
-              </View>
-            </View>
-
-            {/* Card Content Body */}
-            <View style={styles.bodyWrap}>
-              <Text style={[styles.metaCategory, { color: theme.colors.textMuted }]}>
-                {((challenge as any).category || 'Daily').toUpperCase()} • {challenge.difficulty || 'Easy'}
-              </Text>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {challenge.title}
-              </Text>
-              <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                {challenge.description || 'Take action today to help the planet.'}
-              </Text>
-
-              {/* Single Secondary CTA */}
-              <View
-                style={[
-                  styles.ctaButton,
-                  hasPendingHabit
-                    ? [styles.ctaSecondary, { borderColor: isDark ? theme.colors.border : '#D4EBD9', backgroundColor: isDark ? theme.colors.surfaceMuted : '#F4FAF6' }]
-                    : [styles.ctaPrimary, { backgroundColor: isDark ? theme.colors.primary : '#126027' }],
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.ctaText,
-                    hasPendingHabit
-                      ? { color: isDark ? theme.colors.primary : '#126027' }
-                      : { color: isDark ? '#0E1512' : '#FFFFFF' },
-                  ]}
-                >
-                  {challenge.type === 'AI Image Recognition Challenge' ? 'Open Mission' : 'Start Challenge'}
-                </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={scale(13)}
-                  color={hasPendingHabit ? (isDark ? theme.colors.primary : '#126027') : (isDark ? '#0E1512' : '#FFFFFF')}
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
+          <FeedCard
+            width={cardWidth}
+            onPress={() => onOpenChallenge(challenge)}
+            imageUri={challengeImg}
+            imageFailed={challengeImgErr}
+            onImageError={() => setChallengeImgErr(true)}
+            fallbackBg="#FEF3C7"
+            fallbackIcon="trophy-outline"
+            fallbackIconColor="#D97706"
+            badgeColor="#D97706"
+            badgeIcon="trophy"
+            badgeLabel="CHALLENGE"
+            rewardLabel={`+${challenge.expReward} pts`}
+            meta={`${((challenge as any).category || 'Daily').toUpperCase()} • ${challenge.difficulty || 'Easy'}`}
+            title={challenge.title}
+            description={challenge.description || 'Take action today to help the planet.'}
+            ctaLabel={challenge.type === 'AI Image Recognition Challenge' ? 'Open Mission' : 'Start Challenge'}
+            hasPendingHabit={hasPendingHabit}
+          />
         )}
 
         {/* CARD 3: Upcoming Event Card */}
         {event && (
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => {
-              triggerImpactLight();
-              onOpenEvent(event);
-            }}
-            style={[
-              styles.card,
-              {
-                width: cardWidth,
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.cardBorder,
-                shadowOpacity: isDark ? 0.2 : 0.08,
-              },
-            ]}
-          >
-            {/* Media Area (Fixed height prevents CLS) */}
-            <View style={styles.mediaWrap}>
-              {eventImg && !eventImgErr ? (
-                <FastImage
-                  source={{ uri: eventImg }}
-                  style={styles.cardImage}
-                  contentFit="cover"
-                  onError={() => setEventImgErr(true)}
-                />
-              ) : (
-                <View style={[styles.cardImage, styles.fallbackImage, { backgroundColor: isDark ? theme.colors.surfaceMuted : '#EDE9FE' }]}>
-                  <Ionicons name="calendar-outline" size={scale(36)} color="#7C3AED" />
-                </View>
-              )}
-              {/* Type Pill */}
-              <View style={[styles.typeBadge, { backgroundColor: '#7C3AED' }]}>
-                <Ionicons name="calendar" size={scale(10)} color="#FFF" />
-                <Text style={styles.typeBadgeText}>COMMUNITY EVENT</Text>
-              </View>
-              {event.expReward ? (
-                <View style={styles.rewardBadge}>
-                  <Ionicons name="leaf" size={scale(11)} color="#FFF" />
-                  <Text style={styles.rewardBadgeText}>+{event.expReward} pts</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Card Content Body */}
-            <View style={styles.bodyWrap}>
-              <Text style={[styles.metaCategory, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                {event.location || 'Local Drive'}
-              </Text>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {event.title}
-              </Text>
-              <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                {event.description || 'Join community eco warriors for real impact.'}
-              </Text>
-
-              {/* Single Secondary CTA */}
-              <View
-                style={[
-                  styles.ctaButton,
-                  hasPendingHabit
-                    ? [styles.ctaSecondary, { borderColor: isDark ? theme.colors.border : '#D4EBD9', backgroundColor: isDark ? theme.colors.surfaceMuted : '#F4FAF6' }]
-                    : [styles.ctaPrimary, { backgroundColor: isDark ? theme.colors.primary : '#126027' }],
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.ctaText,
-                    hasPendingHabit
-                      ? { color: isDark ? theme.colors.primary : '#126027' }
-                      : { color: isDark ? '#0E1512' : '#FFFFFF' },
-                  ]}
-                >
-                  Join Event
-                </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={scale(13)}
-                  color={hasPendingHabit ? (isDark ? theme.colors.primary : '#126027') : (isDark ? '#0E1512' : '#FFFFFF')}
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
+          <FeedCard
+            width={cardWidth}
+            onPress={() => onOpenEvent(event)}
+            imageUri={eventImg}
+            imageFailed={eventImgErr}
+            onImageError={() => setEventImgErr(true)}
+            fallbackBg="#EDE9FE"
+            fallbackIcon="calendar-outline"
+            fallbackIconColor="#7C3AED"
+            badgeColor="#7C3AED"
+            badgeIcon="calendar"
+            badgeLabel="COMMUNITY EVENT"
+            rewardLabel={event.expReward ? `+${event.expReward} pts` : null}
+            meta={event.location || 'Local Drive'}
+            metaNumberOfLines={1}
+            title={event.title}
+            description={event.description || 'Join community eco warriors for real impact.'}
+            ctaLabel="Join Event"
+            hasPendingHabit={hasPendingHabit}
+          />
         )}
       </ScrollView>
     </View>
+  );
+}
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+interface FeedCardProps {
+  width: number;
+  onPress: () => void;
+  imageUri: string | null;
+  imageFailed: boolean;
+  onImageError: () => void;
+  /** Light-mode background behind the fallback icon */
+  fallbackBg: string;
+  fallbackIcon: IoniconName;
+  fallbackIconColor: string;
+  badgeColor: string;
+  badgeIcon: IoniconName;
+  badgeLabel: string;
+  rewardLabel: string | null;
+  meta: string;
+  metaNumberOfLines?: number;
+  title: string;
+  description: string;
+  ctaLabel: string;
+  hasPendingHabit: boolean;
+}
+
+function FeedCard({
+  width,
+  onPress,
+  imageUri,
+  imageFailed,
+  onImageError,
+  fallbackBg,
+  fallbackIcon,
+  fallbackIconColor,
+  badgeColor,
+  badgeIcon,
+  badgeLabel,
+  rewardLabel,
+  meta,
+  metaNumberOfLines,
+  title,
+  description,
+  ctaLabel,
+  hasPendingHabit,
+}: FeedCardProps) {
+  const { theme, isDark } = useTheme();
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => {
+        triggerImpactLight();
+        onPress();
+      }}
+      style={[
+        styles.card,
+        {
+          width,
+          backgroundColor: theme.colors.card,
+          borderColor: theme.colors.cardBorder,
+          shadowOpacity: isDark ? 0.2 : 0.08,
+        },
+      ]}
+    >
+      {/* Media Area (Fixed height prevents CLS) */}
+      <View style={styles.mediaWrap}>
+        {imageUri && !imageFailed ? (
+          <FastImage
+            source={{ uri: imageUri }}
+            style={styles.cardImage}
+            contentFit="cover"
+            onError={onImageError}
+          />
+        ) : (
+          <View style={[styles.cardImage, styles.fallbackImage, { backgroundColor: isDark ? theme.colors.surfaceMuted : fallbackBg }]}>
+            <Ionicons name={fallbackIcon} size={scale(36)} color={fallbackIconColor} />
+          </View>
+        )}
+        {/* Type & Category Pill */}
+        <View style={[styles.typeBadge, { backgroundColor: badgeColor }]}>
+          <Ionicons name={badgeIcon} size={scale(10)} color="#FFF" />
+          <Text style={styles.typeBadgeText}>{badgeLabel}</Text>
+        </View>
+        {rewardLabel ? (
+          <View style={styles.rewardBadge}>
+            <Ionicons name="leaf" size={scale(11)} color="#FFF" />
+            <Text style={styles.rewardBadgeText}>{rewardLabel}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Card Content Body */}
+      <View style={styles.bodyWrap}>
+        <Text style={[styles.metaCategory, { color: theme.colors.textMuted }]} numberOfLines={metaNumberOfLines}>
+          {meta}
+        </Text>
+        <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+          {description}
+        </Text>
+
+        {/* Single Secondary CTA (or primary if habit is already logged) */}
+        <View
+          style={[
+            styles.ctaButton,
+            hasPendingHabit
+              ? [styles.ctaSecondary, { borderColor: isDark ? theme.colors.border : '#D4EBD9', backgroundColor: isDark ? theme.colors.surfaceMuted : '#F4FAF6' }]
+              : [styles.ctaPrimary, { backgroundColor: isDark ? theme.colors.primary : '#126027' }],
+          ]}
+        >
+          <Text
+            style={[
+              styles.ctaText,
+              hasPendingHabit
+                ? { color: isDark ? theme.colors.primary : '#126027' }
+                : { color: isDark ? '#0E1512' : '#FFFFFF' },
+            ]}
+          >
+            {ctaLabel}
+          </Text>
+          <Ionicons
+            name="arrow-forward"
+            size={scale(13)}
+            color={hasPendingHabit ? (isDark ? theme.colors.primary : '#126027') : (isDark ? '#0E1512' : '#FFFFFF')}
+          />
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 

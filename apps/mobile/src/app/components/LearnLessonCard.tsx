@@ -1,4 +1,4 @@
-import { useScreenActive } from '../../shared/ui/ScreenActivity';
+import { useSkeletonPulse } from '../../shared/ui/SkeletonLoaders';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
@@ -406,28 +406,7 @@ const styles = StyleSheet.create({
 export function LearnLessonSkeleton() {
   const { theme, isDark } = useTheme();
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
-  const pulseAnim = React.useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
-
-  const screenActive = useScreenActive();
-  React.useEffect(() => {
-    if (!screenActive) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.95 : 1,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.5 : 0.55,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [screenActive, pulseAnim, isDark]);
+  const pulseAnim = useSkeletonPulse(isDark);
 
   return (
     <Animated.View

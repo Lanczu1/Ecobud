@@ -131,7 +131,7 @@ export class LearnService {
     });
   }
 
-  async markLessonSeen(userId: string, lessonId: string) {
+  private async findProgressForPublishedLesson(userId: string, lessonId: string) {
     const lesson = await this.database.lesson.findFirst({
       where: {
         id: lessonId,
@@ -146,11 +146,15 @@ export class LearnService {
       throw new HttpError(404, 'Published lesson not found.');
     }
 
-    const existingProgress = await this.database.userLessonProgress.findUnique({
+    return this.database.userLessonProgress.findUnique({
       where: {
         userId_lessonId: { userId, lessonId },
       },
     });
+  }
+
+  async markLessonSeen(userId: string, lessonId: string) {
+    const existingProgress = await this.findProgressForPublishedLesson(userId, lessonId);
 
     if (existingProgress?.status === 'completed') {
       return {
@@ -291,25 +295,7 @@ export class LearnService {
   }
 
   async updateLessonProgress(userId: string, lessonId: string, progressValue: number, videoTimestamp?: number) {
-    const lesson = await this.database.lesson.findFirst({
-      where: {
-        id: lessonId,
-        OR: [
-          { isPublished: true },
-          { scheduledAt: { lte: new Date() } }
-        ]
-      },
-    });
-
-    if (!lesson) {
-      throw new HttpError(404, 'Published lesson not found.');
-    }
-
-    const existingProgress = await this.database.userLessonProgress.findUnique({
-      where: {
-        userId_lessonId: { userId, lessonId },
-      },
-    });
+    const existingProgress = await this.findProgressForPublishedLesson(userId, lessonId);
 
     if (existingProgress?.status === 'completed') {
       return {

@@ -7,7 +7,7 @@ import {
   ArrowLeftRight, 
   FileText, 
   LogOut,
-  Gift, Megaphone, Award, Activity, Bell
+  Gift, Megaphone, Award, Activity
 } from 'lucide-react';
 import { Mascot } from 'page-mascot';
 
@@ -23,7 +23,6 @@ interface SidebarProps {
 const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
   { name: 'Dashboard', icon: LayoutDashboard },
   { name: 'Announcements', icon: Megaphone },
-  { name: 'Notifications', icon: Bell },
   { name: 'ID Verification', icon: Users },
   { name: 'Users', icon: Users },
   { name: 'Learning Content', icon: BookOpen },
