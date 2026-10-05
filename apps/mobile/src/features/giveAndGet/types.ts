@@ -64,6 +64,14 @@ export interface ListingReportPage {
   pagination: { page: number; total: number; totalPages: number };
 }
 
+export interface ListingRatingSummary {
+  average: number;
+  count: number;
+  myRating: number | null;
+  isOwner: boolean;
+  ownerRating: number;
+}
+
 export interface SwapRequest {
   id: string;
   listingId: string;

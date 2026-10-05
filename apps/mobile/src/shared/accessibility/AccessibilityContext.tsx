@@ -20,6 +20,9 @@ function decode(value: string | null): AccessibilityPreferences {
     return { size: ['Small', 'Medium', 'Large'].includes(saved.size) ? saved.size : 'Medium', performance: saved.performance === true, contrast: saved.contrast === true, bold: saved.bold === true, largeTargets: saved.largeTargetsDefaultVersion === 1 && saved.largeTargets === true };
   } catch { return defaultPreferences; }
 }
+let applyUpdate: ((patch: Partial<AccessibilityPreferences>) => void) | null = null;
+/** A new account starts with larger tap areas off, even on a device where a previous account turned them on. */
+export const resetLargeTargetsForNewUser = () => { if (current.largeTargets) applyUpdate?.({ largeTargets: false }); };
 const Context = createContext({ preferences: defaultPreferences, storageError: false, update: (_patch: Partial<AccessibilityPreferences>) => {} });
 export function AccessibilityProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState(() => {
@@ -43,6 +46,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     try { mobileStorage.setItemSync(key, serialized); } catch { setStorageError(true); }
     void mobileStorage.setItem(key, serialized).then(() => setStorageError(false)).catch(() => setStorageError(true));
   };
+  useEffect(() => { applyUpdate = update; return () => { applyUpdate = null; }; });
   return <Context.Provider value={{ preferences, update, storageError }}>{children}</Context.Provider>;
 }
 export const useAccessibility = () => useContext(Context);

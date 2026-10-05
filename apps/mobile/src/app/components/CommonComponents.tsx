@@ -113,12 +113,6 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
   const animatedPosition = useRef(new Animated.ValueXY(targetPosition)).current;
   useEffect(() => {
     if (isDragging.current) return;
-    if (dock) {
-      animatedPosition.stopAnimation();
-      animatedPosition.setValue(targetPosition);
-      return;
-    }
-
     Animated.spring(animatedPosition, {
       toValue: targetPosition,
       damping: 18,
@@ -127,6 +121,24 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       useNativeDriver: true,
     }).start();
   }, [animatedPosition, targetPosition.x, targetPosition.y, dock]);
+
+  // Fade and scale the mascot in whenever it swaps between the full mascot and the docked tab.
+  const swapProgress = useRef(new Animated.Value(1)).current;
+  const lastDockedRef = useRef(isDocked);
+  React.useLayoutEffect(() => {
+    if (lastDockedRef.current === isDocked) return;
+    lastDockedRef.current = isDocked;
+    swapProgress.stopAnimation();
+    if (performanceMode !== 'default') { swapProgress.setValue(1); return; }
+    swapProgress.setValue(0);
+    Animated.timing(swapProgress, {
+      toValue: 1,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+  }, [isDocked, performanceMode, swapProgress]);
 
 
   const handleMascotPress = useCallback(() => {
@@ -179,7 +191,13 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
       }
       const nextDock = resolveMascotDock(fingerX, fingerY, screenWidth, mascotSize, dockMinY, dockMaxY);
       setDock(nextDock);
-      animatedPosition.setValue(getMascotDockCoordinates(nextDock, screenWidth, mascotSize, dockMinY, dockMaxY));
+      Animated.spring(animatedPosition, {
+        toValue: getMascotDockCoordinates(nextDock, screenWidth, mascotSize, dockMinY, dockMaxY),
+        damping: 18,
+        stiffness: 180,
+        mass: 0.8,
+        useNativeDriver: true,
+      }).start();
     },
     [animatedPosition, screenWidth, screenHeight, mascotSize, dockMinY, dockMaxY, setDock, onPositionChange, getPositionCoords]
   );
@@ -460,7 +478,14 @@ export const ChatbotFAB = React.memo(function ChatbotFAB({
         accessibilityLabel={isDocked ? 'Restore EcoBud mascot to bottom right' : 'Chat with EcoBud AI. Drag to reposition or dock mascot at screen edge.'}
         accessibilityRole="button"
       >
-        {isDocked ? <DockedMascot size={mascotSize} side={dock.side} animated={performanceMode === 'default'} /> : <HomeMascotAnimation size={mascotSize} animated={!reduceMascotMotion} />}
+        <Animated.View
+          style={{
+            opacity: swapProgress,
+            transform: [{ scale: swapProgress.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
+          }}
+        >
+          {isDocked ? <DockedMascot size={mascotSize} side={dock.side} animated={performanceMode === 'default'} /> : <HomeMascotAnimation size={mascotSize} animated={!reduceMascotMotion} />}
+        </Animated.View>
       </Pressable>
       </Animated.View>
     </Animated.View>

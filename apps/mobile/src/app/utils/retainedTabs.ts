@@ -1,6 +1,6 @@
 import type { AppTab } from '../types/home';
 
-const reusable = new Set<AppTab>(['home', 'learn', 'challenges']);
+const reusable = new Set<AppTab>(['home', 'learn', 'challenges', 'tracker', 'profile']);
 
 export function retainTabs(previous: AppTab[], active: AppTab, limit: number): AppTab[] {
   const next = [...previous.filter(tab => tab !== active && reusable.has(tab)), active].slice(-Math.max(1, limit));

@@ -1,12 +1,13 @@
 import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { z } from 'zod';
 import { swapReportSchema } from '../services/swapReportService';
 import { errorBoundary, HttpError } from '../http/errorResponder';
 import { pageLimit, decodeCursor } from '../http/cursorPagination';
 import { parseAdminPagination } from '../utils/adminPagination';
 import { authenticateRequest, type AuthenticatedRequest } from '../http/authentication';
-import { swapService } from '../services/swapService';
+import { swapService, ownerRatingAverages } from '../services/swapService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 import { sendDirectNotification } from '../services/notificationService';
 import { prisma } from '../prismaClient';
@@ -21,6 +22,16 @@ const listingReportLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many reports. Please try again in an hour.' },
 });
+
+const listingRatingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  keyGenerator: (req) => (req as AuthenticatedRequest).auth!.userId,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many ratings. Please try again in an hour.' },
+});
+const listingRatingSchema = z.object({ stars: z.number().int().min(1).max(5) });
 
 router.post('/listings/:id/report', authenticateRequest, listingReportLimiter, errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const { reason, reportName } = swapReportSchema.parse(req.body);
@@ -42,6 +53,36 @@ router.get('/listings/:id/reports', authenticateRequest, errorBoundary<Authentic
     prisma.swapListingReport.aggregate({ where, _sum: { occurrences: true } }),
   ]);
   res.json({ items: items.map(report => ({ id: report.id, reportName: report.reportName, reason: report.reason, occurrences: report.occurrences, createdAt: report.createdAt })), activeCount: count._sum.occurrences ?? 0, pagination: { page, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
+}));
+
+async function listingRatingSummary(listingId: string, userId: string, ownerId: string) {
+  const [stats, mine, owners] = await Promise.all([
+    prisma.swapListingRating.aggregate({ where: { listingId }, _avg: { stars: true }, _count: { _all: true } }),
+    prisma.swapListingRating.findUnique({ where: { listingId_userId: { listingId, userId } }, select: { stars: true } }),
+    ownerRatingAverages([ownerId]),
+  ]);
+  return { average: Math.round((stats._avg.stars ?? 0) * 10) / 10, count: stats._count._all, myRating: mine?.stars ?? null, isOwner: ownerId === userId, ownerRating: owners.get(ownerId) ?? 0 };
+}
+
+router.get('/listings/:id/rating', authenticateRequest, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { userId: true, isActive: true, approvalStatus: true } });
+  if (!listing || listing.approvalStatus === 'deleted' || (!(listing.isActive && listing.approvalStatus === 'approved') && listing.userId !== req.auth!.userId)) {
+    return res.status(404).json({ message: 'Listing not available.' });
+  }
+  res.json(await listingRatingSummary(req.params.id, req.auth!.userId, listing.userId));
+}));
+
+router.put('/listings/:id/rating', authenticateRequest, listingRatingLimiter, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const { stars } = listingRatingSchema.parse(req.body);
+  const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { userId: true, isActive: true, approvalStatus: true } });
+  if (!listing || !listing.isActive || listing.approvalStatus !== 'approved') throw new HttpError(404, 'Listing not available.');
+  if (listing.userId === req.auth!.userId) throw new HttpError(403, 'You cannot rate your own listing.');
+  await prisma.swapListingRating.upsert({
+    where: { listingId_userId: { listingId: req.params.id, userId: req.auth!.userId } },
+    create: { listingId: req.params.id, userId: req.auth!.userId, stars },
+    update: { stars },
+  });
+  res.json(await listingRatingSummary(req.params.id, req.auth!.userId, listing.userId));
 }));
 
 // Fetch marketplace listings

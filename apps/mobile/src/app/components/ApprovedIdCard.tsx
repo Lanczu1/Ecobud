@@ -5,26 +5,32 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
-export function ApprovedIdCard({ onPress, status = 'approved', reason }: { onPress: () => void; status?: 'approved' | 'rejected'; reason?: string | null }) {
+export function ApprovedIdCard({ onPress, status = 'approved', reason }: { onPress: () => void; status?: 'approved' | 'rejected' | 'pending'; reason?: string | null }) {
   const { theme, isDark } = useTheme();
   const rejected = status === 'rejected';
-  const outline = rejected ? (isDark ? '#FCA5A5' : '#A32929') : (isDark ? '#63C995' : '#126027');
-  const tint = rejected ? (isDark ? '#482828' : '#FBE9E7') : (isDark ? '#234B35' : '#E0F3D9');
-  const cardColor = isDark ? theme.colors.card : rejected ? '#FFF8F7' : '#F4FCF6';
-  return <View style={[localStyles.cardBase, { backgroundColor: rejected ? (isDark ? '#482828' : '#EBCBC7') : (isDark ? '#163C2A' : '#CFE7D7') }]}>
+  const pending = status === 'pending';
+  const outline = pending ? (isDark ? '#FFD789' : '#976117') : rejected ? (isDark ? '#FCA5A5' : '#A32929') : (isDark ? '#63C995' : '#126027');
+  const tint = pending ? (isDark ? '#4A3515' : '#FFF0CE') : rejected ? (isDark ? '#482828' : '#FBE9E7') : (isDark ? '#234B35' : '#E0F3D9');
+  const cardColor = isDark ? theme.colors.card : pending ? '#FFFBF2' : rejected ? '#FFF8F7' : '#F4FCF6';
+  const baseColor = pending ? (isDark ? '#4A3515' : '#EFDDB5') : rejected ? (isDark ? '#482828' : '#EBCBC7') : (isDark ? '#163C2A' : '#CFE7D7');
+  const buttonLabel = rejected ? 'Resubmit ID' : 'View ID verification';
+  return <View style={[localStyles.cardBase, { backgroundColor: baseColor }]}>
     <View style={[localStyles.card, { backgroundColor: cardColor, borderColor: outline }]}>
       <View style={localStyles.headingRow}>
         <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[localStyles.seal, { backgroundColor: tint, borderColor: outline }]}>
           <Ionicons name="card-outline" size={36} color={outline} />
-          <View style={[localStyles.checkStamp, { borderColor: cardColor, backgroundColor: rejected ? '#A32929' : '#15834F' }]}><Ionicons name={rejected ? 'close' : 'checkmark'} size={17} color="#FFFFFF" /></View>
+          <View style={[localStyles.checkStamp, { borderColor: cardColor, backgroundColor: pending ? '#AC741A' : rejected ? '#A32929' : '#15834F' }]}><Ionicons name={pending ? 'time-outline' : rejected ? 'close' : 'checkmark'} size={17} color="#FFFFFF" /></View>
         </View>
         <View style={localStyles.headingText}>
-          <View style={[localStyles.verifiedTag, { backgroundColor: tint }]}><Ionicons name={rejected ? 'alert-circle-outline' : 'leaf'} size={11} color={outline} /><Text style={[localStyles.tagText, { color: outline }]}>{rejected ? 'RESUBMISSION REQUIRED' : 'VERIFIED RESIDENT'}</Text></View>
-          <Text accessibilityRole="header" style={[localStyles.title, { color: theme.colors.textPrimary }]}>{rejected ? 'ID rejected' : 'ID approved'}</Text>
+          <View style={[localStyles.verifiedTag, { backgroundColor: tint }]}><Ionicons name={pending ? 'time-outline' : rejected ? 'alert-circle-outline' : 'leaf'} size={11} color={outline} /><Text style={[localStyles.tagText, { color: outline }]}>{pending ? 'PENDING REVIEW' : rejected ? 'RESUBMISSION REQUIRED' : 'VERIFIED RESIDENT'}</Text></View>
+          <Text accessibilityRole="header" style={[localStyles.title, { color: theme.colors.textPrimary }]}>{pending ? 'Waiting for ID approval' : rejected ? 'ID rejected' : 'ID approved'}</Text>
         </View>
       </View>
-      <Text style={[localStyles.description, { color: theme.colors.textMuted }]}>{rejected ? 'Review your barangay’s note and resubmit your ID. ID approval is required to join Challenges and Eco Events, and create listings or requests. Learn remains available.' : "You're verified! You can now join Challenges and Eco Events, and create listings or requests in Give & Get."}</Text>
-      {rejected ? <View style={[localStyles.note, { backgroundColor: tint, borderColor: outline }]}>
+      <Text style={[localStyles.description, { color: theme.colors.textMuted }]}>{pending ? 'Your ID has been submitted. Your barangay moderator will review it before you can join Challenges and Eco Events, and create listings or requests in Give & Get. Learn remains available.' : rejected ? 'Review your barangay’s note and resubmit your ID. ID approval is required to join Challenges and Eco Events, and create listings or requests. Learn remains available.' : "You're verified! You can now join Challenges and Eco Events, and create listings or requests in Give & Get."}</Text>
+      {pending ? <View style={[localStyles.note, { backgroundColor: tint, borderColor: outline }]}>
+        <Text style={{ color: outline, fontSize: 13, fontWeight: '800' }}>What happens next</Text>
+        <Text style={[localStyles.description, { color: theme.colors.textPrimary }]}>You’ll get an in-app and email notification after your ID is reviewed. No need to upload it again.</Text>
+      </View> : rejected ? <View style={[localStyles.note, { backgroundColor: tint, borderColor: outline }]}>
         <Text style={{ color: outline, fontSize: 13, fontWeight: '800' }}>Barangay’s note</Text>
         <Text style={[localStyles.description, { color: theme.colors.textPrimary }]}>{reason?.trim() || 'No reason was provided by your barangay.'}</Text>
       </View> : <View style={localStyles.features}>
@@ -35,9 +41,9 @@ export function ApprovedIdCard({ onPress, status = 'approved', reason }: { onPre
         </View>)}
       </View>}
       <View style={[localStyles.buttonBase, { backgroundColor: isDark ? '#082919' : '#084620' }]}>
-        <TouchableOpacity onPress={onPress} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={rejected ? 'Resubmit ID' : 'View ID verification'} style={[localStyles.button, { borderColor: isDark ? '#5CAB7B' : '#0B5127' }]}>
+        <TouchableOpacity onPress={onPress} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={buttonLabel} style={[localStyles.button, { borderColor: isDark ? '#5CAB7B' : '#0B5127' }]}>
           <LinearGradient colors={['#126027', '#17A07E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.buttonContent}>
-            <Text style={localStyles.buttonText}>{rejected ? 'Resubmit ID' : 'View ID verification'}</Text><Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+            <Text style={localStyles.buttonText}>{buttonLabel}</Text><Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
           </LinearGradient>
         </TouchableOpacity>
       </View>

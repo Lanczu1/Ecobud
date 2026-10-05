@@ -22,9 +22,10 @@ export function ScreenTransition({
     progress.setValue(0);
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
+      duration: 200,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
+      isInteraction: false,
     });
 
     animation.start();
@@ -40,23 +41,7 @@ export function ScreenTransition({
       style={[
         { flex: 1 },
         style,
-        {
-          opacity: progress,
-          transform: [
-            {
-              translateY: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [10, 0],
-              }),
-            },
-            {
-              scale: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.985, 1],
-              }),
-            },
-          ],
-        },
+        { opacity: progress },
       ]}
     >
       {children}
