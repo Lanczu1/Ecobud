@@ -5,6 +5,7 @@ import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { triggerImpactLight } from '../utils/haptics';
+import { getLevelFromPoints } from './UnifiedProgressCard';
 
 export interface LevelCardProps {
   ecoPoints: number;
@@ -14,33 +15,7 @@ export interface LevelCardProps {
   onProgressBarMeasured?: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
-const LEVELS = [
-  { level: 1, name: 'Eco Seedling', icon: 'sprout', points: 0 },
-  { level: 2, name: 'Eco Learner', icon: 'book-open-variant', points: 100 },
-  { level: 3, name: 'Eco Advocate', icon: 'bullhorn', points: 300 },
-  { level: 4, name: 'Eco Warrior', icon: 'recycle', points: 600 },
-  { level: 5, name: 'Eco Champion', icon: 'trophy', points: 1000 },
-  { level: 6, name: 'Eco Guardian', icon: 'tree', points: 1500 },
-  { level: 7, name: 'Eco Leader', icon: 'earth', points: 2200 },
-  { level: 8, name: 'Eco Ambassador', icon: 'heart', points: 3000 },
-  { level: 9, name: 'Eco Hero', icon: 'shield-star', points: 4000 },
-  { level: 10, name: 'Eco Legend', icon: 'crown', points: 5500 },
-];
-
-export function getLevelFromPoints(points: number) {
-  let currentLevelObj = LEVELS[0];
-  let nextLevelObj = LEVELS[1];
-
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (points >= LEVELS[i].points) {
-      currentLevelObj = LEVELS[i];
-      nextLevelObj = LEVELS[i + 1] || LEVELS[i];
-      break;
-    }
-  }
-
-  return { currentLevelObj, nextLevelObj };
-}
+export { getLevelFromPoints };
 
 export function LevelCard({ ecoPoints, animatePoints = true, onPress, onProgressBarMeasured }: LevelCardProps) {
   const progressBarRef = React.useRef<View>(null);

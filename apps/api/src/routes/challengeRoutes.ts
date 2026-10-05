@@ -661,6 +661,24 @@ challengeRoutes.post(
   }),
 );
 
+function findSubmissionForRequest(userId: string, challengeInstanceId: string, submissionId?: string) {
+  if (submissionId) {
+    return prisma.challengeSubmission.findUnique({
+      where: { id: submissionId },
+      include: { challengeInstance: { include: { challenge: true } } }
+    });
+  }
+
+  return prisma.challengeSubmission.findFirst({
+    where: {
+      userId,
+      challengeInstanceId,
+    },
+    include: { challengeInstance: { include: { challenge: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+}
+
 challengeRoutes.post(
   '/:challengeInstanceId/verify-qr',
   authenticateRequest,
@@ -685,22 +703,7 @@ challengeRoutes.post(
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const actualInstanceId = instance?.id || req.params.challengeInstanceId;
 
-    let submission;
-    if (submissionId) {
-      submission = await prisma.challengeSubmission.findUnique({
-        where: { id: submissionId },
-        include: { challengeInstance: { include: { challenge: true } } }
-      });
-    } else {
-      submission = await prisma.challengeSubmission.findFirst({
-        where: {
-          userId,
-          challengeInstanceId: actualInstanceId,
-        },
-        include: { challengeInstance: { include: { challenge: true } } },
-        orderBy: { createdAt: 'desc' }
-      });
-    }
+    let submission = await findSubmissionForRequest(userId, actualInstanceId, submissionId);
 
     if (!submission) {
       throw new HttpError(404, 'Submission not found.');
@@ -792,22 +795,7 @@ challengeRoutes.post(
     const instance = await resolveInstance(req.params.challengeInstanceId);
     const actualInstanceId = instance?.id || req.params.challengeInstanceId;
 
-    let submission;
-    if (submissionId) {
-      submission = await prisma.challengeSubmission.findUnique({
-        where: { id: submissionId },
-        include: { challengeInstance: { include: { challenge: true } } }
-      });
-    } else {
-      submission = await prisma.challengeSubmission.findFirst({
-        where: {
-          userId,
-          challengeInstanceId: actualInstanceId,
-        },
-        include: { challengeInstance: { include: { challenge: true } } },
-        orderBy: { createdAt: 'desc' }
-      });
-    }
+    let submission = await findSubmissionForRequest(userId, actualInstanceId, submissionId);
 
     if (!submission) {
       throw new HttpError(404, 'Submission not found.');

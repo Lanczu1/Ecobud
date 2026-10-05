@@ -59,13 +59,9 @@ export function SkeletonBox({
 }
 
 /**
- * Skeleton for Home Dashboard with synchronized breathing pulse/shimmer animation
+ * Breathing pulse shared by the card skeletons
  */
-export function HomeViewSkeleton() {
-  const { width } = useWindowDimensions();
-  const { theme, isDark } = useTheme();
-  const isTablet = width >= 600;
-  const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+export function useSkeletonPulse(isDark: boolean) {
   const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
 
   const screenActive = useScreenActive();
@@ -88,6 +84,19 @@ export function HomeViewSkeleton() {
     anim.start();
     return () => anim.stop();
   }, [screenActive, pulseAnim, isDark]);
+
+  return pulseAnim;
+}
+
+/**
+ * Skeleton for Home Dashboard with synchronized breathing pulse/shimmer animation
+ */
+export function HomeViewSkeleton() {
+  const { width } = useWindowDimensions();
+  const { theme, isDark } = useTheme();
+  const isTablet = width >= 600;
+  const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+  const pulseAnim = useSkeletonPulse(isDark);
 
   const cardStyle = [
     {
@@ -125,6 +134,17 @@ export function HomeViewSkeleton() {
         <View style={{ height: 14, width: '55%', borderRadius: 7, backgroundColor: boneBg, marginLeft: scale(10) }} />
       </Animated.View>
 
+      <HomeCardsBody cardStyle={cardStyle} boneBg={boneBg} isTablet={isTablet} />
+    </View>
+  );
+}
+
+/**
+ * Quick actions, stats, leaderboard and featured lesson placeholders shared by both home skeletons
+ */
+function HomeCardsBody({ cardStyle, boneBg, isTablet }: { cardStyle: StyleProp<any>; boneBg: string; isTablet: boolean }) {
+  return (
+    <>
       {/* Quick Action Icons Placeholder */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: verticalScale(18) }}>
         {[1, 2, 3, 4].map((i) => (
@@ -195,7 +215,7 @@ export function HomeViewSkeleton() {
           <View style={{ height: 14, width: '90%', borderRadius: 7, backgroundColor: boneBg }} />
         </View>
       </Animated.View>
-    </View>
+    </>
   );
 }
 
@@ -207,28 +227,7 @@ export function HomeCardsSkeleton() {
   const { theme, isDark } = useTheme();
   const isTablet = width >= 600;
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
-  const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
-
-  const screenActive = useScreenActive();
-  useEffect(() => {
-    if (!screenActive) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.95 : 1,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.5 : 0.55,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [screenActive, pulseAnim, isDark]);
+  const pulseAnim = useSkeletonPulse(isDark);
 
   const cardStyle = [
     {
@@ -242,76 +241,7 @@ export function HomeCardsSkeleton() {
 
   return (
     <View style={{ width: '100%' }}>
-      {/* Quick Action Icons Placeholder */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: verticalScale(18) }}>
-        {[1, 2, 3, 4].map((i) => (
-          <View key={i} style={{ alignItems: 'center', gap: 6 }}>
-            <View style={{ width: scale(54), height: scale(54), borderRadius: scale(27), backgroundColor: boneBg }} />
-            <View style={{ width: scale(46), height: 10, borderRadius: 5, backgroundColor: boneBg }} />
-          </View>
-        ))}
-      </View>
-
-      {/* Top Stats Cards (Side-by-side on tablet, stacked on phone) */}
-      {isTablet ? (
-        <View style={{ flexDirection: 'row', gap: scale(14), marginBottom: verticalScale(16) }}>
-          <Animated.View style={[{ flex: 1, height: verticalScale(140), padding: moderateScale(16) }, cardStyle]}>
-            <View style={{ height: 16, width: 80, borderRadius: 8, backgroundColor: boneBg, marginBottom: 12 }} />
-            <View style={{ height: 28, width: 120, borderRadius: 10, backgroundColor: boneBg, marginBottom: 14 }} />
-            <View style={{ height: 12, width: '90%', borderRadius: 6, backgroundColor: boneBg }} />
-          </Animated.View>
-          <Animated.View style={[{ flex: 1, height: verticalScale(140), padding: moderateScale(16) }, cardStyle]}>
-            <View style={{ height: 16, width: 80, borderRadius: 8, backgroundColor: boneBg, marginBottom: 12 }} />
-            <View style={{ height: 28, width: 120, borderRadius: 10, backgroundColor: boneBg, marginBottom: 14 }} />
-            <View style={{ height: 12, width: '90%', borderRadius: 6, backgroundColor: boneBg }} />
-          </Animated.View>
-        </View>
-      ) : (
-        <View style={{ gap: verticalScale(14), marginBottom: verticalScale(18) }}>
-          <Animated.View style={[{ height: verticalScale(130), padding: moderateScale(16) }, cardStyle]}>
-            <View style={{ height: 14, width: 80, borderRadius: 7, backgroundColor: boneBg, marginBottom: 10 }} />
-            <View style={{ height: 26, width: 140, borderRadius: 9, backgroundColor: boneBg, marginBottom: 12 }} />
-            <View style={{ height: 12, width: '85%', borderRadius: 6, backgroundColor: boneBg }} />
-          </Animated.View>
-          <Animated.View style={[{ height: verticalScale(130), padding: moderateScale(16) }, cardStyle]}>
-            <View style={{ height: 14, width: 80, borderRadius: 7, backgroundColor: boneBg, marginBottom: 10 }} />
-            <View style={{ height: 26, width: 140, borderRadius: 9, backgroundColor: boneBg, marginBottom: 12 }} />
-            <View style={{ height: 12, width: '85%', borderRadius: 6, backgroundColor: boneBg }} />
-          </Animated.View>
-        </View>
-      )}
-
-      {/* Leaderboard Snippet Skeleton */}
-      <Animated.View
-        style={[
-          cardStyle,
-          {
-            height: verticalScale(76),
-            padding: moderateScale(14),
-            marginBottom: verticalScale(16),
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: scale(10),
-          },
-        ]}
-      >
-        <View style={{ width: scale(36), height: scale(36), borderRadius: scale(18), backgroundColor: boneBg }} />
-        <View style={{ flex: 1, gap: 6 }}>
-          <View style={{ height: 14, width: '50%', borderRadius: 7, backgroundColor: boneBg }} />
-          <View style={{ height: 11, width: '75%', borderRadius: 5, backgroundColor: boneBg }} />
-        </View>
-        <View style={{ height: 16, width: 45, borderRadius: 8, backgroundColor: boneBg }} />
-      </Animated.View>
-
-      {/* Featured Lesson Skeleton */}
-      <Animated.View style={[cardStyle, { overflow: 'hidden', marginBottom: verticalScale(16) }]}>
-        <View style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: boneBg }} />
-        <View style={{ padding: moderateScale(16) }}>
-          <View style={{ height: 14, width: 60, borderRadius: 7, backgroundColor: boneBg, marginBottom: 8 }} />
-          <View style={{ height: 18, width: '70%', borderRadius: 9, backgroundColor: boneBg, marginBottom: 10 }} />
-          <View style={{ height: 14, width: '90%', borderRadius: 7, backgroundColor: boneBg }} />
-        </View>
-      </Animated.View>
+      <HomeCardsBody cardStyle={cardStyle} boneBg={boneBg} isTablet={isTablet} />
     </View>
   );
 }
@@ -325,28 +255,7 @@ export function LearnViewSkeleton() {
   const { theme, isDark } = useTheme();
   const isTablet = width >= 600;
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
-  const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
-
-  const screenActive = useScreenActive();
-  useEffect(() => {
-    if (!screenActive) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.95 : 1,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.5 : 0.55,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [screenActive, pulseAnim, isDark]);
+  const pulseAnim = useSkeletonPulse(isDark);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -447,28 +356,7 @@ export function ChallengesViewSkeleton() {
 export function TrackerCardsSkeleton() {
   const { theme, isDark } = useTheme();
   const boneBg = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
-  const pulseAnim = useRef(new Animated.Value(isDark ? 0.5 : 0.55)).current;
-
-  const screenActive = useScreenActive();
-  useEffect(() => {
-    if (!screenActive) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.95 : 1,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: isDark ? 0.5 : 0.55,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [screenActive, pulseAnim, isDark]);
+  const pulseAnim = useSkeletonPulse(isDark);
 
   const cardStyle = [
     {

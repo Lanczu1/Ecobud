@@ -17,6 +17,20 @@ function contentSaveError(error: any, res: Response, fallback: string) {
   return res.status(500).json({ message: fallback });
 }
 
+function parseEventPayload(body: any) {
+  const payload = { ...body };
+  if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
+  if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
+  if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
+  if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
+  if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
+  if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
+  if (payload.isFeatured !== undefined) {
+    payload.isFeatured = payload.isFeatured === true || payload.isFeatured === 'true';
+  }
+  return payload;
+}
+
 const safelyDeleteUpload = async (url?: string | null) => {
   if (!url) return;
   // If it's a Supabase storage URL
@@ -658,16 +672,7 @@ export class AdminController {
   static async createEvent(req: AuthenticatedRequest, res: Response) {
     if (req.body.badgeReward !== undefined && req.auth?.role !== 'admin') return res.status(403).json({ message: 'Only administrators can manage badge rewards.' });
     try {
-      const payload = { ...req.body };
-      if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
-      if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
-      if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
-      if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
-      if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
-      if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
-      if (payload.isFeatured !== undefined) {
-        payload.isFeatured = payload.isFeatured === true || payload.isFeatured === 'true';
-      }
+      const payload = parseEventPayload(req.body);
 
       if (req.file) {
         try {
@@ -697,16 +702,7 @@ export class AdminController {
   static async updateEvent(req: AuthenticatedRequest, res: Response) {
     if (req.body.badgeReward !== undefined && req.auth?.role !== 'admin') return res.status(403).json({ message: 'Only administrators can manage badge rewards.' });
     try {
-      const payload = { ...req.body };
-      if (payload.isPublished !== undefined) payload.isPublished = payload.isPublished === true || payload.isPublished === 'true';
-      if (payload.capacity) payload.capacity = parseInt(payload.capacity, 10);
-      if (payload.pointsReward) payload.pointsReward = parseInt(payload.pointsReward, 10);
-      if (payload.coinReward !== undefined) payload.coinReward = parseInt(payload.coinReward, 10);
-      if (payload.latitude) payload.latitude = parseFloat(payload.latitude);
-      if (payload.longitude) payload.longitude = parseFloat(payload.longitude);
-      if (payload.isFeatured !== undefined) {
-        payload.isFeatured = payload.isFeatured === true || payload.isFeatured === 'true';
-      }
+      const payload = parseEventPayload(req.body);
 
       let existingEvent;
       try {

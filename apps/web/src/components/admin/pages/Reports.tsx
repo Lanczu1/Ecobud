@@ -1,76 +1,13 @@
-import { useEffect, useState } from 'react';
 import { TrendingUp, Users, Trophy, BookOpen, Coins, ArrowUpRight, Download, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet, getCachedAdminData, clearAdminApiCache } from '../../../utils/adminApi';
-import { adminRealtimeService } from '../../../services/adminRealtimeService';
+import { useAdminStats } from '../useAdminStats';
 
-interface DashboardStats {
-  overview: {
-    totalUsers: number;
-    signupsToday: number;
-    totalLessons: number;
-    totalChallenges: number;
-    totalCoinsRedeemed: number;
-    lessonCompletions: number;
-    onlineNow: number;
-    activeToday: number;
-  };
-  activityTrend: {
-    day: string;
-    dateLabel: string;
-    date: string;
-    active: number;
-    signups: number;
-  }[];
-}
 
 function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
   return <div className={`animate-pulse bg-gray-200 rounded-lg ${className}`} style={style} />;
 }
 
 export function Reports() {
-  const [stats, setStats] = useState<DashboardStats | null>(() => getCachedAdminData<DashboardStats>('/admin/stats'));
-  const [loading, setLoading] = useState(() => !getCachedAdminData<DashboardStats>('/admin/stats'));
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadStats(isInitial = false) {
-      if (isInitial && !stats) setLoading(true);
-      try {
-        const data = await adminGet<DashboardStats>('/admin/stats');
-        if (isMounted) {
-          setStats(data);
-          setError(null);
-        }
-      } catch (err: any) {
-        if (isMounted && isInitial && !stats) {
-          setError(err.message || 'Failed to load report data.');
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadStats(true);
-
-    let unsubscribe: (() => void) | undefined;
-    adminRealtimeService.connect({
-      onStatsRefresh: () => {
-        clearAdminApiCache('/admin/stats');
-        loadStats(false);
-      },
-    }).then((unsub) => {
-      unsubscribe = unsub;
-    });
-
-    return () => {
-      isMounted = false;
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
+  const { stats, loading, error } = useAdminStats('Failed to load report data.');
 
   const kpis = stats ? [
     { label: 'Total Users', value: stats.overview.totalUsers.toLocaleString(), change: `+${stats.overview.signupsToday} today`, up: true, icon: Users, color: 'text-green-600', bg: 'bg-green-50' },
