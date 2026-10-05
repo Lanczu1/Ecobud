@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { adminUserActivityRoutes } from './adminUserActivityRoutes';
 import { barangayReportRoutes } from './barangayReportRoutes';
+import reportRoutes from './reportRoutes';
 import { adminBadgeRoutes } from './adminBadgeRoutes';
 import { authorizeEventWrite, validateEventAudience, eventBarangay } from '../services/eventAccess';
 import { BARANGAYS } from '../utils/announcementBarangays';
@@ -20,6 +21,7 @@ adminRoutes.use(authenticateRequest);
 adminRoutes.use(requireModeratorAccess);
 adminRoutes.use('/user-activity', adminUserActivityRoutes);
 adminRoutes.use('/reports/barangay', barangayReportRoutes);
+adminRoutes.use('/reports', reportRoutes);
 adminRoutes.use('/badges', adminBadgeRoutes);
 
 // Uploads
