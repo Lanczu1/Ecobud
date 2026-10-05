@@ -23,7 +23,6 @@ import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
 import { PublicProfileModal } from './PublicProfileModal';
 import { ListingReportsSection } from './ListingReportsSection';
-import { ListingRatingSection } from './ListingRatingSection';
 import type { SwapListing } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
@@ -79,9 +78,6 @@ export function SwapListingDetail({
   const { theme, isDark } = useTheme();
   const { showNotification } = useInAppNotification();
   const [listing, setListing] = useState<SwapListing>(initialListing);
-  const handleOwnerRating = React.useCallback((rating: number) => {
-    setListing(current => current.user.rating === rating ? current : { ...current, user: { ...current.user, rating } });
-  }, []);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showActions, setShowActions] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -589,11 +585,6 @@ export function SwapListingDetail({
                 </View>
                 <View style={localStyles.userStats}>
                   <View style={localStyles.userStat}>
-                    <Ionicons name="star" size={13} color="#F59E0B" />
-                    <Text style={localStyles.userStatText}>{listing.user.rating.toFixed(1)}</Text>
-                  </View>
-                  <View style={[localStyles.userStatDivider, { backgroundColor: theme.colors.border }]} />
-                  <View style={localStyles.userStat}>
                     <Ionicons name="swap-horizontal" size={13} color={isDark ? theme.colors.primary : ecoTheme.colors.primaryDark} />
                     <Text style={[localStyles.userStatText, { color: theme.colors.textMuted }]}>{listing.user.successfulSwaps} swaps</Text>
                   </View>
@@ -603,7 +594,6 @@ export function SwapListingDetail({
                 <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
               </View>
             </TouchableOpacity>
-            <ListingRatingSection key={listing.id} listingId={listing.id} isOwnListing={isOwnListing} onOwnerRating={handleOwnerRating} />
           </View>
         </ScrollView>
 

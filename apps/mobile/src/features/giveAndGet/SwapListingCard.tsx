@@ -255,8 +255,6 @@ function SwapListingCardComponent({
             <View style={localStyles.userInfo}>
               <Text style={[localStyles.userName, { color: theme.colors.textPrimary }]} numberOfLines={1}>{user.displayName}</Text>
               <View style={localStyles.userStatsRow}>
-                <Ionicons name="star" size={11} color="#F59E0B" />
-                <Text style={localStyles.userRating}>{user.rating.toFixed(1)}</Text>
                 <Text style={[localStyles.userSwaps, { color: theme.colors.textMuted }]}>{user.successfulSwaps} swaps</Text>
               </View>
             </View>
