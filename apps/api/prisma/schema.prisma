@@ -9,6 +9,9 @@ datasource db {
 }
 
 model User {
+  adminNotificationReads       AdminNotificationRead[]
+  adminNotificationPreference AdminNotificationPreference?
+  adminPushSubscriptions      AdminPushSubscription[]
   idVerificationStatus         IdVerificationStatus      @default(not_submitted) @map("id_verification_status")
   idSubmissions                IdVerificationSubmission[] @relation("IdOwner")
   reviewedIds                  IdVerificationSubmission[] @relation("IdReviewer")
@@ -70,6 +73,73 @@ model User {
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
   @@index([status, role, points(sort: Desc), createdAt], map: "users_leaderboard_order_idx")
   @@map("users")
+}
+
+model AdminNotificationEvent {
+  id             String @id @default(dbgenerated("md5((random())::text || (clock_timestamp())::text)"))
+  eventKey       String @unique @map("event_key")
+  category       String
+  title          String
+  message        String
+  recordType     String @map("record_type")
+  recordId       String @map("record_id")
+  barangays      String[] @default([])
+  audience       String @default("both")
+  actionRequired Boolean @default(false) @map("action_required")
+  resolvedAt     DateTime? @map("resolved_at")
+  availableAt    DateTime @default(now()) @map("available_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  reads          AdminNotificationRead[]
+  deliveries     AdminPushDelivery[]
+  @@index([availableAt(sort: Desc), id(sort: Desc)], map: "admin_notifications_feed")
+  @@index([recordType, recordId], map: "admin_notifications_record")
+  @@index([barangays], type: Gin, map: "admin_notifications_barangays")
+  @@map("admin_notification_events")
+}
+
+model AdminNotificationRead {
+  userId String @map("user_id")
+  eventId String @map("event_id")
+  readAt DateTime @default(now()) @map("read_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event AdminNotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@id([userId, eventId])
+  @@map("admin_notification_reads")
+}
+
+model AdminNotificationPreference {
+  userId String @id @map("user_id")
+  pushCategories String[] @default(["system"]) @map("push_categories")
+  quietStart Int? @map("quiet_start")
+  quietEnd Int? @map("quiet_end")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("admin_notification_preferences")
+}
+
+model AdminPushSubscription {
+  id String @id @default(dbgenerated("md5((random())::text || (clock_timestamp())::text)"))
+  endpoint String @unique
+  subscription Json
+  userId String @map("user_id")
+  sessionVersion Int @map("session_version")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries AdminPushDelivery[]
+  @@map("admin_push_subscriptions")
+}
+
+model AdminPushDelivery {
+  eventId String @map("event_id")
+  subscriptionId String @map("subscription_id")
+  state String @default("pending")
+  attempts Int @default(0)
+  nextAt DateTime @default(now()) @map("next_at")
+  event AdminNotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  subscription AdminPushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  @@id([eventId, subscriptionId])
+  @@index([state, nextAt], map: "admin_push_jobs")
+  @@map("admin_push_deliveries")
 }
 
 enum IdVerificationStatus {

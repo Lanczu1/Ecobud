@@ -6,6 +6,7 @@ import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { firebaseMessaging } from '../lib/firebaseMessaging';
 import { effectiveAnnouncementStatus } from './announcementRules';
 import { BARANGAYS } from '../utils/announcementBarangays';
+import { recordAdminWorkerFailure, resolveAdminWorkerFailure } from './adminPushService';
 const mail = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }, connectionTimeout: 10000, socketTimeout: 20000 });
 type EventRow = {
     key: string;
@@ -124,6 +125,7 @@ export async function deliverNotification(d: Delivery) {
     }
 }
 let running = false;
+let workerHadFailure = false;
 let timer: NodeJS.Timeout | undefined;
 export async function notificationTick() {
     if (running)
@@ -147,9 +149,15 @@ export async function notificationTick() {
                 await prisma.$executeRaw `UPDATE notification_deliveries SET state=${state},next_at=${new Date(Date.now() + Math.min(3600000, 60000 * 2 ** Math.min(d.attempts, 6)))} WHERE id=${d.id}`;
             }));
         }
+        if (workerHadFailure) {
+            await resolveAdminWorkerFailure('resident-notifications');
+            workerHadFailure = false;
+        }
     }
     catch (error: any) {
+        workerHadFailure = true;
         console.error('notification_worker_failed', String(error?.code || 'unknown'));
+        await recordAdminWorkerFailure('resident-notifications');
     }
     finally {
         running = false;

@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
 import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { notificationTarget } from '../../../services/adminNotifications';
 import { ContentBadgeReward, useContentBadgeReward } from '../ContentBadgeReward';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
@@ -563,6 +564,7 @@ export function LearningContent() {
   const load = async (fresh = false) => {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      const target=notificationTarget('lesson'); if (target) params.set('recordId',target);
       if (search.trim()) params.set('search', search.trim());
       if (filterStatus !== 'All') params.set('status', filterStatus);
       const data = await adminGet<{ items: Lesson[]; pagination: typeof pagination }>(`/admin/lessons?${params.toString()}`, { bypassCache: fresh });

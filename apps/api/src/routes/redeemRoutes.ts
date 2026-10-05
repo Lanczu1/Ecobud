@@ -207,11 +207,18 @@ router.get('/stats', authenticateRequest, requireModeratorAccess, async (req, re
 });
 
 // Get all redemption requests (admin)
-router.get('/requests', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/requests', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
     const { status } = req.query;
     const { page, pageSize, skip } = parseAdminPagination(req.query);
     const where: any = {};
+    if (typeof req.query.recordId==='string') {
+      where.id=req.query.recordId;
+      if (req.auth!.role==='moderator') {
+        const users=await prisma.user.findMany({ where:{ profile:{ city:{ equals:req.auth!.city?.trim() || '__unassigned__',mode:'insensitive' } } },select:{ id:true } });
+        where.userId={ in:users.map(user=>user.id) };
+      }
+    }
     if (status === 'active') where.status = { not: 'claimed' };
     else if (status && status !== 'all') where.status = status;
     if (typeof req.query.search === 'string' && req.query.search.trim()) {

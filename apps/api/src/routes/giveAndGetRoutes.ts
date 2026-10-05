@@ -81,11 +81,15 @@ router.patch('/:id/status', authenticateRequest, requireModeratorAccess, async (
 // ─── Swap Listings (Manage Listings) ─────────────────────────────────────────
 
 // Get all swap listings (admin view)
-router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
   try {
     const { status, reported } = req.query;
     const { page, pageSize, skip } = parseAdminPagination(req.query);
     const where: any = { approvalStatus: { not: 'deleted' } };
+    if (typeof req.query.recordId==='string') {
+      where.id=req.query.recordId;
+      if (req.auth!.role==='moderator') where.city={ equals:req.auth!.city?.trim() || '__unassigned__',mode:'insensitive' };
+    }
     if (status && status !== 'all') where.approvalStatus = status;
     if (reported === 'true') where.isReported = true;
     if (typeof req.query.search === 'string' && req.query.search.trim()) where.title = { contains: req.query.search.trim().slice(0, 100), mode: 'insensitive' };

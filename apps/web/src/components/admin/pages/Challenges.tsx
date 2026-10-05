@@ -11,6 +11,7 @@ import {
   RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, EyeOff, Info, FileText, CheckSquare
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -715,7 +716,7 @@ export function Challenges() {
   const toast = useToast();
 
   // ── Submissions tab state ────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>('challenges');
+  const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>(notificationTarget('challenge_submission') ? 'submissions' : 'challenges');
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 3, total: 0, totalPages: 1, totalResidents: 0 });
@@ -769,6 +770,7 @@ export function Challenges() {
   const load = async (fresh = false) => {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      const target=notificationTarget('challenge'); if (target) params.set('recordId',target);
       if (search.trim()) params.set('search', search.trim());
       if (filterStatus !== 'All') params.set('status', filterStatus);
       const data = await adminGet<{ items: Challenge[]; pagination: typeof pagination }>(`/admin/challenges?${params.toString()}`, { bypassCache: fresh });
@@ -792,6 +794,7 @@ export function Challenges() {
     if (showLoading) setSubmissionsLoading(true);
     try {
       const params = new URLSearchParams({ type: 'challenge', groupBy: 'barangay', page: String(page) });
+      const target=notificationTarget('challenge_submission'); if (target) params.set('recordId',target);
       if (subSearch.trim()) params.set('search', subSearch.trim());
       if (subStatusFilter !== 'All') params.set('status', subStatusFilter);
       if (selectedUserIdFilter !== 'All') params.set('userId', selectedUserIdFilter);
@@ -805,7 +808,7 @@ export function Challenges() {
       setSubmissions(data.items.filter(isChallengeSubmission));
       setSubmissionsPagination(data.pagination);
       setSubmissionsPage(data.pagination.page);
-      setSubmissionFilterOptions(data.filterOptions);
+      setSubmissionFilterOptions(data.filterOptions ?? { users:[],barangays:[] });
     } catch (err: any) { 
       console.error('Failed to load submissions', err); 
       if (showLoading) toast.error(err.message || 'Failed to load submissions');

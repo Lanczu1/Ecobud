@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
@@ -81,7 +82,7 @@ interface RedeemDraft {
 
 export function Redeem() {
   const drafts = useLocalDrafts<RedeemDraft>('redeem');
-  const [mainTab, setMainTab] = useState<'items' | 'requests'>('items');
+  const [mainTab, setMainTab] = useState<'items' | 'requests'>(notificationTarget('redemption') ? 'requests' : 'items');
   const [itemPage, setItemPage] = useState(1);
   const [requestPage, setRequestPage] = useState(1);
   const [itemPagination, setItemPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
@@ -308,7 +309,9 @@ export function Redeem() {
     try {
       if (!silent) setRequestsLoading(true);
       const params = new URLSearchParams({ page: String(requestPage), pageSize: '25' });
-      if (requestFilterRef.current === 'archive') params.set('status', 'claimed');
+      const target=notificationTarget('redemption'); if (target) params.set('recordId',target);
+      if (target) params.set('status','all');
+      else if (requestFilterRef.current === 'archive') params.set('status', 'claimed');
       else if (requestFilterRef.current === 'all') params.set('status', 'active');
       else params.set('status', requestFilterRef.current);
       if (search.trim()) params.set('search', search.trim());

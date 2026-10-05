@@ -37,6 +37,16 @@ async function editableAnnouncement(req: AuthenticatedRequest) {
 announcementAdminRoutes.get('/barangays', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   res.json({ items: BARANGAYS, assignedBarangay: assignedBarangay(req), canCreate: req.auth!.role === 'admin' || !!assignedBarangay(req) });
 }));
+announcementAdminRoutes.get('/:id', errorBoundary<AuthenticatedRequest>(async (req,res) => {
+  const item=await prisma.announcement.findUnique({ where:{ id:req.params.id },include });
+  if (!item) throw new HttpError(404,'Announcement is no longer available.');
+  if (req.auth!.role==='moderator') {
+    const barangay=assignedBarangay(req);
+    const relevant=!!barangay && effectiveAnnouncementStatus(item)==='Published' && (item.targetAudience==='All Residents' || item.barangays.includes(barangay));
+    if (!canManage(req,item) && !relevant) throw new HttpError(404,'Announcement is outside your assigned barangay.');
+  }
+  res.json({ ...serialize(item),canManage:canManage(req,item) });
+}));
 announcementAdminRoutes.get('/', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const barangay = assignedBarangay(req);
   if (req.auth!.role === 'moderator' && !barangay) return res.json({ items: [] });
