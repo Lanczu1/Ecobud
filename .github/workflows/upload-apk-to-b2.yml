@@ -1,0 +1,74 @@
+name: Upload APK to Backblaze B2
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag to upload"
+        required: true
+        type: string
+
+jobs:
+  upload-apk:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Determine release tag
+        id: release
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download APK from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir -p release
+
+          gh release download "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.apk" \
+            --dir release
+
+          echo "Downloaded APK:"
+          ls -lh release/
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Upload APK to Backblaze B2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+        run: |
+          APK=$(find release -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: No APK found in GitHub Release."
+            exit 1
+          fi
+
+          echo "Uploading: $APK"
+
+          aws s3 cp "$APK" \
+            "s3://$B2_BUCKET/ECOBUD.apk" \
+            --endpoint-url "$B2_ENDPOINT" \
+            --content-type "application/vnd.android.package-archive" \
+            --cache-control "no-cache"
+
+          echo "APK uploaded successfully!"
