@@ -27,6 +27,7 @@ lessonRoutes.get(
           : undefined,
       },
       orderBy: [{ featured: 'desc' }, { title: 'asc' }],
+      take: 100,
       include: {
         progress: {
           where: { userId: req.auth!.userId },

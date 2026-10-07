@@ -1,6 +1,7 @@
 import { NextFunction, Request } from 'express';
 import { Response } from 'express';
 import { prisma } from '../prismaClient';
+import { authCache } from '../lib/cache';
 import { AccessRole, TokenService, TokenSession } from '../security/tokenService';
 import { JsonWebTokenError } from 'jsonwebtoken';
 import { ZodError } from 'zod';
@@ -9,7 +10,9 @@ export interface AuthenticatedRequest extends Request {
   auth?: TokenSession;
 }
 
-const getInactiveStatusMessage = (status: TokenSession['status']) => {
+const AUTH_CACHE_SECONDS = 5;
+
+const getInactiveStatusMessage =(status: TokenSession['status']) => {
   if (status === 'suspended') {
     return 'Your ECOBUD account is suspended. Please contact an administrator.';
   }
@@ -32,22 +35,25 @@ export const authenticateRequest = async (
 
   try {
     const session = TokenService.verify(token);
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        sessionVersion: true,
-        profile: {
-          select: {
-            city: true,
+    // A screen fires several requests at once; they share one lookup.
+    const user = await authCache.getOrSet(`auth:${session.userId}`, AUTH_CACHE_SECONDS, () =>
+      prisma.user.findUnique({
+        where: { id: session.userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          sessionVersion: true,
+          profile: {
+            select: {
+              city: true,
+            },
           },
         },
-      },
-    });
+      }),
+    );
 
     if (!user) {
       return res.status(401).json({ message: 'The access token is no longer valid.' });

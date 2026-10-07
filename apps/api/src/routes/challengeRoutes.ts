@@ -553,6 +553,7 @@ challengeRoutes.get(
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
 
     return res.json({ items });

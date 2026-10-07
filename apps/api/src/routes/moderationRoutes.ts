@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authorizeEventWrite, validateEventAudience } from '../services/eventAccess';
 import { z } from 'zod';
 import { prisma } from '../prismaClient';
+import { parseAdminPagination } from '../utils/adminPagination';
 import { authenticateRequest, AuthenticatedRequest, requireModeratorAccess } from '../http/authentication';
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
@@ -122,8 +123,11 @@ moderationRoutes.get(
 
 moderationRoutes.get(
   '/events',
-  errorBoundary(async (_req, res) => {
+  errorBoundary(async (req, res) => {
+    const { skip, pageSize } = parseAdminPagination(req.query);
     const items = await prisma.event.findMany({
+      skip,
+      take: pageSize,
       include: {
         managedBy: {
           include: {
@@ -235,6 +239,7 @@ moderationRoutes.get(
       typeof req.query.status === 'string' ? req.query.status : undefined,
     );
 
+    const { skip, pageSize } = parseAdminPagination(req.query);
     const isModerator = req.auth?.role === 'moderator';
     const where: any = { status };
 
@@ -262,6 +267,8 @@ moderationRoutes.get(
         },
       },
       orderBy: [{ updatedAt: 'desc' }],
+      skip,
+      take: pageSize,
     });
 
     return res.json({ items });

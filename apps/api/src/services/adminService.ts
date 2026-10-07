@@ -7,6 +7,7 @@ import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { sendDirectNotification } from './notificationService';
 import { apiCache } from "../lib/cache";
 import { getTotalCoinsRedeemed } from './redemptionStatsService';
+import { activityByDayQuery } from './adminActivityTrend';
 
 type ReviewerContext = {
   role: string;
@@ -572,63 +573,23 @@ export class AdminService {
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);
       end.setHours(23, 59, 59, 999);
-      return { start, end, userIds: new Set<string>(), signups: 0 };
+      return { start, end };
     });
-    const range = { gte: days[0].start, lte: days[6].end };
-    const addActivity = (userId: string, timestamp: Date | null) => {
-      if (!timestamp) return;
-      const day = days.find((candidate) => timestamp >= candidate.start && timestamp <= candidate.end);
-      if (day) day.userIds.add(userId);
-    };
 
     const cachedTrend = apiCache.get<any[]>(`admin_activity_trend:${days[0].start.toISOString().slice(0, 10)}`);
     if (cachedTrend) return cachedTrend;
 
-    // Fetch the seven-day window once per data source rather than once per day.
-    const [presenceRows, userRows, lessonRows, submissionRows, habitRows] = await Promise.all([
-      prisma.presenceSession.findMany({
-        where: { user: { role: 'user' }, OR: [{ lastSeenAt: range }, { connectedAt: range }, { updatedAt: range }] },
-        select: { userId: true, lastSeenAt: true, connectedAt: true, updatedAt: true },
-      }),
-      prisma.user.findMany({
-        where: { role: 'user', OR: [{ lastActionDate: range }, { createdAt: range }] },
-        select: { id: true, lastActionDate: true, createdAt: true },
-      }),
-      prisma.userLessonProgress.findMany({
-        where: { user: { role: 'user' }, OR: [{ updatedAt: range }, { createdAt: range }] },
-        select: { userId: true, updatedAt: true, createdAt: true },
-      }),
-      prisma.challengeSubmission.findMany({
-        where: { user: { role: 'user' }, OR: [{ createdAt: range }, { updatedAt: range }] },
-        select: { userId: true, createdAt: true, updatedAt: true },
-      }),
-      prisma.habitCheckIn.findMany({
-        where: { user: { role: 'user' }, createdAt: range },
-        select: { userId: true, createdAt: true },
-      }),
-    ]);
+    const counts = await prisma.$queryRaw<{ idx: number; active: number; signups: number }[]>(
+      activityByDayQuery(days),
+    );
+    const countsByDay = new Map(counts.map((row) => [row.idx, row]));
 
-    presenceRows.forEach((row) => {
-      addActivity(row.userId, row.lastSeenAt);
-      addActivity(row.userId, row.connectedAt);
-      addActivity(row.userId, row.updatedAt);
-    });
-    userRows.forEach((row) => {
-      addActivity(row.id, row.lastActionDate);
-      addActivity(row.id, row.createdAt);
-      const signupDay = days.find((candidate) => row.createdAt >= candidate.start && row.createdAt <= candidate.end);
-      if (signupDay) signupDay.signups += 1;
-    });
-    lessonRows.forEach((row) => { addActivity(row.userId, row.updatedAt); addActivity(row.userId, row.createdAt); });
-    submissionRows.forEach((row) => { addActivity(row.userId, row.createdAt); addActivity(row.userId, row.updatedAt); });
-    habitRows.forEach((row) => addActivity(row.userId, row.createdAt));
-
-    const result = days.map(({ start, userIds, signups }) => ({
-      active: userIds.size,
+    const result = days.map(({ start }, idx) => ({
+      active: countsByDay.get(idx)?.active ?? 0,
       date: start.toISOString(),
       dateLabel: start.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
       day: start.toLocaleDateString('en-US', { weekday: 'short' }),
-      signups,
+      signups: countsByDay.get(idx)?.signups ?? 0,
     }));
     apiCache.set(`admin_activity_trend:${days[0].start.toISOString().slice(0, 10)}`, result, 60);
     return result;

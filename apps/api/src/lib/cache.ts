@@ -80,3 +80,5 @@ class MemoryCache {
 }
 
 export const apiCache = new MemoryCache();
+// Kept apart from apiCache so per-user session lookups never evict shared lists.
+export const authCache = new MemoryCache();
