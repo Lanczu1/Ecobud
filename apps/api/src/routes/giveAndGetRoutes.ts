@@ -12,7 +12,10 @@ const router = Router();
 // Get all give and get items (admin view)
 router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) => {
   try {
+    const { skip, pageSize } = parseAdminPagination(req.query);
     const items = await prisma.giveAndGetItem.findMany({
+      skip,
+      take: pageSize,
       include: {
         user: {
           select: { name: true, email: true },

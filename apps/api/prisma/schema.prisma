@@ -73,6 +73,8 @@ model User {
   @@index([role, createdAt], map: "users_role_created_at_idx")
   @@index([role, lastActionDate], map: "users_role_last_action_date_idx")
   @@index([status, role, points(sort: Desc), createdAt], map: "users_leaderboard_order_idx")
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_name_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_email_trgm_idx")
   @@map("users")
 }
 
@@ -253,6 +255,9 @@ model Profile {
   city            String?
   preferencesJson String?
   user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([displayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "profile_display_name_trgm_idx")
+  @@index([city(ops: raw("gin_trgm_ops"))], type: Gin, map: "profile_city_trgm_idx")
 }
 
 model Lesson {
@@ -286,6 +291,7 @@ model Lesson {
   @@index([category])
   @@index([createdAt])
   @@index([createdById])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "lessons_title_trgm_idx")
   @@map("lessons")
 }
 
@@ -403,6 +409,7 @@ model Challenge {
   @@index([active, startDate, endDate])
   @@index([active, isFeatured])
   @@index([category])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "challenge_title_trgm_idx")
 }
 
 model ChallengeInstance {
@@ -592,6 +599,7 @@ model Event {
   @@index([isPublished, isFeatured(sort: Desc), startDatetime, id], map: "events_mobile_cursor_idx")
   @@index([isFeatured])
   @@index([managedById])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "event_title_trgm_idx")
 }
 
 model EventRegistration {
@@ -755,6 +763,7 @@ model AuditLog {
 
   @@index([userId, timestamp])
   @@index([timestamp])
+  @@index([action, timestamp], map: "audit_logs_action_timestamp_idx")
   @@map("audit_logs")
 }
 
@@ -835,6 +844,7 @@ model RedeemItem {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@index([isActive, coinCost])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "redeem_items_title_trgm_idx")
   @@map("redeem_items")
 }
 
@@ -875,6 +885,9 @@ model SwapListing {
   @@index([category])
   @@index([isActive, createdAt])
   @@index([approvalStatus])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "swap_listings_title_trgm_idx")
+  @@index([lookingFor(ops: raw("gin_trgm_ops"))], type: Gin, map: "swap_listings_looking_for_trgm_idx")
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "swap_listings_description_trgm_idx")
   @@map("swap_listings")
 }
 
@@ -985,6 +998,8 @@ model RedeemRequest {
 
   @@index([userId])
   @@index([status])
+  @@index([userName(ops: raw("gin_trgm_ops"))], type: Gin, map: "redeem_requests_user_name_trgm_idx")
+  @@index([itemTitle(ops: raw("gin_trgm_ops"))], type: Gin, map: "redeem_requests_item_title_trgm_idx")
   @@map("redeem_requests")
 }
 

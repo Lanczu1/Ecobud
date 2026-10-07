@@ -221,6 +221,10 @@ const server = app.listen(port, process.env.HOST || (production ? '127.0.0.1' : 
   console.log(`ECOBUD API accessible on local network at http://0.0.0.0:${port}`);
 });
 
+// Outlast the proxy's idle keep-alive so reused connections are never closed mid-request.
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+
 startPresenceCleanupScheduler();
 startLessonPublishScheduler(); startNotificationWorker(); startIdDocumentCleanup();
 startAdminNotificationWorker();

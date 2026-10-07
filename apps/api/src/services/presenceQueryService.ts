@@ -2,6 +2,7 @@ import { Prisma, type PresenceAppState, type PresenceConnectionState, type Prism
 import { prisma } from '../prismaClient';
 import { PresenceService } from './presenceService';
 import { getAdminUserStats } from './adminUserStats';
+import { activityByDayQuery } from './adminActivityTrend';
 
 interface PresenceAggregateRow {
   userId: string;
@@ -72,7 +73,7 @@ export class PresenceQueryService {
   async getPresenceOverview(snapshotDate: Date = new Date()): Promise<AdminPresenceOverview> {
     const [activeToday, presenceSummaryRows] = await Promise.all([
       this.getActiveTodayCount(snapshotDate),
-      this.getPresenceSummaryRows(snapshotDate),
+      this.getPresenceSummaryRows(snapshotDate, undefined, true),
     ]);
 
     const onlineSummaryRows = presenceSummaryRows.filter((row) => row.isOnline);
@@ -208,75 +209,10 @@ export class PresenceQueryService {
   }
 
   async getActiveUsersCountForRange(startOfDay: Date, endOfDay: Date): Promise<number> {
-    const [
-      presenceUsers,
-      actionOrSignupUsers,
-      lessonUsers,
-      challengeUsers,
-      habitUsers,
-    ] = await Promise.all([
-      this.database.presenceSession.findMany({
-        where: {
-          user: { role: 'user' },
-          OR: [
-            { lastSeenAt: { gte: startOfDay, lte: endOfDay } },
-            { connectedAt: { gte: startOfDay, lte: endOfDay } },
-            { updatedAt: { gte: startOfDay, lte: endOfDay } },
-          ],
-        },
-        select: { userId: true },
-        distinct: ['userId'],
-      }),
-      this.database.user.findMany({
-        where: {
-          role: 'user',
-          OR: [
-            { lastActionDate: { gte: startOfDay, lte: endOfDay } },
-            { createdAt: { gte: startOfDay, lte: endOfDay } },
-          ],
-        },
-        select: { id: true },
-      }),
-      this.database.userLessonProgress.findMany({
-        where: {
-          user: { role: 'user' },
-          OR: [
-            { updatedAt: { gte: startOfDay, lte: endOfDay } },
-            { createdAt: { gte: startOfDay, lte: endOfDay } },
-          ],
-        },
-        select: { userId: true },
-        distinct: ['userId'],
-      }),
-      this.database.challengeSubmission.findMany({
-        where: {
-          user: { role: 'user' },
-          OR: [
-            { createdAt: { gte: startOfDay, lte: endOfDay } },
-            { updatedAt: { gte: startOfDay, lte: endOfDay } },
-          ],
-        },
-        select: { userId: true },
-        distinct: ['userId'],
-      }),
-      this.database.habitCheckIn.findMany({
-        where: {
-          user: { role: 'user' },
-          createdAt: { gte: startOfDay, lte: endOfDay },
-        },
-        select: { userId: true },
-        distinct: ['userId'],
-      }),
-    ]);
-
-    const activeUserIds = new Set<string>();
-    presenceUsers.forEach((u) => activeUserIds.add(u.userId));
-    actionOrSignupUsers.forEach((u) => activeUserIds.add(u.id));
-    lessonUsers.forEach((u) => activeUserIds.add(u.userId));
-    challengeUsers.forEach((u) => activeUserIds.add(u.userId));
-    habitUsers.forEach((u) => activeUserIds.add(u.userId));
-
-    return activeUserIds.size;
+    const [row] = await this.database.$queryRaw<{ active: number }[]>(
+      activityByDayQuery([{ start: startOfDay, end: endOfDay }]),
+    );
+    return row?.active ?? 0;
   }
 
   private async getActiveTodayCount(snapshotDate: Date) {
@@ -288,9 +224,13 @@ export class PresenceQueryService {
     return this.getActiveUsersCountForRange(startOfDay, endOfDay);
   }
 
-  private async getPresenceSummaryRows(snapshotDate: Date, userIds?: string[]) {
+  private async getPresenceSummaryRows(snapshotDate: Date, userIds?: string[], onlineOnly = false) {
     if (userIds && userIds.length === 0) return [];
-    const userFilter = userIds ? Prisma.sql`WHERE ps.user_id IN (${Prisma.join(userIds)})` : Prisma.empty;
+    const userFilter = userIds ? Prisma.sql`WHERE ps.user_id IN (${Prisma.join(userIds)})`
+      : onlineOnly ? Prisma.sql`WHERE ps.user_id IN (
+          SELECT live.user_id FROM presence_sessions live
+          WHERE live.is_online = TRUE AND live.expires_at > ${snapshotDate})`
+      : Prisma.empty;
     return this.database.$queryRaw<PresenceAggregateRow[]>(Prisma.sql`
       SELECT
         ps.user_id AS "userId",

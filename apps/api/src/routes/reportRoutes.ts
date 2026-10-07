@@ -67,8 +67,11 @@ async function getEventReportData(eventId: string) {
     .map(s => s.attendanceImageUrl);
 
   const rawLogs = await prisma.auditLog.findMany({
-    where: { action: { in: ['EVENT_SUBMISSION_APPROVED', 'EVENT_SUBMISSION_REJECTED'] } },
-    include: { user: { select: { name: true } } },
+    where: {
+      action: { in: ['EVENT_SUBMISSION_APPROVED', 'EVENT_SUBMISSION_REJECTED'] },
+      details: { contains: eventId },
+    },
+    select: { action: true, details: true, timestamp: true, user: { select: { name: true } } },
     orderBy: { timestamp: 'asc' }
   });
   const eventLogs = rawLogs.filter(l => {

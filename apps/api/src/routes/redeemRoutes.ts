@@ -121,6 +121,7 @@ router.get('/my-requests', authenticateRequest, requireUserAccess, async (req: A
     const requests = await prisma.redeemRequest.findMany({
       where: { userId: req.auth!.userId },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
     res.json(requests);
   } catch (error) {
@@ -171,13 +172,15 @@ router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) =>
     if (req.query.status === 'inactive') where.isActive = false;
     if (req.query.status === 'outOfStock') where.stock = 0;
     if (typeof req.query.search === 'string' && req.query.search.trim()) where.title = { contains: req.query.search.trim().slice(0, 100), mode: 'insensitive' };
-    const items = await prisma.redeemItem.findMany({
-      where,
-      skip,
-      take: pageSize,
-      orderBy: { createdAt: 'desc' },
-    });
-    const total = await prisma.redeemItem.count({ where });
+    const [items, total] = await Promise.all([
+      prisma.redeemItem.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.redeemItem.count({ where }),
+    ]);
     res.json({ items, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching redeem items:', error);
@@ -229,13 +232,15 @@ router.get('/requests', authenticateRequest, requireModeratorAccess, async (req:
       ];
     }
 
-    const requests = await prisma.redeemRequest.findMany({
-      where,
-      skip,
-      take: pageSize,
-      orderBy: { createdAt: 'desc' },
-    });
-    const total = await prisma.redeemRequest.count({ where });
+    const [requests, total] = await Promise.all([
+      prisma.redeemRequest.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.redeemRequest.count({ where }),
+    ]);
     res.json({ items: requests, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching redeem requests:', error);

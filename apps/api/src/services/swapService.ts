@@ -533,6 +533,7 @@ export const swapService = {
       where: { userId, OR: [{ isActive: true }, { approvalStatus: 'rejected' }] },
       include: profileInclude,
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
     return rows.map(formatListing);
   },

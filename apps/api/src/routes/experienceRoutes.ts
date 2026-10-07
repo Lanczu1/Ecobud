@@ -9,6 +9,7 @@ import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { apiCache } from '../lib/cache';
 
 const experienceRoutes = Router();
+const LEADERBOARD_SIZE = 100;
 
 const getDateKey = (date = new Date()) => {
   return new Intl.DateTimeFormat('en-CA', {
@@ -202,12 +203,13 @@ experienceRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const currentUserId = req.auth!.userId;
-    const users = await apiCache.getOrSet('global_leaderboard_all_users', 45, async () => {
+    const users = await apiCache.getOrSet('global_leaderboard_top', 45, async () => {
       return prisma.user.findMany({
         where: {
           status: 'active',
           role: 'user',
         },
+        take: LEADERBOARD_SIZE,
         select: {
           id: true,
           name: true,
@@ -232,6 +234,27 @@ experienceRoutes.get(
     });
 
     const currentUserIndex = users.findIndex((user) => user.id === currentUserId);
+    let currentUserRank: number | null = currentUserIndex >= 0 ? currentUserIndex + 1 : null;
+    if (currentUserRank === null && users.length === LEADERBOARD_SIZE) {
+      const me = await prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: { points: true, createdAt: true, status: true, role: true },
+      });
+      if (me && me.status === 'active' && me.role === 'user') {
+        const ahead = await prisma.user.count({
+          where: {
+            status: 'active',
+            role: 'user',
+            OR: [
+              { points: { gt: me.points } },
+              { points: me.points, createdAt: { lt: me.createdAt } },
+              { points: me.points, createdAt: me.createdAt, id: { lt: currentUserId } },
+            ],
+          },
+        });
+        currentUserRank = ahead + 1;
+      }
+    }
 
     return res.json({
       scope: 'global',
@@ -244,7 +267,7 @@ experienceRoutes.get(
         badges: user.badges.map((item) => item.badge.name),
         isCurrentUser: user.id === currentUserId,
       })),
-      currentUserRank: currentUserIndex >= 0 ? currentUserIndex + 1 : null,
+      currentUserRank,
     });
   }),
 );
