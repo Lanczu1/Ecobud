@@ -1,7 +1,7 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
 import type { LocalDraft } from '../../../utils/localDraftStore';
 import { LocalDraftPanel } from '../LocalDraftPanel';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
@@ -159,9 +159,11 @@ export function Redeem() {
 
   // Track main tab and filter via refs for realtime events
   const mainTabRef = useRef(mainTab);
-  mainTabRef.current = mainTab;
   const requestFilterRef = useRef(requestFilter);
-  requestFilterRef.current = requestFilter;
+  useLayoutEffect(() => {
+    mainTabRef.current = mainTab;
+    requestFilterRef.current = requestFilter;
+  });
 
   const resetForm = () => {
     setFormTitle('');

@@ -44,6 +44,7 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
     if (item.name === 'Give and Get Hub' && !isModerator) return false;
     if (item.name === 'User Activity & Transactions' && user?.role !== 'admin') return false;
     if (!isModerator && item.name === 'ID Verification') return false;
+    if (!isModerator && item.name === 'Notifications') return false;
     if (isModerator && ['Dashboard', 'Users', 'Learning Content', 'Badges', 'User Activity & Transactions'].includes(item.name)) {
       return false;
     }

@@ -2,7 +2,7 @@ import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts'
 import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } from '../ContentBadgeReward';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
@@ -786,7 +786,7 @@ export function Challenges() {
     }
   };
 
-  loadChallengesRef.current = load;
+  useLayoutEffect(() => { loadChallengesRef.current = load; });
 
   const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
     if (submissionsRefreshInFlight.current) { submissionsRefreshQueued.current = true; return; }
@@ -823,7 +823,7 @@ export function Challenges() {
     }
   };
 
-  loadSubmissionsRef.current = (showLoading = true) => loadSubmissions(showLoading);
+  useLayoutEffect(() => { loadSubmissionsRef.current = (showLoading = true) => loadSubmissions(showLoading); });
 
   useEffect(() => {
     const timer = setTimeout(() => void load(true), 250);

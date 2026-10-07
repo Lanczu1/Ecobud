@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { ContentBadgeReward, useContentBadgeReward } from '../ContentBadgeReward';
 import { createPortal } from 'react-dom';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -1133,7 +1133,9 @@ export function GiveAndGetHub() {
     }
   };
 
-  fetchListingsRef.current = (nextPage, status, nextSearch, fresh = true, background = false) => fetchListings(nextPage, status, nextSearch, fresh, background);
+  useLayoutEffect(() => {
+    fetchListingsRef.current = (nextPage, status, nextSearch, fresh = true, background = false) => fetchListings(nextPage, status, nextSearch, fresh, background);
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => void fetchListings(page, filterStatus, search, true), 300);

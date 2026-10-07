@@ -10,9 +10,14 @@ export function notificationScope(auth: Pick<TokenSession, 'role' | 'city' | 'au
   if (auth.role === 'admin') return Prisma.sql`e.audience IN ('both','admin')`;
   const barangay = assignedNotificationBarangay(auth.city);
   if (auth.role !== 'moderator' || !barangay) return Prisma.sql`FALSE`;
+  // A listing stores the town it was posted from, so listings are matched on the owner's barangay.
   return Prisma.sql`e.audience IN ('both','moderator') AND (
     EXISTS(SELECT 1 FROM unnest(e.barangays) b WHERE lower(b)=lower(${barangay}))
     OR (cardinality(e.barangays)=0 AND NOT e.action_required AND e.record_type IN ('announcement','challenge','event'))
+    OR (e.record_type='listing' AND EXISTS(SELECT 1 FROM swap_listings l JOIN "Profile" p ON p."userId"=l.user_id
+      WHERE l.id=e.record_id AND lower(trim(p.city))=lower(${barangay})))
+    OR (e.record_type='listing_report' AND EXISTS(SELECT 1 FROM swap_listing_reports r JOIN swap_listings l ON l.id=r.listing_id
+      JOIN "Profile" p ON p."userId"=l.user_id WHERE r.id=e.record_id AND lower(trim(p.city))=lower(${barangay})))
   )`;
 }
 export function isQuietHour(start: number | null, end: number | null, at = new Date()) {

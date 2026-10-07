@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
 import { adminGet, adminPost, clearAdminApiCache, API_HOST } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
@@ -88,7 +88,7 @@ export function ManageUsers() {
     }
   };
   const loadUsersRef = useRef(loadUsers);
-  loadUsersRef.current = loadUsers;
+  useLayoutEffect(() => { loadUsersRef.current = loadUsers; });
 
   useEffect(() => {
     let unsubscribe: () => void;

@@ -104,6 +104,7 @@ model AdminNotificationRead {
   userId String @map("user_id")
   eventId String @map("event_id")
   readAt DateTime @default(now()) @map("read_at")
+  dismissedAt DateTime? @map("dismissed_at")
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   event AdminNotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   @@id([userId, eventId])

@@ -116,8 +116,7 @@ export function UnifiedProgressCard({
   const nextPerk = LEVEL_PERKS[nextLevelObj.level] || 'Exclusive perks & badges';
 
   // Leaderboard text calculation
-  const currentUserItem = leaderboard?.items.find((item) => item.isCurrentUser) || leaderboard?.items[0];
-  const userRank = currentUserItem?.rank;
+  const userRank = leaderboard?.items.find((item) => item.isCurrentUser)?.rank ?? leaderboard?.currentUserRank ?? null;
   const leaderboardStripText = userRank
     ? userRank === 1
       ? '#1 this week — You are leading the board!'

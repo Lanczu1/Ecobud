@@ -129,7 +129,7 @@ export default function App() {
     if (!isAuthenticated) return;
     const section=new URLSearchParams(routeHash.split('?')[1] || '').get('section');
     const allowed: AdminSection[]=['Dashboard','Announcements','Notifications','ID Verification','Users','Learning Content','Challenges','Badges','Events','Give and Get Hub','Redeem','User Activity & Transactions','Reports'];
-    if (section === 'Give and Get Hub' && adminUserRole !== 'moderator') {
+    if ((section === 'Give and Get Hub' || section === 'Notifications') && adminUserRole !== 'moderator') {
       setActiveSection('Dashboard');
       window.location.hash = adminHref('Dashboard');
     } else if (allowed.includes(section as AdminSection)) setActiveSection(section as AdminSection);
@@ -261,7 +261,7 @@ export default function App() {
   if (isAuthenticated) {
     return (
       <ToastProvider>
-        <AdminNotificationProvider>
+        <AdminNotificationProvider enabled={adminUserRole === 'moderator'}>
         <AdminLayout
           onLogout={handleLogout}
           activeSection={activeSection}

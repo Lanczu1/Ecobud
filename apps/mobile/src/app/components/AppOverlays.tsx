@@ -6700,7 +6700,10 @@ export function LeaderboardOverlay({ model }: { model: EcoBudMobileModel }) {
   if (top3[0]) podiumLeaders.push({ ...top3[0], badgeColor: '#FFD700', avatarSize: 80, cardStyle: {} });
   if (top3[2]) podiumLeaders.push({ ...top3[2], badgeColor: '#CD7F32', avatarSize: 64, cardStyle: { marginTop: 40 } });
 
-  const currentUser = actualItems.find(item => item.isCurrentUser);
+  const listedRank = model.leaderboard?.currentUserRank ?? null;
+  const currentUser: { rank: number; points: number; avatarUrl?: string | null } | undefined =
+    actualItems.find(item => item.isCurrentUser)
+    ?? (listedRank != null ? { rank: listedRank, points: model.leaderboard?.currentUserPoints ?? 0 } : undefined);
 
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>

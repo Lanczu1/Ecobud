@@ -22,7 +22,7 @@ export function serializeContent(node: Node): string {
 }
 
 export function AnnouncementEditor({ initialContent, onChange }: { initialContent: ReactNode; onChange: (text: string) => void }) {
-  const initial = useRef(initialContent);
+  const [initial] = useState(initialContent);
   const field = useRef<HTMLDivElement>(null);
   const range = useRef<Range | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -72,7 +72,7 @@ export function AnnouncementEditor({ initialContent, onChange }: { initialConten
       <button type="button" onClick={() => { setLinkOpen(false); field.current?.focus(); }} className="px-3 py-2 text-sm">Cancel</button>
     </div>}
     <div ref={field} contentEditable suppressContentEditableWarning role="textbox" aria-label="Announcement content" aria-multiline="true" aria-required="true" onInput={sync} onKeyUp={updateSelection} onMouseUp={updateSelection} onBlur={updateSelection} onPaste={e => { e.preventDefault(); execute('insertText', e.clipboardData.getData('text/plain')); }} className="announcement-content w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 min-h-35 max-h-80 overflow-y-auto break-words">
-      {initial.current}
+      {initial}
     </div>
     {error && <p role="alert" className="mt-1 text-xs text-red-500">{error}</p>}
     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Select text to format it, or choose Bold or Italic before typing.</p>

@@ -235,6 +235,7 @@ experienceRoutes.get(
 
     const currentUserIndex = users.findIndex((user) => user.id === currentUserId);
     let currentUserRank: number | null = currentUserIndex >= 0 ? currentUserIndex + 1 : null;
+    let currentUserPoints: number | null = currentUserIndex >= 0 ? users[currentUserIndex].points : null;
     if (currentUserRank === null && users.length === LEADERBOARD_SIZE) {
       const me = await prisma.user.findUnique({
         where: { id: currentUserId },
@@ -253,6 +254,7 @@ experienceRoutes.get(
           },
         });
         currentUserRank = ahead + 1;
+        currentUserPoints = me.points;
       }
     }
 
@@ -268,6 +270,7 @@ experienceRoutes.get(
         isCurrentUser: user.id === currentUserId,
       })),
       currentUserRank,
+      currentUserPoints,
     });
   }),
 );

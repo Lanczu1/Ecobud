@@ -1,7 +1,7 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
 import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
@@ -612,7 +612,7 @@ export function LearningContent() {
     setLessons(prev => prev.map(l => l.id === updated.id ? updated : l));
   };
 
-  loadRef.current = load;
+  useLayoutEffect(() => { loadRef.current = load; });
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
