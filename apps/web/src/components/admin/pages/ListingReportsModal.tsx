@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { adminGet } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -15,7 +15,7 @@ export function ListingReportsModal({ listing, onClose }: { listing: { id: strin
   useModalScrollLock();
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useLayoutEffect(() => { onCloseRef.current = onClose; });
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
@@ -27,7 +27,7 @@ export function ListingReportsModal({ listing, onClose }: { listing: { id: strin
     closeTimer.current = setTimeout(() => onCloseRef.current(), 300);
   }
   const closeActionRef = useRef(close);
-  closeActionRef.current = close;
+  useLayoutEffect(() => { closeActionRef.current = close; });
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
   const [data, setData] = useState<ReportPage | null>(null);

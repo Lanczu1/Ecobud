@@ -35,8 +35,8 @@ export const authenticateRequest = async (
 
   try {
     const session = TokenService.verify(token);
-    // A screen fires several requests at once; they share one lookup.
-    const user = await authCache.getOrSet(`auth:${session.userId}`, AUTH_CACHE_SECONDS, () =>
+    const cacheKey = `auth:${session.userId}`;
+    const loadUser = () =>
       prisma.user.findUnique({
         where: { id: session.userId },
         select: {
@@ -52,8 +52,16 @@ export const authenticateRequest = async (
             },
           },
         },
-      }),
-    );
+      });
+    // A screen fires several requests at once; they share one lookup.
+    let user = await authCache.getOrSet(cacheKey, AUTH_CACHE_SECONDS, loadUser);
+    // A cached row can be a few seconds behind a password, email or status
+    // change, so confirm against the database before turning anyone away.
+    if (!user || user.status !== 'active' || session.sessionVersion !== user.sessionVersion
+      || user.email.toLowerCase() !== session.email.toLowerCase()) {
+      user = await loadUser();
+      authCache.set(cacheKey, user, AUTH_CACHE_SECONDS);
+    }
 
     if (!user) {
       return res.status(401).json({ message: 'The access token is no longer valid.' });

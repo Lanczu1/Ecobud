@@ -54,7 +54,8 @@ adminNotificationRoutes.delete('/subscriptions/session', errorBoundary(async (re
 adminNotificationRoutes.get('/', errorBoundary(async (req: AuthenticatedRequest, res) => {
   const q = z.object({ category: z.enum(adminNotificationCategories).optional(), filter: z.enum(['all','unread','action']).default('all'),
     before: z.string().datetime().optional(), beforeId: z.string().max(100).optional() }).parse(req.query);
-  const scope = baseScope(req);
+  // A removed notification stays hidden for that person only.
+  const scope = Prisma.sql`${baseScope(req)} AND r.dismissed_at IS NULL`;
   const filter = Prisma.sql`${scope}
     ${q.category ? Prisma.sql`AND e.category=${q.category}` : Prisma.empty}
     ${q.filter === 'unread' ? Prisma.sql`AND r.event_id IS NULL` : Prisma.empty}
@@ -89,7 +90,7 @@ adminNotificationRoutes.get('/:id', errorBoundary(async (req: AuthenticatedReque
   const rows = await prisma.$queryRaw<Record<string, unknown>[]>`SELECT e.id,e.category,e.title,e.message,e.record_type AS "recordType",e.record_id AS "recordId",e.barangays,
     e.action_required AS "actionRequired",e.resolved_at AS "resolvedAt",e.available_at AS "createdAt",(r.event_id IS NOT NULL) AS "isRead"
     FROM admin_notification_events e LEFT JOIN admin_notification_reads r ON r.event_id=e.id AND r.user_id=${req.auth!.userId}
-    WHERE e.id=${req.params.id} AND ${baseScope(req)}`;
+    WHERE e.id=${req.params.id} AND ${baseScope(req)} AND r.dismissed_at IS NULL`;
   if (!rows[0]) throw new HttpError(404,'Notification is unavailable or outside your assigned barangay.');
   let targetRecordId=rows[0].recordId;
   if (rows[0].recordType==='listing_report') {
@@ -104,4 +105,17 @@ adminNotificationRoutes.get('/:id', errorBoundary(async (req: AuthenticatedReque
     ) failures GROUP BY channel,state`;
   }
   res.json({ ...rows[0], targetRecordId, diagnostics });
+}));
+adminNotificationRoutes.delete('/', errorBoundary(async (req: AuthenticatedRequest, res) => {
+  await prisma.$executeRaw`INSERT INTO admin_notification_reads(user_id,event_id,dismissed_at)
+    SELECT ${req.auth!.userId},e.id,CURRENT_TIMESTAMP FROM admin_notification_events e WHERE ${baseScope(req)}
+    ON CONFLICT(user_id,event_id) DO UPDATE SET dismissed_at=COALESCE(admin_notification_reads.dismissed_at,CURRENT_TIMESTAMP)`;
+  res.json({ success: true });
+}));
+adminNotificationRoutes.delete('/:id', errorBoundary(async (req: AuthenticatedRequest, res) => {
+  const count = await prisma.$executeRaw`INSERT INTO admin_notification_reads(user_id,event_id,dismissed_at)
+    SELECT ${req.auth!.userId},e.id,CURRENT_TIMESTAMP FROM admin_notification_events e WHERE e.id=${req.params.id} AND ${baseScope(req)}
+    ON CONFLICT(user_id,event_id) DO UPDATE SET dismissed_at=COALESCE(admin_notification_reads.dismissed_at,CURRENT_TIMESTAMP)`;
+  if (!count) throw new HttpError(404, 'Notification not found.');
+  res.json({ success: true });
 }));

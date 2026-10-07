@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, Eye,
@@ -90,7 +90,7 @@ export function IdVerification() {
   const requestVersion = useRef(0);
   const dialogRef = useRef<HTMLDivElement>(null);
   const reviewBusy = useRef(busy);
-  reviewBusy.current = busy;
+  useLayoutEffect(() => { reviewBusy.current = busy; });
   useModalScrollLock(Boolean(selected));
   const assignedBarangay = useMemo(() => {
     try {

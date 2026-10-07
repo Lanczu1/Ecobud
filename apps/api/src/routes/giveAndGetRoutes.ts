@@ -91,7 +91,10 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
     const where: any = { approvalStatus: { not: 'deleted' } };
     if (typeof req.query.recordId==='string') {
       where.id=req.query.recordId;
-      if (req.auth!.role==='moderator') where.city={ equals:req.auth!.city?.trim() || '__unassigned__',mode:'insensitive' };
+      if (req.auth!.role==='moderator') {
+        const barangay={ equals:req.auth!.city?.trim() || '__unassigned__',mode:'insensitive' as const };
+        where.OR=[{ city:barangay },{ user:{ profile:{ city:barangay } } }];
+      }
     }
     if (status && status !== 'all') where.approvalStatus = status;
     if (reported === 'true') where.isReported = true;

@@ -343,6 +343,7 @@ export interface RewardsData {
 export interface LeaderboardData {
   scope: string;
   currentUserRank: number | null;
+  currentUserPoints?: number | null;
   items: {
     rank: number;
     id: string;

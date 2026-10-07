@@ -88,6 +88,8 @@ function LagunaMapLimits() {
       L.latLng(LAGUNA_MAP_BOUNDS[1][0], LAGUNA_MAP_BOUNDS[1][1]),
     );
     map.setMaxBounds(bounds);
+    // Leaflet has no setter for this option; assigning it on the live map is the supported way.
+    // eslint-disable-next-line react-hooks/immutability
     map.options.maxBoundsViscosity = 1;
     map.fitBounds(bounds, { padding: [4, 4] });
     map.setMinZoom(map.getBoundsZoom(bounds, true, L.point(4, 4)));
@@ -371,13 +373,13 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
   isPublished: true,
           }
   ));
+  const [imagePreview, setImagePreview] = useState<string | null>(resolveEventImageUrl(initial?.imageUrl));
   useEffect(() => {
     if (!form.imageFile) return;
     const url = URL.createObjectURL(form.imageFile);
     setImagePreview(url);
     return () => URL.revokeObjectURL(url);
   }, [form.imageFile]);
-  const [imagePreview, setImagePreview] = useState<string | null>(resolveEventImageUrl(initial?.imageUrl));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
