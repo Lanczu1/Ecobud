@@ -13,6 +13,8 @@ import path from 'path';
 import fs from 'fs';
 import { randomBytes } from 'crypto';
 
+const CLAIM_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
 const router = Router();
 
 class RedemptionError extends Error {
@@ -300,7 +302,8 @@ router.patch('/requests/:id/approve', authenticateRequest, requireModeratorAcces
       return res.status(400).json({ message: `Cannot approve a request with status "${request.status}"` });
     }
 
-    const code = `ECO-${randomBytes(6).toString('hex').toUpperCase()}`;
+    // 8 characters from a 32-letter set that leaves out 0/O and 1/I, which are easy to misread at the counter.
+    const code = `ECO-${Array.from(randomBytes(8), byte => CLAIM_CODE_ALPHABET[byte & 31]).join('')}`;
     const instructions = claimInstructions.trim();
 
     const item = await prisma.redeemItem.findUnique({ where: { id: request.itemId } });
