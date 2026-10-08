@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AccessRole } from '../security/tokenService';
+import { adminLiveEvents } from './adminLiveEvents';
 
 export type AdminRealtimeSection = 'dashboard' | 'users';
 export type RealtimeSection = 'learn' | 'challenges' | 'events' | 'tracker' | 'swap';
@@ -174,6 +175,7 @@ class SupabaseRealtimeService {
     const channel = section === 'learn' ? GLOBAL_CHANNELS.learn
       : section === 'events' ? GLOBAL_CHANNELS.events
       : GLOBAL_CHANNELS.challenges;
+    adminLiveEvents.emit();
 
     return this.publish(channel, 'refresh', {
       actorRole: input.actorRole ?? 'system',
@@ -239,6 +241,7 @@ class SupabaseRealtimeService {
     input: RealtimeSignalInput,
   ) {
     const channel = section === 'dashboard' ? ADMIN_CHANNELS.dashboard : ADMIN_CHANNELS.users;
+    adminLiveEvents.emit();
 
     return this.publish(channel, 'refresh', {
       actorRole: input.actorRole ?? 'system',

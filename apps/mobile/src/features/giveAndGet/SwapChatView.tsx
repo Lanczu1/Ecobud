@@ -26,7 +26,7 @@ import type { SwapChatMessage, SwapConversation, SwapRequestStatus } from './typ
 import { MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { resolveMediaUrl } from '../../app/utils/appUtils';
-import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function getValidImageUrl(url: string | null | undefined): string | undefined {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
@@ -43,6 +43,34 @@ function getInitials(name: string): string {
 
 function formatMessageTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatDayLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  if (isSameDay(date, now)) return 'Today';
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (isSameDay(date, yesterday)) return 'Yesterday';
+  const day = `${MONTH_LABELS[date.getMonth()]} ${date.getDate()}`;
+  return date.getFullYear() === now.getFullYear() ? day : `${day}, ${date.getFullYear()}`;
+}
+
+function formatListTime(dateStr: string): string {
+  return isSameDay(new Date(dateStr), new Date()) ? formatMessageTime(dateStr) : formatDayLabel(dateStr);
+}
+
+function getClosedNotice(status: SwapRequestStatus): string {
+  switch (status) {
+    case 'completed': return 'This request is completed. Messaging is closed.';
+    case 'declined': return 'This request was declined. Messaging is closed.';
+    default: return 'This request was cancelled. Messaging is closed.';
+  }
 }
 
 function getStatusColor(status: SwapRequestStatus): string {
@@ -137,10 +165,19 @@ export function SwapChatList({
               </Text>
               {conv.lastMessage && (
                 <Text style={[localStyles.chatTime, { color: theme.colors.textMuted }]}>
-                  {formatMessageTime(conv.lastMessage.timestamp)}
+                  {formatListTime(conv.lastMessage.timestamp)}
                 </Text>
               )}
             </View>
+            {conv.lastMessage && (
+              <Text
+                style={[localStyles.chatLastMessage, { color: conv.unreadCount > 0 ? theme.colors.textPrimary : theme.colors.textMuted }, conv.unreadCount > 0 && { fontWeight: '700' }]}
+                numberOfLines={1}
+              >
+                {String(conv.lastMessage.senderId) === String(currentUserId) ? 'You: ' : ''}
+                {conv.lastMessage.text || (conv.lastMessage.imageUrl ? 'Photo' : '')}
+              </Text>
+            )}
             <Text style={[localStyles.chatPreview, { color: theme.colors.textMuted }]} numberOfLines={1}>
               {conv.listing.title} → {conv.listing.lookingFor}
             </Text>
@@ -226,7 +263,8 @@ export function SwapChatView({
   completing?: boolean;
 }) {
   const { theme, isDark } = useTheme();
-  const { showNotification } = useInAppNotification();
+  const insets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [messages, setMessages] = useState<SwapChatMessage[]>([]);
   const listPerformance = useListPerformance();
   const [inputText, setInputText] = useState('');
@@ -382,6 +420,7 @@ export function SwapChatView({
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (event) => {
+        setKeyboardVisible(true);
         if (Platform.OS === 'android') {
           keyboardTopRef.current = event.endCoordinates.screenY;
           updateKeyboardOverlap();
@@ -400,6 +439,7 @@ export function SwapChatView({
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
         keyboardTopRef.current = null;
+        setKeyboardVisible(false);
         setKeyboardOverlap(0);
         if (keyboardSettleTimer.current !== null) clearTimeout(keyboardSettleTimer.current);
       }
@@ -412,26 +452,28 @@ export function SwapChatView({
     };
   }, [updateKeyboardOverlap]);
 
-  const handleSend = async () => {
-    const text = inputText.trim();
-    if (!text || sending) return;
-
-    setInputText('');
+  const sendMessage = async (text: string, retryId?: string) => {
+    if (sending) return;
     setSending(true);
 
-    const optimisticMsg: SwapChatMessage = {
-      id: `temp_${Date.now()}`,
-      swapRequestId: conversation.id,
-      senderId: currentUserId,
-      text,
-      timestamp: new Date().toISOString(),
-      read: false,
-      delivered: true,
-    };
-    setMessages((prev) => [...prev, optimisticMsg]);
-    setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 50);
+    const tempId = retryId ?? `temp_${Date.now()}`;
+    if (retryId) {
+      setMessages((prev) => prev.map((m) => m.id === retryId ? { ...m, failed: false } : m));
+    } else {
+      const optimisticMsg: SwapChatMessage = {
+        id: tempId,
+        swapRequestId: conversation.id,
+        senderId: currentUserId,
+        text,
+        timestamp: new Date().toISOString(),
+        read: false,
+        delivered: true,
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    }
 
     try {
       const realMsg = await swapService.sendMessage(
@@ -439,15 +481,23 @@ export function SwapChatView({
         currentUserId,
         text
       );
-      if (scopeRef.current === scope) setMessages(prev => mergeMessages(prev.filter(m => m.id !== optimisticMsg.id), [realMsg]));
+      if (scopeRef.current === scope) setMessages(prev => mergeMessages(prev.filter(m => m.id !== tempId), [realMsg]));
     } catch {
       if (scopeRef.current !== scope) return;
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
-      showNotification({ title: 'Message not sent', message: 'Check your connection and try again.', tone: 'error' });
+      setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, failed: true } : m));
     } finally {
       if (scopeRef.current === scope) setSending(false);
     }
   };
+
+  const handleSend = () => {
+    const text = inputText.trim();
+    if (!text || sending) return;
+    setInputText('');
+    void sendMessage(text);
+  };
+
+  const bottomInset = keyboardVisible ? 0 : insets.bottom;
 
   const isOwner = conversation.listing.user.id === currentUserId;
   const status = conversation.status;
@@ -586,44 +636,73 @@ export function SwapChatView({
             contentContainerStyle={[localStyles.messagesContent, { backgroundColor: theme.colors.background }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item: msg }) => {
+            renderItem={({ item: msg, index }) => {
               const isMine = String(msg.senderId).trim() === String(currentUserId).trim();
+              const previous = messages[index - 1];
+              const startsDay = !previous || !isSameDay(new Date(previous.timestamp), new Date(msg.timestamp));
+              const isUnsent = msg.id.startsWith('temp_');
               return (
-                <View
-                  style={[
-                    localStyles.messageBubble,
-                    isMine
-                      ? [localStyles.messageBubbleMine, { backgroundColor: theme.colors.primary }]
-                      : [localStyles.messageBubbleTheirs, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }],
-                  ]}
-                >
-                  {msg.imageUrl && (
-                    <Image source={{ uri: msg.imageUrl }} style={localStyles.messageImage} />
+                <View>
+                  {startsDay && (
+                    <View style={[localStyles.daySeparator, { backgroundColor: theme.colors.surfaceMuted }]}>
+                      <Text style={[localStyles.daySeparatorText, { color: theme.colors.textMuted }]}>
+                        {formatDayLabel(msg.timestamp)}
+                      </Text>
+                    </View>
                   )}
-                  <Text style={[localStyles.messageText, { color: isMine ? '#FFFFFF' : theme.colors.textPrimary }]}>
-                    {msg.text}
-                  </Text>
-                  <View style={localStyles.messageFooter}>
-                    <Text style={[localStyles.messageTime, { color: isMine ? 'rgba(255,255,255,0.75)' : theme.colors.textMuted }]}>
-                      {formatMessageTime(msg.timestamp)}
-                    </Text>
-                    {isMine && (
-                      <Ionicons
-                        name={msg.read ? 'checkmark-done' : 'checkmark'}
-                        size={14}
-                        color={msg.read ? '#FFFFFF' : 'rgba(255,255,255,0.7)'}
-                        style={{ marginLeft: 4 }}
-                      />
+                  <View
+                    style={[
+                      localStyles.messageBubble,
+                      isMine
+                        ? [localStyles.messageBubbleMine, { backgroundColor: theme.colors.primary }]
+                        : [localStyles.messageBubbleTheirs, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }],
+                      msg.failed && localStyles.messageBubbleFailed,
+                    ]}
+                  >
+                    {msg.imageUrl && (
+                      <Image source={{ uri: msg.imageUrl }} style={localStyles.messageImage} />
                     )}
+                    <Text style={[localStyles.messageText, { color: isMine ? '#FFFFFF' : theme.colors.textPrimary }]}>
+                      {msg.text}
+                    </Text>
+                    <View style={localStyles.messageFooter}>
+                      <Text style={[localStyles.messageTime, { color: isMine ? 'rgba(255,255,255,0.75)' : theme.colors.textMuted }]}>
+                        {formatMessageTime(msg.timestamp)}
+                      </Text>
+                      {isMine && (
+                        <Ionicons
+                          name={msg.failed ? 'alert-circle' : isUnsent ? 'time-outline' : msg.read ? 'checkmark-done' : 'checkmark'}
+                          size={14}
+                          color={msg.read || msg.failed ? '#FFFFFF' : 'rgba(255,255,255,0.7)'}
+                          style={{ marginLeft: 4 }}
+                        />
+                      )}
+                    </View>
                   </View>
+                  {msg.failed && (
+                    <TouchableOpacity
+                      onPress={() => void sendMessage(msg.text, msg.id)}
+                      disabled={sending}
+                      accessibilityRole="button"
+                      accessibilityLabel="Message not sent. Tap to retry"
+                      style={localStyles.retryRow}
+                    >
+                      <Text style={[localStyles.retryRowText, { color: theme.colors.error }]}>Not sent. Tap to retry.</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             }}
           />
         )}
 
-        {status !== 'completed' && status !== 'cancelled' && status !== 'declined' && (
-          <View style={[localStyles.inputBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
+        {status === 'completed' || status === 'cancelled' || status === 'declined' ? (
+          <View style={[localStyles.closedBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border, paddingBottom: verticalScale(12) + bottomInset }]}>
+            <Ionicons name="lock-closed-outline" size={15} color={theme.colors.textMuted} />
+            <Text style={[localStyles.closedBarText, { color: theme.colors.textMuted }]}>{getClosedNotice(status)}</Text>
+          </View>
+        ) : (
+          <View style={[localStyles.inputBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border, paddingBottom: verticalScale(10) + bottomInset }]}>
             <TextInput
               style={[localStyles.chatInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.inputBorder, color: theme.colors.textPrimary }]}
               placeholder="Type a message..."
@@ -860,6 +939,45 @@ const localStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E4F0E8',
   },
+  messageBubbleFailed: {
+    opacity: 0.7,
+    marginBottom: verticalScale(4),
+  },
+  retryRow: {
+    alignSelf: 'flex-end',
+    paddingVertical: verticalScale(4),
+    marginBottom: verticalScale(8),
+  },
+  retryRowText: {
+    fontSize: responsiveFontSize(12),
+    fontWeight: '700',
+  },
+  daySeparator: {
+    alignSelf: 'center',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(3),
+    borderRadius: moderateScale(10),
+    marginTop: verticalScale(4),
+    marginBottom: verticalScale(12),
+  },
+  daySeparatorText: {
+    fontSize: responsiveFontSize(11),
+    fontWeight: '700',
+  },
+  closedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scale(6),
+    paddingHorizontal: scale(14),
+    paddingTop: verticalScale(12),
+    borderTopWidth: 1,
+  },
+  closedBarText: {
+    flexShrink: 1,
+    fontSize: responsiveFontSize(12),
+    fontWeight: '600',
+  },
   messageImage: {
     width: scale(180),
     height: verticalScale(135),
@@ -990,6 +1108,10 @@ const localStyles = StyleSheet.create({
   chatTime: {
     fontSize: responsiveFontSize(11),
     color: ecoTheme.colors.textSoft,
+  },
+  chatLastMessage: {
+    fontSize: responsiveFontSize(13),
+    marginBottom: verticalScale(2),
   },
   chatPreview: {
     fontSize: responsiveFontSize(12),

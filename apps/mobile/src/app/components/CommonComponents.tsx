@@ -1227,6 +1227,108 @@ export function BottomTabBar({
   );
 }
 
+const TAB_HOLD_HINT_INTERVAL_MS = 5000;
+const TAB_HOLD_HINT_VISIBLE_MS = 2600;
+
+function TabHoldHint() {
+  const { theme, isDark } = useTheme();
+  const progress = useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const animate = (toValue: number) => Animated.timing(progress, {
+      toValue,
+      duration: toValue ? 260 : 200,
+      easing: toValue ? Easing.out(Easing.back(1.6)) : Easing.in(Easing.quad),
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+    const show = () => {
+      animate(1);
+      timer = setTimeout(hide, TAB_HOLD_HINT_VISIBLE_MS);
+    };
+    const hide = () => {
+      animate(0);
+      timer = setTimeout(show, TAB_HOLD_HINT_INTERVAL_MS);
+    };
+    timer = setTimeout(show, TAB_HOLD_HINT_INTERVAL_MS);
+    return () => {
+      clearTimeout(timer);
+      progress.stopAnimation();
+    };
+  }, [progress]);
+
+  const backgroundColor = isDark ? theme.colors.surfaceMuted : theme.colors.primaryDark;
+  const foregroundColor = isDark ? theme.colors.textPrimary : '#FFFFFF';
+
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={tabHoldHintStyles.anchor}
+    >
+      <Animated.View
+        style={{
+          alignItems: 'center',
+          opacity: progress,
+          transform: [
+            { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) },
+            { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+          ],
+        }}
+      >
+        <View style={[tabHoldHintStyles.bubble, { backgroundColor, borderColor: isDark ? theme.colors.border : 'transparent' }]}>
+          <MaterialCommunityIcons name="gesture-tap-hold" size={13} color={foregroundColor} />
+          <TextSizeMultiplierContext.Provider value={1}>
+            <Text style={[tabHoldHintStyles.label, { color: foregroundColor }]} numberOfLines={1}>
+              Hold to choose task
+            </Text>
+          </TextSizeMultiplierContext.Provider>
+        </View>
+        <View style={[tabHoldHintStyles.tail, { backgroundColor }]} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const tabHoldHintStyles = StyleSheet.create({
+  anchor: {
+    position: 'absolute',
+    bottom: '100%',
+    left: -80,
+    right: -80,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  bubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    shadowColor: '#071C19',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  tail: {
+    width: 8,
+    height: 8,
+    marginTop: -5,
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }],
+  },
+});
+
 function TabItem({
   item,
   isActive,
@@ -1358,6 +1460,7 @@ function TabItem({
           },
         ]}
       >
+        {isCenterAction && onLongPress ? <TabHoldHint /> : null}
         {isCenterAction ? (
           <View
             ref={circleRef}

@@ -1153,7 +1153,10 @@ export function GiveAndGetHub() {
     return () => unsubscribe?.();
   }, [page, filterStatus, search]);
 
+  const approvingRef = useRef(new Set<string>());
   const handleApprove = async (id: string) => {
+    if (approvingRef.current.has(id)) return;
+    approvingRef.current.add(id);
     try {
       await adminPatch(`/give-and-get/swap-listings/${id}/approve`, {});
       setListings(prev => prev.map(l => (l.id === id ? { ...l, approvalStatus: 'approved', isActive: true, isReported: false, reportCount: 0, reportReason: null } : l)));
@@ -1163,6 +1166,8 @@ export function GiveAndGetHub() {
     } catch (error: any) {
       console.error('Failed to approve listing', error);
       toast.error(error.message || 'Failed to approve listing');
+    } finally {
+      approvingRef.current.delete(id);
     }
   };
 

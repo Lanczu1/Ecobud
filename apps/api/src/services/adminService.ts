@@ -24,6 +24,12 @@ function runSubmissionFollowUps(label: string, tasks: Array<() => Promise<unknow
   });
 }
 
+// A challenge's category is the item it collects, so it always follows the AI detection targets.
+function challengeCategoryFromTargets(targets: string[]) {
+  if (targets.length === 0) return 'General';
+  return targets.length === 1 ? targets[0] : 'Mixed Items';
+}
+
 export class AdminService {
   static async getAllLessons(page = 1, pageSize = 25, search?: string, status?: string, recordId?: string) {
     const where: any = {};
@@ -462,6 +468,7 @@ export class AdminService {
     collectionPointLng?: number;
     requireLocation?: boolean;
   }) {
+    const aiDetectionTargets = data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle", "Plastic Wrapper"];
     const challenge = await prisma.challenge.create({
       data: {
         badge: contentBadgeWrite(data.badgeReward, 'challenge', true),
@@ -472,12 +479,12 @@ export class AdminService {
         endDate: data.endDate ? new Date(data.endDate) : null,
         expReward: data.expReward,
         ecoCoinReward: data.ecoCoinReward || 0,
-        category: data.category || "General",
+        category: challengeCategoryFromTargets(aiDetectionTargets),
         active: data.active ?? true,
         imageUrl: data.imageUrl,
         badgeLabel: data.badgeLabel,
         type: data.type || "AI Image Recognition Challenge",
-        aiDetectionTargets: data.aiDetectionTargets && data.aiDetectionTargets.length > 0 ? data.aiDetectionTargets : ["Plastic Bottle", "Glass Bottle", "Plastic Wrapper"],
+        aiDetectionTargets,
         aiMinimumConfidence: data.aiMinimumConfidence || 80,
         isFeatured: data.isFeatured ?? false,
         quantityUnit: data.quantityUnit || "bottles",
@@ -515,6 +522,7 @@ export class AdminService {
 
   static async updateChallenge(id: string, data: any) {
     const { badgeReward, ...fields } = data;
+    if (Array.isArray(fields.aiDetectionTargets)) fields.category = challengeCategoryFromTargets(fields.aiDetectionTargets);
     const challenge = await prisma.challenge.update({
       where: { id },
       data: { ...fields, badge: contentBadgeWrite(badgeReward, 'challenge') }

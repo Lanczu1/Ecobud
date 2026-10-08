@@ -103,6 +103,8 @@ export function SwapListingDetail({
   const [editCity, setEditCity] = useState(listing.city || 'Nagcarlan');
   const [editProvince, setEditProvince] = useState(listing.province || 'Laguna');
   const editLocationRequest = useRef(0);
+  const editingRef = useRef(false);
+  editingRef.current = showEditModal || savingEdit || deleting;
   const isOwnListing = listing.user.id === currentUserId;
   const isApproved = listing.approvalStatus === 'approved' || (listing as any).approvalStatus === undefined;
   const scrollRef = useRef<ScrollView>(null);
@@ -113,11 +115,14 @@ export function SwapListingDetail({
     let alive = true;
     let inFlight = false;
     async function refreshReports() {
-      if (inFlight || AppState.currentState !== 'active') return;
+      if (inFlight || editingRef.current || AppState.currentState !== 'active') return;
       inFlight = true;
       try {
         const latest = await swapService.fetchListingById(initialListing.id);
-        if (alive && latest) setListing(previous => ({ ...previous, isReported: latest.isReported, reportCount: latest.reportCount }));
+        if (!alive || !latest || editingRef.current) return;
+        // Take every field the server sent so status, quantity and details stay current, not only reports.
+        const defined = Object.fromEntries(Object.entries(latest).filter(([, value]) => value !== undefined));
+        setListing(previous => ({ ...previous, ...defined }));
       } finally { inFlight = false; }
     }
     void refreshReports();

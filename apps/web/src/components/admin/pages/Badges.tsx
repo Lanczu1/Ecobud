@@ -5,6 +5,7 @@ import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './Badges.css';
 import { BadgeArtworkPicker } from './BadgeArtworkPicker';
 import { adminGet, adminPost, adminPut, adminPatch, adminDelete, adminPostForm } from '../../../utils/adminApi';
+import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 
 type Badge = { id: string; name: string; description: string; iconUrl: string; requiredPoints: number; accentColor: string | null; active: boolean; awardType: string; targetCount: number; bonusPoints: number; lesson?: { title: string } | null; challenge?: { title: string } | null; event?: { title: string } | null; swapListing?: { title: string } | null; _count: { users: number } };
 type BadgeForm = { name: string; description: string; iconUrl: string; requiredPoints: number; accentColor: string; awardType: string; targetCount: number; bonusPoints: number };
@@ -73,13 +74,17 @@ export function Badges() {
     setDeletingBadge(badge); setDeleteError(''); setDeleteClosing(false);
     deleteDialog.current?.showModal();
   }
-  async function load() {
-    setLoading(true); setError('');
-    try { setItems((await adminGet<{ items: Badge[] }>('/admin/badges', { bypassCache: true })).items); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Unable to load badges.'); }
-    finally { setLoading(false); }
+  async function load(silent = false) {
+    if (!silent) { setLoading(true); setError(''); }
+    try {
+      const next = (await adminGet<{ items: Badge[] }>('/admin/badges', { bypassCache: true })).items;
+      setItems(current => JSON.stringify(current) === JSON.stringify(next) ? current : next);
+    }
+    catch (e) { if (!silent) setError(e instanceof Error ? e.message : 'Unable to load badges.'); }
+    finally { if (!silent) setLoading(false); }
   }
   useEffect(() => { void load(); }, []);
+  useAdminLiveRefresh(() => void load(true));
   function open(badge: Badge | null) {
     editorTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIsClosing(false);

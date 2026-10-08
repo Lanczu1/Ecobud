@@ -193,6 +193,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const focusedRefreshInFlightRef = React.useRef<Set<FocusedResource>>(new Set());
   const secondaryRefreshInFlightRef = React.useRef<Set<SecondaryResource>>(new Set());
   const lastSecondaryRefreshAtRef = React.useRef<Record<SecondaryResource, number>>({ tracker: 0, profile: 0, leaderboard: 0, transparency: 0 });
+  const secondaryForceRef = React.useRef<Set<SecondaryResource>>(new Set());
+  const [secondaryRefreshNonce, setSecondaryRefreshNonce] = React.useState(0);
   const currentSessionTokenRef = React.useRef<string | null>(null);
   currentSessionTokenRef.current = session?.token ?? null;
   const latestSessionRef = React.useRef(session);
@@ -262,8 +264,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     const changed = DeviceEventEmitter.addListener('announcementsChanged', refreshAnnouncements);
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') refreshAnnouncements();
-    }, HOME_REFRESH_INTERVAL_MS);
-    return () => { alive = false; changed.remove(); clearInterval(interval); };
+    }, FOCUSED_REFRESH_INTERVAL_MS);
+    const resumed = AppState.addEventListener('change', state => { if (state === 'active') refreshAnnouncements(); });
+    return () => { alive = false; changed.remove(); resumed.remove(); clearInterval(interval); };
   }, [session?.token]);
 
 
@@ -1307,7 +1310,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
     void refresh(true);
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
     const timer = setInterval(() => void refresh(), SECONDARY_REFRESH_INTERVAL_MS);
-    return () => { disposed = true; subscription.remove(); clearInterval(timer); };
+    const changed = DeviceEventEmitter.addListener('ecobudDataChanged', () => void refresh(true));
+    return () => { disposed = true; subscription.remove(); changed.remove(); clearInterval(timer); };
   }, [session?.token, session?.user.id, presence.hasUsableInternet, persistSession]);
 
   useEffect(() => {
@@ -1324,11 +1328,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
     for (const resource of needed) {
       if (isHydrating && !trackerIsVisible && !leaderboardIsVisible) continue;
-      if (secondaryRefreshInFlightRef.current.has(resource) ||
-          Date.now() - lastSecondaryRefreshAtRef.current[resource] < SECONDARY_REFRESH_INTERVAL_MS) continue;
+      if (secondaryRefreshInFlightRef.current.has(resource)) continue;
+      const forced = secondaryForceRef.current.delete(resource);
+      if (!forced && Date.now() - lastSecondaryRefreshAtRef.current[resource] < SECONDARY_REFRESH_INTERVAL_MS) continue;
       secondaryRefreshInFlightRef.current.add(resource);
       const requestStartedAt = Date.now();
-      if (resource === 'leaderboard') setLeaderboardLoading(true);
+      if (resource === 'leaderboard' && !forced) setLeaderboardLoading(true);
       void (async () => {
         try {
           if (resource === 'tracker') {
@@ -1343,7 +1348,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
             }
             const result = await homeService.getTracker(token, requestedMonth);
             if (currentSessionTokenRef.current === token && lastSecondaryRefreshAtRef.current.tracker <= requestStartedAt) {
-              setTracker(result);
+              // Drop the response if the user moved to another month while it was in flight.
+              setTracker(current => current && current.month !== result.month ? current : result);
               const resultCacheKey = `ecobud.mobile.tracker.${session!.user.id}.${result.month}`;
               const serialized = JSON.stringify(result);
               mobileStorage.setItemSync(resultCacheKey, serialized);
@@ -1368,7 +1374,25 @@ export function useHomeDashboard(): EcoBudMobileModel {
         }
       })();
     }
-  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating, tracker?.month, persistSession]);
+  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating, tracker?.month, persistSession, secondaryRefreshNonce]);
+
+  // Keep the open tracker, leaderboard, or transparency screen current: timer, app resume, and realtime signals.
+  useEffect(() => {
+    const resource: SecondaryResource | null = activeOverlay === 'leaderboard' ? 'leaderboard'
+      : activeOverlay === 'transparency' ? 'transparency'
+      : activeOverlay === null && activeTab === 'tracker' ? 'tracker'
+      : null;
+    if (!resource || !session?.token || !presence.hasUsableInternet) return;
+    const refresh = () => {
+      if (AppState.currentState !== 'active') return;
+      secondaryForceRef.current.add(resource);
+      setSecondaryRefreshNonce(value => value + 1);
+    };
+    const timer = setInterval(refresh, FOCUSED_REFRESH_INTERVAL_MS);
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') refresh(); });
+    const changed = DeviceEventEmitter.addListener('ecobudDataChanged', refresh);
+    return () => { clearInterval(timer); subscription.remove(); changed.remove(); };
+  }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay]);
 
   useEffect(() => {
     if (!session?.token) return;
@@ -1955,6 +1979,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           DeviceEventEmitter.emit('notificationsChanged');
           DeviceEventEmitter.emit('notificationsInboxRefresh');
           DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
+          DeviceEventEmitter.emit('ecobudDataChanged');
           if (notice.relatedType === 'id_verification') DeviceEventEmitter.emit('idVerificationChanged');
           if (notice.scope !== 'notifications') {
             showNotification({
@@ -1976,6 +2001,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
           }
 
           DeviceEventEmitter.emit('ECO_REDEEM_SYNC');
+          DeviceEventEmitter.emit('ecobudDataChanged');
           if (signal.channel === 'events' || signal.reason.startsWith('event-')) DeviceEventEmitter.emit('eventsChanged');
           queueRealtimeRefresh(signal.channel, signal.reason);
         },

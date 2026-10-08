@@ -1,11 +1,19 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
-export function ApprovedIdCard({ onPress, status = 'approved', reason }: { onPress: () => void; status?: 'approved' | 'rejected' | 'pending'; reason?: string | null }) {
+export function ApprovedIdCard({ onPress, status = 'approved', reason, actionLabel, actionIcon = 'arrow-forward', loading = false, disabled = false }: {
+  onPress: () => void;
+  status?: 'approved' | 'rejected' | 'pending';
+  reason?: string | null;
+  actionLabel?: string;
+  actionIcon?: keyof typeof Ionicons.glyphMap;
+  loading?: boolean;
+  disabled?: boolean;
+}) {
   const { theme, isDark } = useTheme();
   const rejected = status === 'rejected';
   const pending = status === 'pending';
@@ -13,7 +21,7 @@ export function ApprovedIdCard({ onPress, status = 'approved', reason }: { onPre
   const tint = pending ? (isDark ? '#4A3515' : '#FFF0CE') : rejected ? (isDark ? '#482828' : '#FBE9E7') : (isDark ? '#234B35' : '#E0F3D9');
   const cardColor = isDark ? theme.colors.card : pending ? '#FFFBF2' : rejected ? '#FFF8F7' : '#F4FCF6';
   const baseColor = pending ? (isDark ? '#4A3515' : '#EFDDB5') : rejected ? (isDark ? '#482828' : '#EBCBC7') : (isDark ? '#163C2A' : '#CFE7D7');
-  const buttonLabel = rejected ? 'Resubmit ID' : 'View ID verification';
+  const buttonLabel = actionLabel ?? (rejected ? 'Resubmit ID' : 'View ID verification');
   return <View style={[localStyles.cardBase, { backgroundColor: baseColor }]}>
     <View style={[localStyles.card, { backgroundColor: cardColor, borderColor: outline }]}>
       <View style={localStyles.headingRow}>
@@ -41,9 +49,9 @@ export function ApprovedIdCard({ onPress, status = 'approved', reason }: { onPre
         </View>)}
       </View>}
       <View style={[localStyles.buttonBase, { backgroundColor: isDark ? '#082919' : '#084620' }]}>
-        <TouchableOpacity onPress={onPress} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={buttonLabel} style={[localStyles.button, { borderColor: isDark ? '#5CAB7B' : '#0B5127' }]}>
+        <TouchableOpacity onPress={onPress} disabled={disabled || loading} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={buttonLabel} accessibilityState={{ disabled: disabled || loading, busy: loading }} style={[localStyles.button, { borderColor: isDark ? '#5CAB7B' : '#0B5127', opacity: disabled || loading ? 0.7 : 1 }]}>
           <LinearGradient colors={['#126027', '#17A07E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.buttonContent}>
-            <Text style={localStyles.buttonText}>{buttonLabel}</Text><Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+            <Text style={localStyles.buttonText}>{buttonLabel}</Text>{loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name={actionIcon} size={19} color="#FFFFFF" />}
           </LinearGradient>
         </TouchableOpacity>
       </View>

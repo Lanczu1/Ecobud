@@ -3,7 +3,9 @@ import { adminDelete, adminGet, adminPatch, adminPut } from '../../../utils/admi
 import { adminHref, browserPushEnabled, browserPushSupported, disableBrowserPush, enableBrowserPush, fetchNotificationPage,
   notificationCategories, notificationRecordHref, type AdminNotification, type NotificationCategory, type NotificationPage, type NotificationPreferences } from '../../../services/adminNotifications';
 import { useAdminNotifications } from '../AdminNotificationProvider';
-import { ArrowLeftRight, Bell, BookOpen, Calendar, CheckCheck, ClipboardList, Flag, Gift, IdCard, Megaphone, RefreshCw, Settings, Trash2, TriangleAlert, Trophy, X, type LucideIcon } from 'lucide-react';
+import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
+import { Bell, CheckCheck, RefreshCw, Settings, Trash2, X } from 'lucide-react';
+import { RecordIcon, StatusChip, notificationCategoryLabels as labels, notificationStatus } from '../notificationParts';
 
 const field='min-h-11 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 const fieldLabel='space-y-1 text-xs font-semibold text-gray-600 dark:text-gray-300';
@@ -11,25 +13,6 @@ const button='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl 
 const primaryButton='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-gray-900';
 const card='rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900';
 const notice='rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300';
-const statusTone: Record<string,string>={
-  'Needs action':'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  Resolved:'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  Update:'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-};
-// Same icons as the sidebar sections each record opens, so a row reads as "this came from Events".
-const recordIcons: Record<string,LucideIcon>={
-  id_verification:IdCard,challenge_submission:Trophy,challenge:Trophy,event_submission:Calendar,event:Calendar,
-  redemption:Gift,listing:ArrowLeftRight,listing_report:Flag,lesson:BookOpen,announcement:Megaphone,
-  review_summary:ClipboardList,delivery_failure:TriangleAlert,worker_failure:TriangleAlert,
-};
-function RecordIcon({ recordType,unread=false }: { recordType: string; unread?: boolean }) {
-  const Icon=recordIcons[recordType] ?? Bell;
-  return <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${unread ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}><Icon className="h-[18px] w-[18px]" strokeWidth={1.8} /></span>;
-}
-function StatusChip({ status }: { status: string }) {
-  return <span className={`shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold ${statusTone[status]}`}>{status}</span>;
-}
-const labels: Record<NotificationCategory,string>={ verification:'ID verification',challenge:'Challenges',event:'Events',swap:'Listings & reports',reward:'Rewards',learning:'Learning',announcement:'Announcements',system:'System alerts' };
 function readRole() { try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role || ''; } catch { return ''; } }
 
 export function Notifications() {
@@ -41,10 +24,10 @@ export function Notifications() {
   const [detailError,setDetailError]=useState(''); const [detailLoading,setDetailLoading]=useState(false);
   const [prefs,setPrefs]=useState<NotificationPreferences | null>(null); const [prefsError,setPrefsError]=useState('');
   const [pushEnabled,setPushEnabled]=useState(false); const [settingsOpen,setSettingsOpen]=useState(false); const [saved,setSaved]=useState('');
-  const request=useRef(0);
+  const request=useRef(0); const loadedMore=useRef(false);
   const notificationId=new URLSearchParams(window.location.hash.split('?')[1] || '').get('notification');
   const load=useCallback(async (append=false, cursor?: NotificationPage['next']) => {
-    const version=++request.current; setLoading(true); setError('');
+    const version=++request.current; setLoading(true); setError(''); loadedMore.current=append;
     const q=new URLSearchParams({ filter }); if (category) q.set('category',category);
     if (append && cursor) { q.set('before',cursor.before); q.set('beforeId',cursor.beforeId); }
     try { const result=await fetchNotificationPage(q); if (version===request.current) setPage(current => ({ ...result, items: append && current ? [...current.items,...result.items.filter(item=>!current.items.some(old=>old.id===item.id))] : result.items })); }
@@ -52,6 +35,19 @@ export function Notifications() {
     finally { if (version===request.current) setLoading(false); }
   },[filter,category]);
   useEffect(() => { void load(); return () => { request.current++; }; },[load]);
+  // Background refresh of the newest page; older pages the admin already loaded stay in place.
+  useAdminLiveRefresh(() => {
+    const version=request.current;
+    const q=new URLSearchParams({ filter }); if (category) q.set('category',category);
+    void fetchNotificationPage(q).then(result => {
+      if (version!==request.current) return;
+      setPage(current => {
+        if (!current || !loadedMore.current) return current && JSON.stringify(current)===JSON.stringify(result) ? current : result;
+        const fresh=new Set(result.items.map(item=>item.id));
+        return { ...result,next:current.next,items:[...result.items,...current.items.filter(item=>!fresh.has(item.id))] };
+      });
+    }).catch(() => {});
+  });
   useEffect(() => {
     let cancelled=false;
     void adminGet<NotificationPreferences>('/admin/notifications/preferences',{ bypassCache:true }).then(value=>{ if (!cancelled) setPrefs(value); }).catch(e=>{ if (!cancelled) setPrefsError(e.message); });
@@ -136,7 +132,7 @@ export function Notifications() {
         <div className="min-w-0 flex-1 basis-48">
           {detailLoading && <p role="status" className="text-sm text-gray-500 dark:text-gray-400">Loading update…</p>}
           {selected && <><h2 className="text-lg font-bold text-gray-900 dark:text-white">{selected.title}</h2>
-            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400"><StatusChip status={selected.actionRequired ? selected.resolvedAt ? 'Resolved' : 'Needs action' : 'Update'} /><span>{selected.barangays.join(', ') || 'All barangays'} · {new Date(selected.createdAt).toLocaleString()}</span></p></>}
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400"><StatusChip status={notificationStatus(selected)} /><span>{selected.barangays.join(', ') || 'All barangays'} · {new Date(selected.createdAt).toLocaleString()}</span></p></>}
         </div>
         <a className={`${button} shrink-0`} href={adminHref('Notifications')}><X aria-hidden="true" className="h-4 w-4" />Close details</a>
       </div>
@@ -180,7 +176,7 @@ export function Notifications() {
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{labels[item.category]} · {item.barangays.join(', ') || 'All barangays'} · {new Date(item.createdAt).toLocaleString()}</p>
       </a>
       <div className="flex shrink-0 items-center gap-2">
-        <StatusChip status={item.actionRequired ? item.resolvedAt ? 'Resolved' : 'Needs action' : 'Update'} />
+        <StatusChip status={notificationStatus(item)} />
         {!item.isRead && <button type="button" disabled={busy} onClick={()=>void markRead(item.id)} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-900/40">Mark as read</button>}
         <button type="button" disabled={busy} onClick={()=>void remove(item.id)} aria-label={`Remove notification: ${item.title}`} title="Remove" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"><Trash2 aria-hidden="true" className="h-4 w-4" /></button>
       </div>

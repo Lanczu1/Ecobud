@@ -36,7 +36,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     duration?: number;
   }) => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev.slice(-4), { id, type, title, message, duration }]);
+    // A repeat of a message still on screen replaces it instead of stacking.
+    setToasts(prev => [...prev.filter(t => t.type !== type || t.title !== title || t.message !== message).slice(-4), { id, type, title, message, duration }]);
     if (duration > 0) {
       setTimeout(() => {
         removeToast(id);

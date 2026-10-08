@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { adminGet, API_HOST } from '../../../utils/adminApi';
+import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { Reports as SystemReports } from './Reports';
 
 type Report = {
@@ -37,6 +38,20 @@ export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [params, refresh, from, to]);
+
+  const liveParams = useRef(params);
+  useLayoutEffect(() => { liveParams.current = params; });
+  useAdminLiveRefresh(() => {
+    if (system || !from || !to || from > to) return;
+    const requested = params;
+    adminGet<Report>(`/admin/reports/barangay?${requested}`, { bypassCache: true })
+      .then(data => {
+        if (liveParams.current !== requested) return;
+        // generatedAt changes on every read, so compare the figures only.
+        setReport(current => current && JSON.stringify({ ...current, generatedAt: '' }) === JSON.stringify({ ...data, generatedAt: '' }) ? current : data);
+      })
+      .catch(() => {});
+  });
 
   async function download(format: 'pdf' | 'excel') {
     if (!report || loading || exporting) return;

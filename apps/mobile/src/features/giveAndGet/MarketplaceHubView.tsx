@@ -286,7 +286,16 @@ export function MarketplaceHubView({
     completionInFlight.current = true;
     setCompleting(true);
     try {
-      await swapService.updateSwapRequestStatus(requestId, 'completed');
+      try {
+        await swapService.updateSwapRequestStatus(requestId, 'completed');
+      } catch (err: any) {
+        // A dropped connection can lose the reply after the server already saved the exchange.
+        if (err?.code !== 'offline' && err?.code !== 'timeout') throw err;
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const saved = await swapService.updateSwapRequestStatus(requestId, 'completed').then(() => true, () => false)
+          || await swapService.fetchConversations(currentUserId).then(list => list.some(item => item.swapRequestId === requestId && item.status === 'completed'), () => false);
+        if (!saved) throw err;
+      }
       ++conversationsRequestId.current;
       setSelectedConversation(previous => previous?.swapRequestId === requestId ? { ...previous, status: 'completed' } : previous);
       setConversations(previous => previous.map(item => item.swapRequestId === requestId ? { ...item, status: 'completed' } : item));

@@ -19,6 +19,7 @@ import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
 import { swapService } from './swapService';
 import type { SwapCategory, ItemCondition, MeetupMethod } from './types';
@@ -27,6 +28,7 @@ import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../a
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
 import { BarangayListingMap, type ListingLocation } from './LagunaBarangayPickerMap';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -54,6 +56,7 @@ export function CreateSwapListing({
 }) {
   const { theme, isDark } = useTheme();
   const { showNotification } = useInAppNotification();
+  const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<SwapCategory | null>(null);
   const [quantity, setQuantity] = useState('');
@@ -205,15 +208,35 @@ export function CreateSwapListing({
       showNotification({ title: 'Photo limit reached', message: 'A listing can have up to 5 photos.', tone: 'info' });
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.5,
-      allowsMultipleSelection: true,
-      selectionLimit: 5 - images.length,
-    });
-    if (!result.canceled) {
-      const newImages = [...images, ...result.assets.map((a) => a.uri)];
-      setImages(newImages.slice(0, 5));
+    try {
+      // quality 1 keeps the picker from compressing natively, which rejects Android photo picker content:// URIs
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 1,
+        allowsMultipleSelection: true,
+        selectionLimit: 5 - images.length,
+      });
+      if (result.canceled) return;
+
+      const prepared: string[] = [];
+      for (const asset of result.assets) {
+        try {
+          const compressed = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            asset.width > 1440 ? [{ resize: { width: 1440 } }] : [],
+            { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          prepared.push(compressed.uri);
+        } catch {
+          // skip photos the device cannot decode
+        }
+      }
+      if (prepared.length < result.assets.length) {
+        showNotification({ title: 'Some photos were skipped', message: 'A photo could not be read. Try a different one.', tone: 'error' });
+      }
+      if (prepared.length > 0) setImages((current) => [...current, ...prepared].slice(0, 5));
+    } catch {
+      showNotification({ title: 'Photos not added', message: 'Your gallery could not be opened. Please try again.', tone: 'error' });
     }
   };
 
@@ -333,7 +356,7 @@ export function CreateSwapListing({
         <ScrollView
           ref={formScrollRef}
           style={[localStyles.body, { backgroundColor: theme.colors.background }]}
-          contentContainerStyle={[localStyles.bodyContent, { backgroundColor: theme.colors.background, paddingBottom: verticalScale(24) + keyboardHeight }]}
+          contentContainerStyle={[localStyles.bodyContent, { backgroundColor: theme.colors.background, paddingBottom: verticalScale(32) + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
           onScroll={(event) => { formScrollYRef.current = event.nativeEvent.contentOffset.y; }}

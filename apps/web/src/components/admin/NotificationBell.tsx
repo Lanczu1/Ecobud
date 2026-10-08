@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell, X } from 'lucide-react';
 import { adminHref } from '../../services/adminNotifications';
 import { useAdminNotifications } from './AdminNotificationProvider';
+import { RecordIcon, StatusChip, notificationCategoryLabels, notificationStatus } from './notificationParts';
 import './NotificationBell.css';
 
 export function NotificationBell({ scopeLabel }: { scopeLabel: string }) {
@@ -27,7 +28,14 @@ export function NotificationBell({ scopeLabel }: { scopeLabel: string }) {
         {error && <div role="alert" className="p-4 text-sm text-red-700 dark:text-red-300">{error} <button type="button" onClick={() => void refresh()} className="underline">Retry</button></div>}
         {!data && !error && <p role="status" className="p-4 text-sm">Loading notifications…</p>}
         {data?.items.length===0 && <p className="p-4 text-sm text-gray-500 dark:text-gray-400">No notifications yet. New updates will appear here.</p>}
-        <ul>{data?.items.slice(0,3).map(item => <li key={item.id}><a onClick={() => setOpen(false)} href={adminHref('Notifications',{ notification:item.id })} className="notification-preview"><p className="notification-preview-title">{!item.isRead && <span className="sr-only">Unread: </span>}{item.title}</p><p className="notification-preview-message">{item.message}</p></a></li>)}</ul>
+        <ul>{data?.items.slice(0,3).map(item => <li key={item.id} className={!item.isRead ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}><a onClick={() => setOpen(false)} href={adminHref('Notifications',{ notification:item.id })} className="notification-preview">
+          <RecordIcon recordType={item.recordType} unread={!item.isRead} />
+          <span className="min-w-0 flex-1">
+            <span className={`block text-sm text-gray-900 dark:text-white ${item.isRead ? 'font-medium' : 'font-bold'}`}>{!item.isRead && <span role="img" aria-label="Unread" className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-600 align-middle dark:bg-emerald-400" />}{item.title}</span>
+            <span className="mt-0.5 block text-sm text-gray-600 dark:text-gray-400">{item.message}</span>
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400"><StatusChip status={notificationStatus(item)} />{notificationCategoryLabels[item.category]} · {new Date(item.createdAt).toLocaleString()}</span>
+          </span>
+        </a></li>)}</ul>
       </div>
       <a href={adminHref('Notifications')} onClick={() => setOpen(false)} className="notification-view-all">View all notifications</a>
     </div>}

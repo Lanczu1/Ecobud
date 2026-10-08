@@ -1,5 +1,5 @@
 import { useScreenActive } from '../../shared/ui/ScreenActivity';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { View, ScrollView, FlatList, RefreshControl, Image, useWindowDimensions, StyleSheet, Keyboard, Platform } from 'react-native';
@@ -124,7 +124,7 @@ const getGreetingInfo = (): { text: string; icon: keyof typeof Ionicons.glyphMap
 };
 
 export const HomeView = React.memo(function HomeView({ model, section }: HomeDashboardRowProps) {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
 
   // Show card skeleton on cold launch when there is genuinely no data yet
   const isCardsLoading = !model.dashboard && (model.isHydrating || model.initializing || model.booting);
@@ -156,37 +156,18 @@ export const HomeView = React.memo(function HomeView({ model, section }: HomeDas
       {(section === undefined || section === 0) && <TopNavbar model={model} />}
       <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         {(section === undefined || section === 0) && <>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
-          <View style={{ flex: 1, paddingRight: scale(8) }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
-              <Ionicons name={greeting!.icon} size={scale(18)} color={greeting!.iconColor} />
-              <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                {greeting!.text}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
-              <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
-                {firstName}
-              </Text>
-              <MaterialCommunityIcons name="hand-wave" size={scale(26)} color="#F59E0B" style={{ transform: [{ rotate: '-10deg' }] }} />
-            </View>
+        <View style={{ marginBottom: verticalScale(14) }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+            <Ionicons name={greeting!.icon} size={scale(18)} color={greeting!.iconColor} />
+            <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              {greeting!.text}
+            </Text>
           </View>
-          <View
-            style={{
-              width: scale(44),
-              height: scale(44),
-              borderRadius: scale(22),
-              backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: isDark ? theme.colors.border : '#C8E6C9',
-            }}
-          >
-            <Ionicons name="leaf" size={scale(22)} color={isDark ? theme.colors.primary : '#126027'} />
-          </View>
+          <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
+            {firstName}
+          </Text>
+          <Text style={[styles.welcomeSubtitle, { marginTop: verticalScale(4), marginBottom: 0, color: theme.colors.textMuted }]}>Great to see you again!</Text>
         </View>
-        <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(14), color: theme.colors.textMuted }]}>Great to see you again! Let's keep building a greener tomorrow.</Text>
 
         {/* Discoverable AI Assistant Bar (Replaces floating FAB) */}
         <AiAssistantBar onPress={() => model.setActiveOverlay('assistant')} />
@@ -362,38 +343,17 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
       <TopNavbar model={model} />
       <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         <View style={{ marginBottom: verticalScale(12) }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
-            <View style={{ flex: 1, paddingRight: scale(8) }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
-                <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
-                <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                  ECO ACADEMY
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8) }}>
-                <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
-                  Learn & Grow
-                </Text>
-                <MaterialCommunityIcons name="school" size={scale(26)} color={isDark ? theme.colors.primary : '#126027'} />
-              </View>
-            </View>
-            <View
-              style={{
-                width: scale(44),
-                height: scale(44),
-                borderRadius: scale(22),
-                backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: isDark ? theme.colors.border : '#C8E6C9',
-              }}
-            >
-              <MaterialCommunityIcons name="book-open-page-variant" size={scale(22)} color={isDark ? theme.colors.primary : '#126027'} />
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+            <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
+            <Text style={{ fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              ECO ACADEMY
+            </Text>
           </View>
-          <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(6), color: theme.colors.textMuted, fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(19) }]}>
-            Master eco-friendly living with bite-sized lessons, complete quizzes, and build sustainable habits.
+          <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
+            Learn & Grow
+          </Text>
+          <Text style={[styles.welcomeSubtitle, { marginTop: verticalScale(4), marginBottom: verticalScale(6), color: theme.colors.textMuted }]}>
+            Short lessons and quizzes for greener habits.
           </Text>
         </View>
 

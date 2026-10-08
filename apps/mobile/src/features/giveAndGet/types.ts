@@ -84,6 +84,8 @@ export interface SwapChatMessage {
   timestamp: string;
   read: boolean;
   delivered: boolean;
+  /** Client-only: the send failed and the message is waiting for a retry. */
+  failed?: boolean;
 }
 
 export interface SwapConversation {
