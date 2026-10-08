@@ -10,6 +10,13 @@ export function streakMonth(now: Date): string {
   return `${parts.find(p => p.type === 'year')!.value}-${parts.find(p => p.type === 'month')!.value}`;
 }
 
+export const STREAK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+export const STREAK_WARNING_MS = 2 * 24 * 60 * 60 * 1000;
+
+export function streakLastActivity(user: { lastChallengeAt: Date | null; streakRestoredAt: Date | null }): number {
+  return Math.max(user.lastChallengeAt?.getTime() ?? 0, user.streakRestoredAt?.getTime() ?? 0);
+}
+
 export function streakStatus(user: {
   currentStreak: number;
   lastChallengeAt: Date | null;
@@ -17,8 +24,8 @@ export function streakStatus(user: {
   streakRestoreMonth: string | null;
   streakRestoresUsed: number;
 }, now = new Date()) {
-  const lastActivity = Math.max(user.lastChallengeAt?.getTime() ?? 0, user.streakRestoredAt?.getTime() ?? 0);
-  const active = user.currentStreak >= 3 && lastActivity > 0 && now.getTime() - lastActivity < 7 * 24 * 60 * 60 * 1000;
+  const lastActivity = streakLastActivity(user);
+  const active = user.currentStreak >= 3 && lastActivity > 0 && now.getTime() - lastActivity < STREAK_WINDOW_MS;
   const restoresRemaining = Math.max(0, 3 - (user.streakRestoreMonth === streakMonth(now) ? user.streakRestoresUsed : 0));
   return { active, restoresRemaining, canRestore: user.currentStreak >= 3 && !active && restoresRemaining > 0 };
 }

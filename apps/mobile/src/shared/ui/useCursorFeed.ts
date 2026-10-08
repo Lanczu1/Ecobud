@@ -14,7 +14,7 @@ export function useCursorFeed<T extends { id: string }>(fetchPage: (cursor?: str
     const refresh = async () => {
       if (AppState.currentState !== 'active') { dirty = true; return; }
       dirty = false;
-      await feed.refresh();
+      await feed.refreshLoaded();
       lastRefreshAt = Date.now();
     };
     const changed = DeviceEventEmitter.addListener(eventName, () => {
@@ -23,9 +23,9 @@ export function useCursorFeed<T extends { id: string }>(fetchPage: (cursor?: str
       timer = setTimeout(() => void refresh(), 450);
     });
     const appState = AppState.addEventListener('change', status => {
-      if (status === 'active' && (dirty || Date.now() - lastRefreshAt >= 60_000)) void refresh();
+      if (status === 'active' && (dirty || Date.now() - lastRefreshAt >= 30_000)) void refresh();
     });
-    const interval = setInterval(() => { if (feed.state.items.length <= 20 && Date.now() - lastRefreshAt >= 60_000) void refresh(); }, 60_000);
+    const interval = setInterval(() => { if (Date.now() - lastRefreshAt >= 25_000) void refresh(); }, 30_000);
     return () => { unsubscribe(); changed.remove(); appState.remove(); clearInterval(interval); if (timer) clearTimeout(timer); };
   }, [feed, eventName]);
   return { ...(snapshot.feed === feed ? snapshot.state : feed.state), refresh: feed.refresh, loadMore: feed.loadMore, retry: feed.retry };

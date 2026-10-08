@@ -146,8 +146,13 @@ const difficultyColors: Record<string, string> = {
 };
 
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard', 'Expert'];
-const CATEGORIES = ['General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
 const AI_TARGET_OPTIONS = ['Plastic Bottle', 'Glass Bottle', 'Plastic Wrapper'];
+
+// Mirrors the API: a challenge's category is the item it collects.
+function categoryFromTargets(targets: string[]) {
+  if (targets.length === 0) return 'General';
+  return targets.length === 1 ? targets[0] : 'Mixed Items';
+}
 
 const BARANGAYS = [
   'Abo',
@@ -305,7 +310,7 @@ function ChallengeModal({ onClose, onSave, initial, drafts }: ModalProps) {
         const result = await adminPostForm<{ url: string }>('/admin/upload', data);
         imageUrl = result.url;
       }
-      await onSave({ ...form, badgeLabel: '', badgeReward: await badgeReward.prepare(), imageUrl, startDate: null, endDate: null });
+      await onSave({ ...form, category: categoryFromTargets(form.aiDetectionTargets), badgeLabel: '', badgeReward: await badgeReward.prepare(), imageUrl, startDate: null, endDate: null });
       await drafts?.complete();
       handleClose();
     }
@@ -454,9 +459,7 @@ function ChallengeModal({ onClose, onSave, initial, drafts }: ModalProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all bg-white">
-                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
+                  <input readOnly value={categoryFromTargets(form.aiDetectionTargets)} title="Set by the targets to detect" className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-600 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
@@ -845,10 +848,11 @@ export function Challenges() {
       onContentRefresh: () => {
         clearAdminApiCache('/admin/challenges');
         void loadChallengesRef.current();
+        if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
       },
     }).then((unsub) => { unsubscribe = unsub; });
     return () => unsubscribe?.();
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'submissions') {

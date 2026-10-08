@@ -1,6 +1,8 @@
 export type FeedPage<T> = { items: T[]; nextCursor: string | null };
 export type FeedState<T> = FeedPage<T> & { loading: boolean; refreshing: boolean; loadingMore: boolean; error: string | null };
 
+const MAX_RELOAD_PAGES = 10;
+
 export class CursorFeed<T extends { id: string }> {
   state: FeedState<T> = { items: [], nextCursor: null, loading: true, refreshing: false, loadingMore: false, error: null };
   private generation = 0;
@@ -26,6 +28,44 @@ export class CursorFeed<T extends { id: string }> {
   refresh = (): Promise<void> => {
     if (this.request) { this.pendingRefresh = true; return this.request; }
     return this.load(false);
+  };
+  /**
+   * Background refresh that keeps the reader's place: re-reads every loaded page and swaps
+   * them in together, instead of dropping back to the first page like `refresh` does.
+   */
+  refreshLoaded = (): Promise<void> => {
+    if (this.request) { this.pendingRefresh = true; return this.request; }
+    const target = this.state.items.length;
+    const generation = this.generation;
+    const request = (async () => {
+      const items: T[] = [];
+      const seen = new Set<string>();
+      let cursor: string | undefined;
+      let nextCursor: string | null = null;
+      for (let page = 0; page < MAX_RELOAD_PAGES; page++) {
+        const result = await this.fetchPage(cursor);
+        if (generation !== this.generation) return;
+        for (const item of result.items) {
+          if (!seen.has(item.id)) { seen.add(item.id); items.push(item); }
+        }
+        nextCursor = result.nextCursor === cursor ? null : result.nextCursor;
+        if (!nextCursor || items.length >= target) break;
+        cursor = nextCursor;
+      }
+      // Too long to re-read in full: leave the list alone rather than truncate it under the reader.
+      if (nextCursor && items.length < target) return;
+      this.update({ items, nextCursor, error: null });
+    })().catch(() => {
+      // Keep the current list; the next refresh retries.
+    }).finally(() => {
+      if (this.request === request) this.request = null;
+      if (generation === this.generation && this.pendingRefresh) {
+        this.pendingRefresh = false;
+        void this.refreshLoaded();
+      }
+    });
+    this.request = request;
+    return request;
   };
   loadMore = (): Promise<void> => this.load(true);
   retry = (): Promise<void> => this.load(this.lastWasMore);

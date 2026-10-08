@@ -5,6 +5,7 @@ import { startAdminNotificationWorker, stopAdminNotificationWorker } from './ser
 import { idVerificationRoutes } from './routes/idVerificationRoutes';
 import { announcementAdminRoutes, announcementResidentRoutes } from './routes/announcementRoutes';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationService';
+import { startStreakReminderScheduler, stopStreakReminderScheduler } from './services/streakReminderScheduler';
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
@@ -42,6 +43,7 @@ import {
   stopLessonPublishScheduler,
 } from './services/lessonPublishScheduler';
 import { appVersionRoutes } from './routes/appVersionRoutes';
+import { adminLiveEvents } from './services/adminLiveEvents';
 
 const app = express();
 const production = process.env.NODE_ENV === 'production';
@@ -186,6 +188,17 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+// Tell open admin dashboards to refresh after any successful write.
+app.use('/api', (req, res, next) => {
+  const isWrite = req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE';
+  if (isWrite && !req.path.startsWith('/realtime/')) {
+    res.once('finish', () => {
+      if (res.statusCode < 400) adminLiveEvents.emit();
+    });
+  }
+  next();
+});
+
 app.use('/api/app/version', appVersionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/id-verification', idVerificationRoutes);
@@ -228,6 +241,7 @@ server.headersTimeout = 66_000;
 startPresenceCleanupScheduler();
 startLessonPublishScheduler(); startNotificationWorker(); startIdDocumentCleanup();
 startAdminNotificationWorker();
+startStreakReminderScheduler();
 
 let shuttingDown = false;
 const shutdownSchedulers = () => {
@@ -236,6 +250,7 @@ const shutdownSchedulers = () => {
   stopPresenceCleanupScheduler();
   stopLessonPublishScheduler(); stopNotificationWorker(); stopIdDocumentCleanup();
   stopAdminNotificationWorker();
+  stopStreakReminderScheduler();
   server.close(() => {
     void prisma.$disconnect().finally(() => process.exit(0));
   });

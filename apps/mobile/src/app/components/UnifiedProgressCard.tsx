@@ -12,8 +12,8 @@ import { triggerImpactLight } from '../utils/haptics';
 import { getVisibleStreak } from '../utils/appUtils';
 import { type LeaderboardData } from '../../shared/api/ecobudApi';
 import { StreakFlame } from './StreakFlame';
-import { isStreakFlameActive } from '../../shared/api/streakSummary';
 import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
+import { useTheme } from '../../shared/theme/ecoTheme';
 
 export interface UnifiedProgressCardProps {
   ecoPoints: number;
@@ -98,6 +98,7 @@ export function UnifiedProgressCard({
   onProgressBarMeasured,
 }: UnifiedProgressCardProps) {
   const { preferences } = useAccessibility();
+  const { theme, isDark } = useTheme();
   const largeText = preferences.size === 'Large';
   const progressBarRef = useRef<View>(null);
   const { currentLevelObj, nextLevelObj } = getLevelFromPoints(ecoPoints);
@@ -113,18 +114,10 @@ export function UnifiedProgressCard({
     pointsToNext = Math.max(0, nextLevelObj.points - ecoPoints);
   }
 
-  const nextPerk = LEVEL_PERKS[nextLevelObj.level] || 'Exclusive perks & badges';
+  // The card names one reward; the roadmap lists the rest.
+  const nextReward = (LEVEL_PERKS[nextLevelObj.level] || 'Exclusive perks & badges').split(' & ')[0];
 
-  // Leaderboard text calculation
   const userRank = leaderboard?.items.find((item) => item.isCurrentUser)?.rank ?? leaderboard?.currentUserRank ?? null;
-  const leaderboardStripText = userRank
-    ? userRank === 1
-      ? '#1 this week — You are leading the board!'
-      : userRank === 2
-      ? '#2 this week — 1 spot from the top'
-      : `#${userRank} this week — ${userRank - 1} spots from #1`
-    : 'View weekly community leaderboard';
-
   const visibleStreak = getVisibleStreak(currentStreak);
 
   const handleMeasure = () => {
@@ -135,6 +128,8 @@ export function UnifiedProgressCard({
     }
   };
 
+  const secondaryCardStyle = { backgroundColor: theme.colors.card, borderColor: theme.colors.border };
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -143,52 +138,28 @@ export function UnifiedProgressCard({
         end={{ x: 1, y: 1 }}
         style={styles.card}
       >
-        {/* Background leaf watermarks */}
-        <MaterialCommunityIcons name="leaf" size={70} color="rgba(255,255,255,0.04)" style={styles.bgLeaf1} />
-        <MaterialCommunityIcons name="leaf" size={110} color="rgba(255,255,255,0.03)" style={styles.bgLeaf2} />
-
-        {/* 1. Headline Row: Level & Points + Roadmap Link */}
-        <View style={styles.headlineRow}>
-          <View style={styles.levelBadgeCluster}>
-            <View style={styles.iconCircle}>
-              <MaterialCommunityIcons name={currentLevelObj.icon as any} size={scale(18)} color="#34D399" />
-            </View>
-            <View>
-              <Text style={styles.levelSubtitle}>LEVEL {currentLevelObj.level}</Text>
-              <Text style={styles.levelTitle}>{currentLevelObj.name}</Text>
-            </View>
+        {/* 1. Level & title */}
+        <View style={styles.levelRow}>
+          <View style={styles.iconCircle}>
+            <MaterialCommunityIcons name={currentLevelObj.icon as any} size={scale(18)} color="#6EE7B7" />
           </View>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => {
-              triggerImpactLight();
-              onOpenRoadmap();
-            }}
-            style={styles.roadmapButton}
-          >
-            <Text style={styles.roadmapText}>Roadmap</Text>
-            <Ionicons name="chevron-forward" size={scale(12)} color="#E6F4EC" />
-          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.levelSubtitle}>LEVEL {currentLevelObj.level}</Text>
+            <Text style={styles.levelTitle}>{currentLevelObj.name}</Text>
+          </View>
         </View>
 
-        {/* Total Points Display */}
+        {/* 2. Eco Points */}
         <View style={styles.pointsRow}>
           <AnimatedPointsCount value={ecoPoints} />
           <Text style={styles.pointsUnit}>Eco Points</Text>
         </View>
 
-        {/* 2. Target Milestone & Single Progress Bar */}
+        {/* 3. Progress to the next level */}
         <View style={styles.progressContainer}>
-          <View style={styles.progressHeaderRow}>
-            <Text style={styles.progressTargetText}>
-              {isMaxLevel ? 'Max Level Reached! 🏆' : `Next: ${nextLevelObj.name} (Lv. ${nextLevelObj.level})`}
-            </Text>
-            <Text style={styles.progressFractionText}>
-              {isMaxLevel ? 'Mastered' : `${pointsToNext} XP needed`}
-            </Text>
-          </View>
-
+          <Text style={styles.progressHeadline}>
+            {isMaxLevel ? 'Highest level reached' : `${pointsToNext} Eco Points to Level ${nextLevelObj.level}`}
+          </Text>
           <View
             ref={progressBarRef}
             onLayout={handleMeasure}
@@ -196,53 +167,72 @@ export function UnifiedProgressCard({
           >
             <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
           </View>
-
           {!isMaxLevel && (
-            <Text style={styles.perkTeaserText} numberOfLines={1}>
-              🎁 Unlocks: {nextPerk}
-            </Text>
+            <View style={styles.progressFooterRow}>
+              <Text style={styles.progressFooterText}>Next: {nextLevelObj.name}</Text>
+              <Text style={styles.progressFooterText}>{ecoPoints} / {nextLevelObj.points}</Text>
+            </View>
           )}
         </View>
 
-        {/* 3. Inline Stats Row: Streak Pill & Weekly Leaderboard Strip */}
-        <View style={[styles.inlineStatsRow, largeText && { flexDirection: 'column', alignItems: 'stretch' }]}>
-          {/* Streak Chip */}
+        {/* 4. Next reward + roadmap */}
+        <View style={styles.footerRow}>
+          {!isMaxLevel && (
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rewardLabel}>Next reward</Text>
+              <Text style={styles.rewardName} numberOfLines={1}>{nextReward}</Text>
+            </View>
+          )}
           <TouchableOpacity
-            activeOpacity={0.82}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open level roadmap"
             onPress={() => {
               triggerImpactLight();
-              onOpenStreak();
+              onOpenRoadmap();
             }}
-            style={styles.streakChip}
+            style={styles.roadmapButton}
           >
-            <StreakFlame count={currentStreak} active={streakActive} size={36} />
-            <View>
-              <Text style={styles.streakChipNumber}>
-                {visibleStreak}
-              </Text>
-              <Text style={styles.streakChipSub}>{isStreakFlameActive(currentStreak, streakActive) ? 'Challenges' : currentStreak < 3 ? 'Building streak' : 'Inactive streak'}</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Leaderboard Strip */}
-          <TouchableOpacity
-            activeOpacity={0.82}
-            onPress={() => {
-              triggerImpactLight();
-              onOpenLeaderboard();
-            }}
-            style={[styles.leaderboardStrip, largeText && { flex: 0, width: '100%' }]}
-          >
-            <View style={styles.leaderboardIconCircle}>
-              <Ionicons name="trophy" size={scale(13)} color="#F59E0B" />
-            </View>
-            <Text style={styles.leaderboardStripText} numberOfLines={1}>
-              {leaderboardStripText}
-            </Text>
-            <Ionicons name="chevron-forward" size={scale(12)} color="#A7F3D0" />
+            <Text style={styles.roadmapText}>Roadmap</Text>
+            <Ionicons name="chevron-forward" size={scale(16)} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </LinearGradient>
+
+      {/* Streak and leaderboard sit below the card so they don't compete with level progress */}
+      <View style={[styles.secondaryRow, largeText && { flexDirection: 'column' }]}>
+        <TouchableOpacity
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          onPress={() => {
+            triggerImpactLight();
+            onOpenStreak();
+          }}
+          style={[styles.secondaryCard, secondaryCardStyle]}
+        >
+          <StreakFlame count={currentStreak} active={streakActive} size={26} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.secondaryTitle, { color: theme.colors.textPrimary }]}>{visibleStreak}</Text>
+            <Text style={[styles.secondarySub, { color: theme.colors.textMuted }]} numberOfLines={1}>Challenge streak</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          onPress={() => {
+            triggerImpactLight();
+            onOpenLeaderboard();
+          }}
+          style={[styles.secondaryCard, secondaryCardStyle]}
+        >
+          <Ionicons name="trophy" size={scale(20)} color={isDark ? '#FBBF24' : '#B45309'} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.secondaryTitle, { color: theme.colors.textPrimary }]}>{userRank ? `#${userRank}` : 'Leaderboard'}</Text>
+            <Text style={[styles.secondarySub, { color: theme.colors.textMuted }]} numberOfLines={1}>{userRank ? 'Weekly leaderboard' : 'This week'}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -254,7 +244,6 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: moderateScale(22),
     padding: moderateScale(16),
-    position: 'relative',
     overflow: 'hidden',
     shadowColor: '#064E3B',
     shadowOpacity: 0.2,
@@ -262,169 +251,136 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
-  bgLeaf1: {
-    position: 'absolute',
-    top: -10,
-    right: 40,
-  },
-  bgLeaf2: {
-    position: 'absolute',
-    bottom: -20,
-    left: -20,
-  },
-  headlineRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: verticalScale(8),
-  },
-  levelBadgeCluster: {
+  levelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(10),
+    marginBottom: verticalScale(10),
   },
   iconCircle: {
-    width: scale(38),
-    height: scale(38),
-    borderRadius: scale(19),
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   levelSubtitle: {
-    color: '#A7F3D0',
-    fontSize: responsiveFontSize(10),
+    color: '#D1FAE5',
+    fontSize: responsiveFontSize(12),
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   levelTitle: {
     color: '#FFFFFF',
-    fontSize: responsiveFontSize(16),
+    fontSize: responsiveFontSize(18),
+    fontWeight: '800',
+  },
+  pointsRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: scale(8),
+    marginBottom: verticalScale(10),
+  },
+  pointsNumber: {
+    color: '#FFFFFF',
+    fontSize: responsiveFontSize(32),
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  pointsUnit: {
+    color: '#D1FAE5',
+    fontSize: responsiveFontSize(14),
+    fontWeight: '700',
+  },
+  progressContainer: {
+    marginBottom: verticalScale(12),
+  },
+  progressHeadline: {
+    color: '#FFFFFF',
+    fontSize: responsiveFontSize(14),
+    fontWeight: '700',
+    marginBottom: verticalScale(6),
+  },
+  progressBarTrack: {
+    height: verticalScale(8),
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: moderateScale(5),
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#6EE7B7',
+    borderRadius: moderateScale(5),
+  },
+  progressFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: scale(8),
+    marginTop: verticalScale(4),
+  },
+  progressFooterText: {
+    color: '#D1FAE5',
+    fontSize: responsiveFontSize(13),
+    fontWeight: '600',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: scale(12),
+    paddingTop: verticalScale(10),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  rewardLabel: {
+    color: '#D1FAE5',
+    fontSize: responsiveFontSize(12),
+    fontWeight: '600',
+  },
+  rewardName: {
+    color: '#FFFFFF',
+    fontSize: responsiveFontSize(15),
     fontWeight: '800',
   },
   roadmapButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(5),
-    borderRadius: moderateScale(12),
-    gap: 3,
+    minHeight: 44,
+    paddingHorizontal: scale(12),
+    borderRadius: moderateScale(14),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    gap: scale(4),
   },
   roadmapText: {
-    color: '#E6F4EC',
-    fontSize: responsiveFontSize(11),
-    fontWeight: '700',
-  },
-  pointsRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: scale(6),
-    marginBottom: verticalScale(12),
-  },
-  pointsNumber: {
     color: '#FFFFFF',
-    fontSize: responsiveFontSize(28),
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  pointsUnit: {
-    color: '#A7F3D0',
-    fontSize: responsiveFontSize(13),
+    fontSize: responsiveFontSize(14),
     fontWeight: '700',
-    opacity: 0.9,
   },
-  progressContainer: {
-    marginBottom: verticalScale(12),
-  },
-  progressHeaderRow: {
+  secondaryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: verticalScale(4),
-  },
-  progressTargetText: {
-    color: '#E6F4EC',
-    fontSize: responsiveFontSize(11),
-    fontWeight: '700',
-  },
-  progressFractionText: {
-    color: '#A7F3D0',
-    fontSize: responsiveFontSize(11),
-    fontWeight: '700',
-  },
-  progressBarTrack: {
-    height: verticalScale(7),
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    borderRadius: moderateScale(4),
-    overflow: 'hidden',
-    marginBottom: verticalScale(4),
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#34D399',
-    borderRadius: moderateScale(4),
-  },
-  perkTeaserText: {
-    color: '#D1FAE5',
-    fontSize: responsiveFontSize(10.5),
-    fontWeight: '500',
-    opacity: 0.9,
-  },
-  inlineStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: scale(8),
-    marginTop: verticalScale(2),
+    marginTop: verticalScale(8),
   },
-  streakChip: {
+  secondaryCard: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    minHeight: 48,
     paddingHorizontal: scale(10),
     paddingVertical: verticalScale(6),
     borderRadius: moderateScale(14),
-    gap: scale(6),
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    gap: scale(8),
   },
-  streakFlameIcon: {
+  secondaryTitle: {
     fontSize: responsiveFontSize(14),
-  },
-  streakChipNumber: {
-    color: '#FFFFFF',
-    fontSize: responsiveFontSize(11.5),
     fontWeight: '800',
   },
-  streakChipSub: {
-    color: '#A7F3D0',
-    fontSize: responsiveFontSize(9),
-    fontWeight: '600',
-  },
-  leaderboardStrip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.22)',
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(8),
-    borderRadius: moderateScale(14),
-    gap: scale(6),
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  leaderboardIconCircle: {
-    width: scale(20),
-    height: scale(20),
-    borderRadius: scale(10),
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  leaderboardStripText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: responsiveFontSize(11),
+  secondarySub: {
+    fontSize: responsiveFontSize(12),
     fontWeight: '600',
   },
 });

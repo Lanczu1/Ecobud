@@ -192,49 +192,52 @@ router.patch('/requests/:id/status', authenticateRequest, async (req: Authentica
     const { status } = req.body;
     if (!status) return res.status(400).json({ message: 'Status is required' });
     await swapService.updateSwapRequestStatus(req.params.id, req.auth!.userId, req.auth!.role, status);
-    const conversations = await swapService.fetchConversations(req.auth!.userId);
-    const conv = conversations.find((c) => c.swapRequestId === req.params.id);
-    if (conv) {
-      const targetUserId = conv.otherUser.id;
-      if (targetUserId && targetUserId !== req.auth!.userId) {
-        supabaseRealtimeService.publishSwapEvent({
-          actorUserId: req.auth!.userId,
-          targetUserId,
-          eventType: 'status',
-          swapRequestId: req.params.id,
-        }).catch(() => {});
-        const actor = await prisma.user.findUnique({
-          where: { id: req.auth!.userId },
-          select: { name: true, profile: { select: { displayName: true } } },
-        });
-        const actorName = actor?.profile?.displayName || actor?.name || 'The other member';
-        const statusCopy: Record<string, { title: string; message: string }> = {
-          accepted: {
-            title: conv.listing.lookingFor?.trim().toLowerCase() === 'giveaway' ? 'Request Accepted' : 'Swap request accepted',
-            message: conv.listing.lookingFor?.trim().toLowerCase() === 'giveaway'
-              ? `${actorName} accepted your giveaway request.`
-              : `${actorName} accepted your Give & Get request.`,
-          },
-          declined: { title: 'Swap request declined', message: `${actorName} declined your Give & Get request.` },
-          completed: { title: 'Exchange completed', message: `${actorName} marked your Give & Get exchange as complete.` },
-          cancelled: { title: 'Swap request cancelled', message: `${actorName} cancelled the Give & Get request.` },
-        };
-        const copy = statusCopy[status];
-        if (copy) {
-          void sendDirectNotification({
-            userId: targetUserId,
-            type: 'swap',
-            title: copy.title,
-            message: copy.message,
-            relatedId: req.params.id,
-            relatedType: 'swap_request',
-            priority: 'high',
-            notificationKey: `swap_request_status:${req.params.id}:${status}`,
+    // The status is saved; reply now so a slow or dropped connection cannot report a saved change as failed.
+    res.json({ success: true });
+    void (async () => {
+      const conversations = await swapService.fetchConversations(req.auth!.userId);
+      const conv = conversations.find((c) => c.swapRequestId === req.params.id);
+      if (conv) {
+        const targetUserId = conv.otherUser.id;
+        if (targetUserId && targetUserId !== req.auth!.userId) {
+          supabaseRealtimeService.publishSwapEvent({
+            actorUserId: req.auth!.userId,
+            targetUserId,
+            eventType: 'status',
+            swapRequestId: req.params.id,
+          }).catch(() => {});
+          const actor = await prisma.user.findUnique({
+            where: { id: req.auth!.userId },
+            select: { name: true, profile: { select: { displayName: true } } },
           });
+          const actorName = actor?.profile?.displayName || actor?.name || 'The other member';
+          const statusCopy: Record<string, { title: string; message: string }> = {
+            accepted: {
+              title: conv.listing.lookingFor?.trim().toLowerCase() === 'giveaway' ? 'Request Accepted' : 'Swap request accepted',
+              message: conv.listing.lookingFor?.trim().toLowerCase() === 'giveaway'
+                ? `${actorName} accepted your giveaway request.`
+                : `${actorName} accepted your Give & Get request.`,
+            },
+            declined: { title: 'Swap request declined', message: `${actorName} declined your Give & Get request.` },
+            completed: { title: 'Exchange completed', message: `${actorName} marked your Give & Get exchange as complete.` },
+            cancelled: { title: 'Swap request cancelled', message: `${actorName} cancelled the Give & Get request.` },
+          };
+          const copy = statusCopy[status];
+          if (copy) {
+            void sendDirectNotification({
+              userId: targetUserId,
+              type: 'swap',
+              title: copy.title,
+              message: copy.message,
+              relatedId: req.params.id,
+              relatedType: 'swap_request',
+              priority: 'high',
+              notificationKey: `swap_request_status:${req.params.id}:${status}`,
+            });
+          }
         }
       }
-    }
-    res.json({ success: true });
+    })().catch(error => console.error('Error notifying swap request status:', error));
   } catch (error: any) {
     console.error('Error updating swap request status:', error);
     const statusCode = error.statusCode || (error.message?.includes('permission') ? 403 : error.message?.includes('not found') ? 404 : 500);

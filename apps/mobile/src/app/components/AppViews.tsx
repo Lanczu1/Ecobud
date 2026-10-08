@@ -954,7 +954,9 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  const categories = ['All', 'General', 'Waste', 'Transport', 'Food', 'Energy', 'Nature', 'Water', 'Lifestyle'];
+  // Filter chips are the items challenges actually collect, so no chip is ever empty.
+  const categories = ['All', ...Array.from(new Set(model.challenges.flatMap((c) => c.aiDetectionTargets ?? [])))];
+  const activeCategory = categories.includes(selectedCategory) ? selectedCategory : 'All';
 
   useEffect(() => {
     if (!screenActive) return;
@@ -968,14 +970,12 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
     return () => animation.stop();
   }, [screenActive, pulseAnim]);
 
-  const isFiltering = searchQuery.trim() !== '' || selectedCategory !== 'All';
+  const isFiltering = searchQuery.trim() !== '' || activeCategory !== 'All';
 
   const filterChallenge = (c: ChallengeWithProgress) => {
     const searchLower = searchQuery.toLowerCase();
-    const catLower = selectedCategory.toLowerCase();
     const matchesSearch = searchQuery === '' || c.title.toLowerCase().includes(searchLower) || c.description.toLowerCase().includes(searchLower);
-    const challengeCat = ((c as any).category || 'General').toLowerCase();
-    const matchesCategory = selectedCategory === 'All' || challengeCat === catLower || c.title.toLowerCase().includes(catLower) || c.description.toLowerCase().includes(catLower) || (c.type && c.type.toLowerCase().includes(catLower));
+    const matchesCategory = activeCategory === 'All' || (c.aiDetectionTargets ?? []).includes(activeCategory);
     return matchesSearch && matchesCategory;
   };
 
@@ -1219,56 +1219,22 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
       <TopNavbar model={model} />
       <View style={[styles.homeContent, { paddingBottom: 0 }]}>
         <View style={{ marginBottom: verticalScale(4) }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4) }}>
-            <View style={{ flex: 1, paddingRight: scale(8) }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
-                <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
-                <Text style={{ flexShrink: 1, fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                  YOUR ECO JOURNEY
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.85}
-                  style={[
-                    styles.welcomeTitle,
-                    {
-                      marginTop: 0,
-                      color: theme.colors.textPrimary,
-                      fontSize: responsiveFontSize(26),
-                      letterSpacing: -0.3,
-                      flex: 1,
-                    },
-                  ]}
-                >
-                  Tasks & Challenges
-                </Text>
-                <MaterialCommunityIcons
-                  name="target"
-                  size={scale(24)}
-                  color={isDark ? theme.colors.primary : '#10B981'}
-                />
-              </View>
-            </View>
-            <View
-              style={{
-                width: scale(44),
-                height: scale(44),
-                borderRadius: scale(22),
-                backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: isDark ? theme.colors.border : '#C8E6C9',
-              }}
-            >
-              <Ionicons name="trophy" size={scale(22)} color={isDark ? theme.colors.primary : '#126027'} />
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(2) }}>
+            <Ionicons name="sparkles" size={scale(16)} color="#10B981" />
+            <Text style={{ flexShrink: 1, fontSize: responsiveFontSize(13), fontWeight: '700', color: theme.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              YOUR ECO JOURNEY
+            </Text>
           </View>
-          <Text style={[styles.welcomeSubtitle, { marginTop: 0, marginBottom: verticalScale(4), color: theme.colors.textMuted, fontSize: responsiveFontSize(13), lineHeight: responsiveFontSize(19) }]}>
-            Small actions add up. Pick a mission that fits your day and start making a difference.
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+            style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}
+          >
+            Tasks & Challenges
+          </Text>
+          <Text style={[styles.welcomeSubtitle, { marginTop: verticalScale(4), marginBottom: verticalScale(4), color: theme.colors.textMuted }]}>
+            Pick a mission that fits your day.
           </Text>
         </View>
 
@@ -1350,17 +1316,17 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, flexGrow: 0 }} contentContainerStyle={{ paddingRight: 20, paddingVertical: 4, alignItems: 'center' }}>
-          {categories.map((cat, index) => (
+          {categories.map((cat) => (
             <TouchableOpacity
-              key={index}
+              key={cat}
               style={{
-                backgroundColor: selectedCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.card,
+                backgroundColor: activeCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.card,
                 paddingHorizontal: 16,
                 paddingVertical: 8,
                 borderRadius: 20,
                 marginRight: 10,
                 borderWidth: 1,
-                borderColor: selectedCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.border,
+                borderColor: activeCategory === cat ? (isDark ? theme.colors.primary : '#126027') : theme.colors.border,
                 alignSelf: 'center',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1368,10 +1334,10 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
               onPress={() => setSelectedCategory(cat)}
             >
               <Text style={{
-                color: selectedCategory === cat ? (isDark ? '#0E1512' : '#FFFFFF') : theme.colors.textMuted,
+                color: activeCategory === cat ? (isDark ? '#0E1512' : '#FFFFFF') : theme.colors.textMuted,
                 fontWeight: '600',
               }}>
-                {cat}
+                {cat === 'All' ? cat : `${cat}s`}
               </Text>
             </TouchableOpacity>
           ))}
@@ -1448,7 +1414,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
               {isFiltering ? 'No matching missions found' : viewMode === 'My Tasks' ? 'No active tasks yet' : viewMode === 'History' ? 'No completed tasks yet' : 'No missions available'}
             </Text>
             <Text style={{ fontSize: responsiveFontSize(13), color: theme.colors.textMuted, textAlign: 'center', lineHeight: 20 }}>
-              {isFiltering ? 'Try searching for a different keyword or category.' : viewMode === 'My Tasks' ? 'Select a mission from the Discover tab to start contributing!' : viewMode === 'History' ? 'Complete eco-challenges to earn points, build streaks, and unlock achievements.' : 'Check back later for newly announced community missions.'}
+              {isFiltering ? 'Try searching for a different keyword or item.' : viewMode === 'My Tasks' ? 'Select a mission from the Discover tab to start contributing!' : viewMode === 'History' ? 'Complete eco-challenges to earn points, build streaks, and unlock achievements.' : 'Check back later for newly announced community missions.'}
             </Text>
           </View>
         )}

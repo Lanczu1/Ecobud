@@ -90,6 +90,9 @@ export function MarketplaceFeed({
   const pendingSearchScroll = useRef(false);
   const loadListingsRef = useRef<() => Promise<void>>(async () => {});
   const loadMyListingsRef = useRef<() => Promise<void>>(async () => {});
+  const refreshLoadedListingsRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+  const deepRefreshInFlightRef = useRef(false);
+  const lastDeepRefreshAtRef = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 300);
@@ -223,13 +226,52 @@ export function MarketplaceFeed({
     }
   }, [currentUserId]);
 
+  // Background refresh that keeps the scroll position: a list scrolled past the first page
+  // re-reads every loaded page and swaps them in together instead of resetting to page one.
+  const refreshLoadedListings = useCallback(async (force = false) => {
+    const loaded = nextListingsOffsetRef.current;
+    if (loaded <= 20) return loadListings();
+    if (loaded > 100 || loadingMoreRef.current || deepRefreshInFlightRef.current || !internetReadyRef.current) return;
+    if (!force && Date.now() - lastDeepRefreshAtRef.current < 30_000) return;
+    deepRefreshInFlightRef.current = true;
+    const requestId = listingsRequestRef.current;
+    try {
+      const fetched: SwapListing[] = [];
+      let lastPageSize = 0;
+      for (let offset = 0; offset < loaded; offset += 20) {
+        const page = await swapService.fetchListings({
+          search: debouncedSearchQuery || undefined,
+          category: selectedCategory === 'all' ? undefined : selectedCategory,
+          meetupMethod: selectedMeetup === 'all' ? undefined : selectedMeetup,
+          sortBy,
+          limit: 20,
+          offset,
+        });
+        if (requestId !== listingsRequestRef.current || loadingMoreRef.current) return;
+        fetched.push(...page);
+        lastPageSize = page.length;
+        if (page.length < 20) break;
+      }
+      const known = new Set<string>();
+      setListings(fetched.filter((listing) => !known.has(listing.id) && Boolean(known.add(listing.id))));
+      nextListingsOffsetRef.current = fetched.length;
+      setHasMoreListings(lastPageSize === 20);
+      lastDeepRefreshAtRef.current = Date.now();
+    } catch (err) {
+      console.error('Failed to refresh listings:', err);
+    } finally {
+      deepRefreshInFlightRef.current = false;
+    }
+  }, [loadListings, debouncedSearchQuery, selectedCategory, selectedMeetup, sortBy]);
+
   loadListingsRef.current = loadListings;
   loadMyListingsRef.current = loadMyListings;
+  refreshLoadedListingsRef.current = refreshLoadedListings;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || !internetReadyRef.current) return;
-      if (activeTab === 'browse') void loadListingsRef.current();
+      if (activeTab === 'browse') void refreshLoadedListingsRef.current(true);
       if (activeTab === 'mylistings') void loadMyListingsRef.current();
     });
     return () => subscription.remove();
@@ -238,7 +280,7 @@ export function MarketplaceFeed({
   useEffect(() => {
     const timer = setInterval(() => {
       if (AppState.currentState !== 'active' || !internetReadyRef.current) return;
-      if (activeTab === 'browse' && nextListingsOffsetRef.current <= 20 && !loadingMoreRef.current) void loadListingsRef.current();
+      if (activeTab === 'browse' && !loadingMoreRef.current) void refreshLoadedListingsRef.current();
       if (activeTab === 'mylistings') void loadMyListingsRef.current();
     }, 10_000);
     return () => clearInterval(timer);
@@ -254,7 +296,7 @@ export function MarketplaceFeed({
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener('giveAndGetListingsChanged', () => {
-      if (activeTab === 'browse') void loadListingsRef.current();
+      if (activeTab === 'browse') void refreshLoadedListingsRef.current(true);
       if (activeTab === 'mylistings') void loadMyListingsRef.current();
     });
     return () => subscription.remove();

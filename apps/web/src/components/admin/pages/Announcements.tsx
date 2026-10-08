@@ -11,6 +11,7 @@ import {
   ExternalLink, ChevronLeft, ChevronRight, Tag
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -473,6 +474,7 @@ export function Announcements() {
       window.removeEventListener('online', refresh);
     };
   }, []);
+  useAdminLiveRefresh(() => { if (navigator.onLine) void load(true, true); });
 
   // Auto-dismiss notice after 4 seconds
   useEffect(() => {

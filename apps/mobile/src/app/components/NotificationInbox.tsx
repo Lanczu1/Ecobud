@@ -4,6 +4,7 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator,
+  AppState,
   RefreshControl,
   DeviceEventEmitter,
   StyleSheet,
@@ -116,11 +117,13 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
   const [error, setError] = React.useState('');
   const [failedOffset, setFailedOffset] = React.useState<number | null>(null);
   const generation = React.useRef(0);
+  const loadedMore = React.useRef(false);
 
   const load = React.useCallback(
     async (offset = 0, mode: 'initial' | 'refresh' | 'more' = 'initial') => {
       if (!token) return;
       const g = ++generation.current;
+      loadedMore.current = offset > 0;
       if (mode === 'initial') setInitialLoading(true);
       if (mode === 'refresh') setRefreshing(true);
       if (mode === 'more') setLoadingMore(true);
@@ -163,6 +166,33 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
       sub.remove();
     };
   }, [load]);
+
+  // Fallback for missed realtime notices: quietly re-read the newest page and keep older pages in place.
+  React.useEffect(() => {
+    if (!token) return;
+    const refreshTop = async () => {
+      if (AppState.currentState !== 'active') return;
+      const g = generation.current;
+      try {
+        const q = filter === 'unread' ? '&unread=true' : filter === 'all' ? '' : `&type=${filter}`;
+        const p = await ecobudApi.notifications(token, `?offset=0${q}`);
+        if (g !== generation.current) return;
+        const fresh = new Set(p.items.map((n) => n.id));
+        if (loadedMore.current) {
+          setItems((old) => [...p.items, ...old.filter((o) => !fresh.has(o.id))]);
+        } else {
+          setItems((old) => JSON.stringify(old) === JSON.stringify(p.items) ? old : p.items);
+          setNext(p.nextOffset);
+        }
+        setUnreadCount(p.unreadCount);
+      } catch {
+        // Keep the current list; the next tick retries.
+      }
+    };
+    const interval = setInterval(() => void refreshTop(), 30_000);
+    const appState = AppState.addEventListener('change', (state) => { if (state === 'active') void refreshTop(); });
+    return () => { clearInterval(interval); appState.remove(); };
+  }, [token, filter]);
 
   const open = async (n: AppNotification) => {
     if (!token) return;
@@ -220,6 +250,9 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
           model.setActiveOverlay(null);
           model.setActiveTab('profile');
         }
+      } else if (n.type === 'streak') {
+        model.setActiveOverlay(null);
+        model.setActiveTab('challenges');
       } else if (n.type === 'leaderboard') {
         model.setActiveOverlay(null);
         model.setActiveOverlay('leaderboard');

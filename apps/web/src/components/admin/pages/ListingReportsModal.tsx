@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { adminGet } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { AdminPagination } from '../AdminPagination';
+import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 
 interface ReportPage {
   items: { id: string; account: string; reportName: string; reason: string; occurrences: number; createdAt: string; resolvedAt: string | null }[];
@@ -49,6 +50,16 @@ export function ListingReportsModal({ listing, onClose }: { listing: { id: strin
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [listing.id, page, retry]);
+  const liveKey = useRef('');
+  useLayoutEffect(() => { liveKey.current = `${listing.id}:${page}`; });
+  useAdminLiveRefresh(() => {
+    const key = `${listing.id}:${page}`;
+    adminGet<ReportPage>(`/give-and-get/swap-listings/${listing.id}/reports?page=${page}&pageSize=25`, { bypassCache: true })
+      .then(result => {
+        if (liveKey.current === key) setData(current => JSON.stringify(current) === JSON.stringify(result) ? current : result);
+      })
+      .catch(() => {});
+  });
   return createPortal(
     <div className={`listing-reports-overlay fixed inset-0 z-9999 flex items-center justify-center bg-black/60 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={close}>
       <div role="dialog" aria-modal="true" aria-labelledby="listing-reports-title" className={`listing-reports-dialog flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-xl dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 ${closing ? 'animate-modal-exit' : 'animate-modal'}`} onClick={event => event.stopPropagation()} onKeyDown={event => {

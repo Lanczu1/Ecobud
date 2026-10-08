@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { adminGet, adminPatch, API_HOST } from '../../../utils/adminApi';
+import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 
@@ -99,9 +100,9 @@ export function IdVerification() {
     } catch { return ''; }
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     const version = ++requestVersion.current;
-    setLoading(true); setError('');
+    if (!silent) { setLoading(true); setError(''); }
     try {
       const results = await Promise.all(statuses.map(value => adminGet<ReviewPage>(
         `/id-verification/review?status=${value}&page=${value === status ? page : 1}${notificationTarget('id_verification') ? `&recordId=${encodeURIComponent(notificationTarget('id_verification')!)}` : ''}`, { bypassCache: true },
@@ -115,10 +116,11 @@ export function IdVerification() {
       setItems(active.items);
       if (notificationTarget('id_verification') && active.items[0]) setStatus(active.items[0].status);
     } catch (e) {
-      if (version === requestVersion.current) { setItems([]); setError(e instanceof Error ? e.message : 'Could not load submissions.'); }
+      if (version === requestVersion.current && !silent) { setItems([]); setError(e instanceof Error ? e.message : 'Could not load submissions.'); }
     } finally { if (version === requestVersion.current) setLoading(false); }
   }, [status, page]);
   useEffect(() => { void load(); return () => { requestVersion.current++; }; }, [load]);
+  useAdminLiveRefresh(() => { if (!reviewBusy.current) void load(true); });
   useEffect(() => {
     if (!selected) return;
     const controller = new AbortController();
