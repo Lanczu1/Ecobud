@@ -139,16 +139,6 @@ const FAQ = [
   },
 ];
 
-function isLowEnd(): boolean {
-  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
-  return (
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-    (nav.hardwareConcurrency ?? 8) <= 4 ||
-    (nav.deviceMemory ?? 8) <= 4 ||
-    nav.connection?.saveData === true
-  );
-}
-
 /** Pop elements in once as they scroll into view; pause infinite loops while off screen. */
 function useScrollMotion(enabled: boolean) {
   useEffect(() => {
@@ -293,10 +283,6 @@ function Loader({ onDone }: { onDone: () => void }) {
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [menu, setMenu] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('lite', isLowEnd());
-  }, []);
 
   useEffect(() => {
     document.body.style.overflow = loading ? 'hidden' : '';
