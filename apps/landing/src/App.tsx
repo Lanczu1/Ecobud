@@ -1,534 +1,528 @@
-import { useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  ArrowLeftRight,
+  Bell,
+  BookOpen,
+  CalendarCheck,
+  CalendarDays,
+  Camera,
+  ChartColumn,
+  ChevronRight,
+  Coins,
   Download,
-  Smartphone,
-  ShieldCheck,
-  Sparkles,
-  Award,
-  Leaf,
-  Layers,
   ExternalLink,
-  QrCode as QrIcon,
-  Copy,
-  Check,
-  Zap,
+  Flame,
+  Gift,
+  House,
+  Leaf,
   Menu,
-  X
+  Plus,
+  QrCode,
+  Recycle,
+  ShieldCheck,
+  ShoppingCart,
+  Smartphone,
+  Sparkles,
+  Star,
+  Trophy,
+  User,
+  X,
 } from 'lucide-react';
-import logoImg from '../../logo/logo.png';
+import { Lottie } from './Lottie';
 
-function StepNumber({ step, background, borderColor, color }: { step: number; background: string; borderColor: string; color: string }) {
+const APK_URL =
+  import.meta.env.VITE_APK_DOWNLOAD_URL ||
+  'https://github.com/Lanczu1/Ecobud/releases/download/v1.1.1/Ecobud-Beta-v1.1.1.apk';
+const VERSION = import.meta.env.VITE_APP_VERSION || 'v1.1.1';
+const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || '#feedback';
+
+const TICKER = ['Tasks & Challenges', 'Eco Events', 'Learn & Grow', 'Give & Get', 'Redeem Coins', 'EcoBud AI'];
+
+const FEATURES: { icon: ReactNode; tone: string; title: string; body: string; test: string }[] = [
+  {
+    icon: <Trophy size={28} strokeWidth={2.5} />,
+    tone: 'green',
+    title: 'Tasks & Challenges',
+    body: 'Pick a mission that fits your day, submit your proof, and claim Eco Points and Eco Coins once a moderator approves it.',
+    test: 'Submit one and watch its status change.',
+  },
+  {
+    icon: <CalendarDays size={28} strokeWidth={2.5} />,
+    tone: 'violet',
+    title: 'Eco Events',
+    body: 'Join clean-ups and tree planting drives near you, check in with the venue QR code, then claim your reward.',
+    test: 'Join an event and try the QR check-in.',
+  },
+  {
+    icon: <BookOpen size={28} strokeWidth={2.5} />,
+    tone: 'mint',
+    title: 'Learn & Grow',
+    body: 'Short lessons and quizzes in the Eco Academy, such as Composting 101. No ID approval needed to start.',
+    test: 'Finish a lesson, then claim its reward.',
+  },
+  {
+    icon: <ArrowLeftRight size={28} strokeWidth={2.5} />,
+    tone: 'blue',
+    title: 'Give & Get',
+    body: 'Swap items with your neighbours. List what you no longer need, request what others offer, and chat in the app.',
+    test: 'Create a listing and send a request.',
+  },
+  {
+    icon: <Coins size={28} strokeWidth={2.5} />,
+    tone: 'gold',
+    title: 'Redeem Coins',
+    body: 'Exchange Eco Coins for rewards and follow each request in your Coins History.',
+    test: 'Make a redeem request and check its status.',
+  },
+  {
+    icon: <Sparkles size={28} strokeWidth={2.5} />,
+    tone: 'green',
+    title: 'EcoBud AI',
+    body: 'Ask the built-in assistant a question from Home, or use it as a tutor in lessons and a guide in challenges.',
+    test: 'Ask it something and tell us if the answer helped.',
+  },
+];
+
+const STREAK = [
+  { n: 3, reward: '30 pts', note: 'Flame unlocks' },
+  { n: 10, reward: '100 pts + 5 coins', note: '' },
+  { n: 30, reward: '300 pts + 15 coins', note: '' },
+  { n: 100, reward: '1,000 pts + 50 coins', note: 'Challenge Champion badge' },
+];
+
+const EVENT_STEPS = [
+  { icon: <CalendarCheck size={26} strokeWidth={2.5} />, title: 'Join', body: 'Tap Join Event and your slot is reserved.' },
+  { icon: <Camera size={26} strokeWidth={2.5} />, title: 'Show up', body: 'Go to the venue and take a proof photo.' },
+  { icon: <QrCode size={26} strokeWidth={2.5} />, title: 'Scan', body: 'Scan the QR code. A valid code approves your attendance.' },
+  { icon: <Gift size={26} strokeWidth={2.5} />, title: 'Claim', body: 'Tap Claim Reward for Eco Points and Eco Coins.' },
+];
+
+const INSTALL = [
+  {
+    title: 'Download the APK',
+    body: `Tap Download for ${VERSION}. If Chrome says the file might be harmful, choose Download anyway. Android shows this for any APK that did not come from Google Play.`,
+  },
+  {
+    title: 'Allow the install',
+    body: 'Open the file. When Android asks, open Settings and switch on Allow from this source for your browser or file manager.',
+  },
+  {
+    title: 'Open and sign in',
+    body: 'Tap Install, then Open. Sign in with an email code or Google.',
+  },
+];
+
+const FAQ = [
+  {
+    q: 'Why does Android warn me about the file?',
+    a: 'Android flags any APK downloaded through a browser instead of Google Play. The build is attached to our public GitHub release.',
+  },
+  {
+    q: 'Which phones work?',
+    a: 'Android 8.0 or newer.',
+  },
+  {
+    q: 'Do I need to verify my ID?',
+    a: 'Not to look around. You can browse challenges, events and the Give & Get Hub and finish every lesson right away. Joining challenges, joining events and posting or requesting listings need an approved ID. Submit your name and an ID photo in the app, and a moderator from your barangay reviews it.',
+  },
+  {
+    q: 'What are Eco Points and Eco Coins?',
+    a: 'Both come from challenges, events, lessons and habits. Points track your level and streak bonuses. Coins are what you spend on rewards.',
+  },
+  {
+    q: 'How do streaks work?',
+    a: 'Finish 3 challenges to unlock the flame. It goes gray after seven days without a completed challenge, but your count never resets. You can restore a gray flame up to three times a calendar month.',
+  },
+  {
+    q: 'Where do I report bugs?',
+    a: 'Use the feedback form in the header or the footer. Screenshots help a lot.',
+  },
+];
+
+function isLowEnd(): boolean {
+  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
   return (
-    <div
-      style={{
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        background,
-        border: `1px solid ${borderColor}`,
-        color,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '1.25rem',
-        fontWeight: 900,
-        marginBottom: 20
-      }}
-    >
-      {step}
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+    (nav.hardwareConcurrency ?? 8) <= 4 ||
+    (nav.deviceMemory ?? 8) <= 4 ||
+    nav.connection?.saveData === true
+  );
+}
+
+/** Pop elements in once as they scroll into view; pause infinite loops while off screen. */
+function useScrollMotion(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const reveal = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            e.target.classList.add('in');
+            reveal.unobserve(e.target);
+          }
+        }
+      },
+      { rootMargin: '0px 0px -8% 0px' },
+    );
+    const loops = new IntersectionObserver((entries) => {
+      for (const e of entries) e.target.classList.toggle('paused', !e.isIntersecting);
+    });
+    document.querySelectorAll('.pop').forEach((el) => reveal.observe(el));
+    document.querySelectorAll('[data-loop]').forEach((el) => loops.observe(el));
+    const onVis = () => document.documentElement.classList.toggle('tab-hidden', document.hidden);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      reveal.disconnect();
+      loops.disconnect();
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [enabled]);
+}
+
+/** A drawn copy of the app's Home tab, so the page looks like the product. */
+function PhonePreview() {
+  return (
+    <div className="phone" role="img" aria-label="Preview of the EcoBud home screen">
+      <div className="phone-screen" aria-hidden="true">
+        <div className="ph-top">
+          <span className="ph-avatar">E</span>
+          <span className="ph-icons">
+            <ChartColumn size={18} strokeWidth={2.5} />
+            <CalendarDays size={18} strokeWidth={2.5} />
+            <Bell size={18} strokeWidth={2.5} fill="currentColor" />
+          </span>
+        </div>
+        <p className="ph-eyebrow">Good morning</p>
+        <p className="ph-name">Eco neighbour</p>
+        <div className="ph-ask">
+          <span className="ph-spark"><Sparkles size={14} strokeWidth={2.5} /></span>
+          <span className="ph-ask-text">Ask EcoBud AI a question...</span>
+          <b>AI <ChevronRight size={12} strokeWidth={3} /></b>
+        </div>
+        <ul className="ph-tiles">
+          <li className="t-green"><span><Leaf size={16} strokeWidth={2.5} /></span>My Progress</li>
+          <li className="t-gold"><span><Coins size={16} strokeWidth={2.5} /></span>Redeem Coins</li>
+          <li className="t-blue"><span><ArrowLeftRight size={16} strokeWidth={2.5} /></span>Give &amp; Get</li>
+          <li className="t-violet"><span><CalendarDays size={16} strokeWidth={2.5} /></span>Eco Events</li>
+        </ul>
+        <div className="ph-level">
+          <div className="ph-level-head">
+            <span className="ph-recycle"><Recycle size={18} strokeWidth={2.5} /></span>
+            <div>
+              <small>Level 4</small>
+              <strong>Eco Warrior</strong>
+            </div>
+          </div>
+          <p className="ph-points"><b>625</b> Eco Points</p>
+          <p className="ph-to">375 Eco Points to Level 5</p>
+          <div className="ph-bar"><i /></div>
+          <p className="ph-next"><span>Next: Eco Champion</span><span>625 / 1000</span></p>
+        </div>
+        <div className="ph-stats">
+          <span><Flame size={16} strokeWidth={2.5} /> Challenge streak</span>
+          <span><Trophy size={16} strokeWidth={2.5} /> Weekly rank</span>
+        </div>
+        <div className="ph-tabs">
+          <span className="on"><House size={16} strokeWidth={2.5} />Home</span>
+          <span><BookOpen size={16} strokeWidth={2.5} />Learn</span>
+          <span className="mid"><Trophy size={20} strokeWidth={2.5} /></span>
+          <span><ShoppingCart size={16} strokeWidth={2.5} />G&amp;G</span>
+          <span><User size={16} strokeWidth={2.5} />Profile</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Loader({ onDone }: { onDone: () => void }) {
+  const [pct, setPct] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+  const loaded = useRef(document.readyState === 'complete');
+
+  useEffect(() => {
+    const onLoad = () => (loaded.current = true);
+    window.addEventListener('load', onLoad);
+    const start = performance.now();
+    const MIN = 1400;
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / MIN, 1);
+      const cap = loaded.current ? 100 : 90;
+      setPct((p) => Math.min(Math.max(p, Math.round(t * 100)), cap));
+      if (t >= 1 && loaded.current) {
+        setPct(100);
+        setLeaving(true);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('load', onLoad);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!leaving) return;
+    const id = window.setTimeout(onDone, 650);
+    return () => window.clearTimeout(id);
+  }, [leaving, onDone]);
+
+  return (
+    <div className={`loader${leaving ? ' leave' : ''}`} role="status" aria-label="Loading EcoBud">
+      <div className="loader-stage">
+        <span className="loader-ring" />
+        <Lottie name="loading" eager />
+      </div>
+      <p className="loader-title">
+        {'EcoBud'.split('').map((c, i) => (
+          <span key={i} style={{ animationDelay: `${i * 80}ms` }}>
+            {c}
+          </span>
+        ))}
+      </p>
+      <div className="loader-track">
+        <i style={{ transform: `scaleX(${pct / 100})` }} />
+      </div>
+      <p className="loader-pct">{pct}%</p>
     </div>
   );
 }
 
 export default function App() {
-  const [copied, setCopied] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [menu, setMenu] = useState(false);
 
-  // Download URL fallback
-  const apkDownloadUrl = import.meta.env.VITE_APK_DOWNLOAD_URL || '/downloads/ecobud-beta.apk';
-  const appVersion = import.meta.env.VITE_APP_VERSION || 'v1.1.1';
-  const feedbackUrl = import.meta.env.VITE_FEEDBACK_URL || 'https://forms.gle/';
+  useEffect(() => {
+    document.documentElement.classList.toggle('lite', isLowEnd());
+  }, []);
 
-  // Absolute URL for QR code scan on phones
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-  const qrTargetUrl = apkDownloadUrl.startsWith('http') ? apkDownloadUrl : `${currentOrigin}${apkDownloadUrl}`;
+  useEffect(() => {
+    document.body.style.overflow = loading ? 'hidden' : '';
+  }, [loading]);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(qrTargetUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  useScrollMotion(true);
 
-  const closeMenu = () => setMobileMenuOpen(false);
+  const finishLoading = useCallback(() => setLoading(false), []);
 
   return (
-    <div style={{ position: 'relative', overflow: 'hidden' }}>
-      {/* Background ambient lighting */}
-      <div className="ambient-glow-1" />
-      <div className="ambient-glow-2" />
-
-      {/* Top Navigation */}
-      <header className="nav-header">
-        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', gap: 12 }}>
-          {/* Brand Wordmark & Mascot */}
-          <a
-            href="#"
-            style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', flexShrink: 0 }}
-            onClick={closeMenu}
-          >
-            <img
-              src={logoImg}
-              alt="EcoBud Logo"
-              style={{ width: 38, height: 38, objectFit: 'contain', filter: 'drop-shadow(0 4px 10px rgba(16,185,129,0.35))' }}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '1.3rem', fontWeight: 900, letterSpacing: '0.04em', color: '#f0fdf4', fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>
-                ECOBUD
-              </span>
-              <span className="nav-badge-beta">
-                BETA TEST
-              </span>
-            </div>
+    <>
+      {loading && <Loader onDone={finishLoading} />}
+      <div className={`page${loading ? ' booting' : ' ready'}`}>
+        <header className="top">
+          <a className="mark" href="#top" aria-label="EcoBud home">
+            <span className="mark-dot"><img src="/ecobud_logo_circle.png" alt="EcoBud logo" /></span>
+            EcoBud
           </a>
-
-          {/* Desktop Navigation Links */}
-          <nav className="nav-desktop-links" aria-label="Desktop Navigation">
-            <a href="#install-guide" className="nav-link">
-              <Smartphone size={16} />
-              <span>Install Guide</span>
-            </a>
-            <a href="#features" className="nav-link">
-              <Zap size={16} />
-              <span>What to Test</span>
-            </a>
-            <a
-              href={feedbackUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="nav-link"
-            >
-              <ExternalLink size={16} />
-              <span>Send Feedback</span>
-            </a>
+          <nav className={menu ? 'open' : ''} aria-label="Main">
+            <a href="#inside" onClick={() => setMenu(false)}>What&apos;s inside</a>
+            <a href="#streak" onClick={() => setMenu(false)}>Streaks</a>
+            <a href="#install" onClick={() => setMenu(false)}>Install</a>
+            <a href="#faq" onClick={() => setMenu(false)}>FAQ</a>
+            <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">Feedback</a>
           </nav>
-
-          {/* Right Action: Download Button & Mobile Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <a
-              href={apkDownloadUrl}
-              target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
-              rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
-              download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
-              className="btn-primary nav-btn-desktop"
-              style={{ padding: '8px 16px', fontSize: '0.9rem', gap: 6, whiteSpace: 'nowrap' }}
-            >
-              <Download size={16} />
-              <span>Download APK</span>
-            </a>
-
-            {/* Mobile Hamburger Button */}
-            <button
-              type="button"
-              className="nav-mobile-toggle"
-              onClick={() => setMobileMenuOpen(prev => !prev)}
-              aria-label={mobileMenuOpen ? 'Close menu' : 'Open navigation menu'}
-              aria-expanded={mobileMenuOpen}
-            >
-              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Dropdown Menu Drawer */}
-        <div className={`mobile-menu-drawer ${mobileMenuOpen ? 'open' : ''}`}>
-          <a href="#install-guide" className="mobile-nav-link" onClick={closeMenu}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Smartphone size={18} color="#34d399" />
-              Installation Guide
-            </span>
-            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>&rarr;</span>
+          <a className="btn sm" href={APK_URL}>
+            <Download size={16} strokeWidth={3} /> Get APK
           </a>
-
-          <a href="#features" className="mobile-nav-link" onClick={closeMenu}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Zap size={18} color="#a3e635" />
-              What to Test
-            </span>
-            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>&rarr;</span>
-          </a>
-
-          <a
-            href={feedbackUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mobile-nav-link"
-            onClick={closeMenu}
+          <button
+            className="burger"
+            type="button"
+            aria-label={menu ? 'Close menu' : 'Open menu'}
+            aria-expanded={menu}
+            onClick={() => setMenu((m) => !m)}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <ExternalLink size={18} color="#38bdf8" />
-              Tester Feedback
-            </span>
-            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>&rarr;</span>
-          </a>
+            {menu ? <X size={22} strokeWidth={3} /> : <Menu size={22} strokeWidth={3} />}
+          </button>
+        </header>
 
-          <div style={{ marginTop: 16 }}>
-            <a
-              href={apkDownloadUrl}
-              target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
-              rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
-              download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
-              className="btn-primary"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '12px 20px', fontSize: '1rem' }}
-              onClick={closeMenu}
-            >
-              <Download size={18} />
-              <span>Download APK ({appVersion})</span>
-            </a>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main>
-        {/* HERO SECTION */}
-        <section style={{ paddingTop: '60px', paddingBottom: '80px' }}>
-          <div className="container">
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-                gap: 48,
-                alignItems: 'center'
-              }}
-            >
-              {/* Left Column: Headlines & Call to Actions */}
-              <div>
-                <div className="badge-eco" style={{ marginBottom: 24 }}>
-                  <Sparkles size={16} />
-                  <span>Exclusive Early Access Testing</span>
-                </div>
-
-                <h1
-                  style={{
-                    fontSize: 'clamp(2.4rem, 5vw, 3.8rem)',
-                    fontWeight: 900,
-                    lineHeight: 1.12,
-                    marginBottom: 20,
-                    color: '#ffffff'
-                  }}
-                >
-                  Experience the <br />
-                  <span
-                    style={{
-                      background: 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #84cc16 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent'
-                    }}
-                  >
-                    Future of Eco Action
-                  </span>
-                </h1>
-
-                <p
-                  style={{
-                    fontSize: '1.15rem',
-                    lineHeight: 1.7,
-                    color: '#94a3b8',
-                    marginBottom: 36,
-                    maxWidth: 540
-                  }}
-                >
-                  Download the official EcoBud Android build. Test AI waste segregation, participate in community challenges, and track transparent environmental rewards on your phone.
-                </p>
-
-                {/* Direct Action Buttons */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 32 }}>
-                  <a
-                    href={apkDownloadUrl}
-                    target={apkDownloadUrl.startsWith('http') ? '_blank' : undefined}
-                    rel={apkDownloadUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
-                    download={apkDownloadUrl.startsWith('http') ? undefined : 'ecobud-beta.apk'}
-                    className="btn-primary"
-                    style={{ padding: '16px 36px', fontSize: '1.1rem' }}
-                  >
-                    <Download size={22} />
-                    <span>Download APK ({appVersion})</span>
-                  </a>
-
-                  <a
-                    href="#install-guide"
-                    className="btn-secondary"
-                    style={{ padding: '16px 26px', fontSize: '1rem' }}
-                  >
-                    <Smartphone size={20} />
-                    <span>Installation Guide</span>
-                  </a>
-                </div>
-
-                {/* Specs pill */}
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 16,
-                    padding: '10px 18px',
-                    borderRadius: 14,
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    fontSize: '0.85rem',
-                    color: '#cbd5e1'
-                  }}
-                >
-                  <div><strong>Build:</strong> Android ARM64 / Universal</div>
-                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#64748b' }} />
-                  <div><strong>OS:</strong> Android 8.0 or higher</div>
-                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#64748b' }} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#34d399' }}>
-                    <ShieldCheck size={16} /> Verified Safe
-                  </div>
-                </div>
+        <main id="top">
+          <section className="hero">
+            <div className="hero-copy">
+              <p className="dateline">
+                <span>Beta {VERSION}</span>
+                <span>Android 8.0+</span>
+                <span>Nagcarlan barangays</span>
+              </p>
+              <h1 className="mega">
+                <span className="line"><span>Small habits.</span></span>
+                <span className="line"><span>Big <em>barangay.</em></span></span>
+              </h1>
+              <p className="lede">
+                EcoBud turns clean-ups, lessons and neighbourly swaps into a daily game. Finish
+                challenges, check in at eco events, keep your streak alive, and earn points and
+                coins you can spend. We are testing the Android build now.
+              </p>
+              <div className="cta">
+                <a className="btn" href={APK_URL}>
+                  <Download size={20} strokeWidth={3} /> Download APK <small>{VERSION}</small>
+                </a>
+                <a className="btn ghost" href="#install">
+                  <Smartphone size={20} strokeWidth={3} /> How to install
+                </a>
               </div>
+            </div>
 
-              {/* Right Column: Interactive Phone QR Card */}
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div
-                  className="glass-panel"
-                  style={{
-                    padding: 32,
-                    maxWidth: 420,
-                    width: '100%',
-                    textAlign: 'center',
-                    position: 'relative'
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      marginBottom: 16,
-                      color: '#a7f3d0',
-                      fontWeight: 700,
-                      fontSize: '0.95rem'
-                    }}
-                  >
-                    <QrIcon size={20} />
-                    <span>Scan with Mobile Camera</span>
+            <div className="hero-art" data-loop>
+              <div className="blob" aria-hidden="true" />
+              <PhonePreview />
+              <Lottie name="mascot" className="hero-mascot" label="EcoBud mascot waving" eager />
+              <span className="sticker s-coin" aria-hidden="true"><Coins size={26} strokeWidth={2.5} /></span>
+              <span className="sticker s-leaf" aria-hidden="true"><Leaf size={26} strokeWidth={2.5} /></span>
+              <span className="sticker s-star" aria-hidden="true"><Star size={22} strokeWidth={2.5} /></span>
+            </div>
+          </section>
+
+          <div className="ticker" aria-hidden="true" data-loop>
+            <div className="track">
+              {[0, 1].map((n) => (
+                <div key={n} className="set">
+                  {[...TICKER, ...TICKER].map((t, i) => (
+                    <span key={`${n}-${i}`}>
+                      {t}
+                      <Star size={22} strokeWidth={3} fill="currentColor" />
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <section className="block" id="inside">
+            <header className="sec-head pop">
+              <p className="folio">Section 01</p>
+              <h2 className="big">What&apos;s inside</h2>
+              <p className="deck">Six parts of the app are ready for you to poke at. Each card says what we most want checked.</p>
+            </header>
+            <ul className="cards">
+              {FEATURES.map((f, i) => (
+                <li key={f.title} className={`card pop tone-${f.tone}`} style={{ transitionDelay: `${(i % 3) * 70}ms` }}>
+                  <span className="icon-tile">{f.icon}</span>
+                  <h3>{f.title}</h3>
+                  <p>{f.body}</p>
+                  <p className="try"><b>Try:</b> {f.test}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="block streak-block" id="streak">
+            <header className="sec-head pop">
+              <Lottie name="fire" className="streak-fire" />
+              <p className="folio">Section 02</p>
+              <h2 className="big">Light your streak</h2>
+              <p className="deck">
+                Every completed challenge adds to your count. Hit a milestone and the bonus is paid
+                automatically, once.
+              </p>
+            </header>
+            <ol className="ladder">
+              {STREAK.map((s, i) => (
+                <li key={s.n} className={`rung pop r${i}`} style={{ transitionDelay: `${i * 90}ms` }}>
+                  <div className="rung-top">
+                    <Lottie name="fire" className="rung-fire" />
+                    <strong>{s.n}</strong>
+                    <span className="unit">challenges</span>
                   </div>
+                  <p className="reward">{s.reward}</p>
+                  {s.note && <p className="note">{s.note}</p>}
+                </li>
+              ))}
+            </ol>
+            <p className="fine pop">
+              The flame turns gray after seven days without a completed challenge, but your count
+              stays. Restore it up to three times a month.
+            </p>
+          </section>
 
-                  <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: 24, lineHeight: 1.5 }}>
-                    Open your Android camera or QR scanner to download the APK directly to your phone.
-                  </p>
+          <section className="block" id="events">
+            <header className="sec-head pop">
+              <p className="folio">Section 03</p>
+              <h2 className="big">An event in four taps</h2>
+            </header>
+            <ol className="flow">
+              {EVENT_STEPS.map((s, i) => (
+                <li key={s.title} className="flow-step pop" style={{ transitionDelay: `${i * 90}ms` }}>
+                  <span className="flow-n">{i + 1}</span>
+                  <span className="icon-tile">{s.icon}</span>
+                  <h3>{s.title}</h3>
+                  <p>{s.body}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
 
-                  {/* QR Box */}
-                  <div
-                    style={{
-                      padding: 20,
-                      background: '#ffffff',
-                      borderRadius: 20,
-                      display: 'inline-block',
-                      boxShadow: '0 12px 30px rgba(0,0,0,0.3)',
-                      marginBottom: 20
-                    }}
-                  >
-                    <QRCodeSVG
-                      value={qrTargetUrl}
-                      size={200}
-                      level="H"
-                      includeMargin={false}
-                    />
-                  </div>
-
-                  {/* Copy Link Button */}
+          <section className="block install" id="install">
+            <header className="sec-head pop">
+              <p className="folio">Section 04</p>
+              <h2 className="big">Install in three steps</h2>
+            </header>
+            <ol className="steps">
+              {INSTALL.map((s, i) => (
+                <li key={s.title} className="step pop" style={{ transitionDelay: `${i * 90}ms` }}>
+                  <span className="digit">{i + 1}</span>
                   <div>
-                    <button
-                      onClick={handleCopyLink}
-                      className="btn-secondary"
-                      style={{ width: '100%', fontSize: '0.9rem', padding: '10px 16px' }}
-                    >
-                      {copied ? (
-                        <>
-                          <Check size={16} color="#34d399" />
-                          <span style={{ color: '#34d399' }}>Link Copied to Clipboard!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={16} />
-                          <span>Copy Direct Download Link</span>
-                        </>
-                      )}
-                    </button>
+                    <h3>{s.title}</h3>
+                    <p>{s.body}</p>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* STEP-BY-STEP INSTALLATION GUIDE */}
-        <section id="install-guide" style={{ padding: '80px 0', background: 'rgba(6, 26, 21, 0.45)', borderTop: '1px solid rgba(45,106,79,0.25)', borderBottom: '1px solid rgba(45,106,79,0.25)' }}>
-          <div className="container">
-            <div style={{ textAlign: 'center', maxWidth: 680, margin: '0 auto 56px' }}>
-              <div className="badge-eco" style={{ marginBottom: 14 }}>
-                <Smartphone size={16} />
-                <span>Tester Setup</span>
-              </div>
-              <h2 style={{ fontSize: 'clamp(2rem, 4vw, 2.7rem)', fontWeight: 800, color: '#ffffff', marginBottom: 16 }}>
-                How to Install the APK on Android
-              </h2>
-              <p style={{ color: '#94a3b8', fontSize: '1.05rem', lineHeight: 1.6 }}>
-                Since this is a closed beta testing build, follow these 3 quick steps to install and start testing EcoBud.
-              </p>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: 28
-              }}
-            >
-              {/* Step 1 */}
-              <div className="glass-panel" style={{ padding: 32, position: 'relative' }}>
-                <StepNumber step={1} background="rgba(16,185,129,0.15)" borderColor="rgba(52,211,153,0.3)" color="#34d399" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: 12 }}>
-                  Download the File
-                </h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Click the <strong>Download APK</strong> button above or scan the QR code. Your browser (e.g. Chrome) may notify you that the file could be harmful—tap <strong>"Download anyway"</strong>.
-                </p>
-              </div>
-
-              {/* Step 2 */}
-              <div className="glass-panel" style={{ padding: 32, position: 'relative' }}>
-                <StepNumber step={2} background="rgba(132,204,22,0.15)" borderColor="rgba(132,204,22,0.3)" color="#a3e635" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: 12 }}>
-                  Allow Unknown Apps
-                </h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  When opening the downloaded file, Android may prompt for permission. Tap <strong>Settings</strong> and enable <strong>"Allow from this source"</strong> for your browser or file manager.
-                </p>
-              </div>
-
-              {/* Step 3 */}
-              <div className="glass-panel" style={{ padding: 32, position: 'relative' }}>
-                <StepNumber step={3} background="rgba(56,189,248,0.15)" borderColor="rgba(56,189,248,0.3)" color="#38bdf8" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: 12 }}>
-                  Install & Test EcoBud
-                </h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Tap <strong>Install</strong>. Once done, open the app, register an account, test the AI scanner, and send us your valuable feedback!
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CORE FEATURES TESTING FOCUS */}
-        <section id="features" style={{ padding: '80px 0' }}>
-          <div className="container">
-            <div style={{ textAlign: 'center', maxWidth: 680, margin: '0 auto 56px' }}>
-              <div className="badge-eco" style={{ marginBottom: 14 }}>
-                <Zap size={16} />
-                <span>What to Test</span>
-              </div>
-              <h2 style={{ fontSize: 'clamp(2rem, 4vw, 2.7rem)', fontWeight: 800, color: '#ffffff', marginBottom: 16 }}>
-                Features Ready for Evaluation
-              </h2>
-              <p style={{ color: '#94a3b8', fontSize: '1.05rem', lineHeight: 1.6 }}>
-                Please pay special attention to these primary modules during your user testing sessions:
-              </p>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                gap: 28
-              }}
-            >
-              <div className="glass-panel" style={{ padding: 28 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#34d399', marginBottom: 20 }}>
-                  <Leaf size={24} />
-                </div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff', marginBottom: 10 }}>
-                  AI Waste Classification
-                </h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Take photos of recyclable, compostable, or non-biodegradable items. Test accuracy and speed of the classification model.
-                </p>
-              </div>
-
-              <div className="glass-panel" style={{ padding: 28 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(132,204,22,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a3e635', marginBottom: 20 }}>
-                  <Award size={24} />
-                </div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff', marginBottom: 10 }}>
-                  Challenges & Reward Points
-                </h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Join eco-challenges, log proof of action, and ensure rewards and streak calculations update properly.
-                </p>
-              </div>
-
-              <div className="glass-panel" style={{ padding: 28 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(56,189,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8', marginBottom: 20 }}>
-                  <Layers size={24} />
-                </div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff', marginBottom: 10 }}>
-                  Eco-Map & Drop-off Points
-                </h3>
-                <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                  Navigate interactive map layers to locate waste segregation drop-off hubs and community clean-up locations.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* FEEDBACK CALL TO ACTION */}
-        <section style={{ padding: '60px 0 100px' }}>
-          <div className="container">
-            <div
-              className="glass-panel"
-              style={{
-                padding: '48px 36px',
-                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 78, 59, 0.4) 100%)',
-                borderColor: 'rgba(52, 211, 153, 0.4)',
-                textAlign: 'center'
-              }}
-            >
-              <h2 style={{ fontSize: 'clamp(1.8rem, 3.5vw, 2.4rem)', fontWeight: 800, color: '#ffffff', marginBottom: 16 }}>
-                Found a bug or have suggestions?
-              </h2>
-              <p style={{ color: '#cbd5e1', fontSize: '1.05rem', lineHeight: 1.6, maxWidth: 600, margin: '0 auto 28px' }}>
-                Your insights help make EcoBud seamless and impactful. Let the development team know about any issues or enhancements.
-              </p>
-              <a
-                href={feedbackUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary"
-                style={{ padding: '14px 32px' }}
-              >
-                <span>Submit Tester Feedback</span>
-                <ExternalLink size={18} />
+                </li>
+              ))}
+            </ol>
+            <div className="install-foot pop">
+              <a className="btn" href={APK_URL}>
+                <Download size={20} strokeWidth={3} /> Download APK <small>{VERSION}</small>
               </a>
+              <p className="safe"><ShieldCheck size={20} strokeWidth={2.5} /> Public GitHub release, no account needed to download.</p>
             </div>
-          </div>
-        </section>
-      </main>
+          </section>
 
-      {/* FOOTER */}
-      <footer style={{ borderTop: '1px solid rgba(45, 106, 79, 0.3)', padding: '32px 0', background: '#05100d', textAlign: 'center' }}>
-        <div className="container">
-          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
-            &copy; {new Date().getFullYear()} EcoBud Project. All rights reserved. Beta Testing Distribution.
-          </p>
-        </div>
-      </footer>
-    </div>
+          <section className="block" id="faq">
+            <header className="sec-head pop">
+              <p className="folio">Section 05</p>
+              <h2 className="big">Questions</h2>
+            </header>
+            <div className="faq">
+              {FAQ.map((f, i) => (
+                <details key={f.q} className="pop" open={i === 0}>
+                  <summary>
+                    {f.q}
+                    <span className="plus"><Plus size={20} strokeWidth={3.5} /></span>
+                  </summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+
+          <section className="finale" id="feedback">
+            <div className="finale-in">
+              <div className="pop">
+                <h2 className="mega">Found a bug? Tell us.</h2>
+                <p className="lede">Every report from a tester makes the public release better.</p>
+                <div className="cta">
+                  <a className="btn dark" href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
+                    Send feedback <ExternalLink size={20} strokeWidth={3} />
+                  </a>
+                  <a className="btn ghost" href={APK_URL}>
+                    <Download size={20} strokeWidth={3} /> Download APK
+                  </a>
+                </div>
+              </div>
+              <div className="finale-art pop">
+                <Lottie name="confetti" className="confetti" />
+                <Lottie name="celebrate" label="EcoBud mascot celebrating" />
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer className="foot">
+          <span className="mark-dot"><img src="/ecobud_logo_circle.png" alt="EcoBud logo" /></span>
+          <span>EcoBud {VERSION} beta</span>
+          <span>&copy; {new Date().getFullYear()} EcoBud Project</span>
+          <a href="#top">Back to top</a>
+        </footer>
+      </div>
+    </>
   );
 }
