@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminDelete, adminGet, adminPatch, adminPut } from '../../../utils/adminApi';
 import { adminHref, browserPushEnabled, browserPushSupported, disableBrowserPush, enableBrowserPush, fetchNotificationPage,
-  notificationCategories, notificationRecordHref, type AdminNotification, type NotificationCategory, type NotificationPage, type NotificationPreferences } from '../../../services/adminNotifications';
+  notificationCategories, notificationRecordHref, type AdminNotification, type NotificationPage, type NotificationPreferences } from '../../../services/adminNotifications';
 import { useAdminNotifications } from '../AdminNotificationProvider';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { Bell, CheckCheck, RefreshCw, Settings, Trash2, X } from 'lucide-react';
