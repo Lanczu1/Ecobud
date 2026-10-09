@@ -182,3 +182,15 @@ dependencies {
 }
 
 apply plugin: 'com.google.gms.google-services'
+
+// Resolve CMake autolinking codegen clean sequence on Android:
+// externalNativeBuildClean* invokes ninja clean, which fails when library codegen JNI directories have been wiped.
+tasks.matching { it.name.startsWith("externalNativeBuildClean") }.configureEach {
+    enabled = false
+}
+
+tasks.matching { it.name == "clean" }.configureEach {
+    doLast {
+        project.delete(file("${projectDir}/.cxx"))
+    }
+}
