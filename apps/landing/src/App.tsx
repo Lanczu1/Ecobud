@@ -1,13 +1,44 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Check, Copy, Download, ExternalLink, Menu, Plus, QrCode, ShieldCheck, Smartphone, X } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
+import {
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Maximize2,
+  Menu,
+  Play,
+  Plus,
+  QrCode,
+  ShieldCheck,
+  Smartphone,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Lottie } from './Lottie';
+import previewVideo from '../assets/EcoBudAd3.mp4';
 
 const APK_URL =
   import.meta.env.VITE_APK_DOWNLOAD_URL ||
   'https://github.com/Lanczu1/Ecobud/releases/download/v1.1.1/Ecobud-Beta-v1.1.1.apk';
 const VERSION = import.meta.env.VITE_APP_VERSION || 'v1.1.1';
 const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || '#feedback';
+
+const VIEWS = [
+  { id: 'preview', label: 'Preview', Icon: Play },
+  { id: 'overview', label: 'Overview', Icon: QrCode },
+] as const;
+type View = (typeof VIEWS)[number]['id'];
 
 const TESTS: { title: string; body: string; test: string; fire?: boolean }[] = [
   {
@@ -295,6 +326,192 @@ function ScanCard() {
   );
 }
 
+function useMedia(query: string) {
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener('change', notify);
+      return () => mq.removeEventListener('change', notify);
+    },
+    [query],
+  );
+  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
+}
+
+/** The hero's right column: the looping preview video and the QR card share one spot, switched by two tabs. */
+function HeroStage() {
+  const [view, setView] = useState<View>('preview');
+  const [clip, setClip] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [height, setHeight] = useState<number>();
+  const [sound, setSound] = useState(false);
+  const [theater, setTheater] = useState(false);
+  // A QR code is no use on the phone that is already showing it, so phones get the video alone.
+  const phone = useMedia('(max-width: 760px)');
+  const shown: View = phone ? 'preview' : view;
+  const panels = useRef<HTMLDivElement>(null);
+  const video = useRef<HTMLVideoElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const bigVideo = useRef<HTMLVideoElement>(null);
+
+  // The two panels differ in height, so the stage follows whichever one is showing.
+  useLayoutEffect(() => {
+    const el = panels.current?.querySelector<HTMLElement>('.on');
+    if (!el) return;
+    const measure = () => setHeight(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [shown]);
+
+  // The video has no controls, so it only runs while someone can see it.
+  useEffect(() => {
+    const v = video.current;
+    if (!v) return;
+    let onScreen = false;
+    const sync = () => {
+      if (shown !== 'preview' || !onScreen || document.hidden || theater) return v.pause();
+      // Some browsers refuse to resume with sound unless a tap started it, so fall back to silent.
+      v.play().catch(() => {
+        if (v.muted) return;
+        setSound(false);
+        v.muted = true;
+        v.play().catch(() => {});
+      });
+    };
+    const io = new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting;
+      sync();
+    });
+    io.observe(v);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      io.disconnect();
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, [shown, theater]);
+
+  // The large view picks up where the small one was, and hands the position back when it closes.
+  useEffect(() => {
+    const d = dialog.current;
+    const big = bigVideo.current;
+    const v = video.current;
+    if (!theater || !d || !big || !v) return;
+    d.showModal();
+    big.currentTime = v.currentTime;
+    big.play().catch(() => {});
+    return () => {
+      v.currentTime = big.currentTime;
+      big.pause();
+    };
+  }, [theater]);
+
+  const soundButton = (
+    <button type="button" aria-label={sound ? 'Turn sound off' : 'Turn sound on'} onClick={() => setSound((s) => !s)}>
+      {sound ? <Volume2 size={20} strokeWidth={2.25} /> : <VolumeX size={20} strokeWidth={2.25} />}
+    </button>
+  );
+
+  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const next: View = view === 'preview' ? 'overview' : 'preview';
+    setView(next);
+    document.getElementById(`tab-${next}`)?.focus();
+  };
+
+  const panel = (id: View) => ({
+    className: `stage-panel${shown === id ? ' on' : ''}`,
+    id: `panel-${id}`,
+    'data-view': id,
+    role: phone ? undefined : 'tabpanel',
+    'aria-labelledby': phone ? undefined : `tab-${id}`,
+  });
+
+  return (
+    <div className="stage">
+      {!phone && (
+        <div className="stage-tabs" role="tablist" aria-label="Preview video or download overview" data-view={view} onKeyDown={onKeys}>
+          {VIEWS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              id={`tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={view === id}
+              aria-controls={`panel-${id}`}
+              tabIndex={view === id ? 0 : -1}
+              onClick={() => setView(id)}
+            >
+              <Icon size={16} strokeWidth={2.5} /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="stage-panels" ref={panels} style={{ height }}>
+        <div {...panel('preview')}>
+          <figure>
+            <div className={`clip ${clip}`}>
+              {clip === 'loading' && <span className="loader-ring" role="status" aria-label="Loading the preview video" />}
+              {clip === 'failed' ? (
+                <p>The preview video could not load. Reload the page to try again.</p>
+              ) : (
+                <video
+                  ref={video}
+                  src={previewVideo}
+                  muted={!sound}
+                  loop
+                  playsInline
+                  preload="metadata"
+                  disablePictureInPicture
+                  aria-label="EcoBud preview video"
+                  onLoadedMetadata={() => setClip('ready')}
+                  onError={() => setClip('failed')}
+                />
+              )}
+              {clip === 'ready' && (
+                <div className="clip-tools">
+                  {soundButton}
+                  {/* On a phone the large view would be no bigger than the video already is. */}
+                  {!phone && (
+                    <button type="button" aria-label="Open the video in a large view" onClick={() => setTheater(true)}>
+                      <Maximize2 size={20} strokeWidth={2.25} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <figcaption>EcoBud in 30 seconds, on a loop. Sound starts off.</figcaption>
+          </figure>
+        </div>
+        {!phone && (
+          <div {...panel('overview')}>
+            <ScanCard />
+          </div>
+        )}
+      </div>
+      <dialog
+        ref={dialog}
+        className="theater"
+        aria-label="EcoBud preview video"
+        onClose={() => setTheater(false)}
+        onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}
+      >
+        {theater && (
+          <div className="clip">
+            <video ref={bigVideo} src={previewVideo} muted={!sound} loop playsInline disablePictureInPicture aria-label="EcoBud preview video" />
+            <div className="clip-tools">
+              {soundButton}
+              <button type="button" aria-label="Close the large view" onClick={() => dialog.current?.close()}>
+                <X size={20} strokeWidth={2.25} />
+              </button>
+            </div>
+          </div>
+        )}
+      </dialog>
+    </div>
+  );
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [menu, setMenu] = useState(false);
@@ -365,7 +582,7 @@ export default function App() {
                 <li>No account needed to download</li>
               </ul>
             </div>
-            <ScanCard />
+            <HeroStage />
           </section>
 
           <section className="block" id="test">
