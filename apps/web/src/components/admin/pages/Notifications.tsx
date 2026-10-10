@@ -138,7 +138,7 @@ export function Notifications() {
       </div>
       {detailError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{detailError}</p>}
       {selected && <>
-        <p className="mt-4 max-w-3xl break-words text-sm leading-relaxed text-gray-800 dark:text-gray-200">{selected.message}</p>
+        <p className="mt-4 max-w-3xl wrap-break-word text-sm leading-relaxed text-gray-800 dark:text-gray-200">{selected.message}</p>
         {selected.recordType==='id_verification' && role==='admin' && <p className={`${notice} mt-4`}>ID review is handled by the assigned barangay moderator. This update is for oversight; ID documents are not accessible here.</p>}
         <div className="mt-5 flex flex-wrap gap-3">
           {recordLink && <a className={primaryButton} href={recordLink}>Open record</a>}
@@ -171,8 +171,8 @@ export function Notifications() {
     {page?.items.length ? <ul className={`${card} animate-reveal delay-160 divide-y divide-gray-100 overflow-hidden motion-reduce:animate-none dark:divide-gray-800`}>{page.items.map(item=><li className={`flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-4 sm:px-5 ${!item.isRead ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}`} key={item.id}>
       <RecordIcon recordType={item.recordType} unread={!item.isRead} />
       <a className="group min-w-0 flex-1 basis-48 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-500" href={adminHref('Notifications',{ notification:item.id })}>
-        <p className={`break-words text-sm text-gray-900 group-hover:underline dark:text-white ${item.isRead ? 'font-medium' : 'font-bold'}`}>{!item.isRead && <span role="img" aria-label="Unread" className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-600 align-middle dark:bg-emerald-400" />}{item.title}</p>
-        <p className="mt-1 break-words text-sm text-gray-600 dark:text-gray-400">{item.message}</p>
+        <p className={`wrap-break-word text-sm text-gray-900 group-hover:underline dark:text-white ${item.isRead ? 'font-medium' : 'font-bold'}`}>{!item.isRead && <span role="img" aria-label="Unread" className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-600 align-middle dark:bg-emerald-400" />}{item.title}</p>
+        <p className="mt-1 wrap-break-word text-sm text-gray-600 dark:text-gray-400">{item.message}</p>
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{labels[item.category]} · {item.barangays.join(', ') || 'All barangays'} · {new Date(item.createdAt).toLocaleString()}</p>
       </a>
       <div className="flex shrink-0 items-center gap-2">

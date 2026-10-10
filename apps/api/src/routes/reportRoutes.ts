@@ -102,15 +102,23 @@ async function getEventReportData(eventId: string) {
     },
     participants: event.registrations.map(r => {
       const sub = event.submissions.find(s => s.userId === r.userId);
-      const reward = event.rewards.find(rew => rew.userId === r.userId);
+      const userRewards = event.rewards.filter(rew => rew.userId === r.userId);
+      const coinsAwarded = userRewards
+        .filter(rew => rew.type === 'eco_coins')
+        .reduce((sum, rew) => sum + rew.amount, 0);
+      const expAwarded = userRewards
+        .filter(rew => rew.type === 'exp')
+        .reduce((sum, rew) => sum + Math.abs(rew.amount), 0);
+      const hasAwarded = userRewards.length > 0 && (coinsAwarded > 0 || expAwarded > 0);
+
       return {
         name: r.user.name,
         email: r.user.email,
         attendanceStatus: r.attendedAt ? 'Attended' : 'Registered Only',
         qrVerification: sub ? (sub.qrVerified ? 'Verified' : sub.status) : 'No Submission',
-        rewardStatus: reward ? (reward.amount > 0 ? 'Awarded' : 'Pending') : 'Pending',
-        coinsAwarded: reward && reward.type === 'eco_coins' ? reward.amount : 0,
-        expAwarded: reward && reward.type === 'exp' ? Math.abs(reward.amount) : 0,
+        rewardStatus: hasAwarded ? 'Awarded' : 'Pending',
+        coinsAwarded,
+        expAwarded,
         joinedDate: r.registeredAt,
       };
     }),
