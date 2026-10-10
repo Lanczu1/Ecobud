@@ -126,21 +126,12 @@ svg { flex-shrink: 0; }
 .line { display: block; overflow: hidden; padding-bottom: 0.12em; margin-bottom: -0.12em; }
 .line > span { display: inline-block; transform: translateY(115%); animation: rise 0.8s var(--ease) 0.1s forwards; }
 .line:nth-child(2) > span { animation-delay: 0.22s; }
-<<<<<<< HEAD
 .hero-copy .lede, .hero-copy .cta, .dateline, .facts, .stage { opacity: 0; animation: fadeup 0.7s var(--ease) 0.45s forwards; }
 .hero-copy .cta { animation-delay: 0.58s; }
 .facts { animation-delay: 0.7s; }
 .stage { animation-delay: 0.5s; }
 .booting .line > span, .booting .hero-copy .lede, .booting .hero-copy .cta, .booting .dateline, .booting .facts,
-.booting .stage, .booting .mega em { animation-play-state: paused; }
-=======
-.hero-copy .lede, .hero-copy .cta, .dateline, .facts, .scan-card { opacity: 0; animation: fadeup 0.7s var(--ease) 0.45s forwards; }
-.hero-copy .cta { animation-delay: 0.58s; }
-.facts { animation-delay: 0.7s; }
-.scan-card { animation-delay: 0.5s; }
-.booting .line > span, .booting .hero-copy .lede, .booting .hero-copy .cta, .booting .dateline, .booting .facts,
-.booting .scan-card, .booting .scan-mascot, .booting .mega em, .booting .qr::after { animation-play-state: paused; }
->>>>>>> origin/main
+.booting .stage, .booting .scan-mascot, .booting .mega em, .booting .qr::after { animation-play-state: paused; }
 @keyframes rise { to { transform: translateY(0); } }
 @keyframes fadeup { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 
@@ -154,12 +145,8 @@ svg { flex-shrink: 0; }
 
 /* ---------- Hero ---------- */
 .hero {
-<<<<<<< HEAD
   /* Top-aligned so the copy holds still while the stage beside it changes height. */
   display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: start; gap: clamp(2rem, 5vw, 5rem);
-=======
-  display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); align-items: center; gap: clamp(2rem, 5vw, 5rem);
->>>>>>> origin/main
   padding: clamp(3rem, 7vw, 6rem) var(--gutter) clamp(3rem, 6vw, 5rem);
 }
 .hero-copy .lede { margin: 1.5rem 0 2rem; }
@@ -167,7 +154,6 @@ svg { flex-shrink: 0; }
 .facts li { padding: 0 1em; border-left: 1px solid var(--line-strong); line-height: 1.3; }
 .facts li:first-child { padding-left: 0; border-left: 0; }
 
-<<<<<<< HEAD
 /* Stage: the preview video and the scan card share this spot. */
 .stage { width: min(100%, 480px); justify-self: end; }
 .stage-tabs { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; padding: 4px; margin-bottom: 0.75rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
@@ -210,23 +196,14 @@ html:has(.theater[open]) { overflow: hidden; scrollbar-gutter: stable; }
 
 /* Scan card */
 .scan { position: relative; }
-=======
-/* Scan card */
-.scan { position: relative; width: min(100%, 420px); justify-self: end; }
->>>>>>> origin/main
 .scan-card { position: relative; z-index: 1; display: grid; justify-items: center; gap: 1rem; padding: clamp(1.5rem, 3vw, 2.25rem); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; text-align: center; }
 .scan-card h2 { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--display); font-weight: 800; font-size: 1.1875rem; }
 .scan-card h2 svg { color: var(--accent); }
 .scan-card p { color: var(--muted); font-size: 0.9375rem; max-width: 20rem; }
 .scan-card .copy { width: 100%; }
-<<<<<<< HEAD
 /* The mascot peeks over the card each time Overview opens: its lower half sits behind it. */
 .scan-mascot { position: absolute; z-index: 0; right: 22px; top: -74px; width: 124px; pointer-events: none; }
 .stage-panel.on .scan-mascot { animation: peek 0.9s var(--boing) 0.2s both; }
-=======
-/* The mascot peeks over the card: its lower half sits behind it. */
-.scan-mascot { position: absolute; z-index: 0; right: 22px; top: -74px; width: 124px; pointer-events: none; animation: peek 0.9s var(--boing) 1.1s both; }
->>>>>>> origin/main
 @keyframes peek { from { transform: translateY(70%); } to { transform: none; } }
 
 /* QR tile with camera viewfinder corners and a scan line that shows where to point the phone. */
@@ -330,11 +307,7 @@ main:focus-visible, main section:focus-visible { outline: none; }
 /* ---------- Small screens ---------- */
 @media (max-width: 900px) {
   .hero, .split { grid-template-columns: 1fr; }
-<<<<<<< HEAD
   .stage { justify-self: center; margin-top: 2.5rem; }
-=======
-  .scan { justify-self: center; margin-top: 4rem; }
->>>>>>> origin/main
   .split .sec-head { position: static; }
   .test { grid-template-columns: 3rem minmax(0, 1fr); }
   .test > div { grid-column: 2; margin-top: 0.4rem; }
@@ -345,11 +318,7 @@ main:focus-visible, main section:focus-visible { outline: none; }
   .top nav { position: absolute; left: 0; right: 0; top: 100%; flex-direction: column; gap: 0; display: none; margin: 0; background: var(--bg); border-bottom: 1px solid var(--line); }
   .top nav.open { display: flex; }
   .top nav a { padding: 1rem var(--pad); font-size: 1.125rem; border-top: 1px solid var(--line); background: none; color: var(--text); }
-<<<<<<< HEAD
-=======
-  /* A QR code is no use on the phone that is already showing it. */
-  .scan { display: none; }
->>>>>>> origin/main
+
   .finale-in { grid-template-columns: 1fr; }
   .finale-art { justify-self: center; grid-row: 1; }
 }

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import {
   useCallback,
   useEffect,
@@ -28,12 +27,6 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { Lottie } from './Lottie';
 import previewVideo from '../assets/EcoBudAd3.mp4';
-=======
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Check, Copy, Download, ExternalLink, Menu, Plus, QrCode, ShieldCheck, Smartphone, X } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-import { Lottie } from './Lottie';
->>>>>>> origin/main
 
 const APK_URL =
   import.meta.env.VITE_APK_DOWNLOAD_URL ||
@@ -41,15 +34,11 @@ const APK_URL =
 const VERSION = import.meta.env.VITE_APP_VERSION || 'v1.1.1';
 const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || '#feedback';
 
-<<<<<<< HEAD
 const VIEWS = [
   { id: 'preview', label: 'Preview', Icon: Play },
   { id: 'overview', label: 'Overview', Icon: QrCode },
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
-
-=======
->>>>>>> origin/main
 const TESTS: { title: string; body: string; test: string; fire?: boolean }[] = [
   {
     title: 'Tasks & Challenges',
@@ -336,7 +325,6 @@ function ScanCard() {
   );
 }
 
-<<<<<<< HEAD
 function useMedia(query: string) {
   const subscribe = useCallback(
     (notify: () => void) => {
@@ -523,8 +511,6 @@ function HeroStage() {
   );
 }
 
-=======
->>>>>>> origin/main
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [menu, setMenu] = useState(false);
@@ -595,11 +581,7 @@ export default function App() {
                 <li>No account needed to download</li>
               </ul>
             </div>
-<<<<<<< HEAD
             <HeroStage />
-=======
-            <ScanCard />
->>>>>>> origin/main
           </section>
 
           <section className="block" id="test">
