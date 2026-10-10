@@ -10,12 +10,10 @@ type Props = {
   eager?: boolean;
 };
 
-const isLite = () => document.documentElement.classList.contains('lite');
-
 /**
  * Plays one of the mobile app's Lottie animations.
  * The player is code-split, loads only when the element is close to the
- * screen, pauses when scrolled away, and shows a still frame in lite mode.
+ * screen, and pauses when scrolled away or when the tab is hidden.
  */
 export function Lottie({ name, className = '', label, eager = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
@@ -29,7 +27,7 @@ export function Lottie({ name, className = '', label, eager = false }: Props) {
 
     const sync = () => {
       if (!anim) return;
-      if (visible && !document.hidden && !isLite()) anim.play();
+      if (visible && !document.hidden) anim.play();
       else anim.pause();
     };
 
@@ -45,10 +43,10 @@ export function Lottie({ name, className = '', label, eager = false }: Props) {
         assetsPath: `/lottie/${name}/`,
         rendererSettings: { progressiveLoad: true, preserveAspectRatio: 'xMidYMid meet' },
       });
+      // Redraw only at the animation's own frame rate instead of on every screen refresh.
+      anim.setSubframe(false);
       anim.addEventListener('DOMLoaded', () => {
         el.classList.add('is-ready');
-        // Frame 0 of the loading glyph is blank, so the still frame is taken mid-loop.
-        if (isLite()) anim?.goToAndStop(Math.floor(anim.totalFrames / 2), true);
         sync();
       });
     };
