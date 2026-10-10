@@ -1,33 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import {
-  ArrowLeftRight,
-  Bell,
-  BookOpen,
-  CalendarCheck,
-  CalendarDays,
-  Camera,
-  ChartColumn,
-  ChevronRight,
-  Coins,
-  Download,
-  ExternalLink,
-  Flame,
-  Gift,
-  House,
-  Leaf,
-  Menu,
-  Plus,
-  QrCode,
-  Recycle,
-  ShieldCheck,
-  ShoppingCart,
-  Smartphone,
-  Sparkles,
-  Star,
-  Trophy,
-  User,
-  X,
-} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Check, Copy, Download, ExternalLink, Menu, Plus, QrCode, ShieldCheck, Smartphone, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Lottie } from './Lottie';
 
 const APK_URL =
@@ -36,65 +9,43 @@ const APK_URL =
 const VERSION = import.meta.env.VITE_APP_VERSION || 'v1.1.1';
 const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || '#feedback';
 
-const TICKER = ['Tasks & Challenges', 'Eco Events', 'Learn & Grow', 'Give & Get', 'Redeem Coins', 'EcoBud AI'];
-
-const FEATURES: { icon: ReactNode; tone: string; title: string; body: string; test: string }[] = [
+const TESTS: { title: string; body: string; test: string; fire?: boolean }[] = [
   {
-    icon: <Trophy size={28} strokeWidth={2.5} />,
-    tone: 'green',
     title: 'Tasks & Challenges',
     body: 'Pick a mission that fits your day, submit your proof, and claim Eco Points and Eco Coins once a moderator approves it.',
     test: 'Submit one and watch its status change.',
   },
   {
-    icon: <CalendarDays size={28} strokeWidth={2.5} />,
-    tone: 'violet',
+    title: 'Challenge streaks',
+    body: 'Finish 3 challenges to light the flame. Bonuses are paid once each at 3, 10, 30 and 100 challenges.',
+    test: 'Complete three and check that the flame turns on.',
+    fire: true,
+  },
+  {
     title: 'Eco Events',
     body: 'Join clean-ups and tree planting drives near you, check in with the venue QR code, then claim your reward.',
     test: 'Join an event and try the QR check-in.',
   },
   {
-    icon: <BookOpen size={28} strokeWidth={2.5} />,
-    tone: 'mint',
     title: 'Learn & Grow',
     body: 'Short lessons and quizzes in the Eco Academy, such as Composting 101. No ID approval needed to start.',
     test: 'Finish a lesson, then claim its reward.',
   },
   {
-    icon: <ArrowLeftRight size={28} strokeWidth={2.5} />,
-    tone: 'blue',
     title: 'Give & Get',
     body: 'Swap items with your neighbours. List what you no longer need, request what others offer, and chat in the app.',
     test: 'Create a listing and send a request.',
   },
   {
-    icon: <Coins size={28} strokeWidth={2.5} />,
-    tone: 'gold',
     title: 'Redeem Coins',
     body: 'Exchange Eco Coins for rewards and follow each request in your Coins History.',
     test: 'Make a redeem request and check its status.',
   },
   {
-    icon: <Sparkles size={28} strokeWidth={2.5} />,
-    tone: 'green',
     title: 'EcoBud AI',
     body: 'Ask the built-in assistant a question from Home, or use it as a tutor in lessons and a guide in challenges.',
     test: 'Ask it something and tell us if the answer helped.',
   },
-];
-
-const STREAK = [
-  { n: 3, reward: '30 pts', note: 'Flame unlocks' },
-  { n: 10, reward: '100 pts + 5 coins', note: '' },
-  { n: 30, reward: '300 pts + 15 coins', note: '' },
-  { n: 100, reward: '1,000 pts + 50 coins', note: 'Challenge Champion badge' },
-];
-
-const EVENT_STEPS = [
-  { icon: <CalendarCheck size={26} strokeWidth={2.5} />, title: 'Join', body: 'Tap Join Event and your slot is reserved.' },
-  { icon: <Camera size={26} strokeWidth={2.5} />, title: 'Show up', body: 'Go to the venue and take a proof photo.' },
-  { icon: <QrCode size={26} strokeWidth={2.5} />, title: 'Scan', body: 'Scan the QR code. A valid code approves your attendance.' },
-  { icon: <Gift size={26} strokeWidth={2.5} />, title: 'Claim', body: 'Tap Claim Reward for Eco Points and Eco Coins.' },
 ];
 
 const INSTALL = [
@@ -135,14 +86,13 @@ const FAQ = [
   },
   {
     q: 'Where do I report bugs?',
-    a: 'Use the feedback form in the header or the footer. Screenshots help a lot.',
+    a: 'Use the feedback form in the header or at the bottom of this page. Screenshots help a lot.',
   },
 ];
 
-/** Pop elements in once as they scroll into view; pause infinite loops while off screen. */
-function useScrollMotion(enabled: boolean) {
+/** Reveal elements once as they scroll into view, mark the nav link of the section on screen, and pause loops while off screen. */
+function useScrollMotion() {
   useEffect(() => {
-    if (!enabled) return;
     const reveal = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -157,6 +107,21 @@ function useScrollMotion(enabled: boolean) {
     const loops = new IntersectionObserver((entries) => {
       for (const e of entries) e.target.classList.toggle('paused', !e.isIntersecting);
     });
+    const links = document.querySelectorAll<HTMLAnchorElement>('.top nav a[href^="#"]');
+    // A section counts as current while it crosses the middle of the screen.
+    const spy = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          links.forEach((a) => {
+            if (a.hash === `#${e.target.id}`) a.setAttribute('aria-current', 'true');
+            else a.removeAttribute('aria-current');
+          });
+        }
+      },
+      { rootMargin: '-45% 0px -50% 0px' },
+    );
+    document.querySelectorAll('main section[id]').forEach((el) => spy.observe(el));
     document.querySelectorAll('.pop').forEach((el) => reveal.observe(el));
     document.querySelectorAll('[data-loop]').forEach((el) => loops.observe(el));
     const onVis = () => document.documentElement.classList.toggle('tab-hidden', document.hidden);
@@ -164,64 +129,73 @@ function useScrollMotion(enabled: boolean) {
     return () => {
       reveal.disconnect();
       loops.disconnect();
+      spy.disconnect();
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [enabled]);
+  }, []);
 }
 
-/** A drawn copy of the app's Home tab, so the page looks like the product. */
-function PhonePreview() {
-  return (
-    <div className="phone" role="img" aria-label="Preview of the EcoBud home screen">
-      <div className="phone-screen" aria-hidden="true">
-        <div className="ph-top">
-          <span className="ph-avatar">E</span>
-          <span className="ph-icons">
-            <ChartColumn size={18} strokeWidth={2.5} />
-            <CalendarDays size={18} strokeWidth={2.5} />
-            <Bell size={18} strokeWidth={2.5} fill="currentColor" />
-          </span>
-        </div>
-        <p className="ph-eyebrow">Good morning</p>
-        <p className="ph-name">Eco neighbour</p>
-        <div className="ph-ask">
-          <span className="ph-spark"><Sparkles size={14} strokeWidth={2.5} /></span>
-          <span className="ph-ask-text">Ask EcoBud AI a question...</span>
-          <b>AI <ChevronRight size={12} strokeWidth={3} /></b>
-        </div>
-        <ul className="ph-tiles">
-          <li className="t-green"><span><Leaf size={16} strokeWidth={2.5} /></span>My Progress</li>
-          <li className="t-gold"><span><Coins size={16} strokeWidth={2.5} /></span>Redeem Coins</li>
-          <li className="t-blue"><span><ArrowLeftRight size={16} strokeWidth={2.5} /></span>Give &amp; Get</li>
-          <li className="t-violet"><span><CalendarDays size={16} strokeWidth={2.5} /></span>Eco Events</li>
-        </ul>
-        <div className="ph-level">
-          <div className="ph-level-head">
-            <span className="ph-recycle"><Recycle size={18} strokeWidth={2.5} /></span>
-            <div>
-              <small>Level 4</small>
-              <strong>Eco Warrior</strong>
-            </div>
-          </div>
-          <p className="ph-points"><b>625</b> Eco Points</p>
-          <p className="ph-to">375 Eco Points to Level 5</p>
-          <div className="ph-bar"><i /></div>
-          <p className="ph-next"><span>Next: Eco Champion</span><span>625 / 1000</span></p>
-        </div>
-        <div className="ph-stats">
-          <span><Flame size={16} strokeWidth={2.5} /> Challenge streak</span>
-          <span><Trophy size={16} strokeWidth={2.5} /> Weekly rank</span>
-        </div>
-        <div className="ph-tabs">
-          <span className="on"><House size={16} strokeWidth={2.5} />Home</span>
-          <span><BookOpen size={16} strokeWidth={2.5} />Learn</span>
-          <span className="mid"><Trophy size={20} strokeWidth={2.5} /></span>
-          <span><ShoppingCart size={16} strokeWidth={2.5} />G&amp;G</span>
-          <span><User size={16} strokeWidth={2.5} />Profile</span>
-        </div>
-      </div>
-    </div>
-  );
+/**
+ * Animated scrolling for every in-page link (nav tabs, Install guide button, logo, Back to top).
+ * Scripted so it still runs where the browser's own smooth scrolling is switched off.
+ */
+function useAnchorScroll() {
+  useEffect(() => {
+    let raf = 0;
+    let cue = 0;
+    const stop = () => cancelAnimationFrame(raf);
+
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = (e.target as Element).closest<HTMLAnchorElement>('a[href^="#"]');
+      if (!link || link.target === '_blank') return;
+      const target = document.querySelector<HTMLElement>(link.hash);
+      if (!target) return;
+      e.preventDefault();
+      stop();
+
+      const header = document.querySelector('.top')?.getBoundingClientRect().height ?? 0;
+      const from = window.scrollY;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const wanted = target.id === 'top' ? 0 : from + target.getBoundingClientRect().top - header - 20;
+      const to = Math.min(max, Math.max(0, wanted));
+      // Longer trips take longer, within limits, so short hops stay quick.
+      const duration = Math.min(1100, Math.max(450, Math.abs(to - from) * 0.45));
+      const start = performance.now();
+
+      const step = (now: number) => {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        window.scrollTo(0, from + (to - from) * eased);
+        if (t < 1) {
+          raf = requestAnimationFrame(step);
+          return;
+        }
+        // Keyboard and screen reader users continue from the section they jumped to.
+        target.setAttribute('tabindex', '-1');
+        target.focus({ preventScroll: true });
+        target.classList.add('arrived');
+        window.clearTimeout(cue);
+        cue = window.setTimeout(() => target.classList.remove('arrived'), 1200);
+      };
+      raf = requestAnimationFrame(step);
+      history.pushState(null, '', link.hash);
+    };
+
+    // Any scroll input from the visitor takes over from the animation.
+    document.addEventListener('click', onClick);
+    window.addEventListener('wheel', stop, { passive: true });
+    window.addEventListener('touchstart', stop, { passive: true });
+    window.addEventListener('keydown', stop);
+    return () => {
+      stop();
+      window.clearTimeout(cue);
+      document.removeEventListener('click', onClick);
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchstart', stop);
+      window.removeEventListener('keydown', stop);
+    };
+  }, []);
 }
 
 function Loader({ onDone }: { onDone: () => void }) {
@@ -233,7 +207,7 @@ function Loader({ onDone }: { onDone: () => void }) {
     const onLoad = () => (loaded.current = true);
     window.addEventListener('load', onLoad);
     const start = performance.now();
-    const MIN = 1400;
+    const MIN = 900;
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min((now - start) / MIN, 1);
@@ -280,6 +254,47 @@ function Loader({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** Desktop visitors scan this with their phone; the button covers anyone who would rather send the link. */
+function ScanCard() {
+  const [copy, setCopy] = useState<'idle' | 'done' | 'failed'>('idle');
+
+  useEffect(() => {
+    if (copy === 'idle') return;
+    const id = window.setTimeout(() => setCopy('idle'), 2400);
+    return () => window.clearTimeout(id);
+  }, [copy]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(APK_URL);
+      setCopy('done');
+    } catch {
+      setCopy('failed');
+    }
+  };
+
+  return (
+    <aside className="scan" aria-labelledby="scan-title">
+      <Lottie name="mascot" className="scan-mascot" eager />
+      <div className="scan-card">
+        <h2 id="scan-title">
+          <QrCode size={20} strokeWidth={2.25} /> Scan with your phone camera
+        </h2>
+        <p>Point your Android camera or QR scanner at the code to download the APK straight to your phone.</p>
+        <div className="qr" data-loop>
+          <QRCodeSVG value={APK_URL} size={208} level="M" marginSize={0} bgColor="#ffffff" fgColor="#0b1611" title="QR code for the EcoBud APK download" />
+        </div>
+        <button className={`btn ghost copy ${copy}`} type="button" onClick={copyLink}>
+          {copy === 'done' ? <Check size={18} strokeWidth={2.5} /> : <Copy size={18} strokeWidth={2.25} />}
+          <span aria-live="polite">
+            {copy === 'done' ? 'Link copied' : copy === 'failed' ? 'Copy blocked, use Download' : 'Copy download link'}
+          </span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [menu, setMenu] = useState(false);
@@ -288,7 +303,8 @@ export default function App() {
     document.body.style.overflow = loading ? 'hidden' : '';
   }, [loading]);
 
-  useScrollMotion(true);
+  useScrollMotion();
+  useAnchorScroll();
 
   const finishLoading = useCallback(() => setLoading(false), []);
 
@@ -298,18 +314,17 @@ export default function App() {
       <div className={`page${loading ? ' booting' : ' ready'}`}>
         <header className="top">
           <a className="mark" href="#top" aria-label="EcoBud home">
-            <span className="mark-dot"><img src="/ecobud_logo_circle.png" alt="EcoBud logo" /></span>
-            EcoBud
+            <span className="mark-dot"><img src="/logo-96.webp" alt="" width={36} height={36} /></span>
+            EcoBud <small>beta</small>
           </a>
           <nav className={menu ? 'open' : ''} aria-label="Main">
-            <a href="#inside" onClick={() => setMenu(false)}>What&apos;s inside</a>
-            <a href="#streak" onClick={() => setMenu(false)}>Streaks</a>
-            <a href="#install" onClick={() => setMenu(false)}>Install</a>
-            <a href="#faq" onClick={() => setMenu(false)}>FAQ</a>
-            <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">Feedback</a>
+            <a href="#install" onClick={() => setMenu(false)}>Install guide</a>
+            <a href="#test" onClick={() => setMenu(false)}>What to test</a>
+            <a href="#faq" onClick={() => setMenu(false)}>Questions</a>
+            <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer" onClick={() => setMenu(false)}>Send feedback</a>
           </nav>
           <a className="btn sm" href={APK_URL}>
-            <Download size={16} strokeWidth={3} /> Get APK
+            <Download size={16} strokeWidth={2.5} /> Download APK
           </a>
           <button
             className="burger"
@@ -318,18 +333,15 @@ export default function App() {
             aria-expanded={menu}
             onClick={() => setMenu((m) => !m)}
           >
-            {menu ? <X size={22} strokeWidth={3} /> : <Menu size={22} strokeWidth={3} />}
+            {menu ? <X size={22} strokeWidth={2.5} /> : <Menu size={22} strokeWidth={2.5} />}
           </button>
+          <span className="progress" aria-hidden="true" />
         </header>
 
         <main id="top">
           <section className="hero">
             <div className="hero-copy">
-              <p className="dateline">
-                <span>Beta {VERSION}</span>
-                <span>Android 8.0+</span>
-                <span>Nagcarlan barangays</span>
-              </p>
+              <p className="dateline">Android beta {VERSION} for Nagcarlan barangays</p>
               <h1 className="mega">
                 <span className="line"><span>Small habits.</span></span>
                 <span className="line"><span>Big <em>barangay.</em></span></span>
@@ -341,96 +353,56 @@ export default function App() {
               </p>
               <div className="cta">
                 <a className="btn" href={APK_URL}>
-                  <Download size={20} strokeWidth={3} /> Download APK <small>{VERSION}</small>
+                  <Download size={20} strokeWidth={2.5} /> Download APK <small>{VERSION}</small>
                 </a>
                 <a className="btn ghost" href="#install">
-                  <Smartphone size={20} strokeWidth={3} /> How to install
+                  <Smartphone size={20} strokeWidth={2.25} /> Install guide
                 </a>
               </div>
+              <ul className="facts">
+                <li>Android 8.0 or newer</li>
+                <li>Public GitHub release</li>
+                <li>No account needed to download</li>
+              </ul>
             </div>
-
-            <div className="hero-art" data-loop>
-              <div className="blob" aria-hidden="true" />
-              <PhonePreview />
-              <Lottie name="mascot" className="hero-mascot" label="EcoBud mascot waving" eager />
-              <span className="sticker s-coin" aria-hidden="true"><Coins size={26} strokeWidth={2.5} /></span>
-              <span className="sticker s-leaf" aria-hidden="true"><Leaf size={26} strokeWidth={2.5} /></span>
-              <span className="sticker s-star" aria-hidden="true"><Star size={22} strokeWidth={2.5} /></span>
-            </div>
+            <ScanCard />
           </section>
 
-          <div className="ticker" aria-hidden="true" data-loop>
-            <div className="track">
-              {[0, 1].map((n) => (
-                <div key={n} className="set">
-                  {[...TICKER, ...TICKER].map((t, i) => (
-                    <span key={`${n}-${i}`}>
-                      {t}
-                      <Star size={22} strokeWidth={3} fill="currentColor" />
-                    </span>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <section className="block" id="inside">
+          <section className="block" id="test">
             <header className="sec-head pop">
-              <p className="folio">Section 01</p>
-              <h2 className="big">What&apos;s inside</h2>
-              <p className="deck">Six parts of the app are ready for you to poke at. Each card says what we most want checked.</p>
+              <h2 className="big">What to test</h2>
+              <p className="deck">Seven parts of the app are ready for you to poke at. Each row ends with the thing we most want checked.</p>
             </header>
-            <ul className="cards">
-              {FEATURES.map((f, i) => (
-                <li key={f.title} className={`card pop tone-${f.tone}`} style={{ transitionDelay: `${(i % 3) * 70}ms` }}>
-                  <span className="icon-tile">{f.icon}</span>
-                  <h3>{f.title}</h3>
-                  <p>{f.body}</p>
-                  <p className="try"><b>Try:</b> {f.test}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="block streak-block" id="streak">
-            <header className="sec-head pop">
-              <Lottie name="fire" className="streak-fire" />
-              <p className="folio">Section 02</p>
-              <h2 className="big">Light your streak</h2>
-              <p className="deck">
-                Every completed challenge adds to your count. Hit a milestone and the bonus is paid
-                automatically, once.
-              </p>
-            </header>
-            <ol className="ladder">
-              {STREAK.map((s, i) => (
-                <li key={s.n} className={`rung pop r${i}`} style={{ transitionDelay: `${i * 90}ms` }}>
-                  <div className="rung-top">
-                    <Lottie name="fire" className="rung-fire" />
-                    <strong>{s.n}</strong>
-                    <span className="unit">challenges</span>
+            <ol className="tests">
+              {TESTS.map((t, i) => (
+                <li key={t.title} className="test pop" style={{ transitionDelay: `${(i % 4) * 60}ms` }}>
+                  <span className="num" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+                  <h3>
+                    {t.title}
+                    {t.fire && <Lottie name="fire" className="test-fire" />}
+                  </h3>
+                  <div>
+                    <p>{t.body}</p>
+                    <p className="try"><b>Try:</b> {t.test}</p>
                   </div>
-                  <p className="reward">{s.reward}</p>
-                  {s.note && <p className="note">{s.note}</p>}
                 </li>
               ))}
             </ol>
-            <p className="fine pop">
-              The flame turns gray after seven days without a completed challenge, but your count
-              stays. Restore it up to three times a month.
-            </p>
           </section>
 
-          <section className="block" id="events">
+          <section className="block split" id="install">
             <header className="sec-head pop">
-              <p className="folio">Section 03</p>
-              <h2 className="big">An event in four taps</h2>
+              <h2 className="big">Install guide</h2>
+              <p className="deck">Three steps. The warning in step one is normal for any app that comes from outside Google Play.</p>
+              <a className="btn" href={APK_URL}>
+                <Download size={20} strokeWidth={2.5} /> Download APK <small>{VERSION}</small>
+              </a>
+              <p className="safe"><ShieldCheck size={18} strokeWidth={2.25} /> Hosted on our public GitHub release.</p>
             </header>
-            <ol className="flow">
-              {EVENT_STEPS.map((s, i) => (
-                <li key={s.title} className="flow-step pop" style={{ transitionDelay: `${i * 90}ms` }}>
-                  <span className="flow-n">{i + 1}</span>
-                  <span className="icon-tile">{s.icon}</span>
+            <ol className="steps pop">
+              {INSTALL.map((s, i) => (
+                <li key={s.title} className="step" style={{ '--d': `${150 + i * 320}ms` } as CSSProperties}>
+                  <span className="digit">{i + 1}</span>
                   <h3>{s.title}</h3>
                   <p>{s.body}</p>
                 </li>
@@ -438,41 +410,17 @@ export default function App() {
             </ol>
           </section>
 
-          <section className="block install" id="install">
+          <section className="block split" id="faq">
             <header className="sec-head pop">
-              <p className="folio">Section 04</p>
-              <h2 className="big">Install in three steps</h2>
-            </header>
-            <ol className="steps">
-              {INSTALL.map((s, i) => (
-                <li key={s.title} className="step pop" style={{ transitionDelay: `${i * 90}ms` }}>
-                  <span className="digit">{i + 1}</span>
-                  <div>
-                    <h3>{s.title}</h3>
-                    <p>{s.body}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <div className="install-foot pop">
-              <a className="btn" href={APK_URL}>
-                <Download size={20} strokeWidth={3} /> Download APK <small>{VERSION}</small>
-              </a>
-              <p className="safe"><ShieldCheck size={20} strokeWidth={2.5} /> Public GitHub release, no account needed to download.</p>
-            </div>
-          </section>
-
-          <section className="block" id="faq">
-            <header className="sec-head pop">
-              <p className="folio">Section 05</p>
               <h2 className="big">Questions</h2>
+              <p className="deck">Answers for the things testers run into first.</p>
             </header>
             <div className="faq">
               {FAQ.map((f, i) => (
                 <details key={f.q} className="pop" open={i === 0}>
                   <summary>
                     {f.q}
-                    <span className="plus"><Plus size={20} strokeWidth={3.5} /></span>
+                    <span className="plus"><Plus size={18} strokeWidth={2.5} /></span>
                   </summary>
                   <p>{f.a}</p>
                 </details>
@@ -481,20 +429,17 @@ export default function App() {
           </section>
 
           <section className="finale" id="feedback">
-            <div className="finale-in">
-              <div className="pop">
-                <h2 className="mega">Found a bug? Tell us.</h2>
-                <p className="lede">Every report from a tester makes the public release better.</p>
+            <div className="finale-in pop">
+              <div>
+                <h2 className="big">Found a bug? Tell us.</h2>
+                <p className="lede">Every report from a tester makes the public release better. Screenshots help a lot.</p>
                 <div className="cta">
-                  <a className="btn dark" href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
-                    Send feedback <ExternalLink size={20} strokeWidth={3} />
-                  </a>
-                  <a className="btn ghost" href={APK_URL}>
-                    <Download size={20} strokeWidth={3} /> Download APK
+                  <a className="btn" href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
+                    Send feedback <ExternalLink size={18} strokeWidth={2.5} />
                   </a>
                 </div>
               </div>
-              <div className="finale-art pop">
+              <div className="finale-art">
                 <Lottie name="confetti" className="confetti" />
                 <Lottie name="celebrate" label="EcoBud mascot celebrating" />
               </div>
@@ -503,7 +448,6 @@ export default function App() {
         </main>
 
         <footer className="foot">
-          <span className="mark-dot"><img src="/ecobud_logo_circle.png" alt="EcoBud logo" /></span>
           <span>EcoBud {VERSION} beta</span>
           <span>&copy; {new Date().getFullYear()} EcoBud Project</span>
           <a href="#top">Back to top</a>
