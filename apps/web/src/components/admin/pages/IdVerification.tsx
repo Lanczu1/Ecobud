@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, Eye,
-  FileText, Filter, Layers, Loader2, Lock, MapPin, RefreshCw, Search,
+  FileText, Layers, Loader2, Lock, MapPin, RefreshCw, Search,
   ShieldCheck, User, XCircle,
 } from 'lucide-react';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -17,9 +17,7 @@ type Submission = {
   submittedAt: string; reviewedAt: string | null;
   user: { name: string; email: string }; reviewer: { name: string } | null;
 };
-type Status = Submission['status'];
 type ReviewPage = { items: Submission[]; total: number };
-const statuses: Status[] = ['pending', 'approved', 'rejected'];
 const statusLabels = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' };
 const statusStyles = {
   pending: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800',
@@ -72,10 +70,9 @@ function DocumentThumbnail({ submission, onOpen }: { submission: Submission; onO
 }
 
 export function IdVerification() {
-  const [status, setStatus] = useState<Status>('pending');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<Submission[]>([]);
-  const [counts, setCounts] = useState<Record<Status, number>>({ pending: 0, approved: 0, rejected: 0 });
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -104,21 +101,20 @@ export function IdVerification() {
     const version = ++requestVersion.current;
     if (!silent) { setLoading(true); setError(''); }
     try {
-      const results = await Promise.all(statuses.map(value => adminGet<ReviewPage>(
-        `/id-verification/review?status=${value}&page=${value === status ? page : 1}${notificationTarget('id_verification') ? `&recordId=${encodeURIComponent(notificationTarget('id_verification')!)}` : ''}`, { bypassCache: true },
-      )));
+      const target = notificationTarget('id_verification');
+      const result = await adminGet<ReviewPage>(
+        `/id-verification/review?status=pending&page=${page}${target ? `&recordId=${encodeURIComponent(target)}` : ''}`, { bypassCache: true },
+      );
       if (version !== requestVersion.current) return;
-      const active = results[statuses.indexOf(status)];
-      const focused=notificationTarget('id_verification') ? active.items[0] : null;
-      setCounts(notificationTarget('id_verification') ? { pending:focused?.status==='pending' ? 1 : 0,approved:focused?.status==='approved' ? 1 : 0,rejected:focused?.status==='rejected' ? 1 : 0 } : { pending: results[0].total, approved: results[1].total, rejected: results[2].total });
-      const lastPage = Math.max(1, Math.ceil(active.total / 20));
+      const pending = result.items.filter(item => item.status === 'pending');
+      const lastPage = Math.max(1, Math.ceil(result.total / 20));
       if (page > lastPage) { setPage(lastPage); return; }
-      setItems(active.items);
-      if (notificationTarget('id_verification') && active.items[0]) setStatus(active.items[0].status);
+      setItems(pending);
+      setTotal(target ? pending.length : result.total);
     } catch (e) {
       if (version === requestVersion.current && !silent) { setItems([]); setError(e instanceof Error ? e.message : 'Could not load submissions.'); }
     } finally { if (version === requestVersion.current) setLoading(false); }
-  }, [status, page]);
+  }, [page]);
   useEffect(() => { void load(); return () => { requestVersion.current++; }; }, [load]);
   useAdminLiveRefresh(() => { if (!reviewBusy.current) void load(true); });
   useEffect(() => {
@@ -179,13 +175,7 @@ export function IdVerification() {
     }
     return Array.from(result, ([barangay, people]) => ({ barangay, people: Array.from(people, ([email, submissions]) => ({ email, submissions })) }));
   }, [items, resident, search]);
-  const total = counts[status];
-  const stats = [
-    { label: 'Pending Review', value: counts.pending, background: 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-800', color: 'text-orange-600 dark:text-orange-400' },
-    { label: 'Approved', value: counts.approved, background: 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800', color: 'text-green-600 dark:text-green-400' },
-    { label: 'Rejected', value: counts.rejected, background: 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800', color: 'text-red-600 dark:text-red-400' },
-    { label: 'Total Submissions', value: counts.pending + counts.approved + counts.rejected, background: 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800', color: 'text-blue-600 dark:text-blue-400' },
-  ];
+  const waiting = !loading && !error && total > 0;
 
   return <div className="relative p-4 sm:p-8 space-y-6 bg-gray-50/50 min-h-full">
     <div>
@@ -195,15 +185,16 @@ export function IdVerification() {
       </div>
       <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Review and manage resident ID submissions in your assigned barangay.</p>
     </div>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {stats.map(stat => <div key={stat.label} className={`rounded-2xl border p-5 shadow-sm animate-reveal ${stat.background}`}>
-        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{stat.label}</p>
-        <p className={`text-3xl font-serif font-bold mt-1 ${stat.color}`}>{loading ? <span className="inline-block w-10 h-8 rounded bg-current opacity-10 animate-pulse" aria-label="Loading count" /> : error ? '—' : stat.value.toLocaleString()}</p>
-      </div>)}
-    </div>
-    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl p-4 flex items-start justify-between gap-3 animate-reveal delay-160">
-      <div className="flex items-start gap-3"><ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" /><p className="text-sm text-blue-700 dark:text-blue-300"><strong>ID Review:</strong> Compare the submitted name and photo with the ID before approving. Include a clear reason when rejecting so the resident knows what to correct.</p></div>
-      <button type="button" onClick={() => void load()} disabled={loading} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-5 flex flex-col md:flex-row md:items-center gap-4 md:gap-6 animate-reveal">
+      <div className="flex items-center gap-4 shrink-0">
+        <span className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${waiting ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'}`}>{waiting ? <Clock className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}</span>
+        <div>
+          <p className={`text-3xl font-serif font-bold leading-none ${waiting ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{loading ? <span className="inline-block w-10 h-7 rounded bg-current opacity-10 animate-pulse" aria-label="Loading count" /> : error ? '—' : total.toLocaleString()}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1.5">{waiting ? (total === 1 ? 'ID waiting for review' : 'IDs waiting for review') : loading || error ? 'Pending review' : 'No IDs waiting for review'}</p>
+        </div>
+      </div>
+      <div className="flex-1 flex items-start gap-3 md:border-l md:border-gray-100 md:dark:border-gray-800 md:pl-6"><ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" /><p className="text-sm text-gray-600 dark:text-gray-300">Compare the submitted name and photo with the ID before approving. Include a clear reason when rejecting so the resident knows what to correct.</p></div>
+      <button type="button" onClick={() => void load()} disabled={loading} className="self-start md:self-center text-xs text-gray-700 dark:text-gray-200 flex items-center gap-1.5 font-semibold shrink-0 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-2 rounded-lg disabled:opacity-50 transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
     </div>
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 space-y-3 animate-reveal delay-160">
       <div className="flex flex-col xl:flex-row gap-3 items-stretch justify-between">
@@ -217,17 +208,16 @@ export function IdVerification() {
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-800"><span className="flex items-center gap-1.5 text-xs text-gray-400 mr-1"><Filter className="w-3.5 h-3.5" />Filter Status:</span>{statuses.map(value => <button type="button" key={value} aria-pressed={status === value} onClick={() => { setStatus(value); setPage(1); setResident(''); }} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium text-xs transition-all ${status === value ? 'bg-green-600 text-white shadow-sm font-semibold' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{value === 'pending' ? <Clock className="w-3.5 h-3.5" /> : value === 'approved' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}{statusLabels[value]}{!loading && !error && <span className="opacity-70">({counts[value]})</span>}</button>)}</div>
     </div>
     {error && <div role="alert" className="flex items-center gap-2 p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
-    {loading ? <div role="status" aria-label="Loading ID submissions" className="space-y-4">{[0, 1, 2].map(index => <div key={index} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 animate-pulse flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800" /><div className="space-y-2 flex-1"><div className="h-4 w-1/3 rounded bg-gray-100 dark:bg-gray-800" /><div className="h-3 w-1/2 rounded bg-gray-100 dark:bg-gray-800" /></div></div>)}</div> : !error && groups.length === 0 ? <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-12 text-center shadow-sm"><Layers className="w-12 h-12 mx-auto text-gray-400 opacity-30 mb-4" /><h3 className="font-semibold text-gray-700 dark:text-gray-300">No ID Submissions</h3><p className="text-sm text-gray-500 mt-1">{search || resident ? 'No matches on this page. Adjust your search or resident filter.' : `There are no ${status} ID submissions in your barangay.`}</p></div> : <div className="space-y-5">
+    {loading ? <div role="status" aria-label="Loading ID submissions" className="space-y-4">{[0, 1, 2].map(index => <div key={index} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 animate-pulse flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800" /><div className="space-y-2 flex-1"><div className="h-4 w-1/3 rounded bg-gray-100 dark:bg-gray-800" /><div className="h-3 w-1/2 rounded bg-gray-100 dark:bg-gray-800" /></div></div>)}</div> : !error && groups.length === 0 ? <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-12 text-center shadow-sm"><Layers className="w-12 h-12 mx-auto text-gray-400 opacity-30 mb-4" /><h3 className="font-semibold text-gray-700 dark:text-gray-300">No ID Submissions</h3><p className="text-sm text-gray-500 mt-1">{search || resident ? 'No matches on this page. Adjust your search or resident filter.' : 'There are no pending ID submissions in your barangay.'}</p></div> : <div className="space-y-5">
       {groups.map(group => {
         const groupKey = `barangay:${group.barangay}`;
         const submissions = group.people.flatMap(person => person.submissions);
         return <div key={group.barangay} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/90 dark:border-gray-800 shadow-sm overflow-hidden">
           <button type="button" onClick={() => toggle(groupKey)} aria-expanded={!collapsed.has(groupKey)} className="w-full text-left px-6 py-4.5 bg-linear-to-r from-emerald-50 via-green-50/50 to-white dark:from-emerald-950/40 dark:via-gray-900 dark:to-gray-900 border-b border-gray-200/80 dark:border-gray-800 flex items-center justify-between gap-3 hover:bg-emerald-100/40 dark:hover:bg-emerald-950/60 transition-colors">
             <span className="flex items-center gap-3"><span className="w-10 h-10 rounded-xl bg-green-600 flex items-center justify-center shrink-0"><MapPin className="w-5 h-5 text-white" /></span><span><span className="flex flex-wrap items-center gap-2"><span className="text-base font-bold text-gray-900 dark:text-white">{group.barangay}</span><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">{group.people.length} {group.people.length === 1 ? 'resident' : 'residents'}</span></span><span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">{submissions.length} {submissions.length === 1 ? 'submission' : 'submissions'} on this page</span></span></span>
-            <span className="flex items-center gap-3">{status === 'pending' && <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800"><Clock className="w-3.5 h-3.5" />{submissions.length} pending</span>}{collapsed.has(groupKey) ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}</span>
+            <span className="flex items-center gap-3"><span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-200 dark:border-orange-800"><Clock className="w-3.5 h-3.5" />{submissions.length} pending</span>{collapsed.has(groupKey) ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}</span>
           </button>
           {!collapsed.has(groupKey) && <div className="p-5 sm:p-6 space-y-5 bg-gray-50/50 dark:bg-gray-950/60">{group.people.map(person => {
             const first = person.submissions[0]; const personKey = `resident:${person.email}`;

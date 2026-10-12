@@ -1,18 +1,20 @@
 import { prisma } from '../prismaClient';
 import { idDocumentStorage } from './idDocumentStorage';
 
+export async function removeReviewedIdPhoto(id: string, documentPath: string) {
+  await idDocumentStorage.remove(documentPath);
+  await prisma.idVerificationSubmission.updateMany({ where: { id, documentPath }, data: { documentPath: null } });
+}
+
 export async function cleanupReviewedIds() {
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const rows = await prisma.idVerificationSubmission.findMany({
-    where: { documentPath: { not: null }, status: { in: ['approved', 'rejected'] }, reviewedAt: { lt: cutoff } },
+    where: { documentPath: { not: null }, status: { in: ['approved', 'rejected'] } },
     select: { id: true, documentPath: true }, take: 100,
   });
   for (const row of rows) {
     if (!row.documentPath) continue;
-    try {
-      await idDocumentStorage.remove(row.documentPath);
-      await prisma.idVerificationSubmission.updateMany({ where: { id: row.id, documentPath: row.documentPath }, data: { documentPath: null } });
-    } catch { console.error('Reviewed ID photo cleanup will be retried.'); }
+    try { await removeReviewedIdPhoto(row.id, row.documentPath); }
+    catch { console.error('Reviewed ID photo cleanup will be retried.'); }
   }
 }
 

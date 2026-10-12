@@ -17,7 +17,7 @@ Results and the in-app notification are saved in one database transaction, along
 - Deploy `prisma/migrations/20261003000000_id_verification/migration.sql` with the project's migration process, then regenerate Prisma Client and restart the API. Do not reset the database.
 - Existing residents also begin as `not_submitted`. Their learning progress and rewards are preserved. They must submit an ID before performing the restricted actions.
 - Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API. The API creates the private `ecobud-private-ids` bucket on first use. It fails closed if the bucket is public. Do not grant anonymous or authenticated clients direct read access to this bucket; documents are served only through the authenticated moderator endpoint.
-- Reviewed photos are removed after 30 days by the hourly cleanup scheduler. Status, legal name, submission history, and moderator review metadata remain. Pending photos remain available until review. Failed deletions retry on subsequent cleanup runs.
+- The photo is removed from the private bucket as soon as a moderator approves or rejects the submission. Status, legal name, submission history, and moderator review metadata remain. Pending photos remain available until review. Failed deletions retry on the hourly cleanup scheduler.
 - Supported ID categories and retention are implementation defaults. Moderators must inspect the document; uploading a photo does not automatically verify identity.
 
 ## Verification

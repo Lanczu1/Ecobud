@@ -7,6 +7,7 @@ import { authenticateRequest, requireRoles, type AuthenticatedRequest } from '..
 import { errorBoundary, HttpError } from '../http/errorResponder';
 import { avatarUploadMiddleware } from '../http/uploadMiddleware';
 import { idDocumentStorage } from '../services/idDocumentStorage';
+import { removeReviewedIdPhoto } from '../services/idDocumentCleanup';
 
 export const idVerificationRoutes = Router();
 idVerificationRoutes.use(authenticateRequest, (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
@@ -77,7 +78,7 @@ idVerificationRoutes.get('/review/:id/document', errorBoundary(async (req: Authe
 idVerificationRoutes.patch('/review/:id', errorBoundary(async (req: AuthenticatedRequest, res) => {
   const payload = reviewSchema.parse(req.body);
   const city = assignedBarangay(req);
-  const submission = await prisma.$transaction(async tx => {
+  const { submission, documentPath } = await prisma.$transaction(async tx => {
     const row = await tx.idVerificationSubmission.findFirst({ where: { id: req.params.id, barangay: city } });
     if (!row) throw new HttpError(404, 'Submission not found.');
     if (row.userId === req.auth!.userId) throw new HttpError(403, 'You cannot review your own ID.');
@@ -94,7 +95,8 @@ idVerificationRoutes.patch('/review/:id', errorBoundary(async (req: Authenticate
     const user = await tx.user.findUniqueOrThrow({ where: { id: row.userId }, select: { email: true, sessionVersion: true } });
     await tx.$executeRaw`INSERT INTO notification_deliveries(id, notification_id, channel, destination) VALUES (${`rt_${notification.id}`}, ${notification.id}, 'realtime', ${row.userId}), (${`email_${notification.id}`}, ${notification.id}, 'email', ${user.email}) ON CONFLICT DO NOTHING`;
     await tx.$executeRaw`INSERT INTO notification_deliveries(id, notification_id, channel, destination) SELECT ${`push_${notification.id}_`} || token, ${notification.id}, 'push', token FROM notification_devices WHERE user_id=${row.userId} AND session_version=${user.sessionVersion} ON CONFLICT DO NOTHING`;
-    return tx.idVerificationSubmission.findUniqueOrThrow({ where: { id: row.id }, select: publicSubmission });
+    return { submission: await tx.idVerificationSubmission.findUniqueOrThrow({ where: { id: row.id }, select: publicSubmission }), documentPath: row.documentPath };
   });
+  if (documentPath) await removeReviewedIdPhoto(submission.id, documentPath).catch(() => console.error('Reviewed ID photo cleanup will be retried.'));
   return res.json(submission);
 }));
