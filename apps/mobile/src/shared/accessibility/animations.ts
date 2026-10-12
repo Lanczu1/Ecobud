@@ -92,4 +92,5 @@ export namespace Animated {
   export type Value = NativeAnimated.Value;
   export type ValueXY = NativeAnimated.ValueXY;
   export type AnimatedInterpolation<T extends string | number> = NativeAnimated.AnimatedInterpolation<T>;
+  export type WithAnimatedValue<T> = NativeAnimated.WithAnimatedValue<T>;
 }

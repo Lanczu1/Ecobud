@@ -247,19 +247,38 @@ export function QuickMissionsOverlay({
     });
   }, [gestureChannel, updateHover, releaseAt, handleDismiss]);
 
-  const itemTransforms = useMemo(() => {
-    const fanScale = fanAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
-    return [
-      [{ translateX: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [spreadX * 0.35, 0] }) },
-        { translateY: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [leftRightY * 0.35, 0] }) },
-        { scale: Animated.multiply(fanScale, scaleAnim0) }],
-      [{ translateY: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [centerY * 0.35, 0] }) },
-        { scale: Animated.multiply(fanScale, scaleAnim1) }],
-      [{ translateX: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [-spreadX * 0.35, 0] }) },
-        { translateY: fanAnim.interpolate({ inputRange: [0, 1], outputRange: [leftRightY * 0.35, 0] }) },
-        { scale: Animated.multiply(fanScale, scaleAnim2) }],
-    ];
-  }, [fanAnim, spreadX, leftRightY, centerY, scaleAnim0, scaleAnim1, scaleAnim2]);
+  const fanScale = useMemo(
+    () => fanAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+    [fanAnim]
+  );
+  const leftX = useMemo(
+    () => fanAnim.interpolate({ inputRange: [0, 1], outputRange: [spreadX * 0.35, 0] }),
+    [fanAnim, spreadX]
+  );
+  const rightX = useMemo(
+    () => fanAnim.interpolate({ inputRange: [0, 1], outputRange: [-spreadX * 0.35, 0] }),
+    [fanAnim, spreadX]
+  );
+  const sideY = useMemo(
+    () => fanAnim.interpolate({ inputRange: [0, 1], outputRange: [leftRightY * 0.35, 0] }),
+    [fanAnim, leftRightY]
+  );
+  const centerYInterp = useMemo(
+    () => fanAnim.interpolate({ inputRange: [0, 1], outputRange: [centerY * 0.35, 0] }),
+    [fanAnim, centerY]
+  );
+  const scale0 = useMemo(
+    () => Animated.multiply(fanScale, scaleAnim0),
+    [fanScale, scaleAnim0]
+  );
+  const scale1 = useMemo(
+    () => Animated.multiply(fanScale, scaleAnim1),
+    [fanScale, scaleAnim1]
+  );
+  const scale2 = useMemo(
+    () => Animated.multiply(fanScale, scaleAnim2),
+    [fanScale, scaleAnim2]
+  );
 
   const panResponder = useMemo(() =>
     PanResponder.create({
@@ -385,7 +404,11 @@ export function QuickMissionsOverlay({
                 top: c0Y - circleSizeSide / 2,
                 width: circleSizeSide,
                 opacity: fanAnim,
-                transform: itemTransforms[0],
+                transform: [
+                  { translateX: leftX },
+                  { translateY: sideY },
+                  { scale: scale0 },
+                ],
               },
             ]}
           >
@@ -453,7 +476,10 @@ export function QuickMissionsOverlay({
                 top: c1Y - circleSizeCenter / 2,
                 width: circleSizeCenter,
                 opacity: fanAnim,
-                transform: itemTransforms[1],
+                transform: [
+                  { translateY: centerYInterp },
+                  { scale: scale1 },
+                ],
               },
             ]}
           >
@@ -521,7 +547,11 @@ export function QuickMissionsOverlay({
                 top: c2Y - circleSizeSide / 2,
                 width: circleSizeSide,
                 opacity: fanAnim,
-                transform: itemTransforms[2],
+                transform: [
+                  { translateX: rightX },
+                  { translateY: sideY },
+                  { scale: scale2 },
+                ],
               },
             ]}
           >
