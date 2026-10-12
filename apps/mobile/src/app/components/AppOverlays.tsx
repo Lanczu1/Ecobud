@@ -4340,8 +4340,8 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 )
               ) : null}
               {hasLessonVideo && model.selectedLesson.videoCreditsEnabled && model.selectedLesson.videoCreditsName && model.selectedLesson.videoCreditsUrl ? (
-                <View style={{ marginTop: -4, marginBottom: 8 }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, lineHeight: 20 }}>Video credits</Text>
+                <View style={{ marginTop: -4, marginBottom: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 4 }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 15, lineHeight: 24 }}>Credits Name:</Text>
                   <TouchableOpacity
                     accessibilityRole="link"
                     accessibilityLabel={`${model.selectedLesson.videoCreditsName}. Open video credits on YouTube`}
@@ -4351,13 +4351,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                         void Linking.openURL(url).catch(() => Alert.alert('Unable to open YouTube', 'Please try again when a browser is available.'));
                       }
                     }}
-                    style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'stretch' }}
+                    style={{ minHeight: 44, maxWidth: '100%', justifyContent: 'center', flexShrink: 1 }}
                   >
                     <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 15, lineHeight: 24, fontWeight: '700', textDecorationLine: 'underline', flexShrink: 1 }}>
                       {model.selectedLesson.videoCreditsName}
-                    </Text>
-                    <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 13, lineHeight: 20, textDecorationLine: 'underline', flexShrink: 1 }}>
-                      {model.selectedLesson.videoCreditsUrl}
                     </Text>
                   </TouchableOpacity>
                 </View>

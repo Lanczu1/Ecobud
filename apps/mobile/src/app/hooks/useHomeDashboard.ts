@@ -2152,72 +2152,91 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, [session, hydrateApp]);
 
   const openLesson = useCallback(async (lessonId: string) => {
+    const failOpen = (error: unknown) => showConfirmPrompt({
+      title: 'Unable to open lesson',
+      message: error instanceof Error ? error.message : 'Please try again.',
+      confirmLabel: 'OK',
+      icon: 'cloud-offline-outline',
+      hideCancel: true,
+    });
+    const showLesson = () => {
+      setSelectedLessonId(lessonId);
+      setActiveOverlayState('lesson');
+    };
+    // Lesson bodies, pages, and quiz questions are lazy-loaded so the
+    // initial home fetch stays small. Merge them into the cached summary.
+    const mergeDetail = (detail: Partial<LessonWithProgress>) => setLessons((current) => current.map((lesson) => {
+      if (lesson.id !== lessonId) return lesson;
+      const merged = { ...lesson, ...detail };
+      return merged.status === 'not_started' ? { ...merged, status: 'seen' } : merged;
+    }));
+    // Content that is already on the device must not overwrite newer local progress.
+    const contentOnly = ({ progress, status, videoTimestamp, progressUpdatedAt, ...content }: Partial<LessonWithProgress>) => content;
+
+    let activeSession: ReturnType<typeof ensureSession>;
+    try {
+      activeSession = ensureSession();
+    } catch (error) {
+      failOpen(error);
+      return;
+    }
+    const fetchDetail = async () => (await homeService.getLessons(activeSession.token, lessonId))[0] ?? null;
+
+    // Marking the lesson seen never blocks opening it; it queues itself when offline.
+    void runMutationWithOfflineFallback({
+      mutation: {
+        userId: activeSession.user.id,
+        type: 'lesson-seen' as const,
+        payload: { lessonId },
+        dedupeKey: `lesson-seen:${lessonId}`,
+      },
+      onlineAction: async () => {
+        await homeService.markLessonSeen(activeSession.token, lessonId);
+      },
+      applyOptimisticUpdate: () => {
+        applyOfflineLessonSeen(lessonId);
+      },
+    }).catch((error) => console.warn('[openLesson] Unable to mark lesson seen:', error));
+
+    const cached = latestLessonsRef.current.find((lesson) => lesson.id === lessonId);
+    let local: Partial<LessonWithProgress> | null = cached?.content?.trim() || cached?.pages?.length ? {} : null;
+    if (!local && downloadedLessons[lessonId]) {
+      local = await lessonDownloads.readContent(activeSession.user.id, lessonId).catch(() => null);
+    }
+
+    if (local) {
+      // Already on the device: open right away and refresh the content quietly.
+      mergeDetail(contentOnly(local));
+      showLesson();
+      if (presence.hasUsableInternet) {
+        void fetchDetail()
+          .then((detail) => { if (detail) mergeDetail(contentOnly(detail)); })
+          .catch((error) => console.warn('[openLesson] Unable to refresh lesson:', error));
+      }
+      return;
+    }
+
     await runWithActionLoader('Opening lesson...', async () => {
       try {
-        const activeSession = ensureSession();
-        const seenMutation = {
-          userId: activeSession.user.id,
-          type: 'lesson-seen' as const,
-          payload: { lessonId },
-          dedupeKey: `lesson-seen:${lessonId}`,
-        };
-        const downloaded = downloadedLessons[lessonId]
-          ? await lessonDownloads.readContent(activeSession.user.id, lessonId)
-          : null;
-        // Lesson bodies, pages, and quiz questions are lazy-loaded so the
-        // initial home fetch stays small. Merge them into the cached summary.
-        let detail: Partial<LessonWithProgress> | null = null;
-
-        try {
-          await runMutationWithOfflineFallback({
-            mutation: seenMutation,
-            onlineAction: async () => {
-              await homeService.markLessonSeen(activeSession.token, lessonId);
-            },
-            applyOptimisticUpdate: () => {
-              applyOfflineLessonSeen(lessonId);
-            },
-          });
-          // Intentionally omitting hydrateApp here to avoid race conditions with updateLessonProgress
-          if (presence.hasUsableInternet || !downloaded) {
-            detail = (await homeService.getLessons(activeSession.token, lessonId))[0] ?? null;
-          }
-        } catch (error) {
-          const code = (error as { code?: string } | null)?.code;
-          if (code !== 'offline' && code !== 'timeout') throw error;
-          if (!downloaded) {
-            throw new Error('This lesson is not downloaded. Download it while you are online to open it offline.');
-          }
-          await queueOfflineAction(seenMutation, { applyOptimisticUpdate: () => applyOfflineLessonSeen(lessonId) });
-        }
-
-        detail = detail ?? downloaded;
+        const detail = await fetchDetail();
         if (!detail) throw new Error('Lesson details could not be loaded.');
-        const lessonDetail = detail;
-        setLessons((current) => current.map((lesson) =>
-          lesson.id === lessonId ? { ...lesson, ...lessonDetail } : lesson,
-        ));
+        // Intentionally omitting hydrateApp here to avoid race conditions with updateLessonProgress
+        mergeDetail(detail);
       } catch (error) {
-        showConfirmPrompt({
-          title: 'Unable to open lesson',
-          message: error instanceof Error ? error.message : 'Please try again.',
-          confirmLabel: 'OK',
-          icon: 'cloud-offline-outline',
-          hideCancel: true,
-        });
+        const code = (error as { code?: string } | null)?.code;
+        failOpen(code === 'offline' || code === 'timeout'
+          ? new Error('This lesson is not downloaded. Download it while you are online to open it offline.')
+          : error);
         return;
       }
 
-      setSelectedLessonId(lessonId);
-      setActiveOverlayState('lesson');
-    }, 420);
+      showLesson();
+    }, 0);
   }, [
     applyOfflineLessonSeen,
     downloadedLessons,
     ensureSession,
-    hydrateApp,
     presence.hasUsableInternet,
-    queueOfflineAction,
     runMutationWithOfflineFallback,
     runWithActionLoader,
   ]);

@@ -3,7 +3,6 @@ import { HttpError } from '../http/errorResponder';
 import { prisma } from '../prismaClient';
 import { supabaseRealtimeService } from './supabaseRealtimeService';
 import { GamificationService } from './GamificationService';
-import { UserActivityService } from './userActivityService';
 import { apiCache } from '../lib/cache';
 
 export type LessonStatus = 'not_started' | 'seen' | 'completed';
@@ -57,11 +56,9 @@ export interface LearnLessonPayload {
 
 export class LearnService {
   private readonly gamificationService: GamificationService;
-  private readonly userActivityService: UserActivityService;
 
   constructor(private readonly database: PrismaClient = prisma) {
     this.gamificationService = new GamificationService(database);
-    this.userActivityService = new UserActivityService(database);
   }
 
   async getPublishedLessons(userId: string): Promise<LearnLessonPayload[]> {
@@ -152,25 +149,29 @@ export class LearnService {
   }
 
   private async findProgressForPublishedLesson(userId: string, lessonId: string) {
-    const lesson = await this.database.lesson.findFirst({
-      where: {
-        id: lessonId,
-        OR: [
-          { isPublished: true },
-          { scheduledAt: { lte: new Date() } }
-        ]
-      },
-    });
+    const [lesson, progress] = await Promise.all([
+      this.database.lesson.findFirst({
+        where: {
+          id: lessonId,
+          OR: [
+            { isPublished: true },
+            { scheduledAt: { lte: new Date() } }
+          ]
+        },
+        select: { id: true },
+      }),
+      this.database.userLessonProgress.findUnique({
+        where: {
+          userId_lessonId: { userId, lessonId },
+        },
+      }),
+    ]);
 
     if (!lesson) {
       throw new HttpError(404, 'Published lesson not found.');
     }
 
-    return this.database.userLessonProgress.findUnique({
-      where: {
-        userId_lessonId: { userId, lessonId },
-      },
-    });
+    return progress;
   }
 
   async markLessonSeen(userId: string, lessonId: string) {
@@ -211,21 +212,23 @@ export class LearnService {
 
     apiCache.delete(`learn_published_${userId}`);
     apiCache.delete(`learn_catalog_${userId}`);
-    await this.userActivityService.touchUserActivity(userId);
-    await Promise.all([
-      supabaseRealtimeService.publishUserSectionRefresh(userId, 'learn', {
-        actorRole: 'user',
-        actorUserId: userId,
-        entityId: lessonId,
-        reason: 'lesson-seen',
-      }),
-      supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
-        actorRole: 'user',
-        actorUserId: userId,
-        entityId: userId,
-        reason: 'lesson-seen',
-      }),
-    ]);
+    // Realtime refresh signals go out after the response so they never delay opening a lesson.
+    setImmediate(() => {
+      void Promise.all([
+        supabaseRealtimeService.publishUserSectionRefresh(userId, 'learn', {
+          actorRole: 'user',
+          actorUserId: userId,
+          entityId: lessonId,
+          reason: 'lesson-seen',
+        }),
+        supabaseRealtimeService.publishAdminSectionBundle(['dashboard', 'users'], {
+          actorRole: 'user',
+          actorUserId: userId,
+          entityId: userId,
+          reason: 'lesson-seen',
+        }),
+      ]).catch((error) => console.error('lesson_seen_broadcast_failed', error));
+    });
 
     return result;
   }
@@ -283,17 +286,7 @@ export class LearnService {
       }
     }
 
-    const rewardResult = await this.gamificationService.completeLesson(userId, lessonId);
-
-    const progress = await this.database.userLessonProgress.findUnique({
-      where: {
-        userId_lessonId: { userId, lessonId },
-      },
-    });
-
-    if (!progress) {
-      throw new HttpError(404, 'Lesson progress was not found after completion.');
-    }
+    const { progressRecord: progress, ...rewardResult } = await this.gamificationService.completeLesson(userId, lessonId, lesson);
 
     apiCache.delete(`learn_published_${userId}`);
     apiCache.delete(`learn_catalog_${userId}`);

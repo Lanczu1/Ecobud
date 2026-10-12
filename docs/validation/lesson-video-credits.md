@@ -1,5 +1,12 @@
 # Lesson video credits validation
 
+Latest mobile presentation: `Credits Name: Lanczu`, using the lesson's saved name. Only the name is clickable; the saved YouTube URL remains the destination and is not displayed.
+
+- Hard Gate PASS by source inspection: a wrapping row, explicit link role, and 44px touch target remain; only the name is inside the link. No new content or assets.
+- Purpose Gate PASS: the plain label identifies attribution, and the existing green underline identifies the clickable name.
+- Liveliness PASS: ENERGY 1 / RHYTHM 1 / MOTION 1 and existing EcoBud theme tokens retained.
+- Craftsmanship PASS by source inspection: optional visibility, URL validation, and link-opening error feedback are unchanged. Native visual/tap verification remains unperformed.
+
 Scope: optional credits fields in the lesson editor, API persistence, and attribution above the learner's video transcript.
 
 - Hard Gate PASS (changed editor UI): actual editor rendered in a temporary local harness. Credits on revealed both labeled inputs; off hid them. Invalid YouTube URL showed validation. Valid save emitted enabled/name/URL fields, and disabled save emitted false/empty values. Browser console returned no errors or warnings. Light and dark screenshots checked at 514px; page width equaled viewport width and credits fields had no overflow. Native checkboxes and labeled inputs retain keyboard behavior and visible focus outlines. No invented production content or assets added.

@@ -33,9 +33,13 @@ export class GamificationService {
     this.userActivityService = new UserActivityService(database);
   }
 
-  async completeLesson(userId: string, lessonId: string) {
+  async completeLesson(
+    userId: string,
+    lessonId: string,
+    loadedLesson?: { id: string; title: string; pointsReward: number; category: string },
+  ) {
     const result = await this.database.$transaction(async (tx) => {
-      const lesson = await tx.lesson.findUnique({ where: { id: lessonId } });
+      const lesson = loadedLesson ?? await tx.lesson.findUnique({ where: { id: lessonId } });
 
       if (!lesson) {
         throw new HttpError(404, 'Lesson not found.');
@@ -54,10 +58,11 @@ export class GamificationService {
           awardedBadges: [],
           pointsAwarded: 0,
           ecoCoinsAwarded: 0,
+          progressRecord: existingProgress,
         };
       }
 
-      await tx.userLessonProgress.upsert({
+      const progressRecord = await tx.userLessonProgress.upsert({
         where: {
           userId_lessonId: { userId, lessonId },
         },
@@ -75,7 +80,7 @@ export class GamificationService {
         },
       });
 
-      return this.awardAction(tx, {
+      const award = await this.awardAction(tx, {
         userId,
         actionType: `Lesson completed: ${lesson.title}`,
         knowledgePointsAwarded: lesson.pointsReward,
@@ -86,6 +91,7 @@ export class GamificationService {
           category: lesson.category,
         },
       });
+      return { ...award, progressRecord };
     }, { maxWait: 10000, timeout: 30000 });
 
     setImmediate(() => {
