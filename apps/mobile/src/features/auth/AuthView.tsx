@@ -16,7 +16,7 @@ import {
 import { Modal } from '../../shared/accessibility/primitives';
 import { Pressable, Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Animated } from '../../shared/accessibility/animations';
-import { BARANGAYS } from '../../shared/constants/barangays';
+import { useBarangays } from '../../shared/constants/useBarangays';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -473,11 +473,12 @@ export function AuthView({
     [fieldErrors, hasAcceptedLegal, usernameCheckState],
   );
 
+  const barangays = useBarangays();
   const filteredBarangays = useMemo(() => {
-    if (!barangaySearchQuery.trim()) return BARANGAYS;
+    if (!barangaySearchQuery.trim()) return barangays;
     const query = barangaySearchQuery.toLowerCase().trim();
-    return BARANGAYS.filter((b) => b.toLowerCase().includes(query));
-  }, [barangaySearchQuery]);
+    return barangays.filter((b) => b.toLowerCase().includes(query));
+  }, [barangaySearchQuery, barangays]);
 
   const usernameRequirements = useMemo<FieldRequirement[]>(() => {
     const trimmed = username.trim();

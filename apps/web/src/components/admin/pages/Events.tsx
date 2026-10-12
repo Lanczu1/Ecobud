@@ -16,6 +16,8 @@ import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
+import { AdminDateTimePicker } from '../AdminDateTimePicker';
+import { addDays, useManilaNow } from '../../../utils/manilaTime';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -365,9 +367,8 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
             barangay: isModerator ? assignedBarangay ?? '' : '',
             startDatetime: formatDateForInput(), 
             endDatetime: (() => {
-              const d = new Date();
-              d.setHours(d.getHours() + 1);
-              return formatDateForInput(d);
+              const start = formatDateForInput();
+              return `${addDays(start.slice(0, 10), 1)}T${start.slice(11, 16)}`;
             })(),
             isFeatured: false,
   isPublished: true,
@@ -383,6 +384,7 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [isClosing, setIsClosing] = useState(false);
+  const manilaNowValue = useManilaNow();
 
   useDraftAutosave(drafts, form, !initial);
 
@@ -631,12 +633,31 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date &amp; Time *</label>
-              <input type="datetime-local" value={form.startDatetime} onChange={e => setForm(f => ({ ...f, startDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
+              <label htmlFor="event-start" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date &amp; Time *</label>
+              <AdminDateTimePicker
+                id="event-start"
+                label="Start date and time"
+                value={form.startDatetime}
+                min={manilaNowValue}
+                onChange={startDatetime => setForm(f => {
+                  // The end must fall on a later day, so move it along when the start passes it.
+                  const earliestEnd = addDays(startDatetime.slice(0, 10), 1);
+                  const endDatetime = f.endDatetime && f.endDatetime.slice(0, 10) < earliestEnd
+                    ? `${earliestEnd}T${f.endDatetime.slice(11, 16)}`
+                    : f.endDatetime;
+                  return { ...f, startDatetime, endDatetime };
+                })}
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date &amp; Time *</label>
-              <input type="datetime-local" value={form.endDatetime} onChange={e => setForm(f => ({ ...f, endDatetime: e.target.value }))} className="w-full px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800 focus:border-green-400 transition-colors" />
+              <label htmlFor="event-end" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date &amp; Time *</label>
+              <AdminDateTimePicker
+                id="event-end"
+                label="End date and time"
+                value={form.endDatetime}
+                min={`${addDays((form.startDatetime || manilaNowValue).slice(0, 10), 1)}T00:00`}
+                onChange={endDatetime => setForm(f => ({ ...f, endDatetime }))}
+              />
             </div>
           </div>
 
@@ -1501,18 +1522,22 @@ export function Events() {
       {activeTab === 'submissions' && (
         <div className="space-y-6 animate-reveal">
           {/* Submissions Stats */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: 'Previous Pending Records', value: submissions.filter(s => s.status === 'pending').length, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-100 dark:border-orange-800' },
-              { label: 'Approved Attendance', value: submissions.filter(s => s.status === 'approved').length, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-100 dark:border-green-800' },
-              { label: 'Rejected', value: submissions.filter(s => s.status === 'rejected').length, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-100 dark:border-red-800' },
-              { label: 'Total Submissions', value: submissionsPagination.total, color: 'text-gray-900 dark:text-white', bg: 'bg-white dark:bg-gray-900', border: 'border-gray-100 dark:border-gray-800' },
+              { label: 'Previous Pending Records', value: submissions.filter(s => s.status === 'pending').length, Icon: Clock, color: 'text-orange-600 dark:text-orange-400', chip: 'bg-orange-50 dark:bg-orange-900/30' },
+              { label: 'Approved Attendance', value: submissions.filter(s => s.status === 'approved').length, Icon: CheckCircle2, color: 'text-green-600 dark:text-green-400', chip: 'bg-green-50 dark:bg-green-900/30' },
+              { label: 'Total Submissions', value: submissionsPagination.total, Icon: FileText, color: 'text-gray-900 dark:text-white', chip: 'bg-gray-100 dark:bg-gray-800' },
             ].map((s, idx) => {
-              const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
+              const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
               return (
-                <div key={s.label} className={`${s.bg} rounded-2xl border ${s.border} p-5 shadow-sm animate-reveal ${delayClass}`}>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
-                  <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{submissionsLoading ? '—' : s.value}</p>
+                <div key={s.label} className={`flex items-center gap-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm animate-reveal ${delayClass}`}>
+                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${s.chip}`}>
+                    <s.Icon className={`h-6 w-6 ${s.color}`} aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 font-medium truncate">{s.label}</p>
+                    <p className={`text-3xl font-serif font-bold tabular-nums leading-tight ${s.color}`}>{submissionsLoading ? '—' : s.value}</p>
+                  </div>
                 </div>
               );
             })}

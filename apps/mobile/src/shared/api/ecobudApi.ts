@@ -737,6 +737,7 @@ export const ecobudApi = {
   verifyPasswordResetCode: (email: string, code: string) => request<{ resetToken: string; expiresAt: string; serverTime: string }>('/auth/password-reset/verify-code', { method: 'POST', body: { email, code } }),
   completePasswordReset: (resetToken: string, password: string) => request<{ success: boolean; message: string }>('/auth/password-reset/complete', { method: 'POST', body: { resetToken, password } }),
   fetchAppVersion: () => request<AppVersionPayload>('/app/version', { timeoutMs: 5000 }),
+  fetchBarangays: () => request<{ items: string[] }>('/barangays', { timeoutMs: 5000 }),
   notification: (token:string,id:string) => request<import('../../app/types/notifications').AppNotification>('/notifications/'+encodeURIComponent(id),{token}),
   notifications: (token:string, query='') => request<NotificationPage>('/notifications'+query,{token}),
   readNotification: (token:string,id:string) => request('/notifications/'+encodeURIComponent(id)+'/read',{token,method:'PATCH'}),

@@ -595,7 +595,6 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         return {
           ...lesson,
-          progress: Math.max(lesson.progress, 25),
           status: 'seen',
         };
       }),
@@ -2443,7 +2442,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       );
 
       const key = '@lesson_progress_' + activeSession.user.id + ':' + lessonId;
-      let previous: { timestamp: number; progress: number; videoCompleted?: boolean } = { timestamp: 0, progress: 0 };
+      let previous: { timestamp: number; progress: number; videoCompleted?: boolean; videoCompletedAtEnd?: boolean } = { timestamp: 0, progress: 0 };
       try { previous = JSON.parse(mobileStorage.getItemSync(key) ?? 'null') ?? previous; } catch {}
       const isVideoResumeSave = Number.isFinite(videoTimestamp);
       const isVideoDone = Boolean(previous.videoCompleted)
@@ -2461,6 +2460,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
         timestamp: isVideoResumeSave ? videoTimestamp : previous.timestamp,
         progress: savedProgress,
         videoCompleted: isVideoDone,
+        videoCompletedAtEnd: previous.videoCompletedAtEnd === true,
         savedAt: Date.now(),
       }));
       if (isVideoResumeSave) {

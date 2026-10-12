@@ -44,6 +44,7 @@ import {
   stopLessonPublishScheduler,
 } from './services/lessonPublishScheduler';
 import { appVersionRoutes } from './routes/appVersionRoutes';
+import { barangayRoutes } from './routes/barangayRoutes';
 import { adminLiveEvents } from './services/adminLiveEvents';
 
 const app = express();
@@ -204,6 +205,7 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api/app/version', appVersionRoutes);
+app.use('/api/barangays', barangayRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/id-verification', idVerificationRoutes);
 app.use('/api/auth', authRoutes);

@@ -55,7 +55,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { LoadingGlyph } from '../../shared/ui/OptimizedLoading';
 import { AiThinkingBubble } from './AiThinkingBubble';
 import { EcoBadge, EcoBudMobileModel, type EcoEvent } from '../types/home';
-import { BARANGAYS } from '../../shared/constants/barangays';
+import { useBarangays } from '../../shared/constants/useBarangays';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue';
 import type { OfflineMutationRecord } from '../../shared/offline/offlineMutationQueue.types';
@@ -4070,6 +4070,10 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
 
       cachedDurationRef.current = curDuration;
 
+      // Until the saved position is restored, the player still reports the
+      // start of the video. Recording that would overwrite the resume point.
+      if (pendingRestoreTimestampRef.current > 0 && curTime < pendingRestoreTimestampRef.current) return;
+
       // Reject forward seeks immediately, while still allowing unrestricted rewind.
       if (curTime > maxWatchedTimeRef.current + Math.max(2.5, playRate * 1.5)) {
         safeSeekPlayer(maxWatchedTimeRef.current);
@@ -4158,9 +4162,44 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
       compactHeader
       onBack={handleBack}
       topRightAccessory={
-        <Text style={{ fontSize: 16, fontWeight: '800', color: '#FFFFFF' }}>
-          {displayProgress}%
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {lessonDownload ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={lessonDownload.downloadState === 'downloaded'
+                ? 'Downloaded for offline use. Remove download'
+                : lessonDownload.downloadState === 'downloading'
+                  ? `Downloading ${lessonDownload.downloadPercent}%`
+                  : hasLessonVideo ? 'Download lesson and video' : 'Download lesson'}
+              accessibilityState={{ busy: lessonDownload.downloadState === 'downloading' }}
+              onPress={lessonDownload.onDownloadPress}
+              disabled={lessonDownload.downloadState === 'downloading'}
+              activeOpacity={0.8}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(255,255,255,0.18)',
+              }}
+            >
+              {lessonDownload.downloadState === 'downloading' ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons
+                  name={lessonDownload.downloadState === 'downloaded' ? 'checkmark-circle' : 'download-outline'}
+                  size={20}
+                  color="#FFFFFF"
+                />
+              )}
+            </TouchableOpacity>
+          ) : null}
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#FFFFFF' }}>
+            {displayProgress}%
+          </Text>
+        </View>
       }
       topProgressBar={
         <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.2)', width: '100%' }}>
@@ -4207,44 +4246,6 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                     {model.selectedLesson.durationMinutes} minutes
                   </Text>
                 </View>
-              ) : null}
-
-              {lessonDownload ? (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityState={{ busy: lessonDownload.downloadState === 'downloading' }}
-                  onPress={lessonDownload.onDownloadPress}
-                  disabled={lessonDownload.downloadState === 'downloading'}
-                  activeOpacity={0.8}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    marginTop: 12,
-                    minHeight: 48,
-                    paddingHorizontal: 14,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: isDark ? theme.colors.primary + '40' : '#C8E6D3',
-                    backgroundColor: lessonDownload.downloadState === 'downloaded' ? (isDark ? '#0E2016' : '#E6F4EC') : 'transparent',
-                  }}
-                >
-                  <Ionicons
-                    name={lessonDownload.downloadState === 'downloaded' ? 'checkmark-circle' : 'download-outline'}
-                    size={20}
-                    color={isDark ? theme.colors.primary : '#126027'}
-                  />
-                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: isDark ? theme.colors.primary : '#126027' }}>
-                    {lessonDownload.downloadState === 'downloaded'
-                      ? 'Downloaded for offline use'
-                      : lessonDownload.downloadState === 'downloading'
-                        ? `Downloading ${lessonDownload.downloadPercent}%`
-                        : hasLessonVideo ? 'Download lesson and video' : 'Download lesson'}
-                  </Text>
-                  {lessonDownload.downloadState === 'downloaded' ? (
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textMuted }}>Remove</Text>
-                  ) : null}
-                </TouchableOpacity>
               ) : null}
 
               {model.selectedLesson.content ? (
@@ -7262,11 +7263,12 @@ export function EditProfileOverlay({ model }: { model: EcoBudMobileModel }) {
     setIsBarangayPickerOpen(false);
   };
 
+  const barangays = useBarangays();
   const filteredBarangays = React.useMemo(() => {
-    if (!barangaySearchQuery.trim()) return BARANGAYS;
+    if (!barangaySearchQuery.trim()) return barangays;
     const query = barangaySearchQuery.toLowerCase().trim();
-    return BARANGAYS.filter((b) => b.toLowerCase().includes(query));
-  }, [barangaySearchQuery]);
+    return barangays.filter((b) => b.toLowerCase().includes(query));
+  }, [barangaySearchQuery, barangays]);
 
   const handleSave = async () => {
     const trimmedName = displayName.trim();

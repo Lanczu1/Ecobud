@@ -154,61 +154,6 @@ function categoryFromTargets(targets: string[]) {
   return targets.length === 1 ? targets[0] : 'Mixed Items';
 }
 
-const BARANGAYS = [
-  'Abo',
-  'Alibungbungan',
-  'Alumbrado',
-  'Balayong',
-  'Balimbing',
-  'Balinacon',
-  'Bambang',
-  'Banago',
-  'Banca-banca',
-  'Bangcuro',
-  'Banilad',
-  'Bayaquitos',
-  'Buboy',
-  'Buenavista',
-  'Buhanginan',
-  'Bukal',
-  'Bunga',
-  'Cabuyew',
-  'Calumpang',
-  'Kanluran Kabubuhayan',
-  'Silangan Kabubuhayan',
-  'Labangan',
-  'Lawaguin',
-  'Kanluran Lazaan',
-  'Silangan Lazaan',
-  'Lagulo',
-  'Maiit',
-  'Malaya',
-  'Malinao',
-  'Manaol',
-  'Maravilla',
-  'Nagcalbang',
-  'Poblacion I (Poblacion)',
-  'Poblacion II (Poblacion)',
-  'Poblacion III (Poblacion)',
-  'Oples',
-  'Palayan',
-  'Palina',
-  'Sabang',
-  'San Francisco',
-  'Sibulan',
-  'Silangan Napapatid',
-  'Silangan Ilaya',
-  'Sinipian',
-  'Santa Lucia',
-  'Sulsuguin',
-  'Talahib',
-  'Talangan',
-  'Taytay',
-  'Tipacan',
-  'Wakat',
-  'Yukos',
-];
-
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
 }
@@ -769,6 +714,13 @@ export function Challenges() {
       setSelectedBarangayFilter(moderatorBarangay);
     }
   }, [isModerator, moderatorBarangay]);
+
+  const [barangays, setBarangays] = useState<string[]>([]);
+  useEffect(() => {
+    void adminGet<{ items: string[] }>('/admin/events/barangays')
+      .then(data => setBarangays(data.items))
+      .catch((err: Error) => console.warn('Unable to load barangays:', err.message));
+  }, []);
 
   const load = async (fresh = false) => {
     try {
@@ -1545,7 +1497,7 @@ export function Challenges() {
                       className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer max-w-37.5 truncate"
                     >
                       <option value="All">All Barangays ({activeSubmissionBarangays.length})</option>
-                      {BARANGAYS.map(b => (
+                      {barangays.map(b => (
                         <option key={b} value={b}>
                           {b} {activeSubmissionBarangays.includes(b) ? '●' : ''}
                         </option>
