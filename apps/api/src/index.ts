@@ -32,6 +32,7 @@ import { realtimeRoutes } from './routes/realtimeRoutes';
 import { userActionRoutes } from './routes/userActionRoutes';
 import { errorResponder } from './http/errorResponder';
 import { sensitiveResponse } from './http/sensitiveResponse';
+import { conditionalJson } from './http/conditionalJson';
 import { prisma } from './prismaClient';
 import {
   startPresenceCleanupScheduler,
@@ -54,6 +55,8 @@ if (production && (!process.env.CORS_ORIGINS || origins.some(origin => !origin.s
 // Use exact proxy addresses/subnets, never trust arbitrary forwarded headers.
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY.split(',').map(value => value.trim()));
 app.disable('x-powered-by');
+// Mounted first so the tag is computed from the body after sensitiveResponse has cleaned it.
+app.use(conditionalJson);
 app.use(sensitiveResponse);
 if (production) {
   for (const name of ['DATABASE_URL', 'DIRECT_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GMAIL_USER', 'GMAIL_PASS']) {
@@ -74,6 +77,7 @@ app.use(compression());
 app.use(
   cors({
     origin: (origin, callback) => callback(null, !origin || origins.includes(origin)),
+    exposedHeaders: ['ETag'],
   }),
 );
 

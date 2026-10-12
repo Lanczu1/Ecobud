@@ -21,6 +21,7 @@ import { homeService } from '../services/homeService';
 import { scale, verticalScale, moderateScale, responsiveFontSize } from '../utils/responsive';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '../utils/haptics';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { startFallbackPoll } from '../../shared/supabase/realtimeHealth';
 
 const categories = [
   ['all', 'All'],
@@ -189,9 +190,9 @@ export function NotificationInbox({ model }: { model: EcoBudMobileModel }) {
         // Keep the current list; the next tick retries.
       }
     };
-    const interval = setInterval(() => void refreshTop(), 30_000);
+    const stopPolling = startFallbackPoll(() => void refreshTop(), 30_000);
     const appState = AppState.addEventListener('change', (state) => { if (state === 'active') void refreshTop(); });
-    return () => { clearInterval(interval); appState.remove(); };
+    return () => { stopPolling(); appState.remove(); };
   }, [token, filter]);
 
   const open = async (n: AppNotification) => {

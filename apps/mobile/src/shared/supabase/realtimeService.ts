@@ -1,6 +1,7 @@
 import { type RealtimeChannel } from '@supabase/supabase-js';
 import { type SessionPayload, ecobudApi } from '../api/ecobudApi';
 import { isSupabaseRealtimeEnabled, supabaseClient } from './supabaseClient';
+import { setRealtimeHealthy } from './realtimeHealth';
 
 type RealtimeSignalChannel = 'learn' | 'challenges' | 'tracker';
 
@@ -43,6 +44,7 @@ const bindBroadcast = <TPayload extends RealtimeSignal | RealtimeNotice>(
   connectedAt: number,
   seenRevisions: Record<string, number>,
   onPayload?: (payload: TPayload) => void,
+  onStatus?: (channelName: string, subscribed: boolean) => void,
 ) => {
   if (!supabaseClient) {
     return null;
@@ -75,7 +77,7 @@ const bindBroadcast = <TPayload extends RealtimeSignal | RealtimeNotice>(
         onPayload(payload as TPayload);
       }
     })
-    .subscribe();
+    .subscribe((status) => onStatus?.(channelName, status === 'SUBSCRIBED'));
 };
 
 const bindPresence = (
@@ -129,6 +131,15 @@ export const realtimeService = {
 
       const connectedAt = Date.now();
       const seenRevisions: Record<string, number> = {};
+      const subscribedChannels = new Map<string, boolean>();
+      let watching = true;
+      let broadcastChannelCount = 0;
+      const onStatus = (channelName: string, subscribed: boolean) => {
+        if (!watching) return;
+        subscribedChannels.set(channelName, subscribed);
+        setRealtimeHealthy(broadcastChannelCount > 0 && subscribedChannels.size >= broadcastChannelCount &&
+          [...subscribedChannels.values()].every(Boolean));
+      };
       const presenceChannel = realtimeSession.channels.presenceMembers
         ? bindPresence(realtimeSession.channels.presenceMembers, session)
         : null;
@@ -139,6 +150,7 @@ export const realtimeService = {
           connectedAt,
           seenRevisions,
           handlers.onSignal,
+          onStatus,
         ),
         bindBroadcast<RealtimeSignal>(
           realtimeSession.channels.globalChallenges,
@@ -146,6 +158,7 @@ export const realtimeService = {
           connectedAt,
           seenRevisions,
           handlers.onSignal,
+          onStatus,
         ),
         bindBroadcast<RealtimeSignal>(
           realtimeSession.channels.userLearn,
@@ -153,6 +166,7 @@ export const realtimeService = {
           connectedAt,
           seenRevisions,
           handlers.onSignal,
+          onStatus,
         ),
         bindBroadcast<RealtimeSignal>(
           realtimeSession.channels.userChallenges,
@@ -160,6 +174,7 @@ export const realtimeService = {
           connectedAt,
           seenRevisions,
           handlers.onSignal,
+          onStatus,
         ),
         bindBroadcast<RealtimeSignal>(
           realtimeSession.channels.userTracker,
@@ -167,12 +182,13 @@ export const realtimeService = {
           connectedAt,
           seenRevisions,
           handlers.onSignal,
+          onStatus,
         ),
         realtimeSession.channels.globalEvents
-          ? bindBroadcast<RealtimeSignal>(realtimeSession.channels.globalEvents, 'refresh', connectedAt, seenRevisions, handlers.onSignal)
+          ? bindBroadcast<RealtimeSignal>(realtimeSession.channels.globalEvents, 'refresh', connectedAt, seenRevisions, handlers.onSignal, onStatus)
           : null,
         realtimeSession.channels.userEvents
-          ? bindBroadcast<RealtimeSignal>(realtimeSession.channels.userEvents, 'refresh', connectedAt, seenRevisions, (signal) => handlers.onSignal?.({ ...signal, channel: 'events' }))
+          ? bindBroadcast<RealtimeSignal>(realtimeSession.channels.userEvents, 'refresh', connectedAt, seenRevisions, (signal) => handlers.onSignal?.({ ...signal, channel: 'events' }), onStatus)
           : null,
         realtimeSession.channels.adminDashboard
           ? bindBroadcast<RealtimeSignal>(
@@ -181,6 +197,7 @@ export const realtimeService = {
               connectedAt,
               seenRevisions,
               handlers.onSignal,
+              onStatus,
             )
           : null,
         bindBroadcast<RealtimeNotice>(
@@ -189,8 +206,10 @@ export const realtimeService = {
           connectedAt,
           seenRevisions,
           handlers.onNotice,
+          onStatus,
         ),
       ];
+      broadcastChannelCount = channels.filter(Boolean).length;
 
       if (presenceChannel) {
         channels.push(presenceChannel);
@@ -199,6 +218,8 @@ export const realtimeService = {
       handlers.onConnectionChange?.(true);
 
       return () => {
+        watching = false;
+        setRealtimeHealthy(false);
         handlers.onConnectionChange?.(false);
 
         if (presenceChannel) {

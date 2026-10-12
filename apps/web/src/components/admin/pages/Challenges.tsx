@@ -831,6 +831,7 @@ export function Challenges() {
   useEffect(() => {
     const timer = setTimeout(() => void load(true), 250);
     const interval = setInterval(() => {
+      if (adminRealtimeService.isLive()) return;
       if (document.visibilityState === 'visible' && activeTab !== 'submissions') void load(true);
     }, 30000);
     const onFocus = () => {
@@ -858,7 +859,7 @@ export function Challenges() {
     if (activeTab === 'submissions') {
       loadSubmissions();
       const interval = setInterval(() => {
-        void loadSubmissions(false);
+        if (!adminRealtimeService.isLive()) void loadSubmissions(false);
       }, 30000);
       return () => clearInterval(interval);
     }

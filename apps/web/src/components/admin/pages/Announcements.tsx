@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -463,7 +464,7 @@ export function Announcements() {
     const refresh = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) void load(true, true);
     };
-    const timer = window.setInterval(refresh, 10_000);
+    const timer = window.setInterval(() => { if (!adminRealtimeService.isLive()) refresh(); }, 10_000);
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
     window.addEventListener('online', refresh);

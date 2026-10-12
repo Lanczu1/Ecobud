@@ -13,6 +13,10 @@ export interface AdminRealtimeHandlers {
 }
 
 const POLL_INTERVAL_MS = 30_000;
+// While the stream is delivering, the poll only covers changes the stream cannot see.
+const LIVE_POLL_INTERVAL_MS = 120_000;
+// The server pings every 25s, so a longer silence means the stream is stalled or buffered.
+const STREAM_STALE_MS = 60_000;
 const PUSH_DELAY_MS = 300;
 const PUSH_MIN_GAP_MS = 3_000;
 const RECONNECT_MIN_MS = 2_000;
@@ -27,6 +31,7 @@ class AdminRealtimeService {
   private stream: AbortController | null = null;
   private reconnectDelay = RECONNECT_MIN_MS;
   private lastNotifyAt = 0;
+  private lastStreamDataAt = 0;
   private isNotifying = false;
 
   async connect(handlers: AdminRealtimeHandlers): Promise<() => void> {
@@ -39,9 +44,16 @@ class AdminRealtimeService {
     };
   }
 
+  /** True while server pushes are arriving, so screens can skip their own timers. */
+  isLive() {
+    return this.stream !== null && Date.now() - this.lastStreamDataAt < STREAM_STALE_MS;
+  }
+
   private start() {
     this.timer = setInterval(() => {
-      if (document.visibilityState === 'visible') this.notifyAll();
+      if (document.visibilityState !== 'visible') return;
+      if (this.isLive() && Date.now() - this.lastNotifyAt < LIVE_POLL_INTERVAL_MS) return;
+      this.notifyAll();
     }, POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', this.handleVisibility);
     window.addEventListener('focus', this.handleFocus);
@@ -92,6 +104,7 @@ class AdminRealtimeService {
       });
       if (!response.ok || !response.body) throw new Error(`Stream unavailable: ${response.status}`);
       wasLive = true;
+      this.lastStreamDataAt = Date.now();
       this.reconnectDelay = RECONNECT_MIN_MS;
       // Changes made while the stream was down were missed, so catch up once on connect.
       this.queuePush();
@@ -101,6 +114,7 @@ class AdminRealtimeService {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        this.lastStreamDataAt = Date.now();
         const text = tail + decoder.decode(value, { stream: true });
         if (text.includes('data:')) this.queuePush();
         tail = text.slice(-4);
@@ -110,6 +124,7 @@ class AdminRealtimeService {
     } finally {
       if (this.stream === controller) {
         this.stream = null;
+        this.lastStreamDataAt = 0;
         if (this.subscribers.size > 0) {
           const delay = wasLive ? RECONNECT_MIN_MS : this.reconnectDelay;
           if (!wasLive) this.reconnectDelay = Math.min(RECONNECT_MAX_MS, this.reconnectDelay * 2);

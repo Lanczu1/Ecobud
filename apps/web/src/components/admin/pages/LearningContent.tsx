@@ -587,7 +587,7 @@ export function LearningContent() {
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void loadRef.current();
+      if (document.visibilityState === 'visible' && !adminRealtimeService.isLive()) void loadRef.current();
     }, 30000);
     const onFocus = () => { if (document.visibilityState === 'visible') void loadRef.current(); };
     window.addEventListener('focus', onFocus);

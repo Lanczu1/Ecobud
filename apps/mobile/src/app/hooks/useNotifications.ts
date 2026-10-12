@@ -4,6 +4,7 @@ import { isRunningInExpoGo } from 'expo';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { ecobudApi } from '../../shared/api/ecobudApi';
+import { startFallbackPoll } from '../../shared/supabase/realtimeHealth';
 
 // Remote push notification token listeners & Expo push tokens are no longer supported in Expo Go (SDK 53+)
 const isExpoGo = isRunningInExpoGo() || Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -72,7 +73,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     };
     refresh();
     void register();
-    const interval = setInterval(() => { if (AppState.currentState === 'active') { refresh(); void register(); } }, 30000);
+    const stopPolling = startFallbackPoll(() => { if (AppState.currentState === 'active') { refresh(); void register(); } }, 30000);
     const app = AppState.addEventListener('change', state => { if (state === 'active') { refresh(); void register(); } });
     const changed = DeviceEventEmitter.addListener('notificationsChanged', refresh);
     const inboxChanged = DeviceEventEmitter.addListener('notificationsInboxRefresh', refresh);
@@ -98,7 +99,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     }
     return () => {
       alive = false;
-      clearInterval(interval); app.remove(); changed.remove(); inboxChanged.remove(); subscriptions.forEach(subscription => subscription.remove());
+      stopPolling(); app.remove(); changed.remove(); inboxChanged.remove(); subscriptions.forEach(subscription => subscription.remove());
     };
   }, [token, pushEnabled]);
   return count;

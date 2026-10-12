@@ -35,6 +35,7 @@ import type { CreateOfflineMutationInput } from '../../shared/offline/offlineMut
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import { realtimeService } from '../../shared/supabase/realtimeService';
+import { startFallbackPoll } from '../../shared/supabase/realtimeHealth';
 import { ecobudApi, type IdVerificationStatus, type EcoBadge } from '../../shared/api/ecobudApi';
 import { resolveMediaUrl, shiftMonth } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
@@ -292,11 +293,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }).catch(() => {});
     };
     const changed = DeviceEventEmitter.addListener('announcementsChanged', refreshAnnouncements);
-    const interval = setInterval(() => {
+    const stopPolling = startFallbackPoll(() => {
       if (AppState.currentState === 'active') refreshAnnouncements();
     }, FOCUSED_REFRESH_INTERVAL_MS);
     const resumed = AppState.addEventListener('change', state => { if (state === 'active') refreshAnnouncements(); });
-    return () => { alive = false; changed.remove(); resumed.remove(); clearInterval(interval); };
+    return () => { alive = false; changed.remove(); resumed.remove(); stopPolling(); };
   }, [session?.token]);
 
 
@@ -1304,8 +1305,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
     };
     void refresh();
-    const timer = setInterval(() => void refresh(), HOME_REFRESH_INTERVAL_MS);
-    return () => { disposed = true; clearInterval(timer); };
+    const stopPolling = startFallbackPoll(() => void refresh(), HOME_REFRESH_INTERVAL_MS);
+    return () => { disposed = true; stopPolling(); };
   }, [session, presence.hasUsableInternet, activeTab, activeOverlay, refreshHomeResources]);
 
   // Refresh only the data visible on the current page.
@@ -1358,8 +1359,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
     };
     refreshVisible();
-    const interval = setInterval(refreshVisible, FOCUSED_REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return startFallbackPoll(refreshVisible, FOCUSED_REFRESH_INTERVAL_MS);
   }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay, isHydrating]);
 
   useEffect(() => {
@@ -1389,9 +1389,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     };
     void refresh(true);
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
-    const timer = setInterval(() => void refresh(), SECONDARY_REFRESH_INTERVAL_MS);
+    const stopPolling = startFallbackPoll(() => void refresh(), SECONDARY_REFRESH_INTERVAL_MS);
     const changed = DeviceEventEmitter.addListener('ecobudDataChanged', () => void refresh(true));
-    return () => { disposed = true; subscription.remove(); changed.remove(); clearInterval(timer); };
+    return () => { disposed = true; subscription.remove(); changed.remove(); stopPolling(); };
   }, [session?.token, session?.user.id, presence.hasUsableInternet, persistSession]);
 
   useEffect(() => {
@@ -1468,10 +1468,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
       secondaryForceRef.current.add(resource);
       setSecondaryRefreshNonce(value => value + 1);
     };
-    const timer = setInterval(refresh, FOCUSED_REFRESH_INTERVAL_MS);
+    const stopPolling = startFallbackPoll(refresh, FOCUSED_REFRESH_INTERVAL_MS);
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') refresh(); });
     const changed = DeviceEventEmitter.addListener('ecobudDataChanged', refresh);
-    return () => { clearInterval(timer); subscription.remove(); changed.remove(); };
+    return () => { stopPolling(); subscription.remove(); changed.remove(); };
   }, [session?.token, presence.hasUsableInternet, activeTab, activeOverlay]);
 
   useEffect(() => {
@@ -1513,11 +1513,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
       }
     };
     void refresh();
-    const timer = setInterval(() => void refresh(), 10_000);
+    const stopPolling = startFallbackPoll(() => void refresh(), 10_000);
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') void refresh();
     });
-    return () => { disposed = true; clearInterval(timer); subscription.remove(); };
+    const changed = DeviceEventEmitter.addListener('ecobudDataChanged', () => void refresh());
+    return () => { disposed = true; stopPolling(); subscription.remove(); changed.remove(); };
   }, [session?.token, session?.user.id, presence.hasUsableInternet, activeTab, activeOverlay]);
 
   // Declared before the sync effect so the reconnect flag is set by the time it runs.
@@ -3547,10 +3548,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
     };
     setIdVerificationStatus(session.user.idVerificationStatus ?? 'not_submitted');
     void sync();
-    const timer = setInterval(() => { if (AppState.currentState === 'active') void sync(); }, 30000);
+    const stopPolling = startFallbackPoll(() => { if (AppState.currentState === 'active') void sync(); }, 30000);
     const listener = AppState.addEventListener('change', state => { if (state === 'active') void sync(); });
     const changed = DeviceEventEmitter.addListener('idVerificationChanged', () => void sync());
-    return () => { alive = false; clearInterval(timer); listener.remove(); changed.remove(); };
+    return () => { alive = false; stopPolling(); listener.remove(); changed.remove(); };
   }, [session?.token, session?.user.id, applyIdVerificationStatus]);
 
   const idPromptedUser = useRef<string | null>(null);

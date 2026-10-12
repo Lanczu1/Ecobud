@@ -359,6 +359,7 @@ export function Redeem() {
 
     // Periodic refresh for whichever tab is currently visible.
     const interval = setInterval(() => {
+      if (adminRealtimeService.isLive()) return;
       if (mainTabRef.current === 'items') fetchItems(true);
       if (mainTabRef.current === 'requests') {
         fetchRequests(true);

@@ -876,7 +876,7 @@ export function Events() {
   useEffect(() => {
     if (activeTab !== 'events') return;
     const initial = setTimeout(() => void load(true), 250);
-    const interval = setInterval(() => void load(true), 30000);
+    const interval = setInterval(() => { if (!adminRealtimeService.isLive()) void load(true); }, 30000);
     return () => { clearTimeout(initial); clearInterval(interval); };
   }, [activeTab, page, search, barangayFilter]);
 
@@ -898,7 +898,7 @@ export function Events() {
     if (activeTab === 'submissions') {
       loadSubmissions();
       const interval = setInterval(() => {
-        void loadSubmissions(false);
+        if (!adminRealtimeService.isLive()) void loadSubmissions(false);
       }, 30000);
       return () => clearInterval(interval);
     }
@@ -925,7 +925,7 @@ export function Events() {
     };
     refreshReportRef.current = () => { void refresh(); };
     void refresh();
-    const interval = setInterval(() => void refresh(), 30000);
+    const interval = setInterval(() => { if (!adminRealtimeService.isLive()) void refresh(); }, 30000);
     const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);

@@ -460,8 +460,7 @@ const mutationKey = (operation: string, ...parts: Array<string | undefined>) => 
   return `${operation}:${(hash >>> 0).toString(36)}`;
 };
 
-const parseJsonSafely = async (response: Response) => {
-  const rawBody = await response.text();
+const parseJsonText = (rawBody: string) => {
   if (!rawBody) {
     return null;
   }
@@ -470,6 +469,23 @@ const parseJsonSafely = async (response: Response) => {
     return JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return null;
+  }
+};
+
+// Last body received per read, kept as text so every caller still gets its own parsed copy.
+// The server answers 304 with no body when the tag still matches.
+const CONDITIONAL_READ_MAX_ENTRIES = 40;
+const CONDITIONAL_READ_MAX_CHARS = 400_000;
+const conditionalReads = new Map<string, { etag: string; body: string }>();
+
+const rememberConditionalRead = (key: string, etag: string, body: string) => {
+  conditionalReads.delete(key);
+  if (!body || body.length > CONDITIONAL_READ_MAX_CHARS) return;
+  conditionalReads.set(key, { etag, body });
+  while (conditionalReads.size > CONDITIONAL_READ_MAX_ENTRIES) {
+    const oldest = conditionalReads.keys().next().value;
+    if (oldest === undefined) break;
+    conditionalReads.delete(oldest);
   }
 };
 
@@ -513,11 +529,17 @@ const executeRequest = async <T>(path: string, options: RequestOptions = {}): Pr
     headers['Idempotency-Key'] = options.idempotencyKey;
   }
 
+  const isRead = (options.method ?? 'GET') === 'GET';
+  const readKey = `${path}:${options.token ?? ''}`;
+  const remembered = isRead ? conditionalReads.get(readKey) : undefined;
+  if (remembered) {
+    headers['If-None-Match'] = remembered.etag;
+  }
+
   let response: Response;
 
   try {
-    const cacheBuster = path.includes('?') ? `&_cb=${Date.now()}` : `?_cb=${Date.now()}`;
-    const url = `${API_BASE}${path}${cacheBuster}`;
+    const url = `${API_BASE}${path}`;
     const controller = new AbortController();
     const timeoutMs = options.timeoutMs ?? 15000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -546,7 +568,18 @@ const executeRequest = async <T>(path: string, options: RequestOptions = {}): Pr
     );
   }
 
-  const data = await parseJsonSafely(response);
+  if (remembered && response.status === 304) {
+    return parseJsonText(remembered.body) as T;
+  }
+
+  const rawBody = await response.text();
+  const data = parseJsonText(rawBody);
+
+  if (isRead && response.ok) {
+    const etag = response.headers.get('etag');
+    if (etag) rememberConditionalRead(readKey, etag, rawBody);
+    else conditionalReads.delete(readKey);
+  }
 
   if (!response.ok) {
     const error = new EcoBudApiError(

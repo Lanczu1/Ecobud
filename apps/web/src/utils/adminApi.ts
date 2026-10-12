@@ -46,6 +46,13 @@ const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
 const CACHE_TTL_MS = 15_000;
 
+// Last body received per read, kept as text so each caller gets its own parsed copy.
+// It outlives clearAdminApiCache on purpose: a refresh still asks the server, which
+// answers 304 with no body when nothing changed.
+const CONDITIONAL_READ_MAX_ENTRIES = 80;
+const CONDITIONAL_READ_MAX_CHARS = 1_000_000;
+const conditionalReads = new Map<string, { etag: string; body: string }>();
+
 export function invalidateAdminApiPath(path: string) {
   clearAdminApiCache(path);
 }
@@ -86,12 +93,29 @@ export async function adminGet<T>(path: string, options?: { bypassCache?: boolea
   }
 
   const fetchPromise = (async () => {
+    const readKey = `${getToken()}:${path}`;
+    const remembered = conditionalReads.get(readKey);
+    const headers = { ...(authHeaders() as Record<string, string>) };
+    if (remembered) headers['If-None-Match'] = remembered.etag;
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'GET',
-      headers: authHeaders(),
+      headers,
       cache: 'no-store',
     });
-    return handleResponse<T>(res);
+    if (remembered && res.status === 304) return JSON.parse(remembered.body) as T;
+    if (!res.ok || res.status === 204) return handleResponse<T>(res);
+    const body = await res.text();
+    const etag = res.headers.get('ETag');
+    conditionalReads.delete(readKey);
+    if (etag && body.length <= CONDITIONAL_READ_MAX_CHARS) {
+      conditionalReads.set(readKey, { etag, body });
+      while (conditionalReads.size > CONDITIONAL_READ_MAX_ENTRIES) {
+        const oldest = conditionalReads.keys().next().value;
+        if (oldest === undefined) break;
+        conditionalReads.delete(oldest);
+      }
+    }
+    return JSON.parse(body) as T;
   })();
   inFlightRequests.set(path, fetchPromise);
   try {
