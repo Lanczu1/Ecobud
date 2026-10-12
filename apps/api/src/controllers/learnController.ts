@@ -20,7 +20,7 @@ export const learnController = {
   async getLessons(req: AuthenticatedRequest, res: Response) {
     const lessonId = typeof req.query.lessonId === 'string' ? req.query.lessonId : undefined;
     if (lessonId) {
-      const lesson = (await learnService.getPublishedLessons(req.auth!.userId)).find((item) => item.id === lessonId);
+      const lesson = await learnService.getPublishedLesson(req.auth!.userId, lessonId);
       return res.json(lesson ? [lesson] : []);
     }
     return res.json(await learnService.getPublishedLessonCatalog(req.auth!.userId));

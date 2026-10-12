@@ -4339,6 +4339,29 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                   </View>
                 )
               ) : null}
+              {hasLessonVideo && model.selectedLesson.videoCreditsEnabled && model.selectedLesson.videoCreditsName && model.selectedLesson.videoCreditsUrl ? (
+                <View style={{ marginTop: -4, marginBottom: 8 }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, lineHeight: 20 }}>Video credits</Text>
+                  <TouchableOpacity
+                    accessibilityRole="link"
+                    accessibilityLabel={`${model.selectedLesson.videoCreditsName}. Open video credits on YouTube`}
+                    onPress={() => {
+                      const url = model.selectedLesson?.videoCreditsUrl;
+                      if (url && /^https?:\/\/(?:youtu\.be|(?:[a-z0-9-]+\.)*youtube\.com)\//i.test(url)) {
+                        void Linking.openURL(url).catch(() => Alert.alert('Unable to open YouTube', 'Please try again when a browser is available.'));
+                      }
+                    }}
+                    style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'stretch' }}
+                  >
+                    <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 15, lineHeight: 24, fontWeight: '700', textDecorationLine: 'underline', flexShrink: 1 }}>
+                      {model.selectedLesson.videoCreditsName}
+                    </Text>
+                    <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 13, lineHeight: 20, textDecorationLine: 'underline', flexShrink: 1 }}>
+                      {model.selectedLesson.videoCreditsUrl}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               {/* Pages - only unlocked after video completes */}
               {lessonPages.length > 0 ? (
                 showLessonPages ? (
@@ -4388,24 +4411,6 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                   borderWidth: 1,
                   borderColor: theme.colors.cardBorder,
                 }}>
-                  {hasLessonVideo && model.selectedLesson.videoCreditsEnabled && model.selectedLesson.videoCreditsName && model.selectedLesson.videoCreditsUrl ? (
-                    <TouchableOpacity
-                      accessibilityRole="link"
-                      accessibilityLabel={`Video credits: ${model.selectedLesson.videoCreditsName}. Open on YouTube`}
-                      onPress={() => {
-                        const url = model.selectedLesson?.videoCreditsUrl;
-                        if (url && /^https?:\/\/(?:youtu\.be|(?:[a-z0-9-]+\.)*youtube\.com)\//i.test(url)) {
-                          void Linking.openURL(url).catch(() => Alert.alert('Unable to open YouTube', 'Please try again when a browser is available.'));
-                        }
-                      }}
-                      style={{ minHeight: 44, justifyContent: 'center', marginBottom: 12 }}
-                    >
-                      <Text style={{ color: theme.colors.text, fontSize: 14, lineHeight: 22 }}>Video credits</Text>
-                      <Text style={{ color: isDark ? theme.colors.primary : '#126027', fontSize: 15, lineHeight: 24, fontWeight: '700', textDecorationLine: 'underline', flexShrink: 1 }}>
-                        {model.selectedLesson.videoCreditsName} · YouTube
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
                     <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F0EA', justifyContent: 'center', alignItems: 'center' }}>
                       <Ionicons name="document-text" size={14} color={isDark ? theme.colors.primary : '#126027'} />

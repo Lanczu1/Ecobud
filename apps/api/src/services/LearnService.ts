@@ -104,6 +104,19 @@ export class LearnService {
     });
   }
 
+  async getPublishedLesson(userId: string, lessonId: string): Promise<LearnLessonPayload | null> {
+    const lesson = await this.database.lesson.findFirst({
+      where: { id: lessonId, OR: [{ isPublished: true }, { scheduledAt: { lte: new Date() } }] },
+      include: {
+        progress: { where: { userId }, take: 1 },
+        quizQuestions: { select: { id: true, question: true, optionA: true, optionB: true, optionC: true, optionD: true } },
+        pages: { orderBy: { order: 'asc' }, select: { id: true, title: true, description: true, content: true, order: true } },
+        createdBy: { select: { id: true, name: true, profile: { select: { displayName: true } } } },
+      },
+    });
+    return lesson ? this.toLessonPayload(lesson) : null;
+  }
+
   async getPublishedLessonCatalog(userId: string) {
     return apiCache.getOrSet(`learn_catalog_${userId}`, 15, async () => {
       const lessons = await this.database.lesson.findMany({
@@ -112,6 +125,7 @@ export class LearnService {
         select: {
           id: true, title: true, description: true, category: true, difficulty: true,
           imageUrl: true, videoUrl: true, isPublished: true, featured: true,
+          videoCreditsEnabled: true, videoCreditsName: true, videoCreditsUrl: true,
           createdAt: true, pointsReward: true, durationMinutes: true,
           progress: { where: { userId }, take: 1, select: { status: true, progress: true, videoTimestamp: true, updatedAt: true } },
           _count: { select: { pages: true, quizQuestions: true } },
@@ -121,6 +135,9 @@ export class LearnService {
         id: lesson.id, title: lesson.title, description: lesson.description, content: '',
         category: lesson.category, difficulty: lesson.difficulty || undefined,
         imageUrl: lesson.imageUrl, videoUrl: lesson.videoUrl,
+        videoCreditsEnabled: lesson.videoCreditsEnabled,
+        videoCreditsName: lesson.videoCreditsName,
+        videoCreditsUrl: lesson.videoCreditsUrl,
         is_published: lesson.isPublished, featured: lesson.featured,
         created_at: lesson.createdAt.toISOString(), pointsReward: lesson.pointsReward,
         durationMinutes: lesson.durationMinutes,

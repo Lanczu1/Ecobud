@@ -12,3 +12,16 @@ Technical checks: web production build, API TypeScript compilation to a temporar
 Database: only the three additive credits columns were applied and the migration recorded. Existing lessons were readable afterward. No seeds, table drops, resets, or unrelated pending migrations were run.
 
 Limits: the native learner YouTube link was checked in source and by TypeScript, not clicked on a device. Browser save verification captured FormData locally without creating or editing production lessons. The standard API output directory had locked files, so compilation used a separate temporary directory.
+
+## Follow-up: credits below the mobile video
+
+- Hard Gate PASS by source inspection: attribution renders immediately after the video player and before the lesson-page lock message, independently of transcript visibility. The credit name has a link role, a 44px minimum touch target, wrapping text, and a YouTube open handler with failure feedback. Credits remain conditional on the lesson's saved enabled/name/URL fields. Device interaction has not been tested.
+- Purpose Gate PASS: the existing green underlined name indicates a clickable attribution; no new decoration or assets.
+- Liveliness PASS: ENERGY 1 / RHYTHM 1 / MOTION 1 retained from the supplied mobile screenshot; compact spacing keeps attribution next to its video.
+- Craftsmanship PASS by source inspection: credits also remain visible when the completed video is collapsed; the transcript no longer duplicates the link. Both theme colors reuse existing tokens. No database changes required for this follow-up.
+
+## Follow-up: missing mobile credits data
+
+The mobile catalog now selects and returns all three saved attribution fields. Opening a lesson uses a direct published-lesson query instead of the cached full lesson list. The mobile attribution shows both the clickable name and its YouTube URL below the player.
+
+Validation PASS: 16 regression tests passed, including catalog selection, fresh detail reads after a credit change, and explicit disabled/null values. API and mobile TypeScript checks passed. Read-only calls through the actual catalog and detail services both returned enabled credits, name "Lanczu", and a populated YouTube URL from the configured database. The local API and public tunnel health checks returned "ok"; Metro reported running. No database writes or migrations were performed during this fix. Native visual/tap verification remains unperformed.
