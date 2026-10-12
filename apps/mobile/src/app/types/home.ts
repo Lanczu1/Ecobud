@@ -241,6 +241,12 @@ export interface EcoBudMobileModel {
   syncQueuedOfflineActions: (activeSession: SessionPayload, refreshAfterSync?: boolean) => Promise<boolean>;
   openChallengeMission: (challenge: ChallengeWithProgress) => void;
   openLesson: (lessonId: string) => Promise<void>;
+  downloadedLessons: Record<string, { downloadedAt: number; videoFile: string | null; imageFile?: string | null }>;
+  lessonDownloadProgress: Record<string, number>;
+  handleDownloadLesson: (lessonId: string) => Promise<void>;
+  handleRemoveLessonDownload: (lessonId: string) => Promise<void>;
+  getDownloadedLessonVideoUri: (lessonId: string) => string | null;
+  getDownloadedLessonImageUri: (lessonId: string) => string | null;
   handleCompleteLesson: () => Promise<void>;
   handleUpdateLessonProgress: (lessonId: string, progress: number, videoTimestamp?: number) => Promise<void>;
   startQuiz: () => void;

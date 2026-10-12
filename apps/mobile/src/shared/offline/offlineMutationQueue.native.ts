@@ -168,6 +168,12 @@ export const offlineMutationQueue: OfflineMutationQueue = {
     );
   },
 
+  async discard(id: string) {
+    const database = await getDatabase();
+
+    await database.runAsync(`DELETE FROM ${TABLE_NAME} WHERE id = ?`, id);
+  },
+
   async getPendingCount(userId: string) {
     const database = await getDatabase();
     const row = await database.getFirstAsync<{ count: number }>(

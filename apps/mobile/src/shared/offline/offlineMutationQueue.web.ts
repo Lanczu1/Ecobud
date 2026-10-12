@@ -107,6 +107,12 @@ export const offlineMutationQueue: OfflineMutationQueue = {
     );
   },
 
+  async discard(id: string) {
+    const records = await readRecords();
+
+    await writeRecords(records.filter((record) => record.id !== id));
+  },
+
   async getPendingCount(userId: string) {
     const records = await readRecords();
     return records.filter((record) => record.userId === userId && record.synced === 0).length;

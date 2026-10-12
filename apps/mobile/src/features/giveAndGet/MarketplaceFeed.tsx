@@ -28,6 +28,7 @@ import { CATEGORY_LABELS, CATEGORY_ICON, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { CoachMarkTarget } from '../../app/components/CoachMarkTarget';
 import type { EcoBudMobileModel } from '../../app/types/home';
+import { ConnectionErrorCard } from '../../shared/ui/ConnectionErrorCard';
 
 type SortOption = 'newest' | 'nearest' | 'active';
 type FeedTab = 'browse' | 'chats' | 'mylistings';
@@ -70,6 +71,7 @@ export function MarketplaceFeed({
   const listingFiltersRef = useRef('');
   const internetReadyRef = useRef(true);
   internetReadyRef.current = model?.hasUsableInternet !== false;
+  const isOffline = model?.hasUsableInternet === false;
   const [loading, setLoading] = useState(() => !swapService.getCachedListings({ sortBy: 'newest', limit: 20, offset: 0 }));
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -553,6 +555,12 @@ export function MarketplaceFeed({
         </>);
         if (item.kind === 'content') return (<>
       <Animated.View style={[localStyles.feedContent, { opacity: fadeAnim }]}>
+        {isOffline && activeTab !== 'chats' ? (
+          <ConnectionErrorCard
+            title="No internet connection"
+            onRetry={activeTab === 'browse' ? handleRefresh : loadMyListings}
+          />
+        ) : null}
         {activeTab === 'browse' ? (
           <>
             {!loading && listings.length > 0 && (
@@ -566,13 +574,13 @@ export function MarketplaceFeed({
                 </View>
               </View>
             )}
-            {loading ? (
+            {loading && !isOffline ? (
               <>
                 <SwapListingSkeleton />
                 <SwapListingSkeleton />
                 <SwapListingSkeleton />
               </>
-            ) : listings.length === 0 ? (
+            ) : listings.length === 0 && isOffline ? null : listings.length === 0 ? (
               <View style={localStyles.emptyState}>
                 <Ionicons name="leaf-outline" size={64} color={isDark ? theme.colors.primary : "#A7D5BA"} />
                 <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>No listings found</Text>
@@ -602,12 +610,12 @@ export function MarketplaceFeed({
           />
         ) : (
           <>
-            {myListingsLoading ? (
+            {myListingsLoading && !isOffline ? (
               <>
                 <SwapListingSkeleton />
                 <SwapListingSkeleton />
               </>
-            ) : visibleMyListings.length === 0 ? (
+            ) : visibleMyListings.length === 0 && isOffline ? null : visibleMyListings.length === 0 ? (
               <View style={localStyles.emptyState}>
                 <Ionicons name="clipboard-outline" size={64} color={isDark ? theme.colors.primary : "#A7D5BA"} />
                 <Text style={[localStyles.emptyTitle, { color: theme.colors.textPrimary }]}>{myListingsQuery ? 'No matching listings' : 'No listings yet'}</Text>

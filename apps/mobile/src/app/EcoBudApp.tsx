@@ -57,6 +57,8 @@ import { useLiteMode } from '../shared/performance/deviceTier';
 import { Reveal } from '../shared/ui/Motion';
 import { InAppNotificationProvider } from '../shared/ui/InAppNotification';
 import { UpdateRequiredGate } from '../shared/update/UpdateRequiredGate';
+import { ConfirmPromptHost } from '../shared/ui/confirmPrompt';
+import { OfflineStatusPill } from '../shared/ui/OfflineStatusPill';
 import { QuickMissionsOverlay } from './components/QuickMissionsOverlay';
 import { createQuickMissionGestureChannel } from './utils/quickMissionGesture';
 
@@ -75,6 +77,7 @@ export default function App() {
         <UpdateRequiredGate>
           <InAppNotificationProvider>
             <AppWithModel />
+            <ConfirmPromptHost />
           </InAppNotificationProvider>
         </UpdateRequiredGate>
       </ThemeProvider>
@@ -85,7 +88,12 @@ export default function App() {
 
 function AppWithModel() {
   const model = useHomeDashboard();
-  return <MobileShell model={model} />;
+  return (
+    <>
+      <MobileShell model={model} />
+      <OfflineStatusPill visible={!model.hasUsableInternet} />
+    </>
+  );
 }
 
 type ScrollAwareChatbotHandle = { setScrolling: (scrolling: boolean) => void };

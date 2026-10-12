@@ -36,10 +36,13 @@ import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 import { ecobudApi, type IdVerificationStatus, type EcoBadge } from '../../shared/api/ecobudApi';
-import { shiftMonth } from '../utils/appUtils';
+import { resolveMediaUrl, shiftMonth } from '../utils/appUtils';
+import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { lessonDownloads, type LessonDownloadIndex } from '../../shared/offline/lessonDownloads';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
 import { coachMarkSpotlightStore } from '../utils/coachMarkSpotlightStore';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { showConfirmPrompt } from '../../shared/ui/confirmPrompt';
 import { resetLargeTargetsForNewUser } from '../../shared/accessibility/AccessibilityContext';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -57,6 +60,15 @@ const CHATBOT_SIZE_STORAGE_KEY = 'ecobud.mobile.chatbotSize';
 const PUSH_NOTIFICATIONS_ENABLED_STORAGE_KEY = 'ecobud.mobile.pushNotificationsEnabled';
 const CACHED_HOME_DATA_STORAGE_KEY = 'ecobud.mobile.cached_home_data';
 const CACHED_ANNOUNCEMENTS_STORAGE_KEY = 'ecobud.mobile.cached_announcements';
+const OFFLINE_SYNC_RETRY_INTERVAL_MS = 30_000;
+const OFFLINE_ACTION_LABELS: Record<CreateOfflineMutationInput['type'], string> = {
+  'lesson-seen': 'Lesson view',
+  'lesson-complete': 'Lesson completion',
+  'challenge-progress': 'Challenge progress',
+  'habit-check-in': 'Habit check-in',
+  'event-join': 'Event join',
+  'redeem-item': 'Reward redemption',
+};
 type FocusedResource = 'lessons' | 'challenges' | 'events';
 const FOCUSED_REFRESH_INTERVAL_MS = 30_000;
 type SecondaryResource = 'tracker' | 'profile' | 'leaderboard' | 'transparency';
@@ -186,6 +198,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const homeResourceRequestsRef = useRef(new Map<HomeResource, Promise<void>>());
   const pendingHomeResourcesRef = useRef(new Set<HomeResource>());
   const offlineSyncInFlightRef = React.useRef(false);
+  const reconnectSyncPendingRef = React.useRef(false);
+  const previousHasUsableInternetRef = React.useRef(true);
   const isHydratingRef = React.useRef(false);
   const resumeRefreshInFlightRef = React.useRef(false);
   const previousAppStateRef = React.useRef(AppState.currentState);
@@ -234,6 +248,22 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [leaderboardHasLoaded, setLeaderboardHasLoaded] = useState(false);
   const [announcements, setAnnouncements] = useState<import('../../shared/api/ecobudApi').ResidentAnnouncement[]>([]);
   const [events, setEvents] = useState<EcoEvent[]>([]);
+  const [downloadedLessons, setDownloadedLessons] = useState<LessonDownloadIndex>({});
+  const [lessonDownloadProgress, setLessonDownloadProgress] = useState<Record<string, number>>({});
+  const lessonDownloadsInFlightRef = React.useRef(new Set<string>());
+  const latestLessonsRef = React.useRef(lessons);
+  latestLessonsRef.current = lessons;
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    setDownloadedLessons({});
+    if (!userId) return;
+    let disposed = false;
+    void lessonDownloads.readIndex(userId).then((index) => {
+      if (!disposed) setDownloadedLessons(index);
+    }).catch(() => {});
+    return () => { disposed = true; };
+  }, [session?.user.id]);
 
   useEffect(() => {
     if (!session?.token || !dashboard || isHydrating) return;
@@ -887,7 +917,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
 
         if (!silent) {
           console.warn('ECOBUD sync error:', message);
-          Alert.alert('Offline Mode', 'Unable to reach ECOBUD servers. Showing saved challenges and data from your last session.');
+          showConfirmPrompt({
+            title: 'Offline mode',
+            message: 'Unable to reach ECOBUD servers. Showing saved challenges and data from your last session.',
+            confirmLabel: 'OK',
+            icon: 'cloud-offline-outline',
+            hideCancel: true,
+          });
         } else {
           console.warn('[ECOBUD hydrateApp (offline/unreachable)]:', message);
         }
@@ -915,8 +951,29 @@ export function useHomeDashboard(): EcoBudMobileModel {
         });
 
         const hadSyncedMutations = syncResult.syncedCount > 0;
-        if (hadSyncedMutations && refreshAfterSync) {
+        const rejectedCount = syncResult.rejected.length;
+        // Rejected actions were shown optimistically, so server state has to replace them too.
+        const needsRefresh = hadSyncedMutations || rejectedCount > 0;
+        if (needsRefresh && refreshAfterSync) {
           await hydrateApp(activeSession, true);
+        }
+
+        if (rejectedCount > 0) {
+          const first = syncResult.rejected[0];
+          const firstReason = `${OFFLINE_ACTION_LABELS[first.type]}: ${first.message}`;
+          showNotification({
+            title: rejectedCount === 1 ? 'Offline action not saved' : `${rejectedCount} offline actions not saved`,
+            message: rejectedCount === 1 ? firstReason : `${firstReason} Check the rest and try them again.`,
+            tone: 'error',
+          });
+        } else if (hadSyncedMutations) {
+          showNotification({
+            title: 'Offline actions synced',
+            message: syncResult.syncedCount === 1
+              ? 'Your saved action was sent to ECOBUD.'
+              : `${syncResult.syncedCount} saved actions were sent to ECOBUD.`,
+            tone: 'success',
+          });
         }
 
         if (syncResult.failedCount > 0) {
@@ -924,7 +981,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
             `Offline sync finished with ${syncResult.failedCount} failed mutation(s).`,
           );
         }
-        return hadSyncedMutations;
+        return needsRefresh;
       } catch (error) {
         console.warn('Offline sync failed during reconnect.', error);
         return false;
@@ -932,8 +989,31 @@ export function useHomeDashboard(): EcoBudMobileModel {
         offlineSyncInFlightRef.current = false;
       }
     },
-    [hydrateApp],
+    [hydrateApp, showNotification],
   );
+
+  // Reading and video progress made offline only exists on this device, so
+  // upload it before the next refresh would otherwise show the older server value.
+  const uploadLocalLessonProgress = useCallback(async (activeSession: SessionPayload) => {
+    const uploads = latestLessonsRef.current.map(async (lesson) => {
+      if (lesson.status === 'completed') return;
+      try {
+        const raw = mobileStorage.getItemSync('@lesson_progress_' + activeSession.user.id + ':' + lesson.id);
+        const saved = raw ? JSON.parse(raw) : null;
+        if (!saved || !Number.isFinite(saved.progress) || saved.progress <= 0 ||
+            !isLocalLessonProgressNewer(saved.savedAt, lesson.progressUpdatedAt)) return;
+        await homeService.updateLessonProgress(
+          activeSession.token,
+          lesson.id,
+          saved.progress,
+          Number.isFinite(saved.timestamp) && saved.timestamp > 0 ? saved.timestamp : undefined,
+        );
+      } catch (error) {
+        console.warn('[uploadLocalLessonProgress] Unable to upload lesson progress:', error);
+      }
+    });
+    await Promise.all(uploads);
+  }, []);
 
   useEffect(() => {
     const bootstrapTimer = setTimeout(() => {
@@ -1440,13 +1520,44 @@ export function useHomeDashboard(): EcoBudMobileModel {
     return () => { disposed = true; clearInterval(timer); subscription.remove(); };
   }, [session?.token, session?.user.id, presence.hasUsableInternet, activeTab, activeOverlay]);
 
+  // Declared before the sync effect so the reconnect flag is set by the time it runs.
+  useEffect(() => {
+    const wasOnline = previousHasUsableInternetRef.current;
+    previousHasUsableInternetRef.current = presence.hasUsableInternet;
+    if (wasOnline === presence.hasUsableInternet) return;
+
+    // Going offline is shown by the persistent OfflineStatusPill, so no banner here.
+    if (!presence.hasUsableInternet) return;
+
+    reconnectSyncPendingRef.current = true;
+    showNotification({
+      title: 'Online mode',
+      message: latestSessionRef.current ? 'You are back online. Syncing your data now.' : 'You are back online.',
+      tone: 'success',
+    });
+  }, [presence.hasUsableInternet, showNotification]);
+
   useEffect(() => {
     if (!session || !presence.hasUsableInternet) {
       return;
     }
 
-    void syncQueuedOfflineActions(session);
-  }, [presence.hasUsableInternet, session, syncQueuedOfflineActions]);
+    if (reconnectSyncPendingRef.current) {
+      // Coming back from offline: send the queue first, then reload everything from the server.
+      reconnectSyncPendingRef.current = false;
+      void uploadLocalLessonProgress(session)
+        .then(() => syncQueuedOfflineActions(session, false))
+        .then(() => hydrateApp(session, true));
+    } else {
+      void syncQueuedOfflineActions(session);
+    }
+
+    // Items that failed on a server error stay queued, so keep retrying while online.
+    const retryTimer = setInterval(() => {
+      if (AppState.currentState === 'active') void syncQueuedOfflineActions(session);
+    }, OFFLINE_SYNC_RETRY_INTERVAL_MS);
+    return () => clearInterval(retryTimer);
+  }, [hydrateApp, presence.hasUsableInternet, session, syncQueuedOfflineActions, uploadLocalLessonProgress]);
 
   useEffect(() => {
     if (recentViewedMission && challenges.length > 0) {
@@ -1866,9 +1977,16 @@ export function useHomeDashboard(): EcoBudMobileModel {
           let activeSession = session;
 
           if (session.refreshToken) {
-            activeSession = await homeService.refreshSession(session.refreshToken);
-            setSession(activeSession);
-            await persistSession(activeSession);
+            try {
+              activeSession = await homeService.refreshSession(session.refreshToken);
+              setSession(activeSession);
+              await persistSession(activeSession);
+            } catch (refreshError) {
+              const status = (refreshError as { status?: number } | null)?.status;
+              if (status === 401 || status === 403) throw refreshError;
+              // A flaky refresh must not block the queued offline actions from syncing.
+              console.warn('[ECOBUD foreground session refresh warning]:', refreshError);
+            }
           }
 
           const [_, hadSyncedMutations] = await Promise.all([
@@ -2036,33 +2154,56 @@ export function useHomeDashboard(): EcoBudMobileModel {
     await runWithActionLoader('Opening lesson...', async () => {
       try {
         const activeSession = ensureSession();
-        const mutationMode = await runMutationWithOfflineFallback({
-          mutation: {
-            userId: activeSession.user.id,
-            type: 'lesson-seen',
-            payload: { lessonId },
-            dedupeKey: `lesson-seen:${lessonId}`,
-          },
-          onlineAction: async () => {
-            await homeService.markLessonSeen(activeSession.token, lessonId);
-          },
-          applyOptimisticUpdate: () => {
-            applyOfflineLessonSeen(lessonId);
-          },
-        });
-
-        if (mutationMode === 'online') {
-          // Intentionally omitting hydrateApp here to avoid race conditions with updateLessonProgress
-        }
+        const seenMutation = {
+          userId: activeSession.user.id,
+          type: 'lesson-seen' as const,
+          payload: { lessonId },
+          dedupeKey: `lesson-seen:${lessonId}`,
+        };
+        const downloaded = downloadedLessons[lessonId]
+          ? await lessonDownloads.readContent(activeSession.user.id, lessonId)
+          : null;
         // Lesson bodies, pages, and quiz questions are lazy-loaded so the
         // initial home fetch stays small. Merge them into the cached summary.
-        const detail = await homeService.getLessons(activeSession.token, lessonId);
-        if (!detail[0]) throw new Error('Lesson details could not be loaded.');
+        let detail: Partial<LessonWithProgress> | null = null;
+
+        try {
+          await runMutationWithOfflineFallback({
+            mutation: seenMutation,
+            onlineAction: async () => {
+              await homeService.markLessonSeen(activeSession.token, lessonId);
+            },
+            applyOptimisticUpdate: () => {
+              applyOfflineLessonSeen(lessonId);
+            },
+          });
+          // Intentionally omitting hydrateApp here to avoid race conditions with updateLessonProgress
+          if (presence.hasUsableInternet || !downloaded) {
+            detail = (await homeService.getLessons(activeSession.token, lessonId))[0] ?? null;
+          }
+        } catch (error) {
+          const code = (error as { code?: string } | null)?.code;
+          if (code !== 'offline' && code !== 'timeout') throw error;
+          if (!downloaded) {
+            throw new Error('This lesson is not downloaded. Download it while you are online to open it offline.');
+          }
+          await queueOfflineAction(seenMutation, { applyOptimisticUpdate: () => applyOfflineLessonSeen(lessonId) });
+        }
+
+        detail = detail ?? downloaded;
+        if (!detail) throw new Error('Lesson details could not be loaded.');
+        const lessonDetail = detail;
         setLessons((current) => current.map((lesson) =>
-          lesson.id === lessonId ? { ...lesson, ...detail[0] } : lesson,
+          lesson.id === lessonId ? { ...lesson, ...lessonDetail } : lesson,
         ));
       } catch (error) {
-        Alert.alert('Unable to open lesson', error instanceof Error ? error.message : 'Please try again.');
+        showConfirmPrompt({
+          title: 'Unable to open lesson',
+          message: error instanceof Error ? error.message : 'Please try again.',
+          confirmLabel: 'OK',
+          icon: 'cloud-offline-outline',
+          hideCancel: true,
+        });
         return;
       }
 
@@ -2071,11 +2212,117 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }, 420);
   }, [
     applyOfflineLessonSeen,
+    downloadedLessons,
     ensureSession,
     hydrateApp,
+    presence.hasUsableInternet,
+    queueOfflineAction,
     runMutationWithOfflineFallback,
     runWithActionLoader,
   ]);
+
+  const handleDownloadLesson = useCallback(async (lessonId: string) => {
+    if (lessonDownloadsInFlightRef.current.has(lessonId)) return;
+    if (!presence.hasUsableInternet) {
+      showNotification({ title: 'No internet connection', message: 'Connect to the internet to download this lesson.', tone: 'warning' });
+      return;
+    }
+
+    lessonDownloadsInFlightRef.current.add(lessonId);
+    setLessonDownloadProgress((current) => ({ ...current, [lessonId]: 0 }));
+
+    try {
+      const activeSession = ensureSession();
+      const detail = (await homeService.getLessons(activeSession.token, lessonId))[0];
+      if (!detail) throw new Error('Lesson details could not be loaded.');
+
+      const remoteVideoUrl = detail.videoUrl
+        ? (resolveMediaUrl(detail.videoUrl, ecobudApiOrigin) || `${ecobudApiOrigin}${detail.videoUrl}`)
+        : null;
+      let lastPercent = 0;
+      const remoteImageUrl = resolveMediaUrl(detail.imageUrl, ecobudApiOrigin);
+      const entry = await lessonDownloads.save(activeSession.user.id, detail, remoteVideoUrl, remoteImageUrl, (percent) => {
+        if (percent === lastPercent) return;
+        lastPercent = percent;
+        setLessonDownloadProgress((current) => (lessonId in current ? { ...current, [lessonId]: percent } : current));
+      });
+
+      if (latestSessionRef.current?.user.id === activeSession.user.id) {
+        setDownloadedLessons((current) => ({ ...current, [lessonId]: entry }));
+      }
+      showNotification({
+        title: 'Lesson downloaded',
+        message: `${detail.title} is ready to read${detail.videoUrl ? ' and watch' : ''} offline.`,
+        tone: 'success',
+      });
+    } catch (error) {
+      showNotification({
+        title: 'Download failed',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        tone: 'error',
+      });
+    } finally {
+      lessonDownloadsInFlightRef.current.delete(lessonId);
+      setLessonDownloadProgress((current) => {
+        const { [lessonId]: _finished, ...rest } = current;
+        return rest;
+      });
+    }
+  }, [ensureSession, presence.hasUsableInternet, showNotification]);
+
+  const handleRemoveLessonDownload = useCallback(async (lessonId: string) => {
+    const userId = latestSessionRef.current?.user.id;
+    if (!userId) return;
+
+    try {
+      await lessonDownloads.remove(userId, lessonId);
+      setDownloadedLessons((current) => {
+        const { [lessonId]: _removed, ...rest } = current;
+        return rest;
+      });
+      showNotification({ title: 'Download removed', message: 'This lesson now needs internet to open.', tone: 'info' });
+    } catch (error) {
+      showNotification({
+        title: 'Could not remove download',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        tone: 'error',
+      });
+    }
+  }, [showNotification]);
+
+  const getDownloadedLessonVideoUri = useCallback((lessonId: string) => {
+    const userId = latestSessionRef.current?.user.id;
+    return userId ? lessonDownloads.videoUri(userId, downloadedLessons[lessonId]) : null;
+  }, [downloadedLessons]);
+
+  const getDownloadedLessonImageUri = useCallback((lessonId: string) => {
+    const userId = latestSessionRef.current?.user.id;
+    return userId ? lessonDownloads.imageUri(userId, downloadedLessons[lessonId]) : null;
+  }, [downloadedLessons]);
+
+  // Offline, a downloaded lesson must stay in the list even when the cached
+  // home data no longer has it, so put the cached copy back.
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId || presence.hasUsableInternet) return;
+    const missingIds = Object.keys(downloadedLessons).filter((id) => !lessons.some((lesson) => lesson.id === id));
+    if (missingIds.length === 0) return;
+    let disposed = false;
+
+    void lessonDownloads.readAllContents(userId).then((contents) => {
+      if (disposed) return;
+      const restored = contents.filter((content) => missingIds.includes(content.id)).map((content): LessonWithProgress => {
+        let progress = 0;
+        try {
+          const saved = JSON.parse(mobileStorage.getItemSync('@lesson_progress_' + userId + ':' + content.id) ?? 'null');
+          if (Number.isFinite(saved?.progress)) progress = saved.progress;
+        } catch {}
+        return { ...content, progress, status: progress > 0 ? 'seen' : 'not_started' };
+      });
+      if (restored.length > 0) setLessons((current) => uniqueLessonsById([...current, ...restored]));
+    }).catch(() => {});
+    return () => { disposed = true; };
+  }, [downloadedLessons, lessons, presence.hasUsableInternet, session?.user.id]);
 
   const openChallengeMission = useCallback((challenge: ChallengeWithProgress) => {
     setSelectedChallenge(challenge);
@@ -2259,9 +2506,34 @@ export function useHomeDashboard(): EcoBudMobileModel {
     }
   }, [ensureSession]);
 
-  const startQuiz = useCallback(() => {
-    const questions = selectedLesson?.quizQuestions ? [...selectedLesson.quizQuestions] : [];
-    
+  const startQuiz = useCallback((loadedQuestions?: QuizQuestion[]) => {
+    if (!presence.hasUsableInternet) {
+      showNotification({
+        title: 'Quiz needs internet',
+        message: 'Your reading and video progress is saved. Reconnect to take the quiz.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    const questions = loadedQuestions ?? (selectedLesson?.quizQuestions ? [...selectedLesson.quizQuestions] : []);
+
+    // A lesson opened from its offline download has no questions yet, so fetch them first.
+    if (questions.length === 0 && selectedLesson?.hasQuiz && session?.token && !loadedQuestions) {
+      const lessonId = selectedLesson.id;
+      void runWithActionLoader('Loading quiz...', async () => {
+        try {
+          const detail = (await homeService.getLessons(session.token, lessonId))[0];
+          if (!detail?.quizQuestions?.length) throw new Error('The quiz could not be loaded.');
+          setLessons((current) => current.map((lesson) => lesson.id === lessonId ? { ...lesson, ...detail } : lesson));
+          startQuizRef.current([...detail.quizQuestions]);
+        } catch (error) {
+          Alert.alert('Unable to start quiz', error instanceof Error ? error.message : 'Please try again.');
+        }
+      }, 0);
+      return;
+    }
+
     for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [questions[i], questions[j]] = [questions[j], questions[i]];
@@ -2285,7 +2557,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setQuizScore(0);
     setQuizFailureMessage(null);
     setActiveOverlayState('quiz');
-  }, [selectedLesson, session?.user.id, setActiveOverlayState]);
+  }, [presence.hasUsableInternet, runWithActionLoader, selectedLesson, session?.token, session?.user.id, setActiveOverlayState, showNotification]);
+  const startQuizRef = React.useRef(startQuiz);
+  startQuizRef.current = startQuiz;
 
   useEffect(() => {
     if (activeOverlay !== 'quiz' || !selectedLessonId || !quizQuestions.length || quizCompleted) return;
@@ -2403,10 +2677,13 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
   const requireIdApproval = useCallback(() => {
     if (idVerificationStatus === 'approved') return true;
-    Alert.alert('ID approval required', 'ID approval is required to use this feature. You can still browse and complete Learn activities.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'View verification status', onPress: () => setActiveOverlayState('idVerification') },
-    ]);
+    showConfirmPrompt({
+      title: 'ID approval required',
+      message: 'ID approval is required to use this feature. You can still browse and complete Learn activities.',
+      confirmLabel: 'View status',
+      icon: 'id-card-outline',
+      onConfirm: () => setActiveOverlayState('idVerification'),
+    });
     return false;
   }, [idVerificationStatus]);
 
@@ -3400,6 +3677,12 @@ export function useHomeDashboard(): EcoBudMobileModel {
     syncQueuedOfflineActions,
 
     openLesson,
+    downloadedLessons,
+    lessonDownloadProgress,
+    handleDownloadLesson,
+    handleRemoveLessonDownload,
+    getDownloadedLessonVideoUri,
+    getDownloadedLessonImageUri,
     triggerTestReward,
     handleCompleteLesson,
     handleUpdateLessonProgress,

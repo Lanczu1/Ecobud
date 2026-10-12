@@ -39,6 +39,8 @@ import { Animated } from '../../shared/accessibility/animations';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { getLessonDownloadProps } from './LearnLessonCard';
+import { ConnectionErrorCard } from '../../shared/ui/ConnectionErrorCard';
 import { useVideoPlayer, VideoView, useEventListener } from '../../shared/platform/VideoCompat';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -3574,10 +3576,17 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
     });
   };
 
+  // Chosen once per lesson so a download finishing mid-playback does not restart the player.
+  const downloadedVideoUri = React.useMemo(
+    () => (model.selectedLesson?.id ? model.getDownloadedLessonVideoUri(model.selectedLesson.id) : null),
+    [model.selectedLesson?.id],
+  );
   const videoSource = model.selectedLesson?.videoUrl
-    ? (resolveMediaUrl(model.selectedLesson.videoUrl, ecobudApiOrigin) || `${ecobudApiOrigin}${model.selectedLesson.videoUrl}`)
+    ? (downloadedVideoUri || resolveMediaUrl(model.selectedLesson.videoUrl, ecobudApiOrigin) || `${ecobudApiOrigin}${model.selectedLesson.videoUrl}`)
     : null;
-  const headerImg = resolveMediaUrl(model.selectedLesson?.imageUrl, ecobudApiOrigin)
+  const lessonDownload = model.selectedLesson ? getLessonDownloadProps(model, model.selectedLesson) : null;
+  const headerImg = (model.selectedLesson?.id ? model.getDownloadedLessonImageUri(model.selectedLesson.id) : null)
+    || resolveMediaUrl(model.selectedLesson?.imageUrl, ecobudApiOrigin)
     || "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800&auto=format&fit=crop";
 
   const player = useVideoPlayer(videoSource, player => {
@@ -4200,6 +4209,44 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
                 </View>
               ) : null}
 
+              {lessonDownload ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: lessonDownload.downloadState === 'downloading' }}
+                  onPress={lessonDownload.onDownloadPress}
+                  disabled={lessonDownload.downloadState === 'downloading'}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginTop: 12,
+                    minHeight: 48,
+                    paddingHorizontal: 14,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: isDark ? theme.colors.primary + '40' : '#C8E6D3',
+                    backgroundColor: lessonDownload.downloadState === 'downloaded' ? (isDark ? '#0E2016' : '#E6F4EC') : 'transparent',
+                  }}
+                >
+                  <Ionicons
+                    name={lessonDownload.downloadState === 'downloaded' ? 'checkmark-circle' : 'download-outline'}
+                    size={20}
+                    color={isDark ? theme.colors.primary : '#126027'}
+                  />
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: isDark ? theme.colors.primary : '#126027' }}>
+                    {lessonDownload.downloadState === 'downloaded'
+                      ? 'Downloaded for offline use'
+                      : lessonDownload.downloadState === 'downloading'
+                        ? `Downloading ${lessonDownload.downloadPercent}%`
+                        : hasLessonVideo ? 'Download lesson and video' : 'Download lesson'}
+                  </Text>
+                  {lessonDownload.downloadState === 'downloaded' ? (
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textMuted }}>Remove</Text>
+                  ) : null}
+                </TouchableOpacity>
+              ) : null}
+
               {model.selectedLesson.content ? (
                 <View style={{ marginTop: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: theme.colors.cardBorder }}>
                   {model.selectedLesson.content.split('\n').map((paragraph, index) => {
@@ -4409,7 +4456,7 @@ export function LessonOverlay({ model }: { model: EcoBudMobileModel }) {
           ? (hasPages && !isOnLastPage ? 'Next Page' : 'Lesson Completed')
           : hasPages && !isOnLastPage
             ? 'Next Page'
-            : lesson.hasQuiz ? 'Start Quiz' : 'Complete Lesson';
+            : lesson.hasQuiz ? (model.hasUsableInternet ? 'Start Quiz' : 'Quiz needs internet') : 'Complete Lesson';
         const handlePrimaryAction = () => {
           if (hasPages && !isOnLastPage) {
             handleNextPage();
@@ -8126,8 +8173,11 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
         setDisplayCoins(dashboardData.ecoCoins);
       }
     } catch (err) {
-      console.error('Failed to load redeem data:', err);
-      if (!silent) {
+      // Being offline is expected and already shown on screen, so it is not logged as an error.
+      const code = (err as { code?: string } | null)?.code;
+      const isConnectionError = code === 'offline' || code === 'timeout';
+      if (!isConnectionError) console.error('Failed to load redeem data:', err);
+      if (!silent && !isConnectionError) {
         setItems([]);
         setMyRequests([]);
       }
@@ -8201,7 +8251,8 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
     });
 
     const interval = setInterval(() => {
-      loadItems(true);
+      // Polling offline can only fail, so wait for the connection to come back.
+      if (model.hasUsableInternet) loadItems(true);
       void syncQueuedRedemptions();
     }, 6000);
 
@@ -8219,7 +8270,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
       clearInterval(interval);
       appStateSub.remove();
     };
-  }, [loadItems, syncQueuedRedemptions]);
+  }, [loadItems, model.hasUsableInternet, syncQueuedRedemptions]);
 
   const onPullRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -8435,13 +8486,21 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
           ))}
         </View>
 
-        {loading ? (
+        {!model.hasUsableInternet ? (
+          <ConnectionErrorCard
+            title="No internet connection"
+            onRetry={() => { void loadItems(); }}
+            style={{ marginHorizontal: 0, marginTop: 12 }}
+          />
+        ) : null}
+
+        {loading && model.hasUsableInternet ? (
           <View style={{ padding: 40, alignItems: 'center' }}>
             <ActivityIndicator size="large" color={isDark ? theme.colors.primary : '#126027'} />
           </View>
         ) : activeTab === 'shop' ? (
           /* ─── Shop Tab ─── */
-          items.length === 0 ? (
+          items.length === 0 && !model.hasUsableInternet ? null : items.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center' }}>
               <Ionicons name="gift-outline" size={48} color={isDark ? theme.colors.primary : '#A7D5BA'} />
               <Text style={{ fontSize: 15, color: theme.colors.textMuted, marginTop: 12 }}>No items available yet</Text>
@@ -8513,7 +8572,7 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
           )
         ) : (
           /* ─── My Requests Tab ─── */
-          myRequests.length === 0 ? (
+          myRequests.length === 0 && !model.hasUsableInternet ? null : myRequests.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center' }}>
               <Ionicons name="receipt-outline" size={48} color={isDark ? theme.colors.primary : '#A7D5BA'} />
               <Text style={{ fontSize: 15, color: theme.colors.textMuted, marginTop: 12 }}>No requests yet</Text>

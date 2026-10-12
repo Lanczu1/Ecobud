@@ -9,7 +9,7 @@ import { type EcoBudMobileModel, type LessonWithProgress } from '../types/home';
 import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard } from './DiscoverChallengeCard';
 import { TopNavbar, SurfaceCard, AvatarBubble, AiAssistantBar } from './CommonComponents';
-import { LearnLessonCard, LearnLessonSkeleton } from './LearnLessonCard';
+import { LearnLessonCard, LearnLessonSkeleton, getLessonDownloadProps } from './LearnLessonCard';
 import { CoachMarkTarget } from './CoachMarkTarget';
 import { QuickActions } from './QuickActions';
 import { SummaryCards } from './SummaryCards';
@@ -627,6 +627,7 @@ export function LearnView({ model, onSearchKeyboardChange, keyboardHeight = 0 }:
             const card = <LearnLessonCard lesson={lesson} compact={layoutMode === 'grid'}
               ref={lessonIndex === 0 ? tutorialTargetRef : undefined}
               style={{ marginBottom: layoutMode === 'grid' ? 0 : verticalScale(14) }}
+              {...getLessonDownloadProps(model, lesson)}
               onPress={() => void model.openLesson(lesson.id)} />;
             return <View key={lesson.id} style={{ flex: 1 }}>
               {lessonIndex === 0 ? <CoachMarkTarget name="firstLearnLesson" borderRadius={moderateScale(22)}

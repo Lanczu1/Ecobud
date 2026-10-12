@@ -1,8 +1,8 @@
 import React from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
 
-type ConfirmPrompt = Pick<React.ComponentProps<typeof ConfirmDialog>, 'title' | 'message' | 'confirmLabel' | 'icon'> & {
-  onConfirm: () => void;
+type ConfirmPrompt = Pick<React.ComponentProps<typeof ConfirmDialog>, 'title' | 'message' | 'confirmLabel' | 'icon' | 'destructive' | 'hideCancel'> & {
+  onConfirm?: () => void;
 };
 
 let present: ((prompt: ConfirmPrompt) => void) | null = null;
@@ -30,8 +30,10 @@ export function ConfirmPromptHost() {
       message={prompt.message}
       confirmLabel={prompt.confirmLabel}
       icon={prompt.icon}
+      destructive={prompt.destructive}
+      hideCancel={prompt.hideCancel}
       onCancel={() => setVisible(false)}
-      onConfirm={() => { setVisible(false); prompt.onConfirm(); }}
+      onConfirm={() => { setVisible(false); prompt.onConfirm?.(); }}
     />
   );
 }

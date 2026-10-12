@@ -6,21 +6,32 @@ import type {
   OfflineHabitCheckInPayload,
   OfflineLessonMutationPayload,
   OfflineMutationRecord,
+  OfflineMutationType,
   OfflineRedeemItemPayload,
 } from './offlineMutationQueue.types';
 
 const RETRY_DELAYS_MS = [600, 1_200, 2_400] as const;
+const MAX_SYNC_PASSES_PER_MUTATION = 5;
 
 interface SyncPendingMutationsInput {
   token: string;
   userId: string;
 }
 
+export interface RejectedOfflineMutation {
+  type: OfflineMutationType;
+  message: string;
+}
+
 interface SyncPendingMutationsResult {
   attemptedCount: number;
   syncedCount: number;
   failedCount: number;
+  remainingCount: number;
+  rejected: RejectedOfflineMutation[];
 }
+
+type SyncFailureKind = 'connectivity' | 'auth' | 'server' | 'rejected';
 
 const wait = (durationMs: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, durationMs));
@@ -28,19 +39,23 @@ const wait = (durationMs: number) =>
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Unexpected sync failure.';
 
-const isRetryableSyncError = (error: unknown) => {
-  if (!(error instanceof Error)) {
-    return false;
+const classifySyncError = (error: unknown): SyncFailureKind => {
+  const code = (error as { code?: string } | null)?.code;
+  const status = (error as { status?: number } | null)?.status;
+
+  if (code === 'offline' || code === 'timeout') {
+    return 'connectivity';
   }
 
-  const normalizedMessage = error.message.toLowerCase();
+  if (status === 401) {
+    return 'auth';
+  }
 
-  return (
-    normalizedMessage.includes('unable to reach the ecobud api') ||
-    normalizedMessage.includes('network') ||
-    normalizedMessage.includes('fetch') ||
-    normalizedMessage.includes('timeout')
-  );
+  if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+    return 'rejected';
+  }
+
+  return 'server';
 };
 
 const executeMutation = async (
@@ -104,35 +119,32 @@ export const offlineSyncService = {
     await offlineMutationQueue.initialize();
     const pendingMutations = await offlineMutationQueue.listPending(input.userId);
 
-    if (pendingMutations.length === 0) {
-      return {
-        attemptedCount: 0,
-        syncedCount: 0,
-        failedCount: 0,
-      };
-    }
-
     const result: SyncPendingMutationsResult = {
-      attemptedCount: pendingMutations.length,
+      attemptedCount: 0,
       syncedCount: 0,
       failedCount: 0,
+      remainingCount: 0,
+      rejected: [],
     };
 
     for (const mutation of pendingMutations) {
-      let synced = false;
+      let failureKind: SyncFailureKind | null = null;
       let lastErrorMessage = 'Sync failed.';
+
+      result.attemptedCount += 1;
 
       for (let attemptIndex = 0; attemptIndex < RETRY_DELAYS_MS.length; attemptIndex += 1) {
         try {
           await executeMutation(input.token, mutation);
           await offlineMutationQueue.markSynced(mutation.id);
           result.syncedCount += 1;
-          synced = true;
+          failureKind = null;
           break;
         } catch (error) {
           lastErrorMessage = getErrorMessage(error);
+          failureKind = classifySyncError(error);
 
-          if (!isRetryableSyncError(error) || attemptIndex === RETRY_DELAYS_MS.length - 1) {
+          if (failureKind !== 'connectivity' || attemptIndex === RETRY_DELAYS_MS.length - 1) {
             break;
           }
 
@@ -140,11 +152,30 @@ export const offlineSyncService = {
         }
       }
 
-      if (!synced) {
-        await offlineMutationQueue.markFailed(mutation.id, lastErrorMessage);
-        result.failedCount += 1;
+      if (!failureKind) {
+        continue;
       }
+
+      // The connection or the token is unusable for every remaining item, so
+      // leave the queue untouched and let the next sync trigger pick it up.
+      if (failureKind === 'connectivity' || failureKind === 'auth') {
+        result.attemptedCount -= 1;
+        break;
+      }
+
+      const outOfPasses = mutation.retryCount + 1 >= MAX_SYNC_PASSES_PER_MUTATION;
+
+      if (failureKind === 'rejected' || outOfPasses) {
+        await offlineMutationQueue.discard(mutation.id);
+        result.rejected.push({ type: mutation.type, message: lastErrorMessage });
+        continue;
+      }
+
+      await offlineMutationQueue.markFailed(mutation.id, lastErrorMessage);
+      result.failedCount += 1;
     }
+
+    result.remainingCount = await offlineMutationQueue.getPendingCount(input.userId);
 
     return result;
   },

@@ -10,15 +10,19 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  icon,
   destructive = false,
+  hideCancel = false,
   busy = false,
   onCancel,
   onConfirm,
 }: {
+  hideCancel?: boolean;
   visible: boolean;
   title: string;
   message: string;
   confirmLabel: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
   destructive?: boolean;
   busy?: boolean;
   onCancel: () => void;
@@ -33,19 +37,21 @@ export function ConfirmDialog({
         <Pressable accessibilityLabel="Close confirmation" style={StyleSheet.absoluteFill} onPress={busy ? undefined : onCancel} />
         <View accessibilityRole="alert" style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
           <View style={[styles.icon, { backgroundColor: `${accent}1F` }]}>
-            <Ionicons name={destructive ? 'warning' : 'help-circle'} size={25} color={accent} />
+            <Ionicons name={icon ?? (destructive ? 'warning' : 'help-circle')} size={25} color={accent} />
           </View>
           <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{title}</Text>
           <Text style={[styles.message, { color: theme.colors.textSecondary }]}>{message}</Text>
           <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={onCancel}
-              style={({ pressed }) => [styles.button, { borderColor: theme.colors.cardBorder }, pressed && styles.pressed]}
-            >
-              <Text style={[styles.cancelText, { color: theme.colors.textPrimary }]}>Cancel</Text>
-            </Pressable>
+            {hideCancel ? null : (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={onCancel}
+                style={({ pressed }) => [styles.button, { borderColor: theme.colors.cardBorder }, pressed && styles.pressed]}
+              >
+                <Text style={[styles.cancelText, { color: theme.colors.textPrimary }]}>Cancel</Text>
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               disabled={busy}

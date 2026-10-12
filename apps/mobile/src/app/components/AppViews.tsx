@@ -60,7 +60,8 @@ import { ActiveChallengeCard } from './ActiveChallengeCard';
 import { DiscoverChallengeCard, DiscoverChallengeSkeleton } from './DiscoverChallengeCard';
 import { FastImage } from '../../shared/ui/FastImage';
 import { useListPerformance } from '../../shared/ui/useListPerformance';
-import { LearnLessonCard } from './LearnLessonCard';
+import { LearnLessonCard, getLessonDownloadProps } from './LearnLessonCard';
+import { ConnectionErrorCard } from '../../shared/ui/ConnectionErrorCard';
 import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
@@ -706,6 +707,7 @@ export function LearnView({ model }: { model: EcoBudMobileModel }) {
             <LearnLessonCard
               key={lesson.id}
               lesson={lesson}
+              {...getLessonDownloadProps(model, lesson)}
               onPress={() => void model.openLesson(lesson.id)}
               style={{ width: layoutMode === 'grid' ? gridCardWidth : '100%', marginBottom: 0 }}
             />
@@ -883,7 +885,9 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
   const { width, height } = useWindowDimensions();
   const { preferences } = useAccessibility();
   const largeText = preferences.size === 'Large';
-  const isCardsLoading = (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
+  const isOffline = !model.hasUsableInternet;
+  // Nothing can finish loading offline, so skip the skeletons and show the connection card instead.
+  const isCardsLoading = !isOffline && (!model.challenges || model.challenges.length === 0) && (model.isHydrating || model.initializing || model.booting);
   const searchBarRef = useRef<View>(null);
   const searchFocusedRef = useRef(false);
   const challengeListRef = useRef<FlatList<ChallengeListItem>>(null);
@@ -1155,15 +1159,17 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
     | { kind: 'discover'; id: string; row: ChallengeWithProgress[] }
     | { kind: 'myTask'; id: string; group: InProgressGroup }
     | { kind: 'history'; id: string; group: CompletedGroup };
+  // Saved challenge cards are hidden offline: none of them can be started or submitted without a connection.
+  const hideCards = isCardsLoading || isOffline;
   const challengeItems: ChallengeListItem[] = viewMode === 'Discover'
-    ? (isCardsLoading ? [] : challengeRows.map((row) => ({
+    ? (hideCards ? [] : challengeRows.map((row) => ({
         kind: 'discover' as const,
         id: row.map((challenge) => challenge.uniqueId || challenge.id).join(':'),
         row,
       })))
     : viewMode === 'My Tasks'
-      ? (isCardsLoading ? [] : inProgressGroups.map((group) => ({ kind: 'myTask' as const, id: group.challenge.id, group })))
-      : (isCardsLoading ? [] : completedGroups.map((group) => ({ kind: 'history' as const, id: group.challenge.id, group })));
+      ? (hideCards ? [] : inProgressGroups.map((group) => ({ kind: 'myTask' as const, id: group.challenge.id, group })))
+      : (hideCards ? [] : completedGroups.map((group) => ({ kind: 'history' as const, id: group.challenge.id, group })));
   const challengeItemsRef = useRef(challengeItems);
   challengeItemsRef.current = challengeItems;
   const prefetchedChallengeUrlsRef = useRef(new Set<string>());
@@ -1360,7 +1366,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
         )}
 
         {/* Headings */}
-        {((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedGroups.length > 0)) && (
+        {!isOffline && ((viewMode === 'Discover' && currentActiveList.length > 0) || (viewMode === 'My Tasks' && inProgressGroups.length > 0) || (viewMode === 'History' && completedGroups.length > 0)) && (
           <View style={[localStyles.challengeListHeading, { gap: scale(10) }, largeText && { flexDirection: 'column', alignItems: 'stretch' }]}>
             <View style={{ flex: largeText ? undefined : 1, minWidth: 0 }}>
               <Text style={[localStyles.challengeListTitle, { color: theme.colors.textPrimary }]}>
@@ -1385,8 +1391,17 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
           </View>
         )}
 
+        {/* Offline: same card as the Give & Get hub, in place of the skeletons and empty states */}
+        {isOffline ? (
+          <ConnectionErrorCard
+            title="No internet connection"
+            onRetry={() => void model.refreshEverything()}
+            style={{ marginHorizontal: 0, marginTop: 16 }}
+          />
+        ) : null}
+
         {/* Empty States */}
-        {!isCardsLoading && ((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedGroups.length === 0)) && (
+        {!isCardsLoading && !isOffline && ((viewMode === 'Discover' && currentActiveList.length === 0) || (viewMode === 'My Tasks' && inProgressGroups.length === 0) || (viewMode === 'History' && completedGroups.length === 0)) && (
           <View style={{
             alignItems: 'center',
             justifyContent: 'center',
@@ -1465,7 +1480,7 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
         )}
 
 
-        {model.challenges.length === 0 && (
+        {model.challenges.length === 0 && !isOffline && (
           <View style={{ padding: 40, alignItems: 'center', opacity: 0.5 }}>
             <Ionicons name="trophy-outline" size={48} color="#126027" />
             <Text style={[styles.sectionHeadline, { marginTop: 16 }]}>Check back soon!</Text>

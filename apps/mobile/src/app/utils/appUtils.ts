@@ -236,6 +236,9 @@ export function resolveMediaUrl(
   const trimmed = url.trim();
   if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
 
+  // Files saved on the device (downloaded lessons) are already complete URIs.
+  if (trimmed.startsWith('file://')) return trimmed;
+
   let clean = trimmed.replace(/\\/g, '/');
   if (apiOrigin && clean.includes('localhost:3000')) {
     clean = clean.replace('http://localhost:3000', apiOrigin);

@@ -2,6 +2,7 @@ import { useSkeletonPulse } from '../../shared/ui/SkeletonLoaders';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
+  Alert,
   StyleSheet,
   View,
 } from 'react-native';
@@ -18,7 +19,46 @@ interface LearnLessonCardProps {
   onPress: () => void;
   style?: any;
   compact?: boolean;
+  downloadState?: LessonDownloadState;
+  downloadPercent?: number;
+  onDownloadPress?: () => void;
+  localImageUri?: string | null;
 }
+
+export type LessonDownloadState = 'idle' | 'downloading' | 'downloaded';
+
+interface LessonDownloadModel {
+  downloadedLessons: Record<string, unknown>;
+  lessonDownloadProgress: Record<string, number>;
+  handleDownloadLesson: (lessonId: string) => Promise<void>;
+  handleRemoveLessonDownload: (lessonId: string) => Promise<void>;
+  getDownloadedLessonImageUri: (lessonId: string) => string | null;
+}
+
+// Shared by the lesson cards and the lesson screen so both offer the same download behavior.
+export const getLessonDownloadProps = (model: LessonDownloadModel, lesson: Pick<LessonWithProgress, 'id' | 'title'>) => {
+  const percent = model.lessonDownloadProgress[lesson.id];
+  const downloadState: LessonDownloadState = percent !== undefined
+    ? 'downloading'
+    : model.downloadedLessons[lesson.id] ? 'downloaded' : 'idle';
+
+  return {
+    downloadState,
+    downloadPercent: percent ?? 0,
+    localImageUri: model.getDownloadedLessonImageUri(lesson.id),
+    onDownloadPress: () => {
+      if (downloadState === 'downloading') return;
+      if (downloadState === 'idle') {
+        void model.handleDownloadLesson(lesson.id);
+        return;
+      }
+      Alert.alert('Remove download?', `${lesson.title} will need internet to open again.`, [
+        { text: 'Keep', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => void model.handleRemoveLessonDownload(lesson.id) },
+      ]);
+    },
+  };
+};
 
 const getActionLabel = (status: LessonWithProgress['status']) => {
   if (status === 'completed') {
@@ -44,17 +84,17 @@ const getStatusLabel = (status: LessonWithProgress['status']) => {
   return 'Not Started';
 };
 
-export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(function LearnLessonCard({ lesson, onPress, style, compact = false }, ref) {
+export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(function LearnLessonCard({ lesson, onPress, style, compact = false, downloadState, downloadPercent = 0, onDownloadPress, localImageUri }, ref) {
   const { theme, isDark } = useTheme();
   const { isSmall } = useResponsive();
   const [imgError, setImgError] = React.useState(false);
   const progressWidth = `${Math.max(0, Math.min(100, lesson.progress || 0))}%` as const;
 
-  const resolvedImageUrl = resolveMediaUrl(lesson.imageUrl, ecobudApiOrigin);
+  const resolvedImageUrl = localImageUri || resolveMediaUrl(lesson.imageUrl, ecobudApiOrigin);
 
   React.useEffect(() => {
     setImgError(false);
-  }, [lesson.imageUrl]);
+  }, [lesson.imageUrl, localImageUri]);
 
   const starIconSize = isSmall ? clampFontSize(9.5, 8, 10) : clampFontSize(11, 10, 12);
 
@@ -92,6 +132,30 @@ export const LearnLessonCard = React.forwardRef<View, LearnLessonCardProps>(func
             </Text>
           </View>
         )}
+
+        {onDownloadPress && downloadState ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={
+              downloadState === 'downloaded'
+                ? `Remove download of ${lesson.title}`
+                : downloadState === 'downloading'
+                  ? `Downloading ${lesson.title}, ${downloadPercent} percent`
+                  : `Download ${lesson.title} for offline use`
+            }
+            onPress={onDownloadPress}
+            disabled={downloadState === 'downloading'}
+            hitSlop={8}
+            activeOpacity={0.8}
+            style={[styles.downloadButton, { backgroundColor: downloadState === 'downloaded' ? '#126027' : 'rgba(11,17,14,0.72)' }]}
+          >
+            {downloadState === 'downloading' ? (
+              <Text style={styles.downloadPercentText}>{downloadPercent}%</Text>
+            ) : (
+              <Ionicons name={downloadState === 'downloaded' ? 'checkmark' : 'download-outline'} size={scale(18)} color="#FFF" />
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <Text style={[styles.title, compact && styles.titleCompact, { color: theme.colors.textPrimary }]} numberOfLines={compact ? 2 : undefined}>{lesson.title}</Text>
@@ -222,6 +286,22 @@ const styles = StyleSheet.create({
     elevation: 4,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  downloadButton: {
+    position: 'absolute',
+    top: moderateScale(8),
+    right: moderateScale(8),
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  downloadPercentText: {
+    color: '#FFF',
+    fontSize: responsiveFontSize(11),
+    fontWeight: '800',
   },
   featuredBadgeSmall: {
     top: moderateScale(8),

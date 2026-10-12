@@ -73,5 +73,6 @@ export interface OfflineMutationQueue {
   listPending(userId: string): Promise<OfflineMutationRecord[]>;
   markSynced(id: string): Promise<void>;
   markFailed(id: string, errorMessage: string): Promise<void>;
+  discard(id: string): Promise<void>;
   getPendingCount(userId: string): Promise<number>;
 }
