@@ -281,6 +281,9 @@ model Lesson {
   createdById      String?              @map("created_by_id")
   quizPassingScore Int                  @default(70) @map("quiz_passing_score")
   transcript       String?
+  videoCreditsEnabled Boolean           @default(false) @map("video_credits_enabled")
+  videoCreditsName    String?            @map("video_credits_name")
+  videoCreditsUrl     String?            @map("video_credits_url")
   videoUrl         String?
   difficulty       String               @default("Beginner")
   pages            LessonPage[]

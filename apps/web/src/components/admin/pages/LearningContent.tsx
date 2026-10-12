@@ -27,6 +27,9 @@ interface Lesson {
   videoUrl?: string | null;
   imageUrl?: string | null;
   transcript?: string | null;
+  videoCreditsEnabled?: boolean;
+  videoCreditsName?: string | null;
+  videoCreditsUrl?: string | null;
   quizPassingScore?: number;
   quizQuestions?: any[];
   createdAt: string;
@@ -66,6 +69,9 @@ function OptimizedTextArea({ value, onChange, ...props }: any) {
 }
 
 interface FormDataState {
+  videoCreditsEnabled?: boolean;
+  videoCreditsName?: string | null;
+  videoCreditsUrl?: string | null;
   title: string;
   description: string;
   content: string;
@@ -104,10 +110,10 @@ const formatLocalDatetime = (dateString?: string | null) => {
 function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
   const badgeReward = useContentBadgeReward('lesson', initial?.id);
   const [form, setForm] = useState<FormDataState>(
-    drafts?.restored?.form ?? (initial
+    drafts?.restored?.form ?? { videoCreditsEnabled: initial?.videoCreditsEnabled ?? false, videoCreditsName: initial?.videoCreditsName ?? '', videoCreditsUrl: initial?.videoCreditsUrl ?? '', ...(initial
       ? { title: initial.title, description: initial.description, content: initial.content || '', category: initial.category, difficulty: initial.difficulty || 'Beginner', isPublished: initial.isPublished, featured: initial.featured || false, quizPassingScore: initial.quizPassingScore || 70, pointsReward: initial.pointsReward || 10, quizQuestions: initial.quizQuestions || [], transcript: initial.transcript, durationMinutes: initial.durationMinutes ?? 0, pages: (initial as any).pages && (initial as any).pages.length > 0 ? (initial as any).pages : [{ title: '', description: '', content: '' }], scheduledAt: formatLocalDatetime(initial.scheduledAt) }
       : emptyForm
-  ));
+  )});
   const [videoFile, setVideoFile] = useState<File | null>(drafts?.restored?.videoFile ?? null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(drafts?.restored?.thumbnailFile ?? null);
   const [removeThumbnail, setRemoveThumbnail] = useState(false);
@@ -142,6 +148,7 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
     setVideoFile(null);
     setVideoKey(Date.now());
     setUploadedVideoUrl(null);
+    setForm(f => ({ ...f, videoCreditsEnabled: false }));
     if (initial?.videoUrl) setRemoveVideo(true);
   };
 
@@ -239,6 +246,18 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
       setErr('At least one lesson page is required.');
       return;
     }
+    if (enableVideo && !removeVideo && form.videoCreditsEnabled) {
+      let validUrl = false;
+      try {
+        const url = new URL(form.videoCreditsUrl?.trim() || '');
+        validUrl = ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password && !url.port &&
+          (url.hostname === 'youtu.be' || url.hostname === 'youtube.com' || url.hostname.endsWith('.youtube.com'));
+      } catch { /* Invalid URLs are reported with the other form errors. */ }
+      if (!form.videoCreditsName?.trim() || !validUrl) {
+        setErr('Enter a credit name and a valid YouTube link, or turn off Credits video.');
+        return;
+      }
+    }
     setSaving(true);
     setErr('');
     try {
@@ -261,6 +280,10 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
       formData.append('durationMinutes', String(form.durationMinutes || 0));
       formData.append('quizQuestions', JSON.stringify(enableQuiz ? form.quizQuestions : []));
       formData.append('pages', JSON.stringify(form.pages));
+      const creditsEnabled = enableVideo && !removeVideo && Boolean(form.videoCreditsEnabled);
+      formData.append('videoCreditsEnabled', String(creditsEnabled));
+      formData.append('videoCreditsName', creditsEnabled ? form.videoCreditsName?.trim() || '' : '');
+      formData.append('videoCreditsUrl', creditsEnabled ? form.videoCreditsUrl?.trim() || '' : '');
       if (enableVideo && form.transcript) formData.append('transcript', form.transcript);
       if (enableVideo) {
         if (uploadedVideoUrl) {
@@ -366,9 +389,7 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
 
               <div className="bg-gray-50/50 rounded-xl border border-gray-200 p-4 shadow-sm space-y-4 mb-4 mt-6">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <div className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${enableVideo ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setEnableVideo(!enableVideo)}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${enableVideo ? 'translate-x-4' : ''}`} />
-                  </div>
+                  <input type="checkbox" checked={enableVideo} onChange={e => setEnableVideo(e.target.checked)} className="h-5 w-5 accent-green-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-green-700" />
                   <span className="text-sm font-semibold text-gray-700">Include Video in Lesson</span>
                 </label>
 
@@ -405,8 +426,31 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
                       </button>
                     </div>
 
+                    <div className="space-y-3 border-t border-gray-200 pt-3">
+                      <label className="flex min-h-11 items-center gap-3 cursor-pointer text-sm font-semibold text-gray-700 dark:text-gray-200">
+                        <input type="checkbox" checked={Boolean(form.videoCreditsEnabled)} onChange={e => setForm(f => ({ ...f, videoCreditsEnabled: e.target.checked }))} aria-controls="lesson-video-credits" className="h-5 w-5 accent-green-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-green-700" />
+                        Credits video (optional)
+                      </label>
+                      {form.videoCreditsEnabled && (
+                        <div id="lesson-video-credits" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="min-w-0">
+                            <label htmlFor="video-credits-name" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Credits name</label>
+                            <input id="video-credits-name" type="text" required maxLength={200} value={form.videoCreditsName ?? ''} onChange={e => setForm(f => ({ ...f, videoCreditsName: e.target.value }))} className="min-h-11 w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus-visible:outline-2 focus-visible:outline-green-700" />
+                          </div>
+                          <div className="min-w-0">
+                            <label htmlFor="video-credits-url" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">YouTube link</label>
+                            <input id="video-credits-url" type="url" required maxLength={2048} placeholder="https://www.youtube.com/watch?v=..." value={form.videoCreditsUrl ?? ''} onChange={e => setForm(f => ({ ...f, videoCreditsUrl: e.target.value }))} className="min-h-11 w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus-visible:outline-2 focus-visible:outline-green-700" />
+                          </div>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 sm:col-span-2">Shown above the video transcript. The credit name links to YouTube.</p>
+                        </div>
+                      )}
+                    </div>
+
                     {form.transcript && (
                       <div className="mt-2">
+                        {form.videoCreditsEnabled && form.videoCreditsName?.trim() && (
+                          <p className="mb-3 break-words text-sm text-gray-700 dark:text-gray-200">Video credits: {form.videoCreditsName.trim()}</p>
+                        )}
                         <label className="block text-xs font-medium text-gray-600 mb-1">Generated Transcript</label>
                         <textarea
                           value={form.transcript}

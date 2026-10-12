@@ -10,6 +10,7 @@ import fs from "fs";
 import path from "path";
 import { parseAdminPagination } from '../utils/adminPagination';
 import { HttpError } from '../http/errorResponder';
+import { parseLessonVideoCredits } from '../services/lessonVideoCredits';
 
 function contentSaveError(error: any, res: Response, fallback: string) {
   if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
@@ -73,6 +74,10 @@ export class AdminController {
   }
 
   static async createLesson(req: AuthenticatedRequest, res: Response) {
+    let videoCredits;
+    try { videoCredits = parseLessonVideoCredits(req.body); } catch (error) {
+      return contentSaveError(error, res, 'Invalid video credits.');
+    }
     const { title, description, isPublished, category, difficulty, quizPassingScore, quizQuestions, durationMinutes, pages, pointsReward, scheduledAt } = req.body;
 
     if (!title || !description) {
@@ -154,6 +159,7 @@ export class AdminController {
         videoUrl,
         imageUrl,
         transcript,
+        ...(videoUrl ? videoCredits : { videoCreditsEnabled: false, videoCreditsName: null, videoCreditsUrl: null }),
         durationMinutes: durationMinutes !== undefined && durationMinutes !== '' ? parseInt(durationMinutes, 10) : 0,
         quizPassingScore: quizPassingScore ? parseInt(quizPassingScore, 10) : 70,
         pointsReward: pointsReward ? parseInt(pointsReward, 10) : 10,
@@ -171,6 +177,9 @@ export class AdminController {
   static async updateLesson(req: AuthenticatedRequest, res: Response) {
     const { id } = req.params;
     const updateData = { ...req.body };
+    try { Object.assign(updateData, parseLessonVideoCredits(req.body)); } catch (error) {
+      return contentSaveError(error, res, 'Invalid video credits.');
+    }
     
     let existingLesson;
     try {
@@ -186,6 +195,9 @@ export class AdminController {
     if (updateData.removeVideo === 'true') {
       updateData.videoUrl = null;
       updateData.transcript = null;
+      updateData.videoCreditsEnabled = false;
+      updateData.videoCreditsName = null;
+      updateData.videoCreditsUrl = null;
       if (existingLesson?.videoUrl) safelyDeleteUpload(existingLesson.videoUrl);
     }
     delete updateData.removeVideo;

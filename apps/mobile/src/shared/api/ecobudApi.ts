@@ -215,6 +215,9 @@ export interface LessonWithProgress {
   imageUrl?: string | null;
   videoUrl?: string | null;
   transcript?: string | null;
+  videoCreditsEnabled?: boolean;
+  videoCreditsName?: string | null;
+  videoCreditsUrl?: string | null;
   pointsReward?: number;
   durationMinutes?: number;
   hasQuiz?: boolean;

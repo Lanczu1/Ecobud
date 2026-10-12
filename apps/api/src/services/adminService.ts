@@ -110,6 +110,9 @@ export class AdminService {
     videoUrl?: string | null;
     imageUrl?: string | null;
     transcript?: string | null;
+    videoCreditsEnabled?: boolean;
+    videoCreditsName?: string | null;
+    videoCreditsUrl?: string | null;
     durationMinutes?: number;
     quizPassingScore?: number;
     pointsReward?: number;
@@ -131,6 +134,9 @@ export class AdminService {
         videoUrl: data.videoUrl,
         imageUrl: data.imageUrl,
         transcript: data.transcript,
+        videoCreditsEnabled: data.videoCreditsEnabled,
+        videoCreditsName: data.videoCreditsName,
+        videoCreditsUrl: data.videoCreditsUrl,
         durationMinutes: data.durationMinutes ?? 0,
         quizPassingScore: data.quizPassingScore ?? 70,
         pointsReward: data.pointsReward ?? 10,

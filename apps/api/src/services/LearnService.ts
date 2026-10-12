@@ -33,6 +33,9 @@ export interface LearnLessonPayload {
   imageUrl?: string | null;
   videoUrl?: string | null;
   transcript?: string | null;
+  videoCreditsEnabled?: boolean;
+  videoCreditsName?: string | null;
+  videoCreditsUrl?: string | null;
   pointsReward?: number;
   durationMinutes?: number;
   featured: boolean;
@@ -358,6 +361,9 @@ export class LearnService {
     imageUrl: string | null;
     videoUrl: string | null;
     transcript: string | null;
+    videoCreditsEnabled?: boolean;
+    videoCreditsName?: string | null;
+    videoCreditsUrl?: string | null;
     isPublished: boolean;
     featured: boolean;
     createdAt: Date;
@@ -399,6 +405,9 @@ export class LearnService {
       imageUrl: lesson.imageUrl,
       videoUrl: lesson.videoUrl,
       transcript: lesson.transcript,
+      videoCreditsEnabled: lesson.videoCreditsEnabled ?? false,
+      videoCreditsName: lesson.videoCreditsName ?? null,
+      videoCreditsUrl: lesson.videoCreditsUrl ?? null,
       pointsReward: lesson.pointsReward,
       durationMinutes: lesson.durationMinutes,
       author: lesson.createdBy ? {
