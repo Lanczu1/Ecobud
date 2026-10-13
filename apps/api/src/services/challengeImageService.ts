@@ -285,7 +285,7 @@ async function callMistralVision(
 /**
  * Production-grade Challenge Image Recognition
  * Features:
- * - Multi-tier cascade (Mistral vision -> Gemini Flash Lite -> Gemini Flash)
+ * - Multi-tier cascade (Gemini Flash Lite -> Gemini Flash -> Mistral vision)
  * - Exponential backoff with jitter on HTTP 429 (Rate Limit / Quota Exceeded)
  * - Immediate failover on 500, 502, 503, 504 server errors and network timeouts
  * - Result schema normalization to guarantee valid client verification & token signing
@@ -315,17 +315,7 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
     let parsedRawResult: any = null;
     let lastError: any = null;
 
-    if (mistralKey) {
-      try {
-        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, 18_000);
-        parsedRawResult = normalizeDetectionResult(JSON.parse(text));
-      } catch (err: any) {
-        console.error('[AI Vision] Mistral vision failed:', err.message);
-        lastError = err;
-      }
-    }
-
-    if (!parsedRawResult && geminiKey) {
+    if (geminiKey) {
       const modelsToTry = [primaryModel];
       if (secondaryModel !== primaryModel) {
         modelsToTry.push(secondaryModel);
@@ -361,6 +351,17 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
         }
 
         if (parsedRawResult) break;
+      }
+    }
+
+    if (!parsedRawResult && mistralKey) {
+      try {
+        if (geminiKey) console.warn('[AI Vision] Gemini did not return a result. Falling back to Mistral vision...');
+        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, 18_000);
+        parsedRawResult = normalizeDetectionResult(JSON.parse(text));
+      } catch (err: any) {
+        console.error('[AI Vision] Mistral vision failed:', err.message);
+        lastError = err;
       }
     }
 

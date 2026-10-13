@@ -12,6 +12,7 @@ import {
   LogBox,
   Platform,
   AppState,
+  DeviceEventEmitter,
   Easing,
   useWindowDimensions,
   type LayoutChangeEvent,
@@ -171,6 +172,15 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
   const attachHomeList = useCallback((list: FlatList<HomeDashboardSection> | null) => {
     scrollRef.current = list;
     if (list) { scrollYRef.current = 0; homeAnimations.setOffset(0); }
+  }, [homeAnimations]);
+  // Reward particles fly to the level card, so the home list has to be at the top before they launch.
+  React.useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('HOME_SCROLL_TO_TOP', () => {
+      scrollRef.current?.scrollToOffset({ offset: 0, animated: false });
+      scrollYRef.current = 0;
+      homeAnimations.setOffset(0);
+    });
+    return () => subscription.remove();
   }, [homeAnimations]);
   // Profile keeps its own list, so the walkthrough needs a handle on it to bring the coin balance back into view.
   const profileListRef = React.useRef<FlatList<HomeDashboardSection>>(null);

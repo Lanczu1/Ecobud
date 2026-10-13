@@ -1,6 +1,6 @@
 # Challenge image recognition
 
-Before photos use Mistral vision first, with Gemini as a fallback, through the backend `POST /api/challenges/:id/analyze` route. The active request path no longer executes Python or YOLO. After photos retain their existing upload/review flow.
+Before photos use Gemini first, with Mistral vision as a fallback when Gemini fails, through the backend `POST /api/challenges/:id/analyze` route. The active request path no longer executes Python or YOLO. After photos retain their existing upload/review flow.
 
 Set `MISTRAL_API_KEY` in the ignored backend `.env` and optionally set `MISTRAL_IMAGE_MODEL` (default `mistral-medium-2604`). Set `GEMINI_API_KEY` for fallback and optionally `GEMINI_IMAGE_MODEL` (default `gemini-3.5-flash-lite`, with `gemini-3.6-flash` as a backup). Restart the API after changing environment variables. Do not put keys in mobile/web source or any `EXPO_PUBLIC_`/`VITE_` variable. Rotate credentials shared in chat before production use.
 

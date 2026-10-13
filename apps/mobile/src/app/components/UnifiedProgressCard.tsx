@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  DeviceEventEmitter,
   StyleSheet,
   View,
   type LayoutChangeEvent,
@@ -128,7 +129,15 @@ export function UnifiedProgressCard({
     }
   };
 
-  const secondaryCardStyle = { backgroundColor: theme.colors.card, borderColor: theme.colors.border };
+  // onLayout does not fire when the list scrolls, so reward overlays ask for a fresh position.
+  const measureRef = useRef(handleMeasure);
+  measureRef.current = handleMeasure;
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('HOME_PROGRESS_BAR_REMEASURE', () => measureRef.current());
+    return () => subscription.remove();
+  }, []);
+
+  const secondaryCardStyle ={ backgroundColor: theme.colors.card, borderColor: theme.colors.border };
 
   return (
     <View style={styles.container}>

@@ -38,6 +38,7 @@ import { Text, TouchableOpacity, TextInput } from '../../shared/accessibility/pr
 import { Animated } from '../../shared/accessibility/animations';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isLowEndDevice } from '../../shared/performance/deviceTier';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { getLessonDownloadProps } from './LearnLessonCard';
 import { ConnectionErrorCard } from '../../shared/ui/ConnectionErrorCard';
@@ -1607,7 +1608,6 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const claimOrigin = model.claimRewardData?.origin;
-  const homeTarget = model.claimRewardTargets.home;
   const profileTarget = model.claimRewardTargets.profile;
   const particleSize = 30;
   const particleOffset = particleSize / 2;
@@ -1616,7 +1616,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const topDestinationY = Math.max(insets.top, height * 0.08) - particleOffset;
   const sideInset = width * 0.12;
 
-  const numParticles = 24;
+  const numParticles = isLowEndDevice() ? 12 : 24;
   const particleAnims = React.useRef(
     Array.from({ length: numParticles }, () => ({
       pos: new Animated.ValueXY({ x: originX, y: originY }),
@@ -1633,19 +1633,14 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     });
 
     const animations = particleAnims.map((particle, index) => {
-      const isCoin = index % 2 !== 0;
       const cornerSpread = width * 0.035;
-      const targetLeft = {
-        x: (homeTarget?.x ?? sideInset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
-        y: (homeTarget?.y ?? topDestinationY + particleOffset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
-      };
-      const targetRight = {
+      // Eco points and coins both land on the Profile tab.
+      const destination = {
         x: (profileTarget?.x ?? width - sideInset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
         y: (profileTarget?.y ?? topDestinationY + particleOffset) - particleOffset + (Math.random() - 0.5) * cornerSpread,
       };
 
-      const delay = index * 16;
-      const destination = isCoin ? targetRight : targetLeft;
+      const delay = index * (384 / numParticles);
 
       return Animated.sequence([
         Animated.delay(delay),
@@ -1691,7 +1686,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => {
       timers.forEach((t) => clearTimeout(t));
     };
-  }, [homeTarget?.x, homeTarget?.y, originX, originY, particleAnims, profileTarget?.x, profileTarget?.y, setActiveOverlay, sideInset, topDestinationY, width]);
+  }, [numParticles, originX, originY, particleAnims, profileTarget?.x, profileTarget?.y, setActiveOverlay, sideInset, topDestinationY, width]);
 
   return (
     <View
@@ -1702,6 +1697,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
       {particleAnims.map((particle, index) => (
         <Animated.View
           key={index}
+          renderToHardwareTextureAndroid
           style={{
             position: 'absolute',
             left: 0,
@@ -1713,11 +1709,6 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
             ],
             opacity: particle.opacity,
             zIndex: 9999,
-            shadowColor: '#F59E0B',
-            shadowRadius: 10,
-            shadowOpacity: 0.8,
-            shadowOffset: { width: 0, height: 0 },
-            elevation: 10,
           }}
         >
           <View style={{
@@ -5221,6 +5212,89 @@ function ExpCounter({ targetPoints, compact = false }: { targetPoints: number; c
   );
 }
 
+type ProgressBarLayout = { x: number; y: number; width: number; height: number };
+type RewardParticle = { pos: Animated.ValueXY; scale: Animated.Value; opacity: Animated.Value };
+
+// Brings the home level card into view, then waits until its bar reports the same spot twice in a row.
+async function measureHomeProgressBar(read: () => ProgressBarLayout | null): Promise<ProgressBarLayout | null> {
+  let previousY: number | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    DeviceEventEmitter.emit('HOME_SCROLL_TO_TOP');
+    DeviceEventEmitter.emit('HOME_PROGRESS_BAR_REMEASURE');
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    const measured = read();
+    if (!measured || measured.width <= 0 || measured.height <= 0) { previousY = null; continue; }
+    if (previousY !== null && Math.abs(previousY - measured.y) < 1) return measured;
+    previousY = measured.y;
+  }
+  return null;
+}
+
+// One reward particle: bursts out from the origin, then arcs to its landing point.
+function rewardParticleFlight(
+  particle: RewardParticle,
+  index: number,
+  count: number,
+  origin: { x: number; y: number },
+  landing: { x: number; y: number },
+) {
+  const flightDuration = 720;
+  const angle = (Math.PI * 2 * index) / count + (Math.random() - 0.5) * 0.4;
+  const radius = scale(70) + Math.random() * scale(50);
+
+  return Animated.sequence([
+    Animated.delay(index * 45),
+    Animated.parallel([
+      Animated.timing(particle.pos, {
+        toValue: { x: origin.x + Math.cos(angle) * radius, y: origin.y + Math.sin(angle) * radius },
+        duration: 340,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(particle.scale, {
+        toValue: 1.3,
+        duration: 340,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(particle.opacity, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]),
+    // x and y ease differently, so the particle arcs in instead of sliding in a line.
+    Animated.parallel([
+      Animated.timing(particle.pos.x, {
+        toValue: landing.x,
+        duration: flightDuration,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(particle.pos.y, {
+        toValue: landing.y,
+        duration: flightDuration,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(particle.scale, {
+        toValue: 0.4,
+        duration: flightDuration,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(flightDuration - 140),
+        Animated.timing(particle.opacity, {
+          toValue: 0,
+          duration: 140,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]),
+  ]);
+}
+
 export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   const player = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
   const animationStartedRef = React.useRef(false);
@@ -5284,11 +5358,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
     pendingTimeoutsRef.current.push(setTimeout(async () => {
       const origin = await originPromise;
-      let target = progressLayoutRef.current;
-      for (let attempt = 0; (!target || target.width <= 0 || target.height <= 0) && attempt < 30; attempt += 1) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 50));
-        target = progressLayoutRef.current;
-      }
+      const target = await measureHomeProgressBar(() => progressLayoutRef.current);
       const particleLayer = await new Promise<{ x: number; y: number } | null>((resolve) => {
         const layerView = particleLayerRef.current;
         if (!layerView) {
@@ -5320,79 +5390,18 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
       setIsAnimatingPoints(true);
 
-      Animated.parallel([
-        Animated.timing(contentOpacity, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(btnOpacity, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bgOpacity, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      Animated.parallel([contentOpacity, btnOpacity, bgOpacity].map((value) => Animated.timing(value, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }))).start();
 
-      const animations = particleAnims.map((particle, index) => {
-        const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
-        const radius = scale(70) + Math.random() * scale(50);
-        const burstX = originX + Math.cos(angle) * radius;
-        const burstY = originY + Math.sin(angle) * radius;
-
-        const delay = index * 60;
-
-        return Animated.sequence([
-          Animated.delay(delay),
-          Animated.parallel([
-            Animated.spring(particle.pos, {
-              toValue: { x: burstX, y: burstY },
-              tension: 80,
-              friction: 6,
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.scale, {
-              toValue: 1.5,
-              duration: 250,
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]),
-          Animated.delay(120),
-          Animated.parallel([
-            Animated.timing(particle.pos, {
-              toValue: {
-                x: targetX + (Math.random() * Math.min(target.width, scale(60)) - Math.min(target.width, scale(60)) / 2),
-                y: targetY,
-              }, // Target exactly the green LevelCard progress bar
-              duration: 650,
-              easing: Easing.bezier(0.25, 1, 0.5, 1),
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.scale, {
-              toValue: 0.4,
-              duration: 650,
-              useNativeDriver: true,
-            }),
-            Animated.sequence([
-              Animated.delay(450),
-              Animated.timing(particle.opacity, {
-                toValue: 0,
-                duration: 200,
-                useNativeDriver: true,
-              }),
-            ]),
-          ]),
-        ]);
-      });
+      const landingSpread = Math.min(target.width, scale(60));
+      const animations = particleAnims.slice(0, numParticles).map((particle, index) => rewardParticleFlight(
+        particle, index, numParticles, { x: originX, y: originY },
+        { x: targetX + (Math.random() - 0.5) * landingSpread, y: targetY },
+      ));
 
       [100, 350, 600, 850, 1100].forEach((delay) => {
         pendingTimeoutsRef.current.push(setTimeout(playPopSound, delay));
@@ -5465,8 +5474,8 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
 
   }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse]);
 
-  const confettiPieces = React.useMemo(() => generateConfettiPieces(25), []);
-  const embers = React.useMemo(() => generateEmbers(8), []);
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(isLowEndDevice() ? 10 : 20), []);
+  const embers = React.useMemo(() => generateEmbers(isLowEndDevice() ? 3 : 6), []);
 
   return (
     <View style={[styles.fullscreenOverlay, isAnimatingPoints && { backgroundColor: 'transparent' }]}>
@@ -5553,7 +5562,6 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
             shadowOffset: { width: 0, height: 16 },
             shadowOpacity: 0.25,
             shadowRadius: 24,
-            elevation: 12,
             overflow: 'hidden',
           }}>
 
@@ -5747,6 +5755,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
         {particleAnims.map((particle, index) => (
           <Animated.View
             key={index}
+            renderToHardwareTextureAndroid
             style={{
               position: 'absolute',
               left: 0,
@@ -5758,11 +5767,6 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
               ],
               opacity: particle.opacity,
               zIndex: 9999,
-              shadowColor: '#10b981',
-              shadowRadius: 10,
-              shadowOpacity: 0.8,
-              shadowOffset: { width: 0, height: 0 },
-              elevation: 10,
             }}
           >
             <View style={{
@@ -5798,19 +5802,19 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const insets = useSafeAreaInsets();
   const isTablet = width >= 600;
 
-  // Use real measured layout from LevelCard's progress bar
-  const layout3 = model.progressBarLayout;
-  const topSafeArea3 = insets.top || 44;
-  const fallbackY3 =
-    topSafeArea3 +
+  const particleLayerRef = React.useRef<View>(null);
+  const progressLayoutRef = React.useRef(model.progressBarLayout);
+  progressLayoutRef.current = model.progressBarLayout;
+  // Where the level bar usually sits, used only if it cannot be measured.
+  const fallbackBarX = isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15;
+  const fallbackBarY =
+    (insets.top || 44) +
     verticalScale(64) +
     verticalScale(38) +
     verticalScale(52) +
     verticalScale(68) +
     verticalScale(114) +
-    verticalScale(218);
-  const targetProgressBarX = layout3 ? layout3.x + layout3.width * 0.5 - 15 : (isTablet ? scale(16) + (width - scale(32)) * 0.25 - 15 : (width / 2) - 15);
-  const targetProgressBarY = layout3 ? layout3.y + layout3.height * 0.5 - 15 : fallbackY3 - 15;
+    verticalScale(218) - 15;
 
 
   const contentScale = React.useRef(new Animated.Value(0.8)).current;
@@ -5824,7 +5828,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const bgOpacity = React.useRef(new Animated.Value(1)).current;
 
   const [isAnimatingPoints, setIsAnimatingPoints] = React.useState(false);
-  const numParticles = 32;
+  const numParticles = 24;
   const particleAnims = React.useRef(
     Array.from({ length: numParticles }, () => ({
       pos: new Animated.ValueXY({ x: width / 2 - 15, y: height / 2 - 80 }),
@@ -5839,70 +5843,31 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
     setContinueStarted(true);
     model.setActiveTab('home', true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
+      const bar = await measureHomeProgressBar(() => progressLayoutRef.current);
+      const layer = await new Promise<{ x: number; y: number }>((resolve) => {
+        const layerView = particleLayerRef.current;
+        if (!layerView) { resolve({ x: 0, y: 0 }); return; }
+        layerView.measureInWindow((x, y) => resolve({ x: x || 0, y: y || 0 }));
+      });
+      const origin = { x: width / 2 - 15, y: height / 2 - 80 };
+      const barX = bar ? bar.x + bar.width / 2 - layer.x - 15 : fallbackBarX;
+      const barY = bar ? bar.y + bar.height / 2 - layer.y - 15 : fallbackBarY;
+
       setIsAnimatingPoints(true);
 
-      Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 0, duration: 0, useNativeDriver: true }),
-        Animated.timing(btnOpacity, { toValue: 0, duration: 0, useNativeDriver: true }),
-        Animated.timing(bgOpacity, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ]).start();
+      Animated.parallel([contentOpacity, btnOpacity, bgOpacity].map((value) => Animated.timing(value, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }))).start();
 
-      const animations = particleAnims.map((particle, index) => {
-        const isCoin = index % 2 !== 0;
-        const angle = (Math.PI * 2 * index) / numParticles + (Math.random() - 0.5) * 0.4;
-        const radius = 70 + Math.random() * 50;
-        const burstX = width / 2 - 15 + Math.cos(angle) * radius;
-        const burstY = height / 2 - 80 + Math.sin(angle) * radius;
-
-        const delay = index * 60;
-
-        return Animated.sequence([
-          Animated.delay(delay),
-          Animated.parallel([
-            Animated.spring(particle.pos, {
-              toValue: { x: burstX, y: burstY },
-              tension: 80,
-              friction: 6,
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.scale, {
-              toValue: 1.5,
-              duration: 250,
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]),
-          Animated.delay(120),
-          Animated.parallel([
-            Animated.timing(particle.pos, {
-              toValue: isCoin
-                ? { x: width + 100, y: 150 }
-                : { x: targetProgressBarX + (Math.random() * 40 - 20), y: targetProgressBarY },
-              duration: 650,
-              easing: Easing.bezier(0.25, 1, 0.5, 1),
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.scale, {
-              toValue: 0.4,
-              duration: 650,
-              useNativeDriver: true,
-            }),
-            Animated.sequence([
-              Animated.delay(450),
-              Animated.timing(particle.opacity, {
-                toValue: 0,
-                duration: 200,
-                useNativeDriver: true,
-              }),
-            ]),
-          ]),
-        ]);
-      });
+      // Leaves land on the level bar; coins leave toward the top-right.
+      const animations = particleAnims.map((particle, index) => rewardParticleFlight(
+        particle, index, numParticles, origin,
+        index % 2 !== 0 ? { x: width + 100, y: 150 } : { x: barX + (Math.random() * 40 - 20), y: barY },
+      ));
 
       setTimeout(() => playPopSound(), 100);
       setTimeout(() => playPopSound(), 350);
@@ -6055,7 +6020,6 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
             shadowOffset: { width: 0, height: 16 },
             shadowOpacity: 0.25,
             shadowRadius: 24,
-            elevation: 12,
             overflow: 'hidden',
           }}>
 
@@ -6236,10 +6200,11 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
         </TouchableOpacity>
       </Animated.View>
 
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View ref={particleLayerRef} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none">
         {particleAnims.map((particle, index) => (
           <Animated.View
             key={index}
+            renderToHardwareTextureAndroid
             style={{
               position: 'absolute',
               left: 0,
@@ -6251,11 +6216,6 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
               ],
               opacity: particle.opacity,
               zIndex: 9999,
-              shadowColor: '#F59E0B',
-              shadowRadius: 10,
-              shadowOpacity: 0.8,
-              shadowOffset: { width: 0, height: 0 },
-              elevation: 10,
             }}
           >
             <View style={{
@@ -6461,7 +6421,6 @@ export function BadgeUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
             shadowOffset: { width: 0, height: 16 },
             shadowOpacity: 0.25,
             shadowRadius: 24,
-            elevation: 12,
             overflow: 'hidden',
           }}>
 
