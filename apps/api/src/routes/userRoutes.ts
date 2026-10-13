@@ -73,53 +73,36 @@ userRoutes.get(
   authenticateRequest,
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
-    const user = await prisma.user.findUnique({
-      where: { id: req.auth!.userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        googleIdentityId: true,
-        role: true,
-        status: true,
-        idVerificationStatus: true,
-        points: true,
-        currentStreak: true,
-        lastActionDate: true,
-        profile: true,
-        badges: {
-          select: {
-            badge: true,
-          },
-          orderBy: { unlockedAt: 'asc' },
+    const userId = req.auth!.userId;
+    // Each part is its own query so they run side by side instead of one after another.
+    const [user, profile, badges, eventRegistrations, lessonsCompleted, activeChallenges, recentLogs] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          googleIdentityId: true,
+          role: true,
+          status: true,
+          idVerificationStatus: true,
+          points: true,
+          currentStreak: true,
+          lastActionDate: true,
         },
-        eventRegistrations: {
-          select: {
-            status: true,
-            attendedAt: true,
-            event: true,
-          },
-          orderBy: { registeredAt: 'desc' },
-          take: 21,
-        },
-        lessonProgress: {
-          select: {
-            status: true,
-          },
-        },
-        challengeProgress: {
-          select: {
-            status: true,
-          },
-        },
-      },
-    });
-
-    const recentLogs = await prisma.transparencyLog.findMany({
-      where: { userId: req.auth!.userId },
-      orderBy: { timestamp: 'desc' },
-      take: 5,
-    });
+      }),
+      prisma.profile.findUnique({ where: { userId } }),
+      prisma.userBadge.findMany({ where: { userId }, select: { badge: true }, orderBy: { unlockedAt: 'asc' } }),
+      prisma.eventRegistration.findMany({
+        where: { userId },
+        select: { status: true, attendedAt: true, event: true },
+        orderBy: { registeredAt: 'desc' },
+        take: 21,
+      }),
+      prisma.userLessonProgress.count({ where: { userId, status: 'completed' } }),
+      prisma.userChallenge.count({ where: { userId, status: { not: 'COMPLETED' } } }),
+      prisma.transparencyLog.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 5 }),
+    ]);
 
     return res.json({
       id: user?.id,
@@ -131,20 +114,18 @@ userRoutes.get(
       status: user?.status,
       points: user?.points ?? 0,
       currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
-      profile: user?.profile,
-      badges: user?.badges.map((item) => item.badge) ?? [],
+      profile: user ? profile : undefined,
+      badges: user ? badges.map((item) => item.badge) : [],
       eventHistory:
-        user?.eventRegistrations.slice(0, 20).map((item) => ({
+        (user ? eventRegistrations : []).slice(0, 20).map((item) => ({
           ...item.event,
           status: item.status,
           attendedAt: item.attendedAt,
-        })) ?? [],
-      eventHistoryHasMore: (user?.eventRegistrations.length ?? 0) > 20,
+        })),
+      eventHistoryHasMore: Boolean(user) && eventRegistrations.length > 20,
       progress: {
-        lessonsCompleted:
-          user?.lessonProgress.filter((item) => item.status === 'completed').length ?? 0,
-        activeChallenges:
-          user?.challengeProgress.filter((item) => item.status !== 'COMPLETED').length ?? 0,
+        lessonsCompleted: user ? lessonsCompleted : 0,
+        activeChallenges: user ? activeChallenges : 0,
       },
       recentLogs: recentLogs.map((log) => ({
         ...log,

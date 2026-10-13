@@ -281,14 +281,17 @@ experienceRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
-    const [user, badges, userBadges, giveawayCount] = await Promise.all([
+    // The badge list is cached, so reading it first lets the milestone counts join the other queries.
+    const badges = await apiCache.getOrSet('system_badges_list', 600, async () => {
+      return prisma.badge.findMany({ orderBy: { requiredPoints: 'asc' } });
+    });
+    const hasMilestoneBadges = badges.some(badge => milestoneTypes.includes(badge.awardType as typeof milestoneTypes[number]));
+    const [user, milestoneProgress, userBadges, giveawayCount] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { points: true },
       }),
-      apiCache.getOrSet('system_badges_list', 600, async () => {
-        return prisma.badge.findMany({ orderBy: { requiredPoints: 'asc' } });
-      }),
+      hasMilestoneBadges ? badgeMilestoneProgress(prisma, userId) : ({} as Record<string, number>),
       prisma.userBadge.findMany({
         where: { userId },
       }),
@@ -306,8 +309,6 @@ experienceRoutes.get(
       }),
     ]);
 
-    const milestoneProgress = badges.some(badge => milestoneTypes.includes(badge.awardType as typeof milestoneTypes[number]))
-      ? await badgeMilestoneProgress(prisma, userId) : {};
     const unlockedBadgeIds = new Set(userBadges.map((item) => item.badgeId));
 
     return res.json({

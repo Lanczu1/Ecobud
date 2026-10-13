@@ -20,6 +20,28 @@ const getInactiveStatusMessage =(status: TokenSession['status']) => {
   return 'Your ECOBUD account is pending activation.';
 };
 
+const loadSessionUser = (userId: string) =>
+  prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      sessionVersion: true,
+      profile: {
+        select: {
+          city: true,
+        },
+      },
+    },
+  });
+
+// The account row behind a session, shared with the sign-in check so a screen's requests reuse one lookup.
+export const cachedSessionUser = (userId: string) =>
+  authCache.getOrSet(`auth:${userId}`, AUTH_CACHE_SECONDS, () => loadSessionUser(userId));
+
 export const authenticateRequest = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -36,23 +58,7 @@ export const authenticateRequest = async (
   try {
     const session = TokenService.verify(token);
     const cacheKey = `auth:${session.userId}`;
-    const loadUser = () =>
-      prisma.user.findUnique({
-        where: { id: session.userId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          status: true,
-          sessionVersion: true,
-          profile: {
-            select: {
-              city: true,
-            },
-          },
-        },
-      });
+    const loadUser = () => loadSessionUser(session.userId);
     // A screen fires several requests at once; they share one lookup.
     let user = await authCache.getOrSet(cacheKey, AUTH_CACHE_SECONDS, loadUser);
     // A cached row can be a few seconds behind a password, email or status

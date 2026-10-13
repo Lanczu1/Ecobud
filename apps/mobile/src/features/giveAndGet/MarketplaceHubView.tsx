@@ -38,6 +38,7 @@ export function MarketplaceHubView({
   const [conversations, setConversations] = useState<SwapConversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
   const [conversationsError, setConversationsError] = useState(false);
+  const [realtimeLive, setRealtimeLive] = useState(false);
   const conversationsRequestId = useRef(0);
   const conversationsInFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const conversationsLoadedFor = useRef<string | null>(null);
@@ -130,12 +131,13 @@ export function MarketplaceHubView({
       if (AppState.currentState === 'active') void loadConversations();
     };
     refresh();
-    const timer = setInterval(refresh, screen === 'chat' ? 5000 : 10_000);
+    // Realtime pushes changes as they happen; the timer is then only a safety net, as it is for messages.
+    const timer = setInterval(refresh, realtimeLive ? 30_000 : screen === 'chat' ? 5000 : 10_000);
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') refresh();
     });
     return () => { clearInterval(timer); subscription.remove(); };
-  }, [loadConversations, model.hasUsableInternet, screen, feedTab]);
+  }, [loadConversations, model.hasUsableInternet, screen, feedTab, realtimeLive]);
 
   // Hardware back button support within Marketplace (closes dialogs or steps back to feed)
   useEffect(() => {
@@ -211,13 +213,14 @@ export function MarketplaceHubView({
               DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
             }
           })
-          .subscribe();
+          .subscribe(status => setRealtimeLive(status === 'SUBSCRIBED'));
       } catch {
         // Supabase not configured or failed — silently ignore
       }
     })();
 
     return () => {
+      setRealtimeLive(false);
       if (channel && supabaseClient) {
         supabaseClient.removeChannel(channel);
       }

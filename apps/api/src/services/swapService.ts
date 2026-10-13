@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { submitSwapReport, swapReportSchema } from './swapReportService';
 import { awardContentBadge } from './contentBadgeService';
@@ -394,65 +395,59 @@ export const swapService = {
   },
 
   async fetchConversations(userId: string) {
-    const rows = await prisma.swapConversation.findMany({
-      where: {
-        OR: [{ user1Id: userId }, { user2Id: userId }],
-      },
-      include: {
-        swapRequest: {
-          include: {
-            fromUser: { select: userSummarySelect },
-            toUser: { select: userSummarySelect },
-          },
-        },
-        listing: {
-          include: profileInclude,
-        },
-        messages: {
-          orderBy: { timestamp: 'desc' },
-          take: 1,
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const mine = { OR: [{ user1Id: userId }, { user2Id: userId }] };
+    // Two round trips instead of one per nested relation: the member's conversations and unread counts, then everything they point at.
+    const [rows, unreadCounts] = await Promise.all([
+      prisma.swapConversation.findMany({ where: mine, orderBy: { createdAt: 'desc' } }),
+      prisma.swapMessage.groupBy({
+        by: ['swapRequestId'],
+        where: { conversation: mine, senderId: { not: userId }, read: false },
+        _count: { _all: true },
+      }),
+    ]);
+    if (rows.length === 0) return [];
 
-    const unreadCounts = await prisma.swapMessage.groupBy({
-      by: ['swapRequestId'],
-      where: {
-        swapRequestId: { in: rows.map((row) => row.id) },
-        senderId: { not: userId },
-        read: false,
-      },
-      _count: { _all: true },
-    });
+    const conversationIds = rows.map(row => row.id);
+    // user1 sent the request and user2 owns the listing, so these are every participant.
+    const participantIds = [...new Set(rows.flatMap(row => [row.user1Id, row.user2Id]))];
+    const [listings, accounts, profiles, lastMessages] = await Promise.all([
+      prisma.swapListing.findMany({ where: { id: { in: [...new Set(rows.map(row => row.listingId))] } } }),
+      prisma.user.findMany({ where: { id: { in: participantIds } }, select: { id: true, name: true, createdAt: true } }),
+      prisma.profile.findMany({ where: { userId: { in: participantIds } }, select: { userId: true, displayName: true, avatarUrl: true } }),
+      prisma.$queryRaw<any[]>(Prisma.sql`
+        SELECT DISTINCT ON (swap_request_id) id, swap_request_id AS "swapRequestId", sender_id AS "senderId",
+          text, image_url AS "imageUrl", timestamp, read, delivered
+        FROM swap_messages WHERE swap_request_id IN (${Prisma.join(conversationIds)})
+        ORDER BY swap_request_id, timestamp DESC, id DESC`),
+    ]);
+
+    const profilesByUser = new Map(profiles.map(profile => [profile.userId, profile]));
+    const usersById = new Map<string, any>(accounts.map(user => [user.id, { ...user, profile: profilesByUser.get(user.id) ?? null }]));
+    const listingOwners = [...new Set(listings.map(listing => listing.userId))].filter(id => !usersById.has(id));
+    if (listingOwners.length) {
+      for (const user of await prisma.user.findMany({ where: { id: { in: listingOwners } }, select: userSummarySelect })) usersById.set(user.id, user);
+    }
+    const listingsById = new Map(listings.map(listing => [listing.id, listing]));
+    const lastMessageByConversation = new Map(lastMessages.map(message => [message.swapRequestId, message]));
     const unreadByConversation = new Map(unreadCounts.map((item) => [item.swapRequestId, item._count._all]));
 
-    const results = rows.map((row) => {
-        const listing = formatListing(row.listing);
-        const otherUserRaw =
-          row.user1Id === userId
-            ? row.swapRequest?.toUser || row.listing?.user
-            : row.swapRequest?.fromUser;
-        const otherUser = formatParticipant(otherUserRaw);
+    return rows.map((row) => {
+      const listingRow = listingsById.get(row.listingId);
+      const listing = formatListing({ ...listingRow, user: listingRow ? usersById.get(listingRow.userId) : undefined });
+      const otherUser = formatParticipant(usersById.get(row.user1Id === userId ? row.user2Id : row.user1Id));
+      const last = lastMessageByConversation.get(row.id);
 
-        const lastMessage =
-          row.messages && row.messages.length > 0
-            ? formatMessage(row.messages[0])
-            : undefined;
-
-        return {
-          id: row.id,
-          swapRequestId: row.swapRequestId,
-          listing,
-          otherUser,
-          lastMessage,
-          unreadCount: unreadByConversation.get(row.id) ?? 0,
-          status: row.status,
-          meetupMethod: listing.meetupMethod,
-        };
-      });
-
-    return results;
+      return {
+        id: row.id,
+        swapRequestId: row.swapRequestId,
+        listing,
+        otherUser,
+        lastMessage: last ? formatMessage(last) : undefined,
+        unreadCount: unreadByConversation.get(row.id) ?? 0,
+        status: row.status,
+        meetupMethod: listing.meetupMethod,
+      };
+    });
   },
 
   async fetchMessages(conversationOrSwapRequestId: string, userId: string, role: string, page: { limit?: number; before?: string; after?: string } = {}) {

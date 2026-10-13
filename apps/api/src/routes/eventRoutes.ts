@@ -2,7 +2,7 @@ import { requireApprovedId } from '../http/idVerificationAccess';
 import { Router } from 'express';
 import { eventBarangay } from '../services/eventAccess';
 import { prisma } from '../prismaClient';
-import { authenticateRequest, AuthenticatedRequest, requireUserAccess } from '../http/authentication';
+import { authenticateRequest, AuthenticatedRequest, cachedSessionUser, requireUserAccess } from '../http/authentication';
 import { HttpError, errorBoundary } from '../http/errorResponder';
 import { eventSubmissionUploadMiddleware } from '../http/uploadMiddleware';
 import { supabaseStorageService } from '../services/supabaseStorageService';
@@ -33,7 +33,7 @@ eventRoutes.get(
       }
     }
 
-    const viewer = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { profile: { select: { city: true } } } }) : null;
+    const viewer = userId ? await cachedSessionUser(userId) : null;
     const barangay = eventBarangay(viewer?.profile?.city);
     const limit = pageLimit(req.query.limit, 20);
     const cursor = decodeCursor(req.query.cursor);
@@ -57,18 +57,13 @@ eventRoutes.get(
       { isFeatured: cursor.featured, startDatetime: { gt: new Date(cursor.at) } },
       { isFeatured: cursor.featured, startDatetime: new Date(cursor.at), id: { gt: cursor.id } },
     ] });
-    const events = await prisma.event.findMany({
+    // The member's own registrations and submissions load beside the events instead of after them.
+    const [foundEvents, myRegistrations, mySubmissions] = await Promise.all([prisma.event.findMany({
       where: { AND: filters },
       include: {
         _count: {
           select: { registrations: true }
         },
-        registrations: userId ? {
-          where: { userId },
-          select: { status: true, attendedAt: true, userId: true },
-          take: 1
-        } : false,
-        ...(userId ? { submissions: { where: { userId }, orderBy: { submittedAt: 'desc' }, take: 1 } } : {})
       },
       orderBy: [
         { isFeatured: 'desc' },
@@ -76,7 +71,19 @@ eventRoutes.get(
         { id: 'asc' },
       ],
       take: limit + 1,
-    });
+    }),
+    userId ? prisma.eventRegistration.findMany({ where: { userId }, select: { eventId: true, status: true, attendedAt: true, userId: true } }) : [],
+    userId ? prisma.eventSubmission.findMany({ where: { userId } }) : [],
+    ]);
+    const registrationByEvent = new Map(myRegistrations.map(({ eventId, ...registration }) => [eventId, registration]));
+    const submissionByEvent = new Map(mySubmissions.map(submission => [submission.eventId, submission]));
+    const events = foundEvents.map(event => ({
+      ...event,
+      ...(userId ? {
+        registrations: registrationByEvent.has(event.id) ? [registrationByEvent.get(event.id)!] : [],
+        submissions: submissionByEvent.has(event.id) ? [submissionByEvent.get(event.id)!] : [],
+      } : {}),
+    }));
 
     const page = events.slice(0, limit);
     const edge = page[page.length - 1];
@@ -86,7 +93,7 @@ eventRoutes.get(
         let userStatus = null;
         let rejectionReason = undefined;
         if (userId) {
-          const userReg = event.registrations?.[0];
+          const userReg = (event as any).registrations?.[0];
           const submission = (event as any).submissions?.[0];
           
           if (userReg) {
