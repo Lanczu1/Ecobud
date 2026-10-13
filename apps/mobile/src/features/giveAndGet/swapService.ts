@@ -197,6 +197,8 @@ export const swapService = {
 
   async sendSwapRequest(listingId: string, fromUserId: string, message?: string): Promise<SwapRequest> {
     const data = await ecobudApi.sendSwapRequest(authToken, { listingId, message });
+    // A requested listing leaves Browse, so drop it from the cached pages too.
+    readCache.patch<SwapListing[]>('["listings"', listings => listings.filter(listing => listing.id !== listingId));
     return formatRequest(data);
   },
 

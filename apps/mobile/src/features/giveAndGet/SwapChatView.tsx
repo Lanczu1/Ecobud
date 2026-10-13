@@ -18,28 +18,14 @@ import { Text, TextInput, TouchableOpacity } from '../../shared/accessibility/pr
 import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
-import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
+import { AvatarBubble } from '../../app/components/CommonComponents';
 import { swapService } from './swapService';
 import { mergeMessages } from './messagePaging';
 import { PublicProfileModal } from './PublicProfileModal';
 import type { SwapChatMessage, SwapConversation, SwapRequestStatus } from './types';
 import { MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
-import { resolveMediaUrl } from '../../app/utils/appUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-function getValidImageUrl(url: string | null | undefined): string | undefined {
-  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 function formatMessageTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -145,16 +131,12 @@ export function SwapChatList({
           style={[localStyles.chatItem, index === conversations.length - 1 && { marginBottom: 0 }, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
         >
           <View style={localStyles.chatAvatar}>
-            {conv.otherUser.avatarUrl ? (
-              <Image
-                source={{ uri: getValidImageUrl(conv.otherUser.avatarUrl) }}
-                style={localStyles.chatAvatarImage}
-              />
-            ) : (
-              <Text style={localStyles.chatAvatarText}>
-                {getInitials(conv.otherUser.displayName)}
-              </Text>
-            )}
+            <AvatarBubble
+              label={conv.otherUser.displayName}
+              size={scale(44)}
+              avatarUrl={conv.otherUser.avatarUrl}
+              textStyle={localStyles.chatAvatarText}
+            />
             {conv.unreadCount > 0 && <View style={localStyles.unreadDot} />}
           </View>
 
@@ -530,16 +512,12 @@ export function SwapChatView({
           </View>
         </View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${conversation.otherUser.displayName}'s profile`} style={[localStyles.headerAvatar, { backgroundColor: theme.colors.surfaceMuted, borderColor: isDark ? theme.colors.border : 'rgba(255,255,255,0.4)' }]} onPress={() => setShowProfileModal(true)}>
-          {conversation.otherUser.avatarUrl ? (
-            <Image
-              source={{ uri: getValidImageUrl(conversation.otherUser.avatarUrl) }}
-              style={localStyles.headerAvatarImage}
-            />
-          ) : (
-            <Text style={[localStyles.headerAvatarText, { color: isDark ? theme.colors.textPrimary : theme.colors.primaryDark }]}>
-              {getInitials(conversation.otherUser.displayName)}
-            </Text>
-          )}
+          <AvatarBubble
+            label={conversation.otherUser.displayName}
+            size={scale(38)}
+            avatarUrl={conversation.otherUser.avatarUrl}
+            textStyle={localStyles.headerAvatarText}
+          />
         </TouchableOpacity>
       </View>
 
@@ -806,14 +784,8 @@ const localStyles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  headerAvatarImage: {
-    width: '100%',
-    height: '100%',
-  },
   headerAvatarText: {
     fontSize: responsiveFontSize(13),
-    fontWeight: '800',
-    color: '#FFF',
   },
   swapInfoBar: {
     flexDirection: 'row',
@@ -1061,22 +1033,8 @@ const localStyles = StyleSheet.create({
   chatAvatar: {
     position: 'relative',
   },
-  chatAvatarImage: {
-    width: scale(44),
-    height: scale(44),
-    borderRadius: scale(22),
-  },
   chatAvatarText: {
-    width: scale(44),
-    height: scale(44),
-    borderRadius: scale(22),
-    backgroundColor: ecoTheme.colors.primaryDark,
-    textAlign: 'center',
-    lineHeight: scale(44),
     fontSize: responsiveFontSize(15),
-    fontWeight: '800',
-    color: '#FFF',
-    overflow: 'hidden',
   },
   unreadDot: {
     position: 'absolute',

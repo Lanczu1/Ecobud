@@ -253,6 +253,9 @@ export function MarketplaceHubView({
     } catch (err: any) {
       const msg = err?.message || 'Failed to send swap request';
       showNotification({ title: 'Request not sent', message: msg, tone: 'error' });
+    } finally {
+      // Sent or refused, Browse re-reads: a listing with a request is no longer listed.
+      DeviceEventEmitter.emit('giveAndGetListingsChanged');
     }
   };
 

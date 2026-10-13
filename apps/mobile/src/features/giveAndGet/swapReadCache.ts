@@ -16,6 +16,13 @@ export class SwapReadCache {
     return this.values.get(key) as T | undefined;
   }
 
+  // Rewrites cached values under a key prefix, for a change the next read will confirm.
+  patch<T>(keyPrefix: string, change: (value: T) => T) {
+    for (const [key, value] of this.values) {
+      if (key.startsWith(keyPrefix)) this.values.set(key, change(value as T));
+    }
+  }
+
   fetch<T>(key: string, load: () => Promise<T>): Promise<T> {
     const pending = this.requests.get(key);
     if (pending) return pending as Promise<T>;

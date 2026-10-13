@@ -132,6 +132,10 @@ function formatMessage(row: any) {
   };
 }
 
+// A listing takes one request at a time. These statuses hold it; a declined or
+// cancelled request frees it and it shows on Browse again.
+const OPEN_REQUEST_STATUSES = ['pending', 'accepted', 'completed'];
+
 export const swapService = {
   async reportListing(id: string, reporterId: string, reason: string, reportName = 'Other') {
     return submitSwapReport(id, reporterId, swapReportSchema.parse({ reason, reportName }));
@@ -147,7 +151,7 @@ export const swapService = {
   }) {
     const { search, category, meetupMethod, sortBy = 'newest', limit = 20, offset = 0 } = params;
 
-    const where: any = { isActive: true, approvalStatus: 'approved' };
+    const where: any = { isActive: true, approvalStatus: 'approved', requests: { none: { status: { in: OPEN_REQUEST_STATUSES } } } };
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -282,40 +286,54 @@ export const swapService = {
       throw new Error('You cannot send a swap request to your own listing');
     }
 
-    const request = await prisma.swapRequest.create({
-      data: {
-        listingId,
-        fromUserId,
-        toUserId: listing.userId,
-        status: 'pending',
-        message: message ?? null,
-      },
-    });
+    return prisma.$transaction(async tx => {
+      // Lock the listing so two people tapping Swap Now together cannot both get in.
+      await tx.$queryRaw`SELECT id FROM swap_listings WHERE id = ${listingId} FOR UPDATE`;
+      const taken = await tx.swapRequest.findFirst({
+        where: { listingId, status: { in: OPEN_REQUEST_STATUSES } },
+        select: { fromUserId: true },
+      });
+      if (taken) {
+        throw new Error(taken.fromUserId === fromUserId
+          ? 'You already sent a request for this listing.'
+          : 'This listing already has a request.');
+      }
 
-    const conversation = await prisma.swapConversation.create({
-      data: {
-        swapRequestId: request.id,
-        listingId,
-        user1Id: fromUserId,
-        user2Id: listing.userId,
-        status: 'pending',
-      },
-    });
-
-    if (message && message.trim()) {
-      await prisma.swapMessage.create({
+      const request = await tx.swapRequest.create({
         data: {
-          swapRequestId: conversation.id,
-          senderId: fromUserId,
-          text: message.trim(),
-          timestamp: new Date(),
-          read: false,
-          delivered: true,
+          listingId,
+          fromUserId,
+          toUserId: listing.userId,
+          status: 'pending',
+          message: message ?? null,
         },
       });
-    }
 
-    return request;
+      const conversation = await tx.swapConversation.create({
+        data: {
+          swapRequestId: request.id,
+          listingId,
+          user1Id: fromUserId,
+          user2Id: listing.userId,
+          status: 'pending',
+        },
+      });
+
+      if (message && message.trim()) {
+        await tx.swapMessage.create({
+          data: {
+            swapRequestId: conversation.id,
+            senderId: fromUserId,
+            text: message.trim(),
+            timestamp: new Date(),
+            read: false,
+            delivered: true,
+          },
+        });
+      }
+
+      return request;
+    });
   },
 
   async updateSwapRequestStatus(requestId: string, userId: string, role: string, status: string) {

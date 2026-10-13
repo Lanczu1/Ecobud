@@ -155,7 +155,7 @@ function categoryFromTargets(targets: string[]) {
 }
 
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
+  return <div className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded ${className}`} />;
 }
 
 interface FormData {
@@ -668,7 +668,13 @@ export function Challenges() {
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 3, total: 0, totalPages: 1, totalResidents: 0 });
-  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  // Loading covers the first fetch only (skeleton); later fetches keep the list on screen.
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
+  const [submissionsRefreshing, setSubmissionsRefreshing] = useState(false);
+  const submissionsLoaded = useRef(false);
+  const submissionsInFlightQuery = useRef('');
+  const lastSearch = useRef('');
+  const lastSubSearch = useRef('');
   const userJson = localStorage.getItem('ecobud_admin_user');
   const loggedInUser = useMemo(() => {
     if (!userJson) return null;
@@ -743,43 +749,54 @@ export function Challenges() {
 
   useLayoutEffect(() => { loadChallengesRef.current = load; });
 
-  const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
+  // reuseInFlight: skip the refetch when the same query is already on its way (not for
+  // reloads after a review, which need data newer than the request in flight).
+  const loadSubmissions = async (showLoading = true, reuseInFlight = false) => {
+    const params = new URLSearchParams({ type: 'challenge', groupBy: 'barangay', page: String(submissionsPage) });
+    const target=notificationTarget('challenge_submission'); if (target) params.set('recordId',target);
+    if (subSearch.trim()) params.set('search', subSearch.trim());
+    if (subStatusFilter !== 'All') params.set('status', subStatusFilter);
+    if (selectedUserIdFilter !== 'All') params.set('userId', selectedUserIdFilter);
+    if (selectedBarangayFilter !== 'All') params.set('barangay', selectedBarangayFilter);
+    const query = params.toString();
     if (submissionsRefreshInFlight.current) {
+      if (reuseInFlight && !submissionsRefreshQueued.current && submissionsInFlightQuery.current === query) {
+        if (showLoading) setSubmissionsRefreshing(true);
+        return;
+      }
       submissionsRefreshQueued.current = {
         showLoading: showLoading || (submissionsRefreshQueued.current?.showLoading ?? false),
       };
       return;
     }
     submissionsRefreshInFlight.current = true;
-    if (showLoading) setSubmissionsLoading(true);
+    submissionsInFlightQuery.current = query;
+    if (showLoading) setSubmissionsRefreshing(true);
     try {
-      const params = new URLSearchParams({ type: 'challenge', groupBy: 'barangay', page: String(page) });
-      const target=notificationTarget('challenge_submission'); if (target) params.set('recordId',target);
-      if (subSearch.trim()) params.set('search', subSearch.trim());
-      if (subStatusFilter !== 'All') params.set('status', subStatusFilter);
-      if (selectedUserIdFilter !== 'All') params.set('userId', selectedUserIdFilter);
-      if (selectedBarangayFilter !== 'All') params.set('barangay', selectedBarangayFilter);
       const data = await adminGet<{
         items: ChallengeSubmission[]; pagination: typeof submissionsPagination;
         filterOptions: typeof submissionFilterOptions;
-      }>(`/admin/submissions?${params}`, { bypassCache: true });
+      }>(`/admin/submissions?${query}`, { bypassCache: true });
       if (submissionsRefreshQueued.current) return;
       // Filter to only challenge submissions; event submissions belong in the Events page.
       setSubmissions(data.items.filter(isChallengeSubmission));
       setSubmissionsPagination(data.pagination);
       setSubmissionsPage(data.pagination.page);
       setSubmissionFilterOptions(data.filterOptions ?? { users:[],barangays:[] });
-    } catch (err: any) { 
+      submissionsLoaded.current = true;
+    } catch (err: any) {
       console.error('Failed to load submissions', err); 
       if (showLoading) toast.error(err.message || 'Failed to load submissions');
     }
     finally {
       submissionsRefreshInFlight.current = false;
-      if (showLoading) setSubmissionsLoading(false);
       if (submissionsRefreshQueued.current) {
         const queued = submissionsRefreshQueued.current;
         submissionsRefreshQueued.current = null;
         void loadSubmissionsRef.current(queued.showLoading);
+      } else {
+        setSubmissionsLoading(false);
+        setSubmissionsRefreshing(false);
       }
     }
   };
@@ -788,7 +805,10 @@ export function Challenges() {
 
   useEffect(() => {
     if (activeTab === 'submissions') return;
-    const timer = setTimeout(() => void load(true), 250);
+    // Only typing waits; first load, tab switches, filters and paging fetch right away.
+    const typing = lastSearch.current !== search;
+    lastSearch.current = search;
+    const timer = setTimeout(() => void load(true), typing ? 250 : 0);
     return () => clearTimeout(timer);
   }, [page, search, filterStatus, activeTab]);
 
@@ -809,9 +829,12 @@ export function Challenges() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'submissions') {
-      void loadSubmissionsRef.current();
-    }
+    // Fetched once in the background on the Challenges tab, so Submissions opens with data.
+    if (activeTab !== 'submissions' && submissionsLoaded.current) return;
+    const typing = lastSubSearch.current !== subSearch;
+    lastSubSearch.current = subSearch;
+    const timer = setTimeout(() => void loadSubmissions(activeTab === 'submissions', true), typing ? 250 : 0);
+    return () => clearTimeout(timer);
   }, [activeTab, submissionsPage, subSearch, subStatusFilter, selectedUserIdFilter, selectedBarangayFilter]);
 
   // Preliminary approval: approves Before Photo and prompts user to take After Photo
@@ -1290,9 +1313,9 @@ export function Challenges() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total Challenges', value: loading ? '—' : challenges.length, color: 'text-gray-900', icon: Trophy },
-          { label: 'Active', value: loading ? '—' : challenges.filter(c => c.active).length, color: 'text-green-600', icon: Target },
-          { label: 'Total Points', value: loading ? '—' : totalPoints.toLocaleString(), color: 'text-orange-500', icon: Coins },
+          { label: 'Total Challenges', value: challenges.length, color: 'text-gray-900', icon: Trophy },
+          { label: 'Active', value: challenges.filter(c => c.active).length, color: 'text-green-600', icon: Target },
+          { label: 'Total Points', value: totalPoints.toLocaleString(), color: 'text-orange-500', icon: Coins },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (
@@ -1301,7 +1324,7 @@ export function Challenges() {
                 <s.icon className={`w-4 h-4 ${s.color}`} />
                 <p className="text-sm text-gray-500 font-medium">{s.label}</p>
               </div>
-              <p className={`text-2xl font-serif font-bold ${s.color}`}>{s.value}</p>
+              {loading ? <Skeleton className="h-8 w-12" /> : <p className={`text-2xl font-serif font-bold ${s.color}`}>{s.value}</p>}
             </div>
           );
         })}
@@ -1437,7 +1460,7 @@ export function Challenges() {
               return (
               <div key={s.label} className={`${s.bg} rounded-2xl border ${s.border} p-5 shadow-sm animate-reveal ${delayClass}`}>
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
-                <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{submissionsLoading ? '—' : s.value}</p>
+                {submissionsLoading ? <Skeleton className="h-9 w-12 mt-1" /> : <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{s.value}</p>}
               </div>
             )})}
           </div>
@@ -1451,7 +1474,7 @@ export function Challenges() {
               </div>
             </div>
             <button onClick={() => void loadSubmissions()} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg">
-              <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading || submissionsRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
@@ -1576,15 +1599,16 @@ export function Challenges() {
           {submissionsLoading ? (
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 space-y-4 animate-pulse">
+                <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-800" />
-                    <div className="space-y-2">
-                      <div className="w-36 h-4 bg-gray-200 dark:bg-gray-800 rounded" />
-                      <div className="w-24 h-3 bg-gray-200 dark:bg-gray-800 rounded" />
+                    <Skeleton className="w-10 h-10 rounded-xl" />
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-3 w-24" />
                     </div>
+                    <Skeleton className="h-6 w-28 rounded-full ml-auto" />
                   </div>
-                  <div className="h-20 bg-gray-100 dark:bg-gray-800/50 rounded-xl" />
+                  <Skeleton className="h-20 rounded-xl" />
                 </div>
               ))}
             </div>
@@ -1997,7 +2021,7 @@ export function Challenges() {
               })}
             </div>
           )}
-          <fieldset disabled={submissionsLoading} aria-label="Challenge submissions pagination" className="min-w-0">
+          <fieldset disabled={submissionsLoading || submissionsRefreshing} aria-label="Challenge submissions pagination" className="min-w-0">
             <AdminPagination
               page={submissionsPagination.page}
               totalPages={submissionsPagination.totalPages}
