@@ -11,6 +11,7 @@ import { AuthenticatedRequest } from '../http/authentication';
 import { readEventReportPhoto } from '../services/eventReportPhoto';
 import { AdminService } from '../services/adminService';
 import { getEventReportSummaries } from '../services/eventReportSummaries';
+import { parseAdminPagination } from '../utils/adminPagination';
 
 const router = Router();
 const requireEventReportAccess = errorBoundary<AuthenticatedRequest>(async (req, _res, next) => {
@@ -160,9 +161,19 @@ function generateSummary(data: NonNullable<Awaited<ReturnType<typeof getEventRep
 }
 
 router.get('/events/summaries', authenticateRequest, requireModeratorAccess, errorBoundary<AuthenticatedRequest>(async (req, res) => {
-  if (typeof req.query.ids !== 'string') throw new HttpError(400, 'Provide event IDs.');
-  const ids = [...new Set(req.query.ids.split(','))];
-  if (ids.length > 50 || ids.some(id => !id || id.length > 128)) throw new HttpError(400, 'Provide between 1 and 50 valid event IDs.');
+  let ids: string[];
+  if (req.query.ids !== undefined) {
+    if (typeof req.query.ids !== 'string') throw new HttpError(400, 'Provide event IDs.');
+    ids = [...new Set(req.query.ids.split(','))];
+    if (ids.length > 50 || ids.some(id => !id || id.length > 128)) throw new HttpError(400, 'Provide between 1 and 50 valid event IDs.');
+  } else {
+    const { page, pageSize } = parseAdminPagination(req.query);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : undefined;
+    const barangay = typeof req.query.barangay === 'string' ? req.query.barangay : undefined;
+    const recordId = typeof req.query.recordId === 'string' ? req.query.recordId : undefined;
+    const events = await AdminService.getAllEvents(page, pageSize, search, barangay, recordId);
+    ids = events.items.map(event => event.id);
+  }
   res.json({ items: await getEventReportSummaries(req.auth!, ids) });
 }));
 

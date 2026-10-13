@@ -42,6 +42,7 @@ export function eventReportSummaryQuery(ids: string[], barangay: string | null) 
 
 export async function getEventReportSummaries(auth: { role: string; city?: string | null }, ids: string[]) {
   const barangay = reportScope(auth);
+  if (ids.length === 0) return [];
   const rows = await prisma.$queryRaw<Array<{ eventId: string } & Record<keyof EventReportStats, number | bigint>>>(eventReportSummaryQuery(ids, barangay));
   return rows.map(row => ({
     eventId: row.eventId,

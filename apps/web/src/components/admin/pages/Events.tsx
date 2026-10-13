@@ -781,6 +781,8 @@ export function Events() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const eventsRefreshInFlight = useRef(false);
+  const eventsRequestKey = useRef('');
+  const eventsRefreshQueued = useRef(false);
   const loadEventsRef = useRef<() => Promise<void>>(async () => {});
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -828,8 +830,9 @@ export function Events() {
   const [submissions, setSubmissions] = useState<EventSubmission[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
-  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const submissionsRefreshInFlight = useRef(false);
+  const submissionsRequestKey = useRef('');
   const submissionsRefreshQueued = useRef<{ showLoading: boolean } | null>(null);
   const loadSubmissionsRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
   const [subSearch, setSubSearch] = useState('');
@@ -838,18 +841,21 @@ export function Events() {
   const [reviewNotice, setReviewNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
+    const params = new URLSearchParams({ type: 'event', page: String(page), pageSize: '25' });
+    const target=notificationTarget('event_submission'); if (target) params.set('recordId',target);
+    if (adminUser?.role === 'moderator' && adminUser.city) params.set('barangay', adminUser.city);
+    const requestKey = params.toString();
     if (submissionsRefreshInFlight.current) {
+      if (submissionsRequestKey.current === requestKey && !showLoading) return;
       submissionsRefreshQueued.current = {
         showLoading: showLoading || (submissionsRefreshQueued.current?.showLoading ?? false),
       };
       return;
     }
     submissionsRefreshInFlight.current = true;
+    submissionsRequestKey.current = requestKey;
     if (showLoading) setSubmissionsLoading(true);
     try {
-      const params = new URLSearchParams({ type: 'event', page: String(page), pageSize: '25' });
-      const target=notificationTarget('event_submission'); if (target) params.set('recordId',target);
-      if (adminUser?.role === 'moderator' && adminUser.city) params.set('barangay', adminUser.city);
       const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?${params.toString()}`, { bypassCache: true });
       if (submissionsRefreshQueued.current) return;
       setSubmissions(data.items.filter(submission =>
@@ -872,14 +878,20 @@ export function Events() {
   useLayoutEffect(() => { loadSubmissionsRef.current = showLoading => loadSubmissions(showLoading); });
 
   const load = async (fresh = false) => {
-    if (eventsRefreshInFlight.current) return;
+    const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+    const target=notificationTarget('event'); if (target) params.set('recordId',target);
+    if (search.trim()) params.set('search', search.trim());
+    if (barangayFilter) params.set('barangay', barangayFilter);
+    const requestKey = params.toString();
+    if (eventsRefreshInFlight.current) {
+      if (eventsRequestKey.current !== requestKey) eventsRefreshQueued.current = true;
+      return;
+    }
     eventsRefreshInFlight.current = true;
+    eventsRequestKey.current = requestKey;
     try {
-      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
-      const target=notificationTarget('event'); if (target) params.set('recordId',target);
-      if (search.trim()) params.set('search', search.trim());
-      if (barangayFilter) params.set('barangay', barangayFilter);
       const data = await adminGet<{ items: AdminEvent[]; pagination: typeof eventPagination }>(`/admin/events?${params.toString()}`, { bypassCache: fresh });
+      if (eventsRefreshQueued.current) return;
       setEvents(data.items);
       setEventPagination(data.pagination);
       setError(null);
@@ -890,10 +902,14 @@ export function Events() {
     } finally {
       eventsRefreshInFlight.current = false;
       setLoading(false);
+      if (eventsRefreshQueued.current) {
+        eventsRefreshQueued.current = false;
+        void loadEventsRef.current();
+      }
     }
   };
 
-  loadEventsRef.current = () => load(true);
+  useLayoutEffect(() => { loadEventsRef.current = () => load(true); });
 
   const handleToggleFeatured = async (event: AdminEvent) => {
     if (!isAdmin) return;
@@ -912,10 +928,9 @@ export function Events() {
   };
 
   useEffect(() => {
-    if (activeTab !== 'events') return;
-    const initial = setTimeout(() => void load(true), 250);
+    const initial = setTimeout(() => void loadEventsRef.current(), search.trim() ? 250 : 0);
     return () => clearTimeout(initial);
-  }, [activeTab, page, search, barangayFilter]);
+  }, [page, search, barangayFilter]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -923,26 +938,22 @@ export function Events() {
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/admin/events');
-        if (activeTab === 'events') void loadEventsRef.current();
-        if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
-        if (activeTab === 'reports') refreshReportRef.current();
+        void loadEventsRef.current();
+        void loadSubmissionsRef.current(false);
+        refreshReportRef.current();
       },
     }).then((unsub) => {
       if (disposed) unsub();
       else unsubscribe = unsub;
     });
     return () => { disposed = true; unsubscribe?.(); };
-  }, [activeTab]);
-
-  // Fetch submissions when switching to submissions tab or initially
-  useEffect(() => {
-    if (activeTab === 'submissions') {
-      void loadSubmissionsRef.current();
-    }
-  }, [activeTab, submissionsPage, subSearch, subStatusFilter]);
+  }, []);
 
   useEffect(() => {
-    if (activeTab !== 'reports' || events.length === 0) return;
+    void loadSubmissionsRef.current();
+  }, [submissionsPage]);
+
+  useEffect(() => {
     let active = true;
     let inFlight = false;
     let queued = false;
@@ -951,7 +962,10 @@ export function Events() {
       if (inFlight) { queued = true; return; }
       inFlight = true;
       try {
-        const params = new URLSearchParams({ ids: events.map(event => event.id).join(',') });
+        const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+        const target=notificationTarget('event'); if (target) params.set('recordId',target);
+        if (search.trim()) params.set('search', search.trim());
+        if (barangayFilter) params.set('barangay', barangayFilter);
         const data = await adminGet<{ items: { eventId: string; stats: EventReportStats }[] }>(`/reports/events/summaries?${params}`, { bypassCache: true });
         if (active) setReportStatsCache(prev => ({ ...prev, ...Object.fromEntries(data.items.map(item => [item.eventId, item.stats])) }));
       } catch {
@@ -962,12 +976,13 @@ export function Events() {
       }
     };
     refreshReportRef.current = () => { void refresh(); refreshReportDetailsRef.current(); };
-    void refresh();
+    const initial = setTimeout(() => void refresh(), search.trim() ? 250 : 0);
     return () => {
       active = false;
+      clearTimeout(initial);
       refreshReportRef.current = () => {};
     };
-  }, [activeTab, events]);
+  }, [page, search, barangayFilter]);
 
   useEffect(() => {
     if (activeTab !== 'reports' || !expandedReport) return;

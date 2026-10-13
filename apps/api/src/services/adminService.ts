@@ -699,64 +699,67 @@ export class AdminService {
       ? { user: { profile: { city: { equals: barangay, mode: 'insensitive' as const } } } }
       : undefined;
     const where = recordId ? { ...scope,id:recordId } : scope;
-    const challengeSubs = submissionType === 'event' ? [] : await prisma.challengeSubmission.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: groupedPage ? undefined : readSkip,
-      take: groupedPage ? undefined : readTake,
-      select: {
-        id: true,
-        userId: true,
-        challengeInstanceId: true,
-        proofText: true,
-        proofUrl: true,
-        afterProofUrl: true,
-        status: true,
-        moderatorNotes: true,
-        detectedQuantity: true,
-        reservedQuantity: true,
-        createdAt: true,
-        rewardAwarded: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            profile: { select: { displayName: true, avatarUrl: true, city: true } }
-          }
-        },
-        challengeInstance: {
-          select: {
-            challengeId: true,
-            challenge: { select: { id: true, title: true, type: true, quantityUnit: true, collectionPointName: true } },
+    const [challengeSubs, eventSubs, challengeTotal, eventTotal] = await Promise.all([
+      submissionType === 'event' ? Promise.resolve([]) : prisma.challengeSubmission.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: groupedPage ? undefined : readSkip,
+        take: groupedPage ? undefined : readTake,
+        select: {
+          id: true,
+          userId: true,
+          challengeInstanceId: true,
+          proofText: true,
+          proofUrl: true,
+          afterProofUrl: true,
+          status: true,
+          moderatorNotes: true,
+          detectedQuantity: true,
+          reservedQuantity: true,
+          createdAt: true,
+          rewardAwarded: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              profile: { select: { displayName: true, avatarUrl: true, city: true } }
+            }
+          },
+          challengeInstance: {
+            select: {
+              challengeId: true,
+              challenge: { select: { id: true, title: true, type: true, quantityUnit: true, collectionPointName: true } },
+            }
           }
         }
-      }
-    });
-
-    const eventSubs = submissionType === 'challenge' ? [] : await prisma.eventSubmission.findMany({
-      where,
-      orderBy: { submittedAt: 'desc' },
-      skip: groupedPage ? undefined : readSkip,
-      take: groupedPage ? undefined : readTake,
-      select: {
-        id: true,
-        userId: true,
-        eventId: true,
-        qrVerified: true,
-        attendanceImageUrl: true,
-        status: true,
-        rejectionReason: true,
-        submittedAt: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            profile: { select: { displayName: true, avatarUrl: true, city: true } }
-          }
-        },
-        event: { select: { title: true } }
-      }
-    });
+      }),
+      submissionType === 'challenge' ? Promise.resolve([]) : prisma.eventSubmission.findMany({
+        where,
+        orderBy: { submittedAt: 'desc' },
+        skip: groupedPage ? undefined : readSkip,
+        take: groupedPage ? undefined : readTake,
+        select: {
+          id: true,
+          userId: true,
+          eventId: true,
+          qrVerified: true,
+          attendanceImageUrl: true,
+          status: true,
+          rejectionReason: true,
+          submittedAt: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              profile: { select: { displayName: true, avatarUrl: true, city: true } }
+            }
+          },
+          event: { select: { title: true } }
+        }
+      }),
+      groupedPage || submissionType === 'event' ? Promise.resolve(0) : prisma.challengeSubmission.count({ where }),
+      groupedPage || submissionType === 'challenge' ? Promise.resolve(0) : prisma.eventSubmission.count({ where }),
+    ]);
 
     const unified = [
       ...challengeSubs.map(s => ({
@@ -791,10 +794,6 @@ export class AdminService {
 
     unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     if (groupedPage) return { items: unified, pagination: groupedPage.pagination, filterOptions: groupedPage.filterOptions };
-    const [challengeTotal, eventTotal] = await Promise.all([
-      submissionType === 'event' ? 0 : prisma.challengeSubmission.count({ where }),
-      submissionType === 'challenge' ? 0 : prisma.eventSubmission.count({ where }),
-    ]);
     const items = submissionType === 'all' ? unified.slice(skip, skip + pageSize) : unified;
     const total = challengeTotal + eventTotal;
     if (recordId && submissionType==='challenge' && groupFilters) {
