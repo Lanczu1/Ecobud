@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAdminLiveRefresh } from '../../hooks/useAdminLiveRefresh';
-import { adminRealtimeService } from '../../services/adminRealtimeService';
 import { useToast } from '../../context/ToastContext';
 import { fetchNotificationPage, restoreBrowserPush, type NotificationPage } from '../../services/adminNotifications';
 
@@ -46,10 +45,7 @@ export function AdminNotificationProvider({ children, enabled=true }: { children
     if (!enabled) return;
     mounted.current=true;
     void refresh(); void restoreBrowserPush().catch(() => {});
-    const update=() => { if (document.visibilityState==='visible' && navigator.onLine) void refresh(); };
-    const timer=setInterval(() => { if (!adminRealtimeService.isLive()) update(); },30000);
-    window.addEventListener('focus',update); window.addEventListener('online',update); document.addEventListener('visibilitychange',update);
-    return () => { mounted.current=false; clearInterval(timer); window.removeEventListener('focus',update); window.removeEventListener('online',update); document.removeEventListener('visibilitychange',update); };
+    return () => { mounted.current=false; };
   },[refresh,enabled]);
   useAdminLiveRefresh(() => { if (navigator.onLine) void refresh(); },enabled);
   return <Context.Provider value={{ data,error,refresh }}>{children}</Context.Provider>;

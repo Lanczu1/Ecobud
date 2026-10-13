@@ -684,7 +684,7 @@ export function Challenges() {
 
   const [processingSubId, setProcessingSubId] = useState<string | null>(null);
   const submissionsRefreshInFlight = useRef(false);
-  const submissionsRefreshQueued = useRef(false);
+  const submissionsRefreshQueued = useRef<{ showLoading: boolean } | null>(null);
   const loadSubmissionsRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
   const [submissionFilterOptions, setSubmissionFilterOptions] = useState<{
     users: { id: string; name: string }[]; barangays: string[];
@@ -744,7 +744,12 @@ export function Challenges() {
   useLayoutEffect(() => { loadChallengesRef.current = load; });
 
   const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
-    if (submissionsRefreshInFlight.current) { submissionsRefreshQueued.current = true; return; }
+    if (submissionsRefreshInFlight.current) {
+      submissionsRefreshQueued.current = {
+        showLoading: showLoading || (submissionsRefreshQueued.current?.showLoading ?? false),
+      };
+      return;
+    }
     submissionsRefreshInFlight.current = true;
     if (showLoading) setSubmissionsLoading(true);
     try {
@@ -772,8 +777,9 @@ export function Challenges() {
       submissionsRefreshInFlight.current = false;
       if (showLoading) setSubmissionsLoading(false);
       if (submissionsRefreshQueued.current) {
-        submissionsRefreshQueued.current = false;
-        void loadSubmissionsRef.current();
+        const queued = submissionsRefreshQueued.current;
+        submissionsRefreshQueued.current = null;
+        void loadSubmissionsRef.current(queued.showLoading);
       }
     }
   };
@@ -781,39 +787,30 @@ export function Challenges() {
   useLayoutEffect(() => { loadSubmissionsRef.current = (showLoading = true) => loadSubmissions(showLoading); });
 
   useEffect(() => {
+    if (activeTab === 'submissions') return;
     const timer = setTimeout(() => void load(true), 250);
-    const interval = setInterval(() => {
-      if (adminRealtimeService.isLive()) return;
-      if (document.visibilityState === 'visible' && activeTab !== 'submissions') void load(true);
-    }, 30000);
-    const onFocus = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
-      else void load(true);
-    };
-    window.addEventListener('focus', onFocus);
-    return () => { clearTimeout(timer); clearInterval(interval); window.removeEventListener('focus', onFocus); };
+    return () => clearTimeout(timer);
   }, [page, search, filterStatus, activeTab]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
+    let disposed = false;
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/admin/challenges');
-        void loadChallengesRef.current();
         if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
+        else void loadChallengesRef.current();
       },
-    }).then((unsub) => { unsubscribe = unsub; });
-    return () => unsubscribe?.();
+    }).then((unsub) => {
+      if (disposed) unsub();
+      else unsubscribe = unsub;
+    });
+    return () => { disposed = true; unsubscribe?.(); };
   }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'submissions') {
-      loadSubmissions();
-      const interval = setInterval(() => {
-        if (!adminRealtimeService.isLive()) void loadSubmissions(false);
-      }, 30000);
-      return () => clearInterval(interval);
+      void loadSubmissionsRef.current();
     }
   }, [activeTab, submissionsPage, subSearch, subStatusFilter, selectedUserIdFilter, selectedBarangayFilter]);
 

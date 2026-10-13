@@ -3,7 +3,7 @@ import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } fr
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
 import React from 'react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, 
@@ -805,7 +805,10 @@ export function Events() {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
   }, []);
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
+  const [reportStatsCache, setReportStatsCache] = useState<Record<string, EventReportStats>>({});
   const refreshReportRef = useRef<() => void>(() => {});
+  const refreshReportDetailsRef = useRef<() => void>(() => {});
+  const reportRequestsRef = useRef(new Map<string, Promise<EventReportData>>());
   useEffect(() => {
     void adminGet<typeof audience>('/admin/events/barangays').then(data => {
       setAudience(data);
@@ -827,13 +830,20 @@ export function Events() {
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const submissionsRefreshInFlight = useRef(false);
+  const submissionsRefreshQueued = useRef<{ showLoading: boolean } | null>(null);
+  const loadSubmissionsRef = useRef<(showLoading?: boolean) => Promise<void>>(async () => {});
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<string>('All');
   const [selectedImage, setSelectedImage] = useState<{ url: string; title: string } | null>(null);
   const [reviewNotice, setReviewNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadSubmissions = async (showLoading = true, page = submissionsPage) => {
-    if (submissionsRefreshInFlight.current) return;
+    if (submissionsRefreshInFlight.current) {
+      submissionsRefreshQueued.current = {
+        showLoading: showLoading || (submissionsRefreshQueued.current?.showLoading ?? false),
+      };
+      return;
+    }
     submissionsRefreshInFlight.current = true;
     if (showLoading) setSubmissionsLoading(true);
     try {
@@ -841,6 +851,7 @@ export function Events() {
       const target=notificationTarget('event_submission'); if (target) params.set('recordId',target);
       if (adminUser?.role === 'moderator' && adminUser.city) params.set('barangay', adminUser.city);
       const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?${params.toString()}`, { bypassCache: true });
+      if (submissionsRefreshQueued.current) return;
       setSubmissions(data.items.filter(submission =>
         submission.submissionType === 'EVENT' || submission.challenge?.type === 'EVENT'
       ));
@@ -850,9 +861,15 @@ export function Events() {
     } finally {
       submissionsRefreshInFlight.current = false;
       if (showLoading) setSubmissionsLoading(false);
+      if (submissionsRefreshQueued.current) {
+        const queued = submissionsRefreshQueued.current;
+        submissionsRefreshQueued.current = null;
+        void loadSubmissionsRef.current(queued.showLoading);
+      }
     }
   };
 
+  useLayoutEffect(() => { loadSubmissionsRef.current = showLoading => loadSubmissions(showLoading); });
 
   const load = async (fresh = false) => {
     if (eventsRefreshInFlight.current) return;
@@ -897,65 +914,91 @@ export function Events() {
   useEffect(() => {
     if (activeTab !== 'events') return;
     const initial = setTimeout(() => void load(true), 250);
-    const interval = setInterval(() => { if (!adminRealtimeService.isLive()) void load(true); }, 30000);
-    return () => { clearTimeout(initial); clearInterval(interval); };
+    return () => clearTimeout(initial);
   }, [activeTab, page, search, barangayFilter]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
+    let disposed = false;
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/admin/events');
         if (activeTab === 'events') void loadEventsRef.current();
-        if (activeTab === 'submissions') void loadSubmissions(false);
+        if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
         if (activeTab === 'reports') refreshReportRef.current();
       },
-    }).then((unsub) => { unsubscribe = unsub; });
-    return () => unsubscribe?.();
+    }).then((unsub) => {
+      if (disposed) unsub();
+      else unsubscribe = unsub;
+    });
+    return () => { disposed = true; unsubscribe?.(); };
   }, [activeTab]);
 
   // Fetch submissions when switching to submissions tab or initially
   useEffect(() => {
     if (activeTab === 'submissions') {
-      loadSubmissions();
-      const interval = setInterval(() => {
-        if (!adminRealtimeService.isLive()) void loadSubmissions(false);
-      }, 30000);
-      return () => clearInterval(interval);
+      void loadSubmissionsRef.current();
     }
   }, [activeTab, submissionsPage, subSearch, subStatusFilter]);
 
-  // Load report details only for the event the admin expands.
   useEffect(() => {
-    if (activeTab !== 'reports' || !expandedReport) return;
+    if (activeTab !== 'reports' || events.length === 0) return;
     let active = true;
     let inFlight = false;
+    let queued = false;
     const refresh = async () => {
-      if (inFlight || document.visibilityState !== 'visible') return;
+      if (!active || document.visibilityState !== 'visible') return;
+      if (inFlight) { queued = true; return; }
       inFlight = true;
-      setReportLoading(expandedReport);
       try {
-        const data = await adminGet<EventReportData>(`/reports/events/${expandedReport}`, { bypassCache: true });
-        if (active) setReportDataCache(prev => ({ ...prev, [expandedReport]: data }));
+        const params = new URLSearchParams({ ids: events.map(event => event.id).join(',') });
+        const data = await adminGet<{ items: { eventId: string; stats: EventReportStats }[] }>(`/reports/events/summaries?${params}`, { bypassCache: true });
+        if (active) setReportStatsCache(prev => ({ ...prev, ...Object.fromEntries(data.items.map(item => [item.eventId, item.stats])) }));
       } catch {
         if (active) setReviewNotice({ type: 'error', message: 'Could not refresh the event report. Please try again.' });
       } finally {
         inFlight = false;
-        if (active) setReportLoading(null);
+        if (active && queued) { queued = false; void refresh(); }
       }
     };
-    refreshReportRef.current = () => { void refresh(); };
+    refreshReportRef.current = () => { void refresh(); refreshReportDetailsRef.current(); };
     void refresh();
-    const interval = setInterval(() => { if (!adminRealtimeService.isLive()) void refresh(); }, 30000);
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
     return () => {
       active = false;
       refreshReportRef.current = () => {};
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
+    };
+  }, [activeTab, events]);
+
+  useEffect(() => {
+    if (activeTab !== 'reports' || !expandedReport) return;
+    let active = true;
+    const refresh = async () => {
+      if (!active || document.visibilityState !== 'visible') return;
+      const eventId = expandedReport;
+      let request = reportRequestsRef.current.get(eventId);
+      if (!request) {
+        request = adminGet<EventReportData>(`/reports/events/${eventId}`, { bypassCache: true });
+        reportRequestsRef.current.set(eventId, request);
+      }
+      setReportLoading(eventId);
+      try {
+        const data = await request;
+        if (active) {
+          setReportDataCache(prev => ({ ...prev, [eventId]: data }));
+          setReportStatsCache(prev => ({ ...prev, [eventId]: data.stats }));
+        }
+      } catch {
+        if (active) setReviewNotice({ type: 'error', message: 'Could not refresh the event report. Please try again.' });
+      } finally {
+        if (reportRequestsRef.current.get(eventId) === request) reportRequestsRef.current.delete(eventId);
+        if (active) setReportLoading(current => current === eventId ? null : current);
+      }
+    };
+    refreshReportDetailsRef.current = () => { void refresh(); };
+    void refresh();
+    return () => {
+      active = false;
+      refreshReportDetailsRef.current = () => {};
       setReportLoading(current => current === expandedReport ? null : current);
     };
   }, [activeTab, expandedReport]);
@@ -1749,9 +1792,9 @@ export function Events() {
           <div className="grid grid-cols-4 gap-4">
             {[
               { label: 'Total Events', value: eventPagination.total, color: 'text-gray-900 dark:text-white' },
-              { label: 'Loaded Reports', value: Object.keys(reportDataCache).length, color: 'text-green-600 dark:text-green-400' },
-              { label: 'Participants in Loaded Reports', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalRegistered, 0), color: 'text-blue-600 dark:text-blue-400' },
-              { label: 'Rewards in Loaded Reports', value: Object.values(reportDataCache).reduce((a, d) => a + d.stats.totalCoinsAwarded + d.stats.totalExpAwarded, 0), color: 'text-purple-600 dark:text-purple-400' },
+              { label: 'Loaded Reports', value: Object.keys(reportStatsCache).length, color: 'text-green-600 dark:text-green-400' },
+              { label: 'Participants in Loaded Reports', value: Object.values(reportStatsCache).reduce((a, stats) => a + stats.totalRegistered, 0), color: 'text-blue-600 dark:text-blue-400' },
+              { label: 'Rewards in Loaded Reports', value: Object.values(reportStatsCache).reduce((a, stats) => a + stats.totalCoinsAwarded + stats.totalExpAwarded, 0), color: 'text-purple-600 dark:text-purple-400' },
             ].map((s, idx) => {
               const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
               return (
@@ -1802,7 +1845,7 @@ export function Events() {
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {events.map((event) => {
                       const reportData = reportDataCache[event.id];
-                      const stats = reportData?.stats;
+                      const stats = reportStatsCache[event.id] ?? reportData?.stats;
                       const isExpanded = expandedReport === event.id;
                       return (
                         <React.Fragment key={event.id}>

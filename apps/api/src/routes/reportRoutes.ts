@@ -6,10 +6,11 @@ import { prisma } from '../prismaClient';
 import fs from 'fs';
 import path from 'path';
 import { authorizeEventReport } from '../services/barangayReports';
-import { errorBoundary } from '../http/errorResponder';
+import { errorBoundary, HttpError } from '../http/errorResponder';
 import { AuthenticatedRequest } from '../http/authentication';
 import { readEventReportPhoto } from '../services/eventReportPhoto';
 import { AdminService } from '../services/adminService';
+import { getEventReportSummaries } from '../services/eventReportSummaries';
 
 const router = Router();
 const requireEventReportAccess = errorBoundary<AuthenticatedRequest>(async (req, _res, next) => {
@@ -157,6 +158,13 @@ function generateSummary(data: NonNullable<Awaited<ReturnType<typeof getEventRep
 
   return summary;
 }
+
+router.get('/events/summaries', authenticateRequest, requireModeratorAccess, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  if (typeof req.query.ids !== 'string') throw new HttpError(400, 'Provide event IDs.');
+  const ids = [...new Set(req.query.ids.split(','))];
+  if (ids.length > 50 || ids.some(id => !id || id.length > 128)) throw new HttpError(400, 'Provide between 1 and 50 valid event IDs.');
+  res.json({ items: await getEventReportSummaries(req.auth!, ids) });
+}));
 
 // ─── GET /api/reports/events/:id ─── Return report JSON data
 router.get('/events/:id', authenticateRequest, requireModeratorAccess, requireEventReportAccess, async (req, res) => {

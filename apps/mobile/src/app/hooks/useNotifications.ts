@@ -5,6 +5,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { ecobudApi } from '../../shared/api/ecobudApi';
 import { startFallbackPoll } from '../../shared/supabase/realtimeHealth';
+import { createRefreshQueue } from '../../shared/utils/createRefreshQueue';
 
 // Remote push notification token listeners & Expo push tokens are no longer supported in Expo Go (SDK 53+)
 const isExpoGo = isRunningInExpoGo() || Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -34,9 +35,12 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
   useEffect(() => {
     let alive = true;
     if (!token) { setCount(0); return; }
-    const refresh = () => {
-      void ecobudApi.notifications(token).then(page => { if (alive) setCount(page.unreadCount); }).catch(() => {});
-    };
+    const refreshQueue = createRefreshQueue(async () => {
+      if (!alive || AppState.currentState !== 'active') return;
+      const page = await ecobudApi.notifications(token);
+      if (alive) setCount(page.unreadCount);
+    });
+    const refresh = refreshQueue.schedule;
     const register = (updatedToken?: string) => {
       if (!nativePush || !alive) return Promise.resolve();
       registrationQueue.current = registrationQueue.current.then(async () => {
@@ -81,7 +85,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     if (nativePush && pushEnabled) {
       try {
         subscriptions.push(Notifications.addNotificationReceivedListener(() => {
-          refresh(); DeviceEventEmitter.emit('notificationsInboxRefresh');
+          DeviceEventEmitter.emit('notificationsInboxRefresh');
           DeviceEventEmitter.emit('announcementsChanged');
         }));
         const response = (result: Notifications.NotificationResponse) => {
@@ -99,6 +103,7 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
     }
     return () => {
       alive = false;
+      refreshQueue.dispose();
       stopPolling(); app.remove(); changed.remove(); inboxChanged.remove(); subscriptions.forEach(subscription => subscription.remove());
     };
   }, [token, pushEnabled]);

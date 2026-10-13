@@ -629,15 +629,6 @@ export function LearningContent() {
     return () => clearTimeout(timer);
   }, [page, search, filterStatus]);
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && !adminRealtimeService.isLive()) void loadRef.current();
-    }, 30000);
-    const onFocus = () => { if (document.visibilityState === 'visible') void loadRef.current(); };
-    window.addEventListener('focus', onFocus);
-    return () => { window.clearInterval(interval); window.removeEventListener('focus', onFocus); };
-  }, []);
-
   const filtered = useMemo(() =>
     lessons.filter(c => {
       const status = getLessonStatus(c);
@@ -660,13 +651,17 @@ export function LearningContent() {
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
+    let disposed = false;
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/admin/lessons');
         void loadRef.current();
       },
-    }).then((unsub) => { unsubscribe = unsub; });
-    return () => unsubscribe?.();
+    }).then((unsub) => {
+      if (disposed) unsub();
+      else unsubscribe = unsub;
+    });
+    return () => { disposed = true; unsubscribe?.(); };
   }, []);
 
   const openEdit = async (lessonId: string) => {

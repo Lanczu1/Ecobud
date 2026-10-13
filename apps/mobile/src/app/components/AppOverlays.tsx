@@ -72,6 +72,7 @@ import {
 } from '../utils/appUtils';
 import { triggerSuccessHaptic, triggerImpactMedium, triggerSelectionHaptic } from '../utils/haptics';
 import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
+import { createRefreshQueue } from '../../shared/utils/createRefreshQueue';
 import { ChallengeStreakOverlay } from './ChallengeStreakOverlay';
 import { StreakUnlockedOverlay } from './StreakUnlockedOverlay';
 import {
@@ -8161,33 +8162,39 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => clearTimeout(timeout);
   }, [feedback]);
 
-  const loadItems = React.useCallback(async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
-      const [itemsData, requestsData, dashboardData] = await Promise.all([
-        ecobudApi.fetchRedeemItems(token),
-        ecobudApi.fetchMyRedeemRequests(token),
-        ecobudApi.fetchDashboard(token),
-      ]);
-      setItems(itemsData || []);
-      setMyRequests(requestsData || []);
-      // Sync coin balance from server (handles admin reject refunds)
-      if (dashboardData?.ecoCoins != null) {
-        setDisplayCoins(dashboardData.ecoCoins);
+  const redeemLoadRef = React.useRef<{ token: string; promise: Promise<void> } | null>(null);
+  const loadItems = React.useCallback((silent = false): Promise<void> => {
+    if (redeemLoadRef.current?.token === token) return redeemLoadRef.current.promise;
+    const promise = Promise.resolve().then(async () => {
+      try {
+        if (!silent) setLoading(true);
+        const [itemsData, requestsData, dashboardData] = await Promise.all([
+          ecobudApi.fetchRedeemItems(token),
+          ecobudApi.fetchMyRedeemRequests(token),
+          ecobudApi.fetchDashboard(token),
+        ]);
+        setItems(itemsData || []);
+        setMyRequests(requestsData || []);
+        if (dashboardData?.ecoCoins != null) {
+          setDisplayCoins(dashboardData.ecoCoins);
+        }
+      } catch (err) {
+        const code = (err as { code?: string } | null)?.code;
+        const isConnectionError = code === 'offline' || code === 'timeout';
+        if (!isConnectionError) console.error('Failed to load redeem data:', err);
+        if (!silent && !isConnectionError) {
+          setItems([]);
+          setMyRequests([]);
+        }
+      } finally {
+        if (!silent) setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err) {
-      // Being offline is expected and already shown on screen, so it is not logged as an error.
-      const code = (err as { code?: string } | null)?.code;
-      const isConnectionError = code === 'offline' || code === 'timeout';
-      if (!isConnectionError) console.error('Failed to load redeem data:', err);
-      if (!silent && !isConnectionError) {
-        setItems([]);
-        setMyRequests([]);
-      }
-    } finally {
-      if (!silent) setLoading(false);
-      setRefreshing(false);
-    }
+    }).finally(() => {
+      if (redeemLoadRef.current?.promise === promise) redeemLoadRef.current = null;
+    });
+    redeemLoadRef.current = { token, promise };
+    return promise;
   }, [token]);
 
   const updateQueuedRedeems = React.useCallback((update: (ids: string[]) => string[]) => {
@@ -8238,35 +8245,30 @@ export function RedeemPointsOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => { loadItems(); }, [loadItems]);
   React.useEffect(() => { void syncQueuedRedemptions(); }, [syncQueuedRedemptions]);
 
-  // Real-time synchronization:
-  // 1. Listen for notification & redeem refresh events
-  // 2. Poll every 6 seconds to automatically catch new catalog items, approvals, and status changes
-  // 3. Auto-refresh when app comes to foreground
   React.useEffect(() => {
-    const subNotice = DeviceEventEmitter.addListener('notificationsInboxRefresh', () => {
-      loadItems(true);
+    const refreshQueue = createRefreshQueue(async () => {
+      if (model.hasUsableInternet && AppState.currentState === 'active') await loadItems(true);
     });
-    const subNoticesChanged = DeviceEventEmitter.addListener('notificationsChanged', () => {
-      loadItems(true);
-    });
-    const subRedeem = DeviceEventEmitter.addListener('ECO_REDEEM_SYNC', () => {
-      loadItems(true);
-    });
+    const subNotice = DeviceEventEmitter.addListener('notificationsInboxRefresh', refreshQueue.schedule);
+    const subNoticesChanged = DeviceEventEmitter.addListener('notificationsChanged', refreshQueue.schedule);
+    const subRedeem = DeviceEventEmitter.addListener('ECO_REDEEM_SYNC', refreshQueue.schedule);
 
     const interval = setInterval(() => {
       // Polling offline can only fail, so wait for the connection to come back.
-      if (model.hasUsableInternet) loadItems(true);
+      if (AppState.currentState !== 'active') return;
+      refreshQueue.schedule();
       void syncQueuedRedemptions();
     }, 6000);
 
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        loadItems(true);
+        refreshQueue.schedule();
         void syncQueuedRedemptions();
       }
     });
 
     return () => {
+      refreshQueue.dispose();
       subNotice.remove();
       subNoticesChanged.remove();
       subRedeem.remove();

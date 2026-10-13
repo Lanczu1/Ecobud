@@ -349,26 +349,10 @@ export function Redeem() {
         if (mainTabRef.current === 'items') fetchItems(true);
         if (mainTabRef.current === 'requests') fetchRequests(true);
       },
-      onStatsRefresh: () => {
-        fetchItems(true);
-        if (mainTabRef.current === 'requests') {
-          fetchRequests(true);
-        }
-      },
     });
-
-    // Periodic refresh for whichever tab is currently visible.
-    const interval = setInterval(() => {
-      if (adminRealtimeService.isLive()) return;
-      if (mainTabRef.current === 'items') fetchItems(true);
-      if (mainTabRef.current === 'requests') {
-        fetchRequests(true);
-      }
-    }, 30000);
 
     return () => {
       unsubscribe.then(unsub => unsub?.());
-      clearInterval(interval);
     };
   }, [fetchItems, fetchRequests]);
 

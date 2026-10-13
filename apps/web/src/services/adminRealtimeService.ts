@@ -53,7 +53,7 @@ class AdminRealtimeService {
     this.timer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       if (this.isLive() && Date.now() - this.lastNotifyAt < LIVE_POLL_INTERVAL_MS) return;
-      this.notifyAll();
+      this.queuePush();
     }, POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', this.handleVisibility);
     window.addEventListener('focus', this.handleFocus);
@@ -76,12 +76,12 @@ class AdminRealtimeService {
   }
 
   private handleVisibility = () => {
-    if (document.visibilityState === 'visible') this.notifyAll();
+    if (document.visibilityState === 'visible') this.queuePush();
   };
 
-  private handleFocus = () => this.notifyAll();
+  private handleFocus = () => this.queuePush();
   private handleOnline = () => {
-    this.notifyAll();
+    this.queuePush();
     if (!this.stream) {
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

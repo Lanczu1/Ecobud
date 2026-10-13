@@ -277,6 +277,10 @@ function CoachMarksScreen({
     const isForward = nextIndex > currentStep;
     const targetStep = steps[nextIndex];
 
+    if (targetStep?.stepNumber === 4) {
+      model?.setChallengesViewMode('Discover');
+    }
+
     // Automatically navigate to the REAL live screen in background
     if (!replay && onTabChange && targetStep?.targetTab) {
       onTabChange(targetStep.targetTab);
