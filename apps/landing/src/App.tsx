@@ -30,8 +30,8 @@ import previewVideo from '../assets/EcoBudAd3.mp4';
 
 const APK_URL =
   import.meta.env.VITE_APK_DOWNLOAD_URL ||
-  'https://github.com/Lanczu1/Ecobud/releases/download/v1.1.1/Ecobud-Beta-v1.1.1.apk';
-const VERSION = import.meta.env.VITE_APP_VERSION || 'v1.1.1';
+  'https://github.com/Lanczu1/Ecobud/releases/download/v1.1.3/Ecobud-Beta-v1.1.3.apk';
+const VERSION = import.meta.env.VITE_APP_VERSION || 'v1.1.3';
 const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || '#feedback';
 
 const VIEWS = [
