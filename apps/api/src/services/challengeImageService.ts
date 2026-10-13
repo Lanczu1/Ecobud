@@ -354,6 +354,7 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
       }
     }
 
+    const answeredByGemini = Boolean(parsedRawResult);
     if (!parsedRawResult && mistralKey) {
       try {
         if (geminiKey) console.warn('[AI Vision] Gemini did not return a result. Falling back to Mistral vision...');
@@ -373,7 +374,21 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
       throw new HttpError(503, 'Image recognition is temporarily unavailable across all providers. Please retry in a moment.');
     }
 
-    return { ...evaluateDetections(parsedRawResult, targets, minimumConfidence), mimeType };
+    let evaluation = evaluateDetections(parsedRawResult, targets, minimumConfidence);
+    // Gemini answered but rejected the photo: ask Mistral before failing the user's attempt.
+    if (!evaluation.passed && answeredByGemini && mistralKey) {
+      try {
+        console.warn(`[AI Vision] Gemini rejected the photo (${evaluation.reason}) Asking Mistral for a second check...`);
+        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, 18_000);
+        const second = evaluateDetections(normalizeDetectionResult(JSON.parse(text)), targets, minimumConfidence);
+        console.warn(`[AI Vision] Mistral second check ${second.passed ? 'passed' : 'also rejected'} the photo (${second.object} ${second.confidence}%).`);
+        if (second.passed) evaluation = second;
+      } catch (err: any) {
+        console.error('[AI Vision] Mistral second check failed:', err.message);
+      }
+    }
+
+    return { ...evaluation, mimeType };
   } catch (error) {
     if (error instanceof HttpError) throw error;
     // Never leak provider error bodies, credentials, or uploaded image data to client
