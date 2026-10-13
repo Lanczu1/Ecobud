@@ -85,7 +85,25 @@ export function evaluateDetections(raw: unknown, targets: unknown, minimumConfid
 
 let inFlight = 0;
 const MAX_CONCURRENT_ANALYSES = 8;
-const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+// A healthy scan answers in 2-4 seconds; past this a provider is treated as down so the next one can answer.
+const PROVIDER_TIMEOUT_MS = 8_000;
+// How long Gemini gets on its own before Mistral is asked alongside it.
+const HEDGE_DELAY_MS = 3_000;
+const STILL_WAITING = Symbol('still waiting');
+
+// Resolves with the first run that produces a value, or null once every run came back empty.
+function firstResult<T>(runs: Promise<T | null>[]): Promise<T | null> {
+  return new Promise(resolve => {
+    let pending = runs.length;
+    for (const run of runs) {
+      void run.then(value => {
+        pending -= 1;
+        if (value) resolve(value);
+        else if (pending === 0) resolve(null);
+      });
+    }
+  });
+}
 
 /**
  * Sleep helper with jitter to prevent thundering herd during upstream rate limits (429).
@@ -114,7 +132,9 @@ function normalizeDetectionResult(parsedJson: any): any {
     if (!matchedTarget || seenObjects.has(matchedTarget)) continue;
     seenObjects.add(matchedTarget);
 
-    const confidence = typeof item.confidence === 'number' ? Math.min(100, Math.max(0, item.confidence)) : 75;
+    // Some providers answer on a 0-1 scale (0.99) instead of the 0-100 the prompt asks for.
+    const rawConfidence = typeof item.confidence === 'number' ? item.confidence : 75;
+    const confidence = Math.min(100, Math.max(0, rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence));
     const count = typeof item.count === 'number' && item.count >= 1 ? Math.floor(item.count) : 1;
     
     // Normalize bounding box if present
@@ -285,7 +305,7 @@ async function callMistralVision(
 /**
  * Production-grade Challenge Image Recognition
  * Features:
- * - Multi-tier cascade (Gemini Flash Lite -> Gemini Flash -> Mistral vision)
+ * - Gemini Flash first; Mistral vision joins when Gemini fails or is slow; Gemini Flash Lite as last resort
  * - Exponential backoff with jitter on HTTP 429 (Rate Limit / Quota Exceeded)
  * - Immediate failover on 500, 502, 503, 504 server errors and network timeouts
  * - Result schema normalization to guarantee valid client verification & token signing
@@ -308,62 +328,69 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
   }
 
   inFlight += 1;
-  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.5-flash-lite';
-  const secondaryModel = 'gemini-3.6-flash';
+  const primaryModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.5-flash';
+  const backupModel = 'gemini-3.1-flash-lite';
 
   try {
-    let parsedRawResult: any = null;
     let lastError: any = null;
 
-    if (geminiKey) {
-      const modelsToTry = [primaryModel];
-      if (secondaryModel !== primaryModel) {
-        modelsToTry.push(secondaryModel);
-      }
-
-      for (const model of modelsToTry) {
-        let attemptsLeft = 2; // Up to 2 attempts per model (for 429 rate limit recovery)
-        while (attemptsLeft > 0) {
-          try {
-            const { text } = await callGeminiVision(model, geminiKey, mimeType, base64Data, selectedTargets, 18_000);
-            parsedRawResult = normalizeDetectionResult(JSON.parse(text));
-            break;
-          } catch (err: any) {
-            lastError = err;
-            attemptsLeft -= 1;
-            const status = err?.status;
-
-            if (status === 429 && attemptsLeft > 0) {
-              // Rate limit / quota burst: backoff 800ms with jitter and retry once
-              console.warn(`[AI Vision] Gemini ${model} hit 429 rate limit. Backing off before retry...`);
-              await sleepWithJitter(800);
-              continue;
-            }
-
-            if (RETRYABLE_STATUS_CODES.has(status) || err.name === 'TimeoutError' || err.message?.includes('fetch')) {
-              console.warn(`[AI Vision] Gemini ${model} failed (status: ${status || 'network/timeout'}). Cascading...`);
-              break; // Try next model or next provider
-            }
-
-            // Non-retryable error
-            break;
+    // One Gemini model, with a single retry when it reports a rate limit. Resolves null on failure.
+    const tryGemini = async (model: string): Promise<any | null> => {
+      if (!geminiKey) return null;
+      for (let attemptsLeft = 2; attemptsLeft > 0; attemptsLeft -= 1) {
+        try {
+          const { text } = await callGeminiVision(model, geminiKey, mimeType, base64Data, selectedTargets, PROVIDER_TIMEOUT_MS);
+          return normalizeDetectionResult(JSON.parse(text));
+        } catch (err: any) {
+          lastError = err;
+          if (err?.status === 429 && attemptsLeft > 1) {
+            console.warn(`[AI Vision] Gemini ${model} hit 429 rate limit. Backing off before retry...`);
+            await sleepWithJitter(800);
+            continue;
           }
+          console.warn(`[AI Vision] Gemini ${model} failed (status: ${err?.status || 'network/timeout'}).`);
+          return null;
         }
-
-        if (parsedRawResult) break;
       }
-    }
-
-    const answeredByGemini = Boolean(parsedRawResult);
-    if (!parsedRawResult && mistralKey) {
+      return null;
+    };
+    const tryMistral = async (): Promise<any | null> => {
+      if (!mistralKey) return null;
       try {
-        if (geminiKey) console.warn('[AI Vision] Gemini did not return a result. Falling back to Mistral vision...');
-        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, 18_000);
-        parsedRawResult = normalizeDetectionResult(JSON.parse(text));
+        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, PROVIDER_TIMEOUT_MS);
+        return normalizeDetectionResult(JSON.parse(text));
       } catch (err: any) {
         console.error('[AI Vision] Mistral vision failed:', err.message);
         lastError = err;
+        return null;
       }
+    };
+
+    // Gemini goes first. If it fails, or is still silent after the hedge delay, Mistral runs too and the first answer wins.
+    const geminiRun = tryGemini(primaryModel);
+    let mistralRun: Promise<any | null> | null = null;
+    const early = await Promise.race([
+      geminiRun,
+      new Promise<typeof STILL_WAITING>(resolve => setTimeout(() => resolve(STILL_WAITING), HEDGE_DELAY_MS)),
+    ]);
+    let parsedRawResult: any = early === STILL_WAITING ? null : early;
+    let answeredByGemini = Boolean(parsedRawResult);
+
+    if (!parsedRawResult) {
+      if (mistralKey && geminiKey) console.warn(`[AI Vision] Gemini ${early === STILL_WAITING ? 'is slow' : 'did not return a result'}. Asking Mistral vision...`);
+      mistralRun = tryMistral();
+      const winner = await firstResult([
+        geminiRun.then(result => result && { result, gemini: true }),
+        mistralRun.then(result => result && { result, gemini: false }),
+      ]);
+      parsedRawResult = winner?.result ?? null;
+      answeredByGemini = Boolean(winner?.gemini);
+    }
+
+    // Last resort, only reached when both the primary Gemini model and Mistral failed.
+    if (!parsedRawResult && backupModel !== primaryModel) {
+      parsedRawResult = await tryGemini(backupModel);
+      answeredByGemini = Boolean(parsedRawResult);
     }
 
     if (!parsedRawResult) {
@@ -377,15 +404,12 @@ export async function recognizeChallengeImage(bytes: Buffer, targets: unknown, m
     let evaluation = evaluateDetections(parsedRawResult, targets, minimumConfidence);
     // Gemini answered but rejected the photo: ask Mistral before failing the user's attempt.
     if (!evaluation.passed && answeredByGemini && mistralKey) {
-      try {
-        console.warn(`[AI Vision] Gemini rejected the photo (${evaluation.reason}) Asking Mistral for a second check...`);
-        const { text } = await callMistralVision(mistralKey, mimeType, base64Data, selectedTargets, 18_000);
-        const second = evaluateDetections(normalizeDetectionResult(JSON.parse(text)), targets, minimumConfidence);
-        console.warn(`[AI Vision] Mistral second check ${second.passed ? 'passed' : 'also rejected'} the photo (${second.object} ${second.confidence}%).`);
-        if (second.passed) evaluation = second;
-      } catch (err: any) {
-        console.error('[AI Vision] Mistral second check failed:', err.message);
-      }
+      console.warn(`[AI Vision] Gemini rejected the photo (${evaluation.reason}) Asking Mistral for a second check...`);
+      // Reuses the Mistral call when it was already started alongside a slow Gemini.
+      const secondRaw = await (mistralRun ?? tryMistral());
+      const second = secondRaw ? evaluateDetections(secondRaw, targets, minimumConfidence) : null;
+      if (second) console.warn(`[AI Vision] Mistral second check ${second.passed ? 'passed' : 'also rejected'} the photo (${second.object} ${second.confidence}%).`);
+      if (second?.passed) evaluation = second;
     }
 
     return { ...evaluation, mimeType };

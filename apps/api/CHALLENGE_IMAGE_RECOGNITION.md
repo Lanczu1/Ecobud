@@ -1,8 +1,8 @@
 # Challenge image recognition
 
-Before photos use Gemini first, with Mistral vision as a fallback when Gemini fails, through the backend `POST /api/challenges/:id/analyze` route. The active request path no longer executes Python or YOLO. After photos retain their existing upload/review flow.
+Before photos use Gemini first through the backend `POST /api/challenges/:id/analyze` route. Mistral vision is asked as well when Gemini fails, when Gemini has not answered after 3 seconds (the first answer wins), or when Gemini answers but rejects the photo (a pass from Mistral then passes the scan). Each provider call times out after 8 seconds. The active request path no longer executes Python or YOLO. After photos retain their existing upload/review flow.
 
-Set `MISTRAL_API_KEY` in the ignored backend `.env` and optionally set `MISTRAL_IMAGE_MODEL` (default `mistral-medium-2604`). Set `GEMINI_API_KEY` for fallback and optionally `GEMINI_IMAGE_MODEL` (default `gemini-3.5-flash-lite`, with `gemini-3.6-flash` as a backup). Restart the API after changing environment variables. Do not put keys in mobile/web source or any `EXPO_PUBLIC_`/`VITE_` variable. Rotate credentials shared in chat before production use.
+Set `MISTRAL_API_KEY` in the ignored backend `.env` and optionally set `MISTRAL_IMAGE_MODEL` (default `mistral-medium-2604`). Set `GEMINI_API_KEY` and optionally `GEMINI_IMAGE_MODEL` (default `gemini-3.5-flash`, with `gemini-3.1-flash-lite` as a last resort when both it and Mistral fail). Restart the API after changing environment variables. Do not put keys in mobile/web source or any `EXPO_PUBLIC_`/`VITE_` variable. Rotate credentials shared in chat before production use.
 
 Admin detection settings accept one or more of exactly these classes:
 
@@ -39,5 +39,7 @@ Rate limits and concurrency limits are process-local. Use a shared limiter when 
 Run `npm test` and `npx tsc --noEmit` in `apps/api`. Regression tests cover the three-by-three class matrix, confidence filtering, invalid output, missing/forged/expired/wrong-user tokens, direct-submission bypass, repeated proofs, and multipart uploads. Provider and database calls are mocked in these tests.
 
 Live check on 2026-09-05: the configured key could list models, but Gemini generation returned HTTP 403 `PERMISSION_DENIED` (project access denied). The previous 2.5 Flash model also reported it was unavailable to new users and directed migration to 3.6 Flash. A working project/key is required before live recognition can be verified. No successful live bread-bag classification has been claimed.
+
+Live timing on 2026-10-14, one 121 KB plastic-bottle photo: `gemini-3.5-flash-lite` timed out on every call, including text-only; `gemini-3.5-flash` answered in about 3–6 seconds on some calls and timed out or returned HTTP 503 on most; Mistral answered in about 2 seconds. With the 3-second hedge, five consecutive scans each finished in about 5 seconds, all answered by Mistral. This is one photo from one network on one evening, not a general latency figure.
 
 References: [Google image understanding](https://ai.google.dev/gemini-api/docs/image-understanding), [Google structured output](https://ai.google.dev/gemini-api/docs/generate-content/structured-output).
