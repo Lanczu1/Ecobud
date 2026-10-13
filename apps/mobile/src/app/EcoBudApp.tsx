@@ -172,6 +172,8 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
     scrollRef.current = list;
     if (list) { scrollYRef.current = 0; homeAnimations.setOffset(0); }
   }, [homeAnimations]);
+  // Profile keeps its own list, so the walkthrough needs a handle on it to bring the coin balance back into view.
+  const profileListRef = React.useRef<FlatList<HomeDashboardSection>>(null);
   const pendingSearchY = React.useRef<number | null>(null);
   const [searchKeyboardHeight, setSearchKeyboardHeight] = useState(0);
   const chatbotRef = React.useRef<ScrollAwareChatbotHandle>(null);
@@ -287,7 +289,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
             return (
             <FlatList<HomeDashboardSection>
               key={tab}
-              ref={tab === 'home' ? attachHomeList : undefined}
+              ref={tab === 'home' ? attachHomeList : tab === 'profile' ? profileListRef : undefined}
               data={tab === 'home' ? HOME_DASHBOARD_ROWS : []}
               renderItem={tab === 'home' ? renderHomeRow : null}
               keyExtractor={homeRowKey}
@@ -372,6 +374,7 @@ function MobileShell({ model }: { model: EcoBudMobileModel }) {
         onTabChange={model.setActiveTab}
         onScrollTo={(y, animated = true) => {
           scrollRef.current?.scrollToOffset({ offset: y, animated });
+          profileListRef.current?.scrollToOffset({ offset: y, animated: animated && model.activeTab === 'profile' });
         }}
         onScrollBy={(delta, animated = true) => {
           scrollRef.current?.scrollToOffset({ offset: Math.max(0, scrollYRef.current + delta), animated });

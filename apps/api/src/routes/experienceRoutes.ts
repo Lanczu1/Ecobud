@@ -281,7 +281,7 @@ experienceRoutes.get(
   requireUserAccess,
   errorBoundary(async (req: AuthenticatedRequest, res) => {
     const userId = req.auth!.userId;
-    const [user, badges, userBadges, challengeCount, eventCount, giveawayCount] = await Promise.all([
+    const [user, badges, userBadges, giveawayCount] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { points: true },
@@ -291,18 +291,6 @@ experienceRoutes.get(
       }),
       prisma.userBadge.findMany({
         where: { userId },
-      }),
-      prisma.userChallenge.count({
-        where: {
-          userId,
-          status: 'COMPLETED',
-        },
-      }),
-      prisma.eventRegistration.count({
-        where: {
-          userId,
-          status: 'ATTENDED',
-        },
       }),
       prisma.swapRequest.count({
         where: {
@@ -344,22 +332,8 @@ experienceRoutes.get(
           ...(['lesson', 'challenge', 'event', 'exchange'].includes(badge.awardType) ? { currentProgress: unlockedBadgeIds.has(badge.id) ? 1 : 0, targetProgress: 1 } : {}),
         };
       }),
-      achievements: [
-        {
-          id: 'challenge-master',
-          label: '50 Challenges Complete',
-          current: challengeCount,
-          target: 50,
-          reward: 100,
-        },
-        {
-          id: 'event-hero',
-          label: '10 Community Events Joined',
-          current: eventCount,
-          target: 10,
-          reward: 60,
-        },
-      ],
+      // Kept as an empty list because installed app versions still read this field.
+      achievements: [],
     });
   }),
 );

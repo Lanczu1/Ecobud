@@ -146,11 +146,11 @@ export function Reports() {
                 role="menu"
                 aria-orientation="vertical"
                 aria-labelledby="export-report-button"
-                className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-50 animate-reveal"
+                className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#0f1713] rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-2 z-50 animate-reveal"
               >
-                <div className="px-3 py-2 border-b border-gray-100 mb-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Export Report Format</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Platform performance &amp; analytics snapshot</p>
+                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Export Report Format</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Platform performance &amp; analytics snapshot</p>
                 </div>
 
                 <div className="space-y-1">
@@ -161,9 +161,9 @@ export function Reports() {
                     id="export-pdf-option"
                     disabled={!!exporting}
                     onClick={() => void handleDownload('pdf')}
-                    className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-red-50/70 text-left transition-colors group cursor-pointer disabled:opacity-50"
+                    className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-red-50/70 dark:hover:bg-red-950/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 text-left transition-colors group cursor-pointer disabled:opacity-50"
                   >
-                    <div className="w-9 h-9 rounded-lg bg-red-100/70 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="w-9 h-9 rounded-lg bg-red-100/70 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                       {exporting === 'pdf' ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
@@ -172,10 +172,10 @@ export function Reports() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-red-700">PDF Document</span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">.pdf</span>
+                        <span className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-red-700 dark:group-hover:text-red-300">PDF Document</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300">.pdf</span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
                         Formatted executive report with KPI cards, 7-day trend table &amp; narrative summary
                       </p>
                     </div>
@@ -188,9 +188,9 @@ export function Reports() {
                     id="export-excel-option"
                     disabled={!!exporting}
                     onClick={() => void handleDownload('excel')}
-                    className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-emerald-50/70 text-left transition-colors group cursor-pointer disabled:opacity-50"
+                    className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 text-left transition-colors group cursor-pointer disabled:opacity-50"
                   >
-                    <div className="w-9 h-9 rounded-lg bg-emerald-100/70 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100/70 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                       {exporting === 'excel' ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
@@ -199,10 +199,10 @@ export function Reports() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-emerald-700">Excel Spreadsheet</span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">.xlsx</span>
+                        <span className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300">Excel Spreadsheet</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">.xlsx</span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
                         Multi-sheet workbook with KPI metrics, 7-day activity data &amp; system metadata
                       </p>
                     </div>

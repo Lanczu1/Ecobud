@@ -3253,35 +3253,6 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               </View>
             </View>
           </LinearGradient>
-
-          <Text style={[profileStyles.sectionHeadline, { fontSize: isSmallDevice ? 14 : 16, marginTop: isSmallDevice ? 4 : 8, color: theme.colors.textPrimary }]}>Lifetime Achievements</Text>
-          {(model.rewards?.achievements ?? []).length > 0 ? (
-            (model.rewards?.achievements ?? []).map((achievement) => {
-              const progress = Math.min(100, Math.round((achievement.current / achievement.target) * 100));
-              return (
-                <View key={achievement.id} style={[profileStyles.achievementCard, isDark && { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }, isSmallDevice && { padding: moderateScale(12), borderRadius: moderateScale(18) }]}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: isSmallDevice ? 8 : 12, gap: 8 }}>
-                    <Text
-                      style={[profileStyles.badgeTitle, { textAlign: 'left', flex: 1, color: theme.colors.textPrimary }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.8}
-                    >
-                      {achievement.label} ({achievement.current}/{achievement.target})
-                    </Text>
-                    <Text style={[{ color: isDark ? theme.colors.primary : '#10B981', fontWeight: 'bold' }, isSmallDevice && { fontSize: responsiveFontSize(12) }]}>
-                      {achievement.reward} pts
-                    </Text>
-                  </View>
-                  <View style={profileStyles.badgeProgressWrap}>
-                    <ProgressBar progress={progress} />
-                  </View>
-                </View>
-              );
-            })
-          ) : (
-            <Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginTop: 16 }}>No achievements yet.</Text>
-          )}
         </View>
 
         {/* Collectible Badges Grid */}

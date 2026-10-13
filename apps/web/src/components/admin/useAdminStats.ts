@@ -22,9 +22,13 @@ export interface DashboardStats {
   }[];
 }
 
+// The last stats shown this session. Dashboard and Reports reopen with these at once
+// and refresh behind them, instead of showing a loader on every visit.
+let lastStats: DashboardStats | null = null;
+
 export function useAdminStats(loadErrorMessage: string) {
-  const [stats, setStats] = useState<DashboardStats | null>(() => getCachedAdminData<DashboardStats>('/admin/stats'));
-  const [loading, setLoading] = useState(() => !getCachedAdminData<DashboardStats>('/admin/stats'));
+  const [stats, setStats] = useState<DashboardStats | null>(() => getCachedAdminData<DashboardStats>('/admin/stats') ?? lastStats);
+  const [loading, setLoading] = useState(() => !stats);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +38,7 @@ export function useAdminStats(loadErrorMessage: string) {
       if (isInitial && !stats) setLoading(true);
       try {
         const statsData = await adminGet<DashboardStats>('/admin/stats');
+        lastStats = statsData;
         if (isMounted) {
           setStats(statsData);
           setError(null);

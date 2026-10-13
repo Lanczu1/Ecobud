@@ -59,11 +59,106 @@ interface StepConfig {
   arrowDirection: 'top' | 'bottom' | 'none';
 }
 
-export function CoachMarksOverlay({
+const DIM_COLOR = 'rgba(10, 28, 22, 0.72)';
+
+// Step configs tailored to guide through the REAL live screens
+const steps: StepConfig[] = [
+  {
+    stepNumber: 1,
+    totalSteps: 7,
+    targetTab: 'home',
+    title: 'Welcome to ECOBUD!',
+    titleIcon: '🌱',
+    description: 'Your journey toward a greener lifestyle starts here on your Home Dashboard. Let\'s take a quick tour!',
+    pose: 'wave',
+    mascotPosition: 'center',
+    cardVerticalAlign: 'center',
+    arrowDirection: 'bottom',
+  },
+  {
+    stepNumber: 2,
+    totalSteps: 7,
+    targetTab: 'profile',
+    title: 'Your Eco-Coins',
+    titleIcon: '🪙',
+    description: 'Earn coins from verified eco-actions and trade rewards!',
+    pose: 'right_point',
+    mascotPosition: 'right',
+    cardVerticalAlign: 'bottom',
+    arrowDirection: 'top',
+  },
+  {
+    stepNumber: 3,
+    totalSteps: 7,
+    targetTab: 'tracker',
+    title: 'Maintain Your Streak!',
+    titleIcon: '🔥',
+    description: 'Complete challenges to grow your streak and earn milestone rewards. After 7 inactive days, restore the flame up to 3 times per month.',
+    pose: 'left_point',
+    mascotPosition: 'left',
+    cardVerticalAlign: 'bottom',
+    arrowDirection: 'top',
+  },
+  {
+    stepNumber: 4,
+    totalSteps: 7,
+    targetTab: 'challenges',
+    title: 'Discover Eco-Tasks',
+    titleIcon: '🎯',
+    description: 'Explore the Discover challenges section! Complete real-world missions, submit proof, and level up.',
+    pose: 'right_point',
+    mascotPosition: 'right',
+    cardVerticalAlign: 'bottom',
+    arrowDirection: 'top',
+  },
+  {
+    stepNumber: 5,
+    totalSteps: 7,
+    targetTab: 'learn',
+    title: 'Learn & Earn Hub',
+    titleIcon: '📚',
+    description: 'Master climate solutions with short lessons and interactive quizzes to earn additional Eco-Coins.',
+    pose: 'right_point',
+    mascotPosition: 'right',
+    cardVerticalAlign: 'bottom',
+    arrowDirection: 'top',
+  },
+  {
+    stepNumber: 6,
+    totalSteps: 7,
+    targetTab: 'marketplace',
+    title: 'Give & Get Hub',
+    titleIcon: '♻️',
+    description: 'Exchange pre-loved eco items, join community giveaways, and reduce waste in your local neighborhood.',
+    pose: 'right_point',
+    mascotPosition: 'right',
+    cardVerticalAlign: 'bottom',
+    arrowDirection: 'top',
+  },
+  {
+    stepNumber: 7,
+    totalSteps: 7,
+    targetTab: 'home',
+    title: 'You\'re All Set!',
+    titleIcon: '🎉',
+    description: 'You\'re ready to explore ECOBUD! Start completing habits, earn coins, and build a greener world today.',
+    pose: 'celebrate',
+    mascotPosition: 'center',
+    cardVerticalAlign: 'center',
+    arrowDirection: 'none',
+  },
+];
+
+// The screen only exists while the walkthrough is open, so a closed walkthrough costs nothing on
+// app re-renders and every opening starts from a clean step 1.
+export function CoachMarksOverlay(props: CoachMarksOverlayProps) {
+  return props.visible ? <CoachMarksScreen {...props} /> : null;
+}
+
+function CoachMarksScreen({
   visible,
   replay = false,
   onFinish,
-  onSkip,
   initialStep = 0,
   activeTab,
   onTabChange,
@@ -89,98 +184,11 @@ export function CoachMarksOverlay({
   const mascotSlide = useRef(new Animated.Value(0)).current;
   const nextPressScale = useRef(new Animated.Value(1)).current;
   const backPressScale = useRef(new Animated.Value(1)).current;
+  const spotlightCover = useRef(cardFade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })).current;
   const isAnimating = useRef(false);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealScheduled = useRef(false);
   const pendingReveal = useRef<{ step: number; show: () => void } | null>(null);
-
-  // Step configs tailored to guide through the REAL live screens
-  const steps: StepConfig[] = [
-    {
-      stepNumber: 1,
-      totalSteps: 7,
-      targetTab: 'home',
-      title: 'Welcome to ECOBUD!',
-      titleIcon: '🌱',
-      description: 'Your journey toward a greener lifestyle starts here on your Home Dashboard. Let\'s take a quick tour!',
-      pose: 'wave',
-      mascotPosition: 'center',
-      cardVerticalAlign: 'center',
-      arrowDirection: 'bottom',
-    },
-    {
-      stepNumber: 2,
-      totalSteps: 7,
-      targetTab: 'profile',
-      title: 'Your Eco-Coins',
-      titleIcon: '🪙',
-      description: 'Earn coins from verified eco-actions and trade rewards!',
-      pose: 'right_point',
-      mascotPosition: 'right',
-      cardVerticalAlign: 'bottom',
-      arrowDirection: 'top',
-    },
-    {
-      stepNumber: 3,
-      totalSteps: 7,
-      targetTab: 'tracker',
-      title: 'Maintain Your Streak!',
-      titleIcon: '🔥',
-      description: 'Complete challenges to grow your streak and earn milestone rewards. After 7 inactive days, restore the flame up to 3 times per month.',
-      pose: 'left_point',
-      mascotPosition: 'left',
-      cardVerticalAlign: 'bottom',
-      arrowDirection: 'top',
-    },
-    {
-      stepNumber: 4,
-      totalSteps: 7,
-      targetTab: 'challenges',
-      title: 'Discover Eco-Tasks',
-      titleIcon: '🎯',
-      description: 'Explore the Discover challenges section! Complete real-world missions, submit proof, and level up.',
-      pose: 'right_point',
-      mascotPosition: 'right',
-      cardVerticalAlign: 'bottom',
-      arrowDirection: 'top',
-    },
-    {
-      stepNumber: 5,
-      totalSteps: 7,
-      targetTab: 'learn',
-      title: 'Learn & Earn Hub',
-      titleIcon: '📚',
-      description: 'Master climate solutions with short lessons and interactive quizzes to earn additional Eco-Coins.',
-      pose: 'right_point',
-      mascotPosition: 'right',
-      cardVerticalAlign: 'bottom',
-      arrowDirection: 'top',
-    },
-    {
-      stepNumber: 6,
-      totalSteps: 7,
-      targetTab: 'marketplace',
-      title: 'Give & Get Hub',
-      titleIcon: '♻️',
-      description: 'Exchange pre-loved eco items, join community giveaways, and reduce waste in your local neighborhood.',
-      pose: 'right_point',
-      mascotPosition: 'right',
-      cardVerticalAlign: 'bottom',
-      arrowDirection: 'top',
-    },
-    {
-      stepNumber: 7,
-      totalSteps: 7,
-      targetTab: 'home',
-      title: 'You\'re All Set!',
-      titleIcon: '🎉',
-      description: 'You\'re ready to explore ECOBUD! Start completing habits, earn coins, and build a greener world today.',
-      pose: 'celebrate',
-      mascotPosition: 'center',
-      cardVerticalAlign: 'center',
-      arrowDirection: 'none',
-    },
-  ];
 
   useEffect(() => {
     if (visible) {
@@ -240,6 +248,9 @@ export function CoachMarksOverlay({
     setPendingRevealStep(null);
     pending.show();
   }, [visible, replay, currentStep, activeTab, spotlightTargetRect]);
+
+  // Closing unmounts this screen, so drop the measured target with it.
+  useEffect(() => () => coachMarkSpotlightStore.set(null), []);
 
   if (!visible) return null;
 
@@ -397,19 +408,6 @@ export function CoachMarksOverlay({
     }
   };
 
-  const handleSkip = () => {
-    triggerSelectionHaptic();
-    if (onTabChange) onTabChange('home');
-    Animated.timing(overlayFade, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      if (onSkip) onSkip();
-      else onFinish();
-    });
-  };
-
   const mascotSize = isSmallDevice ? scale(140) : isCompact ? scale(165) : scale(180);
 
   // Dynamic mascot container alignment based on step pose & position
@@ -532,13 +530,19 @@ export function CoachMarksOverlay({
                   <Svg width={width} height={height} pointerEvents="none">
                     <Path
                       d={`M 0 0 H ${width} V ${height} H 0 Z ${holePath}`}
-                      fill="rgba(10, 28, 22, 0.72)"
+                      fill={DIM_COLOR}
                       fillRule="evenodd"
                     />
                   </Svg>
                 </TouchableOpacity>
 
-                <View
+                {/* Fills the cutout with the dim colour while the card is hidden, so the spotlight fades open. */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={{ position: 'absolute', left: holeX, top: holeY, width: holeW, height: holeH, borderRadius: radius, backgroundColor: DIM_COLOR, opacity: spotlightCover }}
+                />
+
+                <Animated.View
                   pointerEvents="none"
                   style={[
                     styles.spotlightCutoutBorder,
@@ -549,13 +553,14 @@ export function CoachMarksOverlay({
                       height: holeH,
                       borderRadius: r,
                       shadowOpacity: replay && (isStep4 || isStep5) ? 0 : 1,
+                      opacity: cardFade,
                     },
                   ]}
                 >
                   <View style={styles.cutoutSparkle}>
                     <Ionicons name="sparkles" size={scale(16)} color="#4ADE80" />
                   </View>
-                </View>
+                </Animated.View>
               </>
             );
           })()}
@@ -774,12 +779,8 @@ export function CoachMarksOverlay({
                     <Ionicons name="arrow-forward" size={scale(18)} color="#FFFFFF" />
                   </AnimatedTouchableOpacity>
                 ) : (
-                  <View style={styles.buttonsRow}>
-                    {currentStep === 0 ? (
-                      <TouchableOpacity onPress={handleSkip} activeOpacity={0.7} style={styles.skipBtn}>
-                        <Text style={[styles.skipBtnText, isDark && { color: theme.colors.textMuted }]}>Skip</Text>
-                      </TouchableOpacity>
-                    ) : (
+                  <View style={[styles.buttonsRow, currentStep === 0 && { justifyContent: 'flex-end' }]}>
+                    {currentStep === 0 ? null : (
                       <AnimatedTouchableOpacity
                         onPress={handleBack}
                         onPressIn={() => animateButton(backPressScale, true)}
@@ -878,7 +879,7 @@ const styles = StyleSheet.create({
   },
   standardDimmedBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(10, 28, 22, 0.68)',
+    backgroundColor: DIM_COLOR,
   },
 
   /* ── Step 2 Cutout & Tooltip Overlay Elements ── */
@@ -1032,15 +1033,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: verticalScale(2),
-  },
-  skipBtn: {
-    paddingVertical: verticalScale(8),
-    paddingHorizontal: scale(14),
-  },
-  skipBtnText: {
-    fontSize: responsiveFontSize(13.5),
-    fontWeight: '700',
-    color: '#6B7280',
   },
   backBtn: {
     paddingVertical: verticalScale(8),

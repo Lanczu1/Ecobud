@@ -7002,25 +7002,6 @@ export function RewardsOverlay({ model }: { model: EcoBudMobileModel }) {
             <BadgeCard key={badge.id} badge={badge} fullWidth />
           ))}
         </View>
-
-        <Text style={styles.sectionHeadline}>Lifetime Achievements</Text>
-        {(model.rewards?.achievements ?? []).map((achievement) => {
-          const progress = Math.min(100, Math.round((achievement.current / achievement.target) * 100));
-
-          return (
-            <SurfaceCard key={achievement.id} style={styles.achievementCard}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>
-                  {achievement.label} ({achievement.current}/{achievement.target})
-                </Text>
-                <Text style={styles.logPoints}>{achievement.reward} pts</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${progress}%` }]} />
-              </View>
-            </SurfaceCard>
-          );
-        })}
       </ScrollView>
     </OverlayScaffold>
   );

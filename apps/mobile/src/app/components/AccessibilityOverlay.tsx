@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, ScrollView, Switch, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, ScrollView, Switch, StyleSheet, Easing } from 'react-native';
 import { Text, Pressable } from '../../shared/accessibility/primitives';
+import { Animated } from '../../shared/accessibility/animations';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
@@ -43,10 +44,19 @@ export function AccessibilityOverlay({ model }: { model: EcoBudMobileModel }) {
   const previewForeground = contrast ? (isDark ? '#FFFFFF' : '#111111') : theme.colors.textPrimary;
   const previewBackground = contrast ? (isDark ? '#000000' : '#FFFFFF') : theme.colors.surfaceMuted;
 
+  // The shared Animated wrapper skips this when "Optimize performance" is on.
+  const reveal = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const animation = Animated.timing(reveal, { toValue: 1, duration: 350, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+  }, [reveal]);
+
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.homeContent, { paddingBottom: 100 }]}>
+        <Animated.View style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
         <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>PREFERENCES</Text>
         <Text accessibilityRole="header" style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Accessibility</Text>
         <LinearGradient colors={['#059669', '#10B981', '#047857']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.banner}>
@@ -103,6 +113,7 @@ export function AccessibilityOverlay({ model }: { model: EcoBudMobileModel }) {
             </View>
           </SettingsCard>}
         </View>
+        </Animated.View>
       </ScrollView>
     </View>
   );

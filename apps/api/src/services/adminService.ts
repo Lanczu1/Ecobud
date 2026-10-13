@@ -616,9 +616,10 @@ export class AdminService {
       startOfToday.setHours(0, 0, 0, 0);
       const endOfToday = new Date(snapshotDate);
       endOfToday.setHours(23, 59, 59, 999);
-      const presenceOverview = await presenceQueryService.getPresenceOverview(snapshotDate);
-
+      // Every figure is independent, so they are all fetched in one round.
       const [
+        presenceOverview,
+        activityTrend,
         totalUsers,
         signupsToday,
         totalLessons,
@@ -626,8 +627,9 @@ export class AdminService {
         userPoints,
         totalCoinsRedeemed,
         lessonCompletions,
-        pendingSubmissions,
       ] = await Promise.all([
+        presenceQueryService.getPresenceOverview(snapshotDate),
+        this.getSevenDayActivityTrend(snapshotDate),
         prisma.user.count({
           where: { role: 'user' }
         }),
@@ -651,12 +653,7 @@ export class AdminService {
         prisma.userLessonProgress.count({
           where: { status: 'completed' },
         }),
-        prisma.challengeSubmission.count({
-          where: { status: 'pending' },
-        }),
       ]);
-
-      const activityTrend = await this.getSevenDayActivityTrend(snapshotDate);
 
       return {
         overview: {
