@@ -191,3 +191,21 @@ export async function adminDelete(path: string): Promise<void> {
   clearAdminApiCache();
   return handleResponse<void>(res);
 }
+
+// Saves a file response (PDF, Excel) using the server's filename when it sends one.
+export async function adminDownload(path: string, fallbackFilename: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) return handleResponse<void>(res);
+  const blob = await res.blob();
+  const match = (res.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = match ? match[1] : fallbackFilename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

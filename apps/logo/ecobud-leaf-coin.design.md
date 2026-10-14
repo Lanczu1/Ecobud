@@ -1,0 +1,11 @@
+# EcoBud leaf and coin logo
+
+Asset: `ecobud-leaf-coin.png`, generated with the built-in image generation tool.
+
+Design direction: preserve the existing logo's friendly rounded lettering, forest-green outlines and heart-shaped leaf gesture. Connect the leaves and Eco Coin with a shared stem, reflecting the app's environmental activities and earned rewards. Gold distinguishes the coin from the foliage. Transparent padding allows placement on different backgrounds.
+
+Antislop applied during design. ENERGY 2 / RHYTHM 1 / MOTION 1. Static logo, with the connected leaf and coin emblem as the focal point. Visual review confirms readable EcoBud text, connected leaves and coin, and correspondence with the existing leaf identity. This is a raster logo asset, with no interactive elements or application changes.
+
+Generation prompt:
+
+Use case: logo-brand. Create one finished EcoBud logo on a genuinely transparent background. EcoBud is a friendly environmental learning and community action app where users earn Eco Coins through challenges, events, lessons and habits. Its existing identity uses a heart-shaped green leaf mascot, dark forest-green outlines, fresh green leaf surfaces, and rounded friendly lettering. Design a distinctive, compact emblem: a single flat warm-gold eco coin with a bold forest-green rim, connected organically to two green leaves through a shared curved stem; integrate a heart-shaped leaf gesture recalling EcoBud's mascot, and a simple uppercase E in the coin face to identify the reward. Leaves and coin must form one connected silhouette, not a collage of separate clip art. Below the emblem place exact text 'EcoBud', correctly spelled, in substantial rounded friendly forest-green lettering, balanced and easy to read. Color palette: forest green #205B32, leaf green #78BA43, warm gold #E7B947. Flat vector-like graphic, crisp contours, restrained shapes, professional logo craftsmanship, generous transparent padding, centered stacked composition. No mascot face, no hands, no currency dollar signs, no bitcoin motifs, no extra text or tagline, no watermark, no mockup, no shadows, no glow, no 3D rendering, no gradients, no decorative stars. Output the actual logo asset only.

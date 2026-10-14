@@ -9,10 +9,10 @@ import {
   Calendar, Plus, Edit3, Trash2, MapPin, Users, Clock, Search, 
   AlertCircle, X, Loader2, Image as ImageIcon, QrCode, Download, 
   Leaf, FileText, BarChart3, ChevronDown, ChevronUp, Star,
-  CheckCircle2, XCircle, ShieldCheck, RefreshCw
+  CheckCircle2, XCircle, ShieldCheck, RefreshCw, FileDown
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, adminDownload, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
@@ -823,6 +823,7 @@ export function Events() {
   const canManage = (event: AdminEvent) => event.canManage ?? (adminUser?.role === 'admin');
   const isAdmin = adminUser?.role === 'admin';
   const [reportLoading, setReportLoading] = useState<string | null>(null);
+  const [pdfUserId, setPdfUserId] = useState<string | null>(null);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
   const [togglingFeatured, setTogglingFeatured] = useState<string | null>(null);
 
@@ -1171,6 +1172,19 @@ export function Events() {
       setReviewNotice({ type: 'error', message: err.message || 'Failed to download report.' });
     } finally {
       setReportLoading(null);
+    }
+  };
+
+  const handleDownloadUserPdf = async (userId: string, displayName: string) => {
+    if (pdfUserId) return;
+    setPdfUserId(userId);
+    try {
+      await adminDownload(`/reports/submissions/events/${encodeURIComponent(userId)}/pdf`, 'ECOBUD-Event-Submissions.pdf');
+      setReviewNotice({ type: 'success', message: `Downloaded ${displayName}'s eco event submissions PDF.` });
+    } catch (err: any) {
+      setReviewNotice({ type: 'error', message: err.message || 'Could not download the PDF. Please try again.' });
+    } finally {
+      setPdfUserId(null);
     }
   };
 
@@ -1685,6 +1699,7 @@ export function Events() {
                       <th className="px-5 py-3.5">Photo Proof</th>
                       <th className="px-5 py-3.5">Status</th>
                       <th className="px-5 py-3.5">Submitted Date</th>
+                      <th className="px-5 py-3.5">Report</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -1784,9 +1799,24 @@ export function Events() {
                                 day: 'numeric', 
                                 hour: 'numeric', 
                                 minute: '2-digit', 
-                                hour12: true 
+                                hour12: true
                               })}
                             </span>
+                          </td>
+
+                          {/* Per-resident PDF */}
+                          <td className="px-5 py-4">
+                            <button
+                              type="button"
+                              onClick={() => void handleDownloadUserPdf(sub.userId, displayName)}
+                              disabled={pdfUserId !== null}
+                              aria-label={`Download PDF of ${displayName}'s eco event submissions with photos`}
+                              title="Download PDF with photos"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-gray-900"
+                            >
+                              {pdfUserId === sub.userId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                              {pdfUserId === sub.userId ? 'Preparing...' : 'PDF'}
+                            </button>
                           </td>
 
                         </tr>

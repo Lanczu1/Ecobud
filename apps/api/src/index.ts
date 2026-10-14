@@ -23,6 +23,7 @@ import { adminRoutes } from './routes/adminRoutes';
 import giveAndGetRoutes from './routes/giveAndGetRoutes';
 import swapRoutes from './routes/swapRoutes';
 import reportRoutes from './routes/reportRoutes';
+import submissionReportRoutes from './routes/submissionReportRoutes';
 import redeemRoutes from './routes/redeemRoutes';
 import { moderationRoutes } from './routes/moderationRoutes';
 import { faqRoutes } from './routes/faqRoutes';
@@ -229,6 +230,7 @@ app.use('/api/announcements', announcementResidentRoutes);
 app.use('/api/give-and-get', giveAndGetRoutes);
 app.use('/api/swap', swapRoutes);
 app.use('/api/redeem', redeemRoutes);
+app.use('/api/reports/submissions', submissionReportRoutes);
 app.use('/api/reports', reportRoutes);
 
 app.use(errorResponder);

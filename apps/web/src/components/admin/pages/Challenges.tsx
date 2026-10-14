@@ -8,9 +8,9 @@ import {
   Trophy, Plus, Edit3, Trash2, Coins, Search, Target, AlertCircle, X, 
   Loader2, UploadCloud, Power, Star, XCircle, ShieldCheck, 
   ChevronDown, ChevronRight, User, Layers, Filter, 
-  RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, EyeOff, Info, FileText, CheckSquare
+  RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, EyeOff, Info, FileText, CheckSquare, FileDown
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminDownload, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
@@ -662,6 +662,7 @@ export function Challenges() {
     challenge: null,
   });
   const toast = useToast();
+  const [pdfUserId, setPdfUserId] = useState<string | null>(null);
 
   // ── Submissions tab state ────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>(notificationTarget('challenge_submission') ? 'submissions' : 'challenges');
@@ -1139,6 +1140,19 @@ export function Challenges() {
 
   const toggleUserCollapse = (userId: string) => {
     setCollapsedUsers(prev => ({ ...prev, [userId]: !(prev[userId] ?? hideSubmissionsByDefault) }));
+  };
+
+  const handleDownloadUserPdf = async (userId: string, displayName: string) => {
+    if (pdfUserId) return;
+    setPdfUserId(userId);
+    try {
+      await adminDownload(`/reports/submissions/challenges/${encodeURIComponent(userId)}/pdf`, 'ECOBUD-Challenge-Submissions.pdf');
+      toast.success(`Downloaded ${displayName}'s challenge submissions PDF.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not download the PDF. Please try again.');
+    } finally {
+      setPdfUserId(null);
+    }
   };
 
   const toggleChallengeCollapse = (key: string) => {
@@ -1719,6 +1733,17 @@ export function Challenges() {
                                       {userGroup.pendingCount} Pending
                                     </span>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); void handleDownloadUserPdf(userGroup.userId, userGroup.displayName); }}
+                                    disabled={pdfUserId !== null}
+                                    aria-label={`Download PDF of ${userGroup.displayName}'s challenge submissions with photos`}
+                                    title="Download PDF with photos"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-gray-900"
+                                  >
+                                    {pdfUserId === userGroup.userId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                                    {pdfUserId === userGroup.userId ? 'Preparing...' : 'PDF'}
+                                  </button>
                                   <button className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                                     {isUserCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                   </button>
