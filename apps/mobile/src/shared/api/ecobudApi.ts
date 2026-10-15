@@ -380,6 +380,7 @@ export interface EcoEvent {
 export interface EventSubmissionHistoryItem {
   id: string;
   eventId: string;
+  attendanceImageUrl?: string | null;
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason: string | null;
   submittedAt: string;

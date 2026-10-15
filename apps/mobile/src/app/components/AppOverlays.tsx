@@ -61,6 +61,7 @@ import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue';
 import type { OfflineMutationRecord } from '../../shared/offline/offlineMutationQueue.types';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
+import { EventHistoryPhoto } from './EventHistoryPhoto';
 import { RejectionModal } from './RejectionModal';
 import { LeaderboardPagination } from './LeaderboardPagination';
 import {
@@ -3218,6 +3219,11 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         {item.status === 'rejected' && !!item.rejectionReason && (
           <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>Reason: {item.rejectionReason}</Text>
         )}
+        <EventHistoryPhoto
+          key={item.attendanceImageUrl ?? 'missing-photo'}
+          imageUrl={item.attendanceImageUrl}
+          eventTitle={item.event.title}
+        />
       </View>
     );
   };

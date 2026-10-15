@@ -142,6 +142,7 @@ eventRoutes.get(
       select: {
         id: true,
         eventId: true,
+        attendanceImageUrl: true,
         status: true,
         rejectionReason: true,
         submittedAt: true,

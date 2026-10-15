@@ -31,6 +31,7 @@ app.use(errorResponder);
 
 const submission = (id: string, status = 'approved') => ({
   id, eventId: `event-${id}`, status, rejectionReason: null,
+  attendanceImageUrl: `https://example.test/attendance/${id}.jpg`,
   submittedAt: new Date('2026-10-15T10:00:00Z'), reviewedAt: null,
   event: { title: `Event ${id}`, location: 'Nagcarlan' },
 });
@@ -49,6 +50,7 @@ describe('GET /api/events/history', () => {
       const response = await request(app).get('/api/events/history?userId=someone-else').set('Authorization', `Bearer ${userId}`);
       expect(response.status).toBe(200);
       expect(response.body.items.map((item: any) => item.id)).toEqual([userId]);
+      expect(response.body.items[0].attendanceImageUrl).toBe(`https://example.test/attendance/${userId}.jpg`);
       expect(prisma.eventSubmission.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { userId } }));
     }
   });
@@ -63,6 +65,7 @@ describe('GET /api/events/history', () => {
     expect(response.body.items[0].event.title).toBe('Event 3');
     expect(prisma.eventSubmission.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId: 'alice' }, orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
+      select: expect.objectContaining({ attendanceImageUrl: true }),
     }));
   });
 
