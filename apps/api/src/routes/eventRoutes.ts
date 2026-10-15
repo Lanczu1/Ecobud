@@ -73,7 +73,7 @@ eventRoutes.get(
       take: limit + 1,
     }),
     userId ? prisma.eventRegistration.findMany({ where: { userId }, select: { eventId: true, status: true, attendedAt: true, userId: true } }) : [],
-    userId ? prisma.eventSubmission.findMany({ where: { userId } }) : [],
+    userId ? prisma.eventSubmission.findMany({ where: { userId }, select: { eventId: true, status: true, rejectionReason: true } }) : [],
     ]);
     const registrationByEvent = new Map(myRegistrations.map(({ eventId, ...registration }) => [eventId, registration]));
     const submissionByEvent = new Map(mySubmissions.map(submission => [submission.eventId, submission]));

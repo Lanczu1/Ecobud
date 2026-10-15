@@ -1,4 +1,4 @@
-import { useCursorFeed } from '../../shared/ui/useCursorFeed';
+import { prefetchCursorFeed, useCursorFeed } from '../../shared/ui/useCursorFeed';
 import { PaginationFooter } from '../../shared/ui/PaginationFooter';
 import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { ApprovedIdCard } from './ApprovedIdCard';
@@ -2865,11 +2865,23 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const fetchPage = React.useCallback((cursor?: string) => showHistory
     ? Promise.resolve({ items: [] as EcoEvent[], nextCursor: null })
     : ecobudApi.fetchEvents(token, { cursor, limit: 20, scope, id: focusedId ?? undefined }), [token, scope, focusedId, showHistory]);
-  const feed = useCursorFeed(fetchPage, 'eventsChanged');
+  const feed = useCursorFeed(fetchPage, 'eventsChanged', showHistory ? undefined : `eventsChanged:${token ?? 'guest'}:${scope}:${focusedId ?? ''}`);
   const fetchHistoryPage = React.useCallback((cursor?: string) => showHistory && token
     ? ecobudApi.fetchEventHistory(token, cursor)
     : Promise.resolve({ items: [] as EventSubmissionHistoryItem[], nextCursor: null }), [token, showHistory]);
-  const historyFeed = useCursorFeed(fetchHistoryPage, 'eventsChanged');
+  const historyFeed = useCursorFeed(fetchHistoryPage, 'eventsChanged', showHistory ? `eventsChanged:${token}:history` : undefined);
+
+  // Warm the other tabs in the background so switching to them shows a list without waiting.
+  React.useEffect(() => {
+    if (focusedId) return;
+    const handle = setTimeout(() => {
+      for (const tabScope of ['browse', 'joined', 'past'] as const) {
+        prefetchCursorFeed(`eventsChanged:${token ?? 'guest'}:${tabScope}:`, () => ecobudApi.fetchEvents(token, { limit: 20, scope: tabScope }));
+      }
+      if (token) prefetchCursorFeed(`eventsChanged:${token}:history`, () => ecobudApi.fetchEventHistory(token));
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [token, focusedId]);
   const activeFeed = showHistory ? historyFeed : feed;
 
   const featuredEvent = feed.items[0] ?? null;
