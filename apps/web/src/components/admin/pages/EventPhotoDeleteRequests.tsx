@@ -12,7 +12,8 @@ interface PhotoRequest {
   requestedAt: string;
   reviewedAt?: string;
   photoUrl: string | null;
-  photoField?: 'proofUrl' | 'afterProofUrl';
+  photoField?: 'proofUrl' | 'afterProofUrl' | 'both';
+  photos?: { proofUrl: string | null; afterProofUrl: string | null } | null;
   user: { name: string; profile: { displayName: string | null; city: string | null } | null } | null;
 }
 interface RequestPage {
@@ -85,7 +86,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
     setNotice(null);
     try {
       await adminPost(`${endpoint}/${encodeURIComponent(item.id)}/approve`, {});
-      setNotice('Approved. The photo was removed; history details, attendance, and rewards were retained.');
+      setNotice(item.photoField === 'both' ? 'Approved. Both proof and after photos were removed; history details and rewards were retained.' : 'Approved. The photo was removed; history details, attendance, and rewards were retained.');
       onApproved();
       await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not approve the request.'); }
@@ -148,17 +149,21 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">{filteredRequests.map(item => {
               const displayName = item.user?.profile?.displayName || item.user?.name || 'Former user';
               const city = item.user?.profile?.city;
-              const photoUrl = item.photoUrl ? /^https?:\/\//i.test(item.photoUrl) ? item.photoUrl : `${API_HOST.replace(/\/$/, '')}/${item.photoUrl.replace(/^\//, '')}` : null;
+              const photos = (item.photos
+                ? [{ url: item.photos.proofUrl, label: 'Proof photo' }, { url: item.photos.afterProofUrl, label: 'After photo' }]
+                : [{ url: item.photoUrl, label: item.photoField === 'afterProofUrl' ? 'After photo' : item.photoField ? 'Proof photo' : 'Attendance photo' }])
+                .filter((photo): photo is { url: string; label: string } => !!photo.url)
+                .map(photo => ({ ...photo, url: /^https?:\/\//i.test(photo.url) ? photo.url : `${API_HOST.replace(/\/$/, '')}/${photo.url.replace(/^\//, '')}` }));
               return <tr key={item.id} className="transition-colors hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
                 <td className="px-6 py-4"><div className="flex items-center gap-3">
                   <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-green-100 text-sm font-bold text-green-700 dark:bg-green-900/40 dark:text-green-300">{displayName.charAt(0).toUpperCase()}</div>
                   <div className="min-w-0"><p className="max-w-44 break-words text-sm font-semibold text-gray-900 dark:text-white">{displayName}</p>{city && <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300"><MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />{city}</p>}</div>
                 </div></td>
                 <td className="px-5 py-4"><div className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-green-700 dark:text-green-300" aria-hidden="true" /><span className="max-w-52 break-words text-sm font-medium text-gray-800 dark:text-gray-200">{item.eventTitle}</span></div></td>
-                <td className="px-5 py-4">{photoUrl ? <button type="button" onClick={() => onPreview({ url: photoUrl, title: `${displayName} - ${item.eventTitle}` })} aria-label={`View requested photo for ${displayName}, ${item.eventTitle}`} className={`group relative block h-11 w-14 overflow-hidden rounded-lg border border-gray-200 shadow-xs transition-all hover:ring-2 hover:ring-green-500 dark:border-gray-700 ${focus}`}>
-                  <img src={photoUrl} alt={`Attendance photo for ${item.eventTitle}`} loading="lazy" className="h-full w-full object-cover" />
+                <td className="px-5 py-4"><div className="flex gap-3">{photos.length ? photos.map(photo => <div key={photo.label}><button type="button" onClick={() => onPreview({ url: photo.url, title: `${displayName} - ${item.eventTitle} - ${photo.label}` })} aria-label={`View ${photo.label.toLowerCase()} for ${displayName}, ${item.eventTitle}`} className={`group relative block h-11 w-14 overflow-hidden rounded-lg border border-gray-200 shadow-xs transition-all hover:ring-2 hover:ring-green-500 dark:border-gray-700 ${focus}`}>
+                  <img src={photo.url} alt={`${photo.label} for ${item.eventTitle}`} loading="lazy" className="h-full w-full object-cover" />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><ImageIcon className="h-4 w-4 text-white" aria-hidden="true" /></div>
-                </button> : <span className="text-xs text-gray-600 italic dark:text-gray-300">Photo removed</span>}{item.photoField && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{item.photoField === 'afterProofUrl' ? 'After photo' : 'Proof photo'}</p>}</td>
+                </button>{item.photoField && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{photo.label}</p>}</div>) : <span className="text-xs text-gray-600 italic dark:text-gray-300">{item.photoField === 'both' ? 'Both photos removed' : 'Photo removed'}</span>}</div></td>
                 <td className="px-5 py-4"><p className="min-w-44 max-w-72 break-words whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{item.reason}</p></td>
                 <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-xs font-semibold ${item.status === 'pending' ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300'}`}>{item.status === 'pending' ? <Clock className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}{item.status === 'pending' ? 'Pending Approval' : 'Approved'}</span></td>
                 <td className="px-5 py-4"><span className="text-xs whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(item.requestedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>{item.reviewedAt && <p className="mt-1 text-xs whitespace-nowrap text-gray-600 dark:text-gray-300">Approved {new Date(item.reviewedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' })}</p>}</td>

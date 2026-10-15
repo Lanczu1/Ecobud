@@ -275,7 +275,7 @@ export interface ChallengeWithProgress {
       status: string;
       proofUrl: string | null;
       afterProofUrl: string | null;
-      photoDeletionRequests?: Partial<Record<'proofUrl' | 'afterProofUrl', { id: string; status: 'pending' | 'approved'; reason: string }>>;
+      photoDeletionRequests?: Partial<Record<'proofUrl' | 'afterProofUrl' | 'both', { id: string; status: 'pending' | 'approved'; reason: string }>>;
       detectedQuantity: number;
       reservedQuantity: number;
       qrToken: string | null;
@@ -979,9 +979,9 @@ export const ecobudApi = {
     request<{ id: string; status: 'pending'; reason: string }>(`/events/submissions/${encodeURIComponent(submissionId)}/delete-request`, {
       token, method: 'POST', body: { reason, photoUrl },
     }),
-  requestChallengePhotoDeletion: (token: string, submissionId: string, photoField: 'proofUrl' | 'afterProofUrl', reason: string, photoUrl: string) =>
+  requestChallengePhotosDeletion: (token: string, submissionId: string, reason: string, photos: { proofUrl: string | null; afterProofUrl: string | null }) =>
     request<{ id: string; status: 'pending'; reason: string }>(`/challenges/submissions/${encodeURIComponent(submissionId)}/delete-request`, {
-      token, method: 'POST', body: { reason, photoUrl, photoField },
+      token, method: 'POST', body: { reason, photos, photoField: 'both' },
     }),
   fetchRewardHistory: (token: string, cursor?: string) =>
     request<CursorPage<TransparencyFeed['logs'][number]>>(`/users/me/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { token }),

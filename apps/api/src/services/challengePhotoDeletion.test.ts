@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
   return { tx, transaction: vi.fn(), findMany: vi.fn(), count: vi.fn() };
 });
 vi.mock('../prismaClient', () => ({ prisma: { $transaction: mocks.transaction, auditLog: { findMany: mocks.findMany, count: mocks.count } } }));
-import { approveChallengePhotoDeletion, requestChallengePhotoDeletion, listChallengePhotoDeletionRequests, challengePhotoDeletionStatuses, challengePhotoRequestId, CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED } from './challengePhotoDeletion';
+import { approveChallengePhotoDeletion, requestChallengePhotoDeletion, requestChallengePhotosDeletion, listChallengePhotoDeletionRequests, challengePhotoDeletionStatuses, challengePhotoRequestId, challengePhotosRequestId, CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED } from './challengePhotoDeletion';
 
 const photoUrl = 'https://example.test/proof.jpg';
 const details = { submissionId: 'one', eventId: 'cycle-one', eventTitle: 'Recycle bottles', photoField: 'proofUrl', photoUrl, reason: 'Please remove my photo' };
@@ -36,6 +36,66 @@ describe('challenge photo deletion', () => {
     expect(stored).toMatchObject({ id: log.id, userId: 'alice', action: CHALLENGE_PHOTO_DELETE_PENDING });
     expect(JSON.parse(stored.details)).toEqual(details);
     expect(mocks.tx.challengeSubmission.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('creates one request capturing both proof and after photos', async () => {
+    const photos = { proofUrl: submission.proofUrl, afterProofUrl: submission.afterProofUrl };
+    const result = await requestChallengePhotosDeletion('alice', 'one', details.reason, photos);
+    expect(result.id).toBe(challengePhotosRequestId('one', photos));
+    expect(mocks.tx.auditLog.create).toHaveBeenCalledOnce();
+    expect(JSON.parse(mocks.tx.auditLog.create.mock.calls[0][0].data.details)).toMatchObject({ photoField: 'both', photos, reason: details.reason });
+    expect(mocks.tx.challengeSubmission.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates a combined request and preserves the original reason', async () => {
+    const photos = { proofUrl: submission.proofUrl, afterProofUrl: submission.afterProofUrl };
+    mocks.tx.auditLog.findUnique.mockResolvedValue({ ...log, details: JSON.stringify({ ...details, photoField: 'both', photos }) });
+    expect(await requestChallengePhotosDeletion('alice', 'one', 'Different reason', photos)).toMatchObject({ status: 'pending', reason: details.reason });
+    expect(mocks.tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('atomically clears both photos while preserving history, status, and rewards', async () => {
+    const photos = { proofUrl: submission.proofUrl, afterProofUrl: submission.afterProofUrl };
+    mocks.tx.auditLog.findFirst.mockResolvedValue({ ...log, details: JSON.stringify({ ...details, photoField: 'both', photos }) });
+    await approveChallengePhotoDeletion(admin, log.id);
+    expect(mocks.tx.challengeSubmission.updateMany).toHaveBeenCalledOnce();
+    expect(mocks.tx.challengeSubmission.updateMany).toHaveBeenCalledWith({
+      where: { id: 'one', userId: 'alice', ...photos, OR: [{ status: 'approved' }, { rewardAwarded: true }] },
+      data: { proofUrl: null, afterProofUrl: null },
+    });
+    expect(JSON.parse(mocks.tx.auditLog.update.mock.calls[0][0].data.details)).toMatchObject({ photoField: 'both', photos, reviewedById: 'admin' });
+  });
+
+  it('rejects combined requests from another user or when either photo changed', async () => {
+    const photos = { proofUrl: submission.proofUrl, afterProofUrl: submission.afterProofUrl };
+    await expect(requestChallengePhotosDeletion('bob', 'one', details.reason, photos)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(requestChallengePhotosDeletion('alice', 'one', details.reason, { ...photos, afterProofUrl: 'outdated.jpg' })).rejects.toMatchObject({ statusCode: 409 });
+    expect(mocks.tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('does not partially approve a combined request when either photo changed', async () => {
+    mocks.tx.auditLog.findFirst.mockResolvedValue({ ...log, details: JSON.stringify({ ...details, photoField: 'both', photos: { proofUrl: photoUrl, afterProofUrl: submission.afterProofUrl } }) });
+    mocks.tx.challengeSubmission.updateMany.mockResolvedValue({ count: 0 });
+    await expect(approveChallengePhotoDeletion(admin, log.id)).rejects.toMatchObject({ statusCode: 409 });
+    expect(mocks.tx.auditLog.update).not.toHaveBeenCalled();
+  });
+
+  it('returns a single combined status after both photos have been removed', async () => {
+    mocks.findMany.mockResolvedValue([{ ...log, action: CHALLENGE_PHOTO_DELETE_APPROVED, details: JSON.stringify({ ...details, photoField: 'both', photos: { proofUrl: photoUrl, afterProofUrl: submission.afterProofUrl } }) }]);
+    const states = await challengePhotoDeletionStatuses('alice', [{ id: 'one', proofUrl: null, afterProofUrl: null }]);
+    expect(states.get('one')).toEqual({ both: { id: log.id, status: 'approved', reason: details.reason } });
+  });
+
+  it('allows deletion of remaining photos when one is already absent', async () => {
+    mocks.tx.challengeSubmission.findUnique.mockResolvedValue({ ...submission, proofUrl: null });
+    const result = await requestChallengePhotosDeletion('alice', 'one', details.reason, { proofUrl: null, afterProofUrl: submission.afterProofUrl });
+    expect(result.status).toBe('pending');
+  });
+
+  it('does not expose either removed photo in approved admin history', async () => {
+    mocks.findMany.mockResolvedValue([{ ...log, timestamp: new Date(), user: null, details: JSON.stringify({ ...details, photoField: 'both', photos: { proofUrl: photoUrl, afterProofUrl: submission.afterProofUrl } }) }]);
+    const result = await listChallengePhotoDeletionRequests(admin, 'approved', 1, 20);
+    expect(result.items[0]).toMatchObject({ photoUrl: null, photos: null });
   });
 
   it('keeps separate requests for proof and after photos, even when URLs match', () => {

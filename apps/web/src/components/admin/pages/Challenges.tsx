@@ -805,33 +805,35 @@ export function Challenges() {
 
   useLayoutEffect(() => { loadSubmissionsRef.current = (showLoading = true) => loadSubmissions(showLoading); });
 
+  // Loads with the page alongside submissions and deletion requests; switching tabs does not refetch.
   useEffect(() => {
-    if (activeTab === 'submissions') return;
-    // Only typing waits; first load, tab switches, filters and paging fetch right away.
+    // Only typing waits; first load, filters and paging fetch right away.
     const typing = lastSearch.current !== search;
     lastSearch.current = search;
     const timer = setTimeout(() => void load(true), typing ? 250 : 0);
     return () => clearTimeout(timer);
-  }, [page, search, filterStatus, activeTab]);
+  }, [page, search, filterStatus]);
 
+  // One subscription for the page's lifetime: a server push quietly updates both lists,
+  // whichever tab is open, so every tab is current when it is shown.
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/admin/challenges');
-        if (activeTab === 'submissions') void loadSubmissionsRef.current(false);
-        else void loadChallengesRef.current();
+        void loadChallengesRef.current();
+        void loadSubmissionsRef.current(false);
       },
     }).then((unsub) => {
       if (disposed) unsub();
       else unsubscribe = unsub;
     });
     return () => { disposed = true; unsubscribe?.(); };
-  }, [activeTab]);
+  }, []);
 
   useEffect(() => {
-    // Fetched once in the background on the Challenges tab, so Submissions opens with data.
+    // Fetched once in the background with the page, so Submissions opens with data.
     if (activeTab !== 'submissions' && submissionsLoaded.current) return;
     const typing = lastSubSearch.current !== subSearch;
     lastSubSearch.current = subSearch;
@@ -1330,9 +1332,11 @@ export function Challenges() {
         </div>
       )}
 
-      {activeTab === 'photoRequests' ? (
+      {/* Mounted with the page so deletion requests load alongside challenges and submissions. */}
+      <div hidden={activeTab !== 'photoRequests'}>
         <EventPhotoDeleteRequests resource="challenges" onPreview={setSelectedImage} onApproved={() => { void loadSubmissionsRef.current(false); }} />
-      ) : activeTab === 'challenges' ? (
+      </div>
+      {activeTab === 'photoRequests' ? null : activeTab === 'challenges' ? (
         <>
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

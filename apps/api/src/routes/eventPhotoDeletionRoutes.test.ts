@@ -13,7 +13,7 @@ vi.mock('../http/authentication', () => ({
   requireModeratorAccess: (req: any, res: any, next: any) => ['admin', 'moderator'].includes(req.auth.role) ? next() : res.sendStatus(403),
 }));
 vi.mock('../services/eventPhotoDeletion', () => ({ requestEventPhotoDeletion: vi.fn(), listEventPhotoDeletionRequests: vi.fn(), approveEventPhotoDeletion: vi.fn() }));
-vi.mock('../services/challengePhotoDeletion', () => ({ requestChallengePhotoDeletion: vi.fn(), listChallengePhotoDeletionRequests: vi.fn(), approveChallengePhotoDeletion: vi.fn() }));
+vi.mock('../services/challengePhotoDeletion', () => ({ requestChallengePhotoDeletion: vi.fn(), requestChallengePhotosDeletion: vi.fn(), listChallengePhotoDeletionRequests: vi.fn(), approveChallengePhotoDeletion: vi.fn() }));
 vi.mock('../services/adminLiveEvents', () => ({ adminLiveEvents: { emit: vi.fn() } }));
 vi.mock('../services/supabaseRealtimeService', () => ({ supabaseRealtimeService: { publishUserEventsRefresh: vi.fn(), publishUserSectionRefresh: vi.fn() } }));
 
@@ -21,7 +21,7 @@ import { requestEventPhotoDeletion, listEventPhotoDeletionRequests, approveEvent
 import { errorResponder } from '../http/errorResponder';
 import { eventPhotoDeletionRoutes, adminEventPhotoDeletionRoutes } from './eventPhotoDeletionRoutes';
 import { challengePhotoDeletionRoutes, adminChallengePhotoDeletionRoutes } from './challengePhotoDeletionRoutes';
-import { requestChallengePhotoDeletion, approveChallengePhotoDeletion } from '../services/challengePhotoDeletion';
+import { requestChallengePhotoDeletion, requestChallengePhotosDeletion, approveChallengePhotoDeletion } from '../services/challengePhotoDeletion';
 const app = express();
 app.use(express.json());
 app.use('/api/events', eventPhotoDeletionRoutes);
@@ -32,6 +32,22 @@ app.use(errorResponder);
 
 describe('photo delete request HTTP access and validation', () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it('submits a single combined request with the authenticated owner and both photo snapshots', async () => {
+    vi.mocked(requestChallengePhotosDeletion).mockResolvedValue({ id: 'combined', status: 'pending', reason: 'Private photos' });
+    const photos = { proofUrl: 'proof.jpg', afterProofUrl: 'after.jpg' };
+    const response = await request(app).post('/api/challenges/submissions/one/delete-request').set('Authorization', 'Bearer user').send({ userId: 'someone-else', photoField: 'both', reason: ' Private photos ', photos });
+    expect(response.status).toBe(200);
+    expect(requestChallengePhotosDeletion).toHaveBeenCalledWith('viewer', 'one', 'Private photos', photos);
+    expect(requestChallengePhotoDeletion).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing or empty combined photo snapshots', async () => {
+    for (const photos of [undefined, {}, { proofUrl: null, afterProofUrl: null }, { proofUrl: 'proof.jpg' }]) {
+      expect((await request(app).post('/api/challenges/submissions/one/delete-request').set('Authorization', 'Bearer user').send({ photoField: 'both', reason: 'Private photos', photos })).status).toBe(400);
+    }
+    expect(requestChallengePhotosDeletion).not.toHaveBeenCalled();
+  });
 
   it('requires a valid challenge photo field and reason', async () => {
     for (const body of [{ reason: 'Private photo', photoUrl: 'photo.jpg', photoField: 'userId' }, { reason: ' ', photoUrl: 'photo.jpg', photoField: 'proofUrl' }]) {

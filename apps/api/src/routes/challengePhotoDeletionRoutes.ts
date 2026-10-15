@@ -2,16 +2,22 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticateRequest, type AuthenticatedRequest, requireUserAccess, requireModeratorAccess } from '../http/authentication';
 import { errorBoundary } from '../http/errorResponder';
-import { approveChallengePhotoDeletion, listChallengePhotoDeletionRequests, requestChallengePhotoDeletion } from '../services/challengePhotoDeletion';
+import { approveChallengePhotoDeletion, listChallengePhotoDeletionRequests, requestChallengePhotoDeletion, requestChallengePhotosDeletion } from '../services/challengePhotoDeletion';
 import { parseAdminPagination } from '../utils/adminPagination';
 import { adminLiveEvents } from '../services/adminLiveEvents';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 
 export const challengePhotoDeletionRoutes = Router();
-const schema = z.object({ reason: z.string().trim().min(5).max(500), photoUrl: z.string().trim().min(1).max(2048), photoField: z.enum(['proofUrl', 'afterProofUrl']) });
+const photoUrl = z.string().trim().min(1).max(2048);
+const schema = z.discriminatedUnion('photoField', [
+  z.object({ reason: z.string().trim().min(5).max(500), photoUrl, photoField: z.enum(['proofUrl', 'afterProofUrl']) }),
+  z.object({ reason: z.string().trim().min(5).max(500), photoField: z.literal('both'), photos: z.object({ proofUrl: photoUrl.nullable(), afterProofUrl: photoUrl.nullable() }).refine(photos => !!photos.proofUrl || !!photos.afterProofUrl) }),
+]);
 challengePhotoDeletionRoutes.post('/submissions/:submissionId/delete-request', authenticateRequest, requireUserAccess, errorBoundary(async (req: AuthenticatedRequest, res) => {
   const body = schema.parse(req.body);
-  const result = await requestChallengePhotoDeletion(req.auth!.userId, req.params.submissionId, body.photoField, body.reason, body.photoUrl);
+  const result = body.photoField === 'both'
+    ? await requestChallengePhotosDeletion(req.auth!.userId, req.params.submissionId, body.reason, body.photos)
+    : await requestChallengePhotoDeletion(req.auth!.userId, req.params.submissionId, body.photoField, body.reason, body.photoUrl);
   adminLiveEvents.emit();
   void supabaseRealtimeService.publishUserSectionRefresh(req.auth!.userId, 'challenges', { reason: 'challenge-photo-delete-requested' });
   res.json(result);

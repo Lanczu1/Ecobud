@@ -15,25 +15,26 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
     sendRequest={token ? reason => ecobudApi.requestEventPhotoDeletion(token, item.id, reason, item.attendanceImageUrl!) : undefined} />;
 }
 
-export function ChallengePhotoDeleteRequest({ submissionId, photoField, photoUrl, title, deletionRequest, token, onRequested }: {
+export function ChallengePhotoDeleteRequest({ submissionId, proofUrl, afterProofUrl, title, deletionRequest, token, onRequested }: {
   submissionId: string;
-  photoField: 'proofUrl' | 'afterProofUrl';
-  photoUrl?: string | null;
+  proofUrl?: string | null;
+  afterProofUrl?: string | null;
   title: string;
   deletionRequest?: EventSubmissionHistoryItem['deletionRequest'];
   token?: string;
   onRequested: () => void;
 }) {
-  return <PhotoDeleteRequest title={title} photoUrl={photoUrl} deletionRequest={deletionRequest} onRequested={onRequested}
-    sendRequest={token ? reason => ecobudApi.requestChallengePhotoDeletion(token, submissionId, photoField, reason, photoUrl!) : undefined} />;
+  return <PhotoDeleteRequest multiple title={title} photoUrl={proofUrl || afterProofUrl} deletionRequest={deletionRequest} onRequested={onRequested}
+    sendRequest={token ? reason => ecobudApi.requestChallengePhotosDeletion(token, submissionId, reason, { proofUrl: proofUrl ?? null, afterProofUrl: afterProofUrl ?? null }) : undefined} />;
 }
 
-function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onRequested }: {
+function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onRequested, multiple = false }: {
   title: string;
   photoUrl?: string | null;
   deletionRequest?: EventSubmissionHistoryItem['deletionRequest'];
   sendRequest?: (reason: string) => Promise<unknown>;
   onRequested: () => void;
+  multiple?: boolean;
 }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -46,7 +47,7 @@ function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onR
     return <View style={[requestStyles.statusRow, { backgroundColor: theme.colors.surfaceMuted }]}>
       <Ionicons name="image-outline" size={18} color={theme.colors.textSecondary} />
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Photo removed</Text>
+        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>{multiple ? 'Photos removed' : 'Photo removed'}</Text>
         <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Deletion approved. Your history details are retained.</Text>
       </View>
     </View>;
@@ -55,7 +56,7 @@ function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onR
     return <View accessibilityLiveRegion="polite" style={[requestStyles.statusRow, { backgroundColor: theme.colors.surfaceMuted }]}>
       <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
       <View style={{ flex: 1, gap: 4 }}>
-        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Photo deletion requested</Text>
+        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>{multiple ? 'Proof and after photo deletion requested' : 'Photo deletion requested'}</Text>
         <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Waiting for admin or moderator approval.</Text>
         <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Reason: {deletionRequest?.reason ?? reason.trim()}</Text>
       </View>
@@ -79,7 +80,7 @@ function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onR
   };
 
   return <>
-    <TouchableOpacity accessibilityRole="button" accessibilityHint="Opens a form to request removal of this photo" onPress={() => { setError(null); setOpen(true); }} style={requestStyles.requestAction}>
+    <TouchableOpacity accessibilityRole="button" accessibilityHint={multiple ? 'Requests removal of both the proof and after photo' : 'Opens a form to request removal of this photo'} onPress={() => { setError(null); setOpen(true); }} style={requestStyles.requestAction}>
       <Ionicons name="trash-outline" size={17} color="#FFFFFF" />
       <Text style={{ flexShrink: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>Request photo deletion</Text>
     </TouchableOpacity>
@@ -89,7 +90,7 @@ function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onR
           <View accessibilityViewIsModal style={[requestStyles.card, { backgroundColor: theme.colors.card }]}>
             <Text accessibilityRole="header" style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700' }}>Request photo deletion</Text>
             <Text style={{ color: theme.colors.textSecondary }}>{title}</Text>
-            <Text style={{ color: theme.colors.textSecondary }}>Your photo stays visible until approved. Your history details and rewards will be kept.</Text>
+            <Text style={{ color: theme.colors.textSecondary }}>{multiple ? 'This request removes both your proof photo and after photo when approved. Your history details and rewards will be kept.' : 'Your photo stays visible until approved. Your history details and rewards will be kept.'}</Text>
             <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>Reason (required)</Text>
             <TextInput
               accessibilityLabel="Reason for deleting this photo"

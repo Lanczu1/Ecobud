@@ -2048,9 +2048,9 @@ export function useHomeDashboard(): EcoBudMobileModel {
         const resources = [...pendingHomeResourcesRef.current];
         pendingHomeResourcesRef.current.clear();
         await refreshHomeResources(resources, true);
-        if (pendingHomeResourcesRef.current.size) realtimeRefreshTimer.current = setTimeout(() => void flush(), 450);
+        if (pendingHomeResourcesRef.current.size) realtimeRefreshTimer.current = setTimeout(() => void flush(), 250);
       };
-      realtimeRefreshTimer.current = setTimeout(() => void flush(), 450);
+      realtimeRefreshTimer.current = setTimeout(() => void flush(), 250);
     },
     [refreshHomeResources, session],
   );
@@ -2700,6 +2700,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
     setChallenges(fresh.items);
     setIsCycleActive(fresh.isCycleActive ?? true);
   }, []);
+  const reloadChallenges = useCallback(async () => {
+    const token = currentSessionTokenRef.current;
+    if (token) await refreshChallenges(token).catch(() => {});
+  }, [refreshChallenges]);
   const requireIdApproval = useCallback(() => {
     if (idVerificationStatus === 'approved') return true;
     showConfirmPrompt({
@@ -3699,6 +3703,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
     handleCheckUsernameAvailability,
     handleLogout,
     refreshEverything,
+    reloadChallenges,
     syncQueuedOfflineActions,
 
     openLesson,

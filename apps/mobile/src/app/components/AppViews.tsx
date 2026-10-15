@@ -1944,18 +1944,15 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                               </TouchableOpacity>
                             )}
 
-                            {(['proofUrl', 'afterProofUrl'] as const).map(photoField => {
-                              const photoUrl = item.sub?.[photoField];
-                              const deletionRequest = item.sub?.photoDeletionRequests?.[photoField];
-                              if (!photoUrl && !deletionRequest) return null;
-                              return <View key={`${item.sub.id}:${photoField}:${photoUrl ?? 'removed'}`} style={{ marginBottom: 12 }}>
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' }}>{photoField === 'proofUrl' ? 'Proof photo' : 'After photo'}</Text>
-                                {photoField === 'afterProofUrl' && photoUrl && <TouchableOpacity accessibilityRole="button" accessibilityLabel="View after photo" onPress={() => setPreviewImage(photoUrl)} style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden' }}>
-                                  <Image source={{ uri: photoUrl }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
-                                </TouchableOpacity>}
-                                <ChallengePhotoDeleteRequest submissionId={item.sub.id} photoField={photoField} photoUrl={photoUrl} title={challenge.title} deletionRequest={deletionRequest} token={model.session?.token} onRequested={() => { void model.refreshEverything(); }} />
-                              </View>;
-                            })}
+                            {!!item.sub?.afterProofUrl && <View style={{ marginBottom: 12 }}>
+                              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' }}>After photo</Text>
+                              <TouchableOpacity accessibilityRole="button" accessibilityLabel="View after photo" onPress={() => setPreviewImage(item.sub.afterProofUrl)} style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden' }}>
+                                <Image source={{ uri: item.sub.afterProofUrl }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
+                              </TouchableOpacity>
+                            </View>}
+                            <View style={{ marginBottom: 12 }}>
+                              <ChallengePhotoDeleteRequest key={`${item.sub.id}:${item.sub.proofUrl ?? ''}:${item.sub.afterProofUrl ?? ''}`} submissionId={item.sub.id} proofUrl={item.sub.proofUrl} afterProofUrl={item.sub.afterProofUrl} title={challenge.title} deletionRequest={item.sub.photoDeletionRequests?.both} token={model.session?.token} onRequested={() => { void model.reloadChallenges(); }} />
+                            </View>
 
                             {/* Rewards / Claim Button */}
                             <View style={{ marginTop: 4, gap: 10 }}>

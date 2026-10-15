@@ -16,6 +16,7 @@ interface RequestDetails {
   eventTitle: string;
   photoUrl: string;
   reason: string;
+  photos?: { proofUrl: string | null; afterProofUrl: string | null };
   reviewedById?: string;
   reviewedAt?: string;
 }
@@ -64,7 +65,7 @@ export async function listEventPhotoDeletionRequests(auth: Reviewer, status: 'pe
   ]);
   return paginatedResult(rows.map(row => {
     const details = photoDeleteDetails(row.details);
-    return { id: row.id, status, requestedAt: row.timestamp, user: row.user, ...details, photoUrl: status === 'pending' ? details.photoUrl : null };
+    return { id: row.id, status, requestedAt: row.timestamp, user: row.user, ...details, photoUrl: status === 'pending' ? details.photoUrl : null, ...(details.photos ? { photos: status === 'pending' ? details.photos : null } : {}) };
   }), page, pageSize, total);
 }
 

@@ -238,6 +238,8 @@ export interface EcoBudMobileModel {
   handleCheckUsernameAvailability: (displayName: string) => Promise<{ available: boolean; message: string }>;
   handleLogout: () => Promise<void>;
   refreshEverything: () => Promise<void>;
+  /** Reloads only the challenge list, for changes that touch nothing else (e.g. a photo request). */
+  reloadChallenges: () => Promise<void>;
   syncQueuedOfflineActions: (activeSession: SessionPayload, refreshAfterSync?: boolean) => Promise<boolean>;
   openChallengeMission: (challenge: ChallengeWithProgress) => void;
   openLesson: (lessonId: string) => Promise<void>;
