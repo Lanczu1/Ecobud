@@ -3,11 +3,11 @@
     "name": "ECO-BUD",
     "slug": "eco-bud",
     "scheme": "ecobud",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "android": {
-      "versionCode": 9,
+      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "package": "com.anonymous.ecobudmobile",
       "softwareKeyboardLayoutMode": "resize",
