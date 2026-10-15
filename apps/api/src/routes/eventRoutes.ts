@@ -123,6 +123,43 @@ eventRoutes.get(
   }),
 );
 
+eventRoutes.get(
+  '/history',
+  authenticateRequest,
+  requireUserAccess,
+  errorBoundary(async (req: AuthenticatedRequest, res) => {
+    const userId = req.auth!.userId;
+    const limit = pageLimit(req.query.limit, 20);
+    const cursor = decodeCursor(req.query.cursor);
+    const found = await prisma.eventSubmission.findMany({
+      where: {
+        userId,
+        ...(cursor ? { OR: [
+          { submittedAt: { lt: new Date(cursor.at) } },
+          { submittedAt: new Date(cursor.at), id: { lt: cursor.id } },
+        ] } : {}),
+      },
+      select: {
+        id: true,
+        eventId: true,
+        status: true,
+        rejectionReason: true,
+        submittedAt: true,
+        reviewedAt: true,
+        event: { select: { title: true, location: true, imageUrl: true, startDatetime: true, endDatetime: true, expReward: true, ecoCoinsReward: true } },
+      },
+      orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+    const page = found.slice(0, limit);
+    const edge = page[page.length - 1];
+    return res.json({
+      nextCursor: found.length > limit && edge ? encodeCursor({ id: edge.id, at: edge.submittedAt.toISOString() }) : null,
+      items: page,
+    });
+  }),
+);
+
 eventRoutes.post(
   '/:eventId/join',
   authenticateRequest,
@@ -283,7 +320,7 @@ eventRoutes.post(
         }
         return tx.eventSubmission.upsert({
           where: { userId_eventId: { userId, eventId } },
-          update: { attendanceImageUrl: imageUrl, qrVerified: true, status: 'approved', reviewedAt: now, rejectionReason: null },
+          update: { attendanceImageUrl: imageUrl, qrVerified: true, status: 'approved', submittedAt: now, reviewedAt: now, rejectionReason: null },
           create: {
             userId,
             eventId,

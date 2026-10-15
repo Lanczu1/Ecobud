@@ -72,7 +72,7 @@ import {
   resolveMediaUrl,
 } from '../utils/appUtils';
 import { triggerSuccessHaptic, triggerImpactMedium, triggerSelectionHaptic } from '../utils/haptics';
-import { ecobudApiOrigin, ecobudApi } from '../../shared/api/ecobudApi';
+import { ecobudApiOrigin, ecobudApi, type EventSubmissionHistoryItem } from '../../shared/api/ecobudApi';
 import { createRefreshQueue } from '../../shared/utils/createRefreshQueue';
 import { ChallengeStreakOverlay } from './ChallengeStreakOverlay';
 import { StreakUnlockedOverlay } from './StreakUnlockedOverlay';
@@ -2815,7 +2815,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = React.useState<'list' | 'map'>('list');
-  const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past'>('browse');
+  const [activeTab, setActiveTab] = React.useState<'browse' | 'joined' | 'past' | 'history'>('browse');
   const [joinedEventId, setJoinedEventId] = React.useState<string | null>(null);
   const joinedEventRef = React.useRef<EcoEvent | null>(null);
   const [userLocation, setUserLocation] = React.useState<{ latitude: number; longitude: number } | null>(null);
@@ -2858,12 +2858,18 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
 
   const listPerformance = useListPerformance();
   const token = model.session?.token;
-  const scope = viewMode === 'map' ? 'all' : activeTab;
+  const showHistory = viewMode === 'list' && activeTab === 'history';
+  const scope = viewMode === 'map' ? 'all' : activeTab === 'history' ? 'joined' : activeTab;
   const focusedId = model.focusedEventId;
-  const fetchPage = React.useCallback((cursor?: string) => ecobudApi.fetchEvents(token, {
-    cursor, limit: 20, scope, id: focusedId ?? undefined,
-  }), [token, scope, focusedId]);
+  const fetchPage = React.useCallback((cursor?: string) => showHistory
+    ? Promise.resolve({ items: [] as EcoEvent[], nextCursor: null })
+    : ecobudApi.fetchEvents(token, { cursor, limit: 20, scope, id: focusedId ?? undefined }), [token, scope, focusedId, showHistory]);
   const feed = useCursorFeed(fetchPage, 'eventsChanged');
+  const fetchHistoryPage = React.useCallback((cursor?: string) => showHistory && token
+    ? ecobudApi.fetchEventHistory(token, cursor)
+    : Promise.resolve({ items: [] as EventSubmissionHistoryItem[], nextCursor: null }), [token, showHistory]);
+  const historyFeed = useCursorFeed(fetchHistoryPage, 'eventsChanged');
+  const activeFeed = showHistory ? historyFeed : feed;
 
   const featuredEvent = feed.items[0] ?? null;
   const otherEvents = featuredEvent ? feed.items.slice(1) : feed.items;
@@ -3183,57 +3189,111 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
     );
   };
 
+  const renderHistoryItem = (item: EventSubmissionHistoryItem) => {
+    const submittedAt = `${formatLongDate(item.submittedAt)} · ${new Date(item.submittedAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' })}`;
+    const statusStyle = item.status === 'approved'
+      ? { label: 'Approved', color: isDark ? theme.colors.primary : '#126027', background: isDark ? theme.colors.surfaceMuted : 'rgba(18,96,39,0.12)' }
+      : item.status === 'rejected'
+        ? { label: 'Rejected', color: '#DC2626', background: isDark ? '#3A1414' : '#FEE2E2' }
+        : { label: 'Waiting for approval', color: isDark ? '#FBBF24' : '#92400E', background: isDark ? '#3D2C0C' : '#FEF3C7' };
+
+    return (
+      <View key={item.id} style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 12, gap: 8 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <Text style={{ flex: 1, color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700' }}>{item.event.title}</Text>
+          <View style={{ backgroundColor: statusStyle.background, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+            <Text style={{ color: statusStyle.color, fontSize: 12, fontWeight: '700' }}>{statusStyle.label}</Text>
+          </View>
+        </View>
+        <View style={styles.rowMeta}>
+          <Ionicons name="calendar-outline" size={14} color={theme.colors.textMuted} />
+          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> Submitted {submittedAt}</Text>
+        </View>
+        {!!item.event.location && (
+          <View style={styles.rowMeta}>
+            <Ionicons name="location" size={14} color={theme.colors.textMuted} />
+            <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {item.event.location}</Text>
+          </View>
+        )}
+        {item.status === 'rejected' && !!item.rejectionReason && (
+          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>Reason: {item.rejectionReason}</Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.fullscreenOverlay, { backgroundColor: theme.colors.background }]}>
       <TopNavbar model={model} showBack={true} />
-      <FlatList
-        data={viewMode === 'list' ? displayedEvents : []}
-        keyExtractor={event => event.id}
-        renderItem={({ item }) => renderEvent(item)}
+      <FlatList<EcoEvent | EventSubmissionHistoryItem>
+        data={viewMode !== 'list' ? [] : showHistory ? historyFeed.items : displayedEvents}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => 'submittedAt' in item ? renderHistoryItem(item) : renderEvent(item)}
         initialNumToRender={4}
         maxToRenderPerBatch={4}
         windowSize={5}
         {...listPerformance}
-        onEndReached={() => { if (!feed.error) void feed.loadMore(); }}
+        onEndReached={() => { if (!activeFeed.error) void activeFeed.loadMore(); }}
         onEndReachedThreshold={0.3}
-        ListFooterComponent={<PaginationFooter loading={feed.loading || feed.loadingMore} error={feed.error} hasMore={!!feed.nextCursor} onLoad={() => void (feed.error ? feed.retry() : feed.nextCursor ? feed.loadMore() : feed.refresh())} />}
+        ListFooterComponent={<PaginationFooter loading={activeFeed.loading || activeFeed.loadingMore} error={activeFeed.error} hasMore={!!activeFeed.nextCursor} onLoad={() => void (activeFeed.error ? activeFeed.retry() : activeFeed.nextCursor ? activeFeed.loadMore() : activeFeed.refresh())} />}
         showsVerticalScrollIndicator={false}
         style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={[styles.homeContent, { backgroundColor: theme.colors.background, paddingBottom: insets.bottom + 8 }]}
         refreshControl={
           <RefreshControl
-            refreshing={feed.refreshing}
-            onRefresh={() => void feed.refresh()}
+            refreshing={activeFeed.refreshing}
+            onRefresh={() => void activeFeed.refresh()}
             tintColor={isDark ? theme.colors.primary : '#126027'}
           />
         }
         ListHeaderComponent={<>
         <Text style={[styles.welcomeLabel, { color: theme.colors.textMuted }]}>DIRECTORY</Text>
-        <View style={styles.rowBetween}>
-          <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Eco Events</Text>
-          <View style={[styles.filterPillGroup, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border, borderWidth: 1 }]}>
-            <TouchableOpacity onPress={() => setViewMode('list')} style={[viewMode === 'list' ? styles.filterPillActive : styles.filterPillInactive, viewMode === 'list' && isDark && { backgroundColor: theme.colors.card }]}>
-              <MaterialCommunityIcons name="view-list" size={16} color={viewMode === 'list' ? (isDark ? theme.colors.primary : "#126027") : theme.colors.textMuted} />
-              <Text style={[viewMode === 'list' ? styles.filterPillActiveText : styles.filterPillInactiveText, { color: viewMode === 'list' ? (isDark ? theme.colors.primary : '#1A211D') : theme.colors.textMuted }]}> List</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setViewMode('map')} style={[viewMode === 'map' ? styles.filterPillActive : styles.filterPillInactive, viewMode === 'map' && isDark && { backgroundColor: theme.colors.card }]}>
-              <MaterialCommunityIcons name="map" size={16} color={viewMode === 'map' ? (isDark ? theme.colors.primary : "#126027") : theme.colors.textMuted} />
-              <Text style={[viewMode === 'map' ? styles.filterPillActiveText : styles.filterPillInactiveText, { color: viewMode === 'map' ? (isDark ? theme.colors.primary : '#1A211D') : theme.colors.textMuted }]}> Map</Text>
-            </TouchableOpacity>
+        <View style={[styles.rowBetween, { gap: 12, marginTop: 2 }]}>
+          <Text style={[styles.pageTitle, { color: theme.colors.textPrimary, flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Eco Events</Text>
+          <View style={[styles.filterPillGroup, { flexShrink: 0 }, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border, borderWidth: 1 }]}>
+            {([
+              { key: 'list', label: 'List', icon: 'view-list' },
+              { key: 'map', label: 'Map', icon: 'map' },
+            ] as const).map(option => {
+              const selected = viewMode === option.key;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => setViewMode(option.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[selected ? styles.filterPillActive : styles.filterPillInactive, { paddingHorizontal: scale(12), gap: 4 }, selected && isDark && { backgroundColor: theme.colors.card }]}
+                >
+                  <MaterialCommunityIcons name={option.icon} size={16} color={selected ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted} />
+                  <Text style={[selected ? styles.filterPillActiveText : styles.filterPillInactiveText, { color: selected ? (isDark ? theme.colors.primary : '#1A211D') : theme.colors.textMuted }]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         {viewMode === 'list' && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 12, marginBottom: 16 }}>
-            <TouchableOpacity onPress={() => setActiveTab('browse')} style={{ borderBottomWidth: activeTab === 'browse' ? 2 : 0, borderBottomColor: activeTab === 'browse' ? (isDark ? theme.colors.primary : '#126027') : 'transparent', paddingBottom: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: activeTab === 'browse' ? '700' : '500', color: activeTab === 'browse' ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }}>Browse</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab('joined')} style={{ borderBottomWidth: activeTab === 'joined' ? 2 : 0, borderBottomColor: activeTab === 'joined' ? (isDark ? theme.colors.primary : '#126027') : 'transparent', paddingBottom: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: activeTab === 'joined' ? '700' : '500', color: activeTab === 'joined' ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }}>My Events</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab('past')} style={{ borderBottomWidth: activeTab === 'past' ? 2 : 0, borderBottomColor: activeTab === 'past' ? (isDark ? theme.colors.primary : '#126027') : 'transparent', paddingBottom: 6 }}>
-              <Text style={{ fontSize: 16, fontWeight: activeTab === 'past' ? '700' : '500', color: activeTab === 'past' ? (isDark ? theme.colors.primary : '#126027') : theme.colors.textMuted }}>Past</Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', marginTop: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+            {([
+              { key: 'browse', label: 'Browse' },
+              { key: 'joined', label: 'My Events' },
+              { key: 'past', label: 'Past' },
+              { key: 'history', label: 'History' },
+            ] as const).map(tab => {
+              const selected = activeTab === tab.key;
+              const accent = isDark ? theme.colors.primary : '#126027';
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  onPress={() => setActiveTab(tab.key)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: selected ? accent : 'transparent' }}
+                >
+                  <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: selected ? '700' : '500', color: selected ? accent : theme.colors.textMuted }}>{tab.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -3243,7 +3303,13 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </View>
         ) : (
           <>
-            {displayedEvents.length === 0 && !feed.loading && !feed.error && (
+            {showHistory && historyFeed.items.length === 0 && !historyFeed.loading && !historyFeed.error && (
+              <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
+                <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>No submissions yet</Text>
+                <Text style={[styles.metaTextSmallDark, { color: theme.colors.textMuted }]}>Attendance you submit for an event will show here with the date you sent it.</Text>
+              </SurfaceCard>
+            )}
+            {!showHistory && displayedEvents.length === 0 && !feed.loading && !feed.error && (
               <SurfaceCard style={[styles.publicInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}>
                 <Text style={[styles.sectionHeadline, { color: theme.colors.textPrimary }]}>
                   {activeTab === 'joined' ? "You haven't joined any events" : `No ${activeTab === 'past' ? 'past' : 'public'} events yet`}

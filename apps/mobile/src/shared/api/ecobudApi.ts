@@ -377,6 +377,16 @@ export interface EcoEvent {
   rejectionReason?: string;
 }
 
+export interface EventSubmissionHistoryItem {
+  id: string;
+  eventId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  event: Pick<EcoEvent, 'title' | 'location' | 'imageUrl' | 'startDatetime' | 'endDatetime' | 'expReward' | 'ecoCoinsReward'>;
+}
+
 export interface CursorPage<T> { items: T[]; nextCursor: string | null }
 
 export interface TransparencyFeed {
@@ -960,6 +970,8 @@ export const ecobudApi = {
     for (const [key, value] of Object.entries(page)) if (value !== undefined) query.set(key, String(value));
     return request<CursorPage<EcoEvent>>(`/events?${query}`, token ? { token } : undefined);
   },
+  fetchEventHistory: (token: string, cursor?: string) =>
+    request<CursorPage<EventSubmissionHistoryItem>>(`/events/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { token }),
   fetchRewardHistory: (token: string, cursor?: string) =>
     request<CursorPage<TransparencyFeed['logs'][number]>>(`/users/me/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { token }),
   joinEvent: (token: string, eventId: string) =>

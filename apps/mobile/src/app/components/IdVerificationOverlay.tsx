@@ -108,7 +108,7 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Full name as shown on your ID</Text>
         <TextInput accessibilityLabel="Full name on ID" value={legalName} editable={!busy} maxLength={120} onChangeText={setLegalName} autoCapitalize="words" style={{ color: theme.colors.textPrimary, borderWidth: 1, borderColor: theme.colors.inputBorder, borderRadius: 10, padding: 12 }} />
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>ID type</Text>
-        {([['government', 'Government ID'], ['school', 'School ID'], ['barangay', 'Barangay ID']] as const).map(([value, label]) =>
+        {([['government', 'Government ID'], ['barangay', 'Barangay ID']] as const).map(([value, label]) =>
           <TouchableOpacity key={value} disabled={busy} accessibilityRole="radio" accessibilityState={{ checked: idType === value }} onPress={() => setIdType(value)} style={{ padding: 12, borderWidth: 1, borderColor: idType === value ? theme.colors.primary : theme.colors.inputBorder, borderRadius: 10 }}>
             <Text style={{ color: theme.colors.textPrimary }}>{idType === value ? '● ' : '○ '}{label}</Text>
           </TouchableOpacity>)}
