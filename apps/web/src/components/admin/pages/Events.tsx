@@ -1406,10 +1406,13 @@ export function Events() {
         </button>
       </div>
 
-      {activeTab === 'photoRequests' && <EventPhotoDeleteRequests
-        onPreview={image => setSelectedImage({ ...image, url: resolveEventImageUrl(image.url) ?? image.url })}
-        onApproved={() => { setReportDataCache({}); void loadSubmissionsRef.current(false); refreshReportRef.current(); }}
-      />}
+      {/* Mounted with the page so requests load alongside events, submissions and reports. */}
+      <div hidden={activeTab !== 'photoRequests'}>
+        <EventPhotoDeleteRequests
+          onPreview={image => setSelectedImage({ ...image, url: resolveEventImageUrl(image.url) ?? image.url })}
+          onApproved={() => { setReportDataCache({}); void loadSubmissionsRef.current(false); refreshReportRef.current(); }}
+        />
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3">
