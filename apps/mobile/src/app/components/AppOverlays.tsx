@@ -3330,7 +3330,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         <EventAttendanceOverlay
           eventId={attendanceEvent}
           model={model}
-          onClose={() => { setAttendanceEvent(null); void feed.refresh(); }}
+          onClose={() => { setAttendanceEvent(null); void feed.refresh(); void historyFeed.refresh(); }}
         />
       )}
       <RejectionModal
