@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Lottie } from './Lottie';
-import previewVideo from '../assets/EcoBudAd3.mp4';
+import previewVideo from '../assets/Ecobud Ad.mp4';
 
 const APK_URL =
   import.meta.env.VITE_APK_DOWNLOAD_URL ||
