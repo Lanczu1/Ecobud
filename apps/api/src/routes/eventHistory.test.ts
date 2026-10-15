@@ -105,11 +105,21 @@ describe('GET /api/events/history', () => {
   it('keeps history details after photo approval and scopes request statuses to the user', async () => {
     vi.mocked(prisma.eventSubmission.findMany).mockResolvedValueOnce([{ ...submission('one'), attendanceImageUrl: '' }] as any);
     vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([{
-      id: 'event-photo-delete:one', action: 'EVENT_PHOTO_DELETE_APPROVED',
+      id: 'event-photo-delete:one:abc123', action: 'EVENT_PHOTO_DELETE_APPROVED',
       details: JSON.stringify({ submissionId: 'one', eventId: 'event-one', eventTitle: 'Event one', photoUrl: 'photo.jpg', reason: 'Private photo' }),
     }] as any);
     const response = await request(app).get('/api/events/history').set('Authorization', 'Bearer alice');
     expect(response.body.items[0]).toMatchObject({ id: 'one', attendanceImageUrl: '', event: { title: 'Event one' }, deletionRequest: { status: 'approved', reason: 'Private photo' } });
-    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: 'alice', OR: [{ id: { startsWith: 'event-photo-delete:one:' }, action: 'EVENT_PHOTO_DELETE_APPROVED' }] }) }));
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'alice', action: { in: ['EVENT_PHOTO_DELETE_PENDING', 'EVENT_PHOTO_DELETE_APPROVED'] } } }));
+  });
+
+  it('does not attach another submission\'s photo request', async () => {
+    vi.mocked(prisma.eventSubmission.findMany).mockResolvedValueOnce([{ ...submission('one'), attendanceImageUrl: '' }] as any);
+    vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([{
+      id: 'event-photo-delete:other:abc123', action: 'EVENT_PHOTO_DELETE_APPROVED',
+      details: JSON.stringify({ submissionId: 'other', eventId: 'event-other', eventTitle: 'Other', photoUrl: 'photo.jpg', reason: 'Private photo' }),
+    }] as any);
+    const response = await request(app).get('/api/events/history').set('Authorization', 'Bearer alice');
+    expect(response.body.items[0].deletionRequest).toBeNull();
   });
 });

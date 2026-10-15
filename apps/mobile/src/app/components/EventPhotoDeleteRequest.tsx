@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Modal, Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { ecobudApi, type EventSubmissionHistoryItem } from '../../shared/api/ecobudApi';
 import { useTheme } from '../../shared/theme/ecoTheme';
@@ -18,13 +19,22 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
   const [error, setError] = React.useState<string | null>(null);
   const [sent, setSent] = React.useState(false);
   if (item.deletionRequest?.status === 'approved') {
-    return <Text style={{ color: theme.colors.textSecondary }}>Attendance photo removed after approval. Your history details are retained.</Text>;
+    return <View style={[requestStyles.statusRow, { backgroundColor: theme.colors.surfaceMuted }]}>
+      <Ionicons name="image-outline" size={18} color={theme.colors.textSecondary} />
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Photo removed</Text>
+        <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Deletion approved. Your history details are retained.</Text>
+      </View>
+    </View>;
   }
   if (item.deletionRequest?.status === 'pending' || sent) {
-    return <View accessibilityLiveRegion="polite" style={{ gap: 4 }}>
-      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>Photo deletion requested</Text>
-      <Text style={{ color: theme.colors.textSecondary }}>Waiting for admin or moderator approval.</Text>
-      <Text style={{ color: theme.colors.textSecondary }}>Reason: {item.deletionRequest?.reason ?? reason.trim()}</Text>
+    return <View accessibilityLiveRegion="polite" style={[requestStyles.statusRow, { backgroundColor: theme.colors.surfaceMuted }]}>
+      <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Photo deletion requested</Text>
+        <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Waiting for admin or moderator approval.</Text>
+        <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Reason: {item.deletionRequest?.reason ?? reason.trim()}</Text>
+      </View>
     </View>;
   }
   if (!token || !item.attendanceImageUrl) return null;
@@ -45,8 +55,9 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
   };
 
   return <>
-    <TouchableOpacity accessibilityRole="button" onPress={() => { setError(null); setOpen(true); }} style={[requestStyles.button, { borderColor: theme.colors.cardBorder }]}>
-      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>Request photo deletion</Text>
+    <TouchableOpacity accessibilityRole="button" accessibilityHint="Opens a form to request removal of this photo" onPress={() => { setError(null); setOpen(true); }} style={requestStyles.requestAction}>
+      <Ionicons name="trash-outline" size={17} color="#FFFFFF" />
+      <Text style={{ flexShrink: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>Request photo deletion</Text>
     </TouchableOpacity>
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[requestStyles.backdrop, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -80,6 +91,8 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
 }
 
 const requestStyles = StyleSheet.create({
+  requestAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 12, paddingHorizontal: 16, marginTop: 12, borderRadius: 12, backgroundColor: '#B91C1C' },
+  statusRow: { flexDirection: 'row', alignItems: 'flex-start', padding: 12, marginTop: 8, borderRadius: 12, gap: 9 },
   button: { minHeight: 44, borderWidth: 1, borderRadius: 8, padding: 12, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 16 },
   scroll: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },

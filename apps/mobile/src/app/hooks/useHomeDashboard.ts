@@ -6,6 +6,7 @@ import { type MascotDock, parseMascotDock } from '../utils/mascotDock';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Alert, DeviceEventEmitter, AppState, Platform, ToastAndroid } from 'react-native';
 import { homeService } from '../services/homeService';
+import { prefetchEventTabs } from '../services/eventFeedPrefetch';
 import { HOME_REFRESH_INTERVAL_MS, HOME_RESOURCES, affectedHomeResources, type HomeResource } from '../utils/homeRefreshPolicy';
 import {
   type AppTab,
@@ -1264,7 +1265,11 @@ export function useHomeDashboard(): EcoBudMobileModel {
           if (currentSessionTokenRef.current === token) { setChallenges(current => unchanged(current, data.items)); setIsCycleActive(data.isCycleActive); }
         } else if (resource === 'events') {
           const data = await homeService.getEvents(token);
-          if (currentSessionTokenRef.current === token) setEvents(current => unchanged(current, data));
+          if (currentSessionTokenRef.current === token) {
+            setEvents(current => unchanged(current, data));
+            // Have the Eco Events tabs ready before the screen is opened.
+            prefetchEventTabs(token);
+          }
         } else {
           const data = await homeService.getLeaderboard(token);
           if (currentSessionTokenRef.current === token) setLeaderboard(current => unchanged(current, data));

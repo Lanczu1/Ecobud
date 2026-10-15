@@ -134,7 +134,8 @@ eventRoutes.get(
     const userId = req.auth!.userId;
     const limit = pageLimit(req.query.limit, 20);
     const cursor = decodeCursor(req.query.cursor);
-    const found = await prisma.eventSubmission.findMany({
+    // A member's photo requests are few, so they load beside the page instead of after it.
+    const [found, requests] = await Promise.all([prisma.eventSubmission.findMany({
       where: {
         userId,
         ...(cursor ? { OR: [
@@ -154,16 +155,19 @@ eventRoutes.get(
       },
       orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
-    });
-    const page = found.slice(0, limit);
-    const requests = page.length ? await prisma.auditLog.findMany({
-      where: { userId, action: { in: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED] }, OR: page.map(item => item.attendanceImageUrl
-        ? { id: photoDeleteRequestId(item.id, item.attendanceImageUrl) }
-        : { id: { startsWith: photoDeleteRequestPrefix(item.id) }, action: PHOTO_DELETE_APPROVED }) },
+    }), prisma.auditLog.findMany({
+      where: { userId, action: { in: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED] } },
       select: { id: true, details: true, action: true },
       orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
-    }) : [];
-    const pendingRequests = new Map(requests.map(row => [photoDeleteDetails(row.details).submissionId, { id: row.id, status: row.action === PHOTO_DELETE_APPROVED ? 'approved' : 'pending', reason: photoDeleteDetails(row.details).reason }]));
+    })]);
+    const page = found.slice(0, limit);
+    // Same match as before: the request for the current photo, or an approved one once the photo is gone.
+    const belongsTo = (item: (typeof page)[number], row: (typeof requests)[number]) => item.attendanceImageUrl
+      ? row.id === photoDeleteRequestId(item.id, item.attendanceImageUrl)
+      : row.action === PHOTO_DELETE_APPROVED && row.id.startsWith(photoDeleteRequestPrefix(item.id));
+    const pendingRequests = new Map(page.flatMap(item => requests
+      .filter(row => belongsTo(item, row))
+      .map(row => [item.id, { id: row.id, status: row.action === PHOTO_DELETE_APPROVED ? 'approved' : 'pending', reason: photoDeleteDetails(row.details).reason }] as const)));
     const edge = page[page.length - 1];
     return res.json({
       nextCursor: found.length > limit && edge ? encodeCursor({ id: edge.id, at: edge.submittedAt.toISOString() }) : null,

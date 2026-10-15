@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 import { Modal, Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { useTheme } from '../../shared/theme/ecoTheme';
 import { resolveMediaUrl } from '../utils/appUtils';
@@ -20,8 +21,14 @@ export function EventHistoryPhoto({ imageUrl, eventTitle }: {
   }
 
   return (
-    <View style={{ gap: 8 }}>
-      <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>Attendance photo</Text>
+    <View style={{ gap: 10 }}>
+      <View style={photoStyles.caption}>
+        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Attendance photo</Text>
+        <View style={photoStyles.viewHint}>
+          <Ionicons name="expand-outline" size={13} color={theme.colors.textSecondary} />
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>View full photo</Text>
+        </View>
+      </View>
       <View style={[photoStyles.frame, { backgroundColor: theme.colors.surfaceMuted }]}>
         <PhotoImage uri={uri} eventTitle={eventTitle} onPress={() => setViewing(true)} />
       </View>
@@ -66,7 +73,7 @@ function PhotoImage({ uri, eventTitle, onPress }: { uri: string; eventTitle: str
         accessibilityLabel={`Attendance photo submitted for ${eventTitle}`}
         accessible={!onPress}
         style={StyleSheet.absoluteFill}
-        resizeMode="contain"
+        resizeMode={onPress ? 'cover' : 'contain'}
         onLoad={() => setLoading(false)}
         onError={() => { setLoading(false); setFailed(true); }}
       />
@@ -108,7 +115,9 @@ function PhotoImage({ uri, eventTitle, onPress }: { uri: string; eventTitle: str
 }
 
 const photoStyles = StyleSheet.create({
-  frame: { width: '100%', aspectRatio: 4 / 3, borderRadius: 12, overflow: 'hidden' },
+  frame: { width: '100%', aspectRatio: 16 / 10, borderRadius: 14, overflow: 'hidden' },
+  caption: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  viewHint: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   feedback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 12, gap: 8 },
   retry: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 16, borderWidth: 1, borderRadius: 8 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },

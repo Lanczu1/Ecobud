@@ -1,4 +1,5 @@
-import { prefetchCursorFeed, useCursorFeed } from '../../shared/ui/useCursorFeed';
+import { useCursorFeed } from '../../shared/ui/useCursorFeed';
+import { eventFeedKey, eventHistoryKey, prefetchEventTabs } from '../services/eventFeedPrefetch';
 import { PaginationFooter } from '../../shared/ui/PaginationFooter';
 import { useListPerformance } from '../../shared/ui/useListPerformance';
 import { ApprovedIdCard } from './ApprovedIdCard';
@@ -61,8 +62,7 @@ import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue';
 import type { OfflineMutationRecord } from '../../shared/offline/offlineMutationQueue.types';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
-import { EventHistoryPhoto } from './EventHistoryPhoto';
-import { EventPhotoDeleteRequest } from './EventPhotoDeleteRequest';
+import { EventSubmissionHistoryCard } from './EventSubmissionHistoryCard';
 import { RejectionModal } from './RejectionModal';
 import { LeaderboardPagination } from './LeaderboardPagination';
 import {
@@ -2863,26 +2863,17 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   const showHistory = viewMode === 'list' && activeTab === 'history';
   const scope = viewMode === 'map' ? 'all' : activeTab === 'history' ? 'joined' : activeTab;
   const focusedId = model.focusedEventId;
+  // Every tab's first page starts together before the feeds below mount, so the open tab
+  // waits on its own request and the others are ready by the time they are tapped.
+  React.useMemo(() => prefetchEventTabs(token), [token]);
   const fetchPage = React.useCallback((cursor?: string) => showHistory
     ? Promise.resolve({ items: [] as EcoEvent[], nextCursor: null })
     : ecobudApi.fetchEvents(token, { cursor, limit: 20, scope, id: focusedId ?? undefined }), [token, scope, focusedId, showHistory]);
-  const feed = useCursorFeed(fetchPage, 'eventsChanged', showHistory ? undefined : `eventsChanged:${token ?? 'guest'}:${scope}:${focusedId ?? ''}`);
+  const feed = useCursorFeed(fetchPage, 'eventsChanged', showHistory ? undefined : eventFeedKey(token, scope, focusedId));
   const fetchHistoryPage = React.useCallback((cursor?: string) => showHistory && token
     ? ecobudApi.fetchEventHistory(token, cursor)
     : Promise.resolve({ items: [] as EventSubmissionHistoryItem[], nextCursor: null }), [token, showHistory]);
-  const historyFeed = useCursorFeed(fetchHistoryPage, 'eventsChanged', showHistory ? `eventsChanged:${token}:history` : undefined);
-
-  // Warm the other tabs in the background so switching to them shows a list without waiting.
-  React.useEffect(() => {
-    if (focusedId) return;
-    const handle = setTimeout(() => {
-      for (const tabScope of ['browse', 'joined', 'past'] as const) {
-        prefetchCursorFeed(`eventsChanged:${token ?? 'guest'}:${tabScope}:`, () => ecobudApi.fetchEvents(token, { limit: 20, scope: tabScope }));
-      }
-      if (token) prefetchCursorFeed(`eventsChanged:${token}:history`, () => ecobudApi.fetchEventHistory(token));
-    }, 600);
-    return () => clearTimeout(handle);
-  }, [token, focusedId]);
+  const historyFeed = useCursorFeed(fetchHistoryPage, 'eventsChanged', showHistory && token ? eventHistoryKey(token) : undefined);
   const activeFeed = showHistory ? historyFeed : feed;
 
   const featuredEvent = feed.items[0] ?? null;
@@ -3204,42 +3195,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
   };
 
   const renderHistoryItem = (item: EventSubmissionHistoryItem) => {
-    const submittedAt = `${formatLongDate(item.submittedAt)} · ${new Date(item.submittedAt).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' })}`;
-    const statusStyle = item.status === 'approved'
-      ? { label: 'Approved', color: isDark ? theme.colors.primary : '#126027', background: isDark ? theme.colors.surfaceMuted : 'rgba(18,96,39,0.12)' }
-      : item.status === 'rejected'
-        ? { label: 'Rejected', color: '#DC2626', background: isDark ? '#3A1414' : '#FEE2E2' }
-        : { label: 'Waiting for approval', color: isDark ? '#FBBF24' : '#92400E', background: isDark ? '#3D2C0C' : '#FEF3C7' };
-
-    return (
-      <View key={item.id} style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder, borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 12, gap: 8 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <Text style={{ flex: 1, color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700' }}>{item.event.title}</Text>
-          <View style={{ backgroundColor: statusStyle.background, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
-            <Text style={{ color: statusStyle.color, fontSize: 12, fontWeight: '700' }}>{statusStyle.label}</Text>
-          </View>
-        </View>
-        <View style={styles.rowMeta}>
-          <Ionicons name="calendar-outline" size={14} color={theme.colors.textMuted} />
-          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> Submitted {submittedAt}</Text>
-        </View>
-        {!!item.event.location && (
-          <View style={styles.rowMeta}>
-            <Ionicons name="location" size={14} color={theme.colors.textMuted} />
-            <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}> {item.event.location}</Text>
-          </View>
-        )}
-        {item.status === 'rejected' && !!item.rejectionReason && (
-          <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>Reason: {item.rejectionReason}</Text>
-        )}
-        {item.deletionRequest?.status !== 'approved' && <EventHistoryPhoto
-          key={item.attendanceImageUrl ?? 'missing-photo'}
-          imageUrl={item.attendanceImageUrl}
-          eventTitle={item.event.title}
-        />}
-        <EventPhotoDeleteRequest item={item} token={token} onRequested={() => { void historyFeed.refresh(); }} />
-      </View>
-    );
+    return <EventSubmissionHistoryCard item={item} token={token} onRequested={() => { void historyFeed.refresh(); }} />;
   };
 
   return (

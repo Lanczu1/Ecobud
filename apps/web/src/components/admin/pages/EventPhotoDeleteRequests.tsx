@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, CheckCircle2, Clock, Image as ImageIcon, Loader2, MapPin, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { adminGet, adminPost, API_HOST } from '../../../utils/adminApi';
+import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 
 interface PhotoRequest {
@@ -32,10 +33,13 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
   const [search, setSearch] = useState('');
   const [counts, setCounts] = useState({ pending: 0, approved: 0 });
   const generation = useRef(0);
-  const load = useCallback(async () => {
+  // A silent load (live sync) swaps the rows in place without the spinner or clearing errors first.
+  const load = useCallback(async (silent = false) => {
     const current = ++generation.current;
-    setLoading(true);
-    setError(null);
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const otherStatus = status === 'pending' ? 'approved' : 'pending';
       const [response, other] = await Promise.all([
@@ -48,16 +52,26 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
           : { pending: other.pagination.total, approved: response.pagination.total });
         if (page > response.pagination.totalPages) { setPage(response.pagination.totalPages); return; }
         setData(response);
+        setError(null);
       }
     } catch (err) {
-      if (current === generation.current) setError(err instanceof Error ? err.message : 'Could not load photo delete requests.');
+      // A failed background sync keeps the rows on screen; the next push retries.
+      if (current === generation.current && !silent) setError(err instanceof Error ? err.message : 'Could not load photo delete requests.');
     } finally { if (current === generation.current) setLoading(false); }
   }, [page, status]);
 
-  // Loads once per page/filter change; new requests show up through the Refresh button, not on a timer.
   useEffect(() => {
     void load();
     return () => { generation.current++; };
+  }, [load]);
+
+  // Server pushes (a new request from mobile, an approval elsewhere) sync the list without a timer.
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void adminRealtimeService.connect({ onContentRefresh: () => { if (!disposed) void load(true); } })
+      .then(stop => { if (disposed) stop(); else unsubscribe = stop; });
+    return () => { disposed = true; unsubscribe?.(); };
   }, [load]);
 
   const approve = async (item: PhotoRequest) => {

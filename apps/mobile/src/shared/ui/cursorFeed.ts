@@ -67,6 +67,19 @@ export class CursorFeed<T extends { id: string }> {
     this.request = request;
     return request;
   };
+  /** Waits on a first-page request already in flight elsewhere, falling back to a normal load if it fails. */
+  adopt = (pending: Promise<FeedPage<T>>): Promise<void> => {
+    if (this.request) return this.request;
+    const generation = this.generation;
+    const request = pending.then(page => {
+      if (generation !== this.generation) return;
+      this.update({ items: page.items, nextCursor: page.nextCursor, loading: false, error: null });
+    }).finally(() => {
+      if (this.request === request) this.request = null;
+    }).catch(() => { if (generation === this.generation) void this.load(false); });
+    this.request = request;
+    return request;
+  };
   loadMore = (): Promise<void> => this.load(true);
   retry = (): Promise<void> => this.load(this.lastWasMore);
 
