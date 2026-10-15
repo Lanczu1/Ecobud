@@ -381,6 +381,7 @@ export interface EventSubmissionHistoryItem {
   id: string;
   eventId: string;
   attendanceImageUrl?: string | null;
+  deletionRequest?: { id: string; status: 'pending' | 'approved'; reason: string } | null;
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason: string | null;
   submittedAt: string;
@@ -973,6 +974,10 @@ export const ecobudApi = {
   },
   fetchEventHistory: (token: string, cursor?: string) =>
     request<CursorPage<EventSubmissionHistoryItem>>(`/events/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { token }),
+  requestEventPhotoDeletion: (token: string, submissionId: string, reason: string, photoUrl: string) =>
+    request<{ id: string; status: 'pending'; reason: string }>(`/events/submissions/${encodeURIComponent(submissionId)}/delete-request`, {
+      token, method: 'POST', body: { reason, photoUrl },
+    }),
   fetchRewardHistory: (token: string, cursor?: string) =>
     request<CursorPage<TransparencyFeed['logs'][number]>>(`/users/me/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { token }),
   joinEvent: (token: string, eventId: string) =>

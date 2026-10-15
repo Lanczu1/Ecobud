@@ -8,6 +8,7 @@ import { sendDirectNotification } from './notificationService';
 import { apiCache } from "../lib/cache";
 import { getTotalCoinsRedeemed } from './redemptionStatsService';
 import { activityByDayQuery } from './adminActivityTrend';
+import { PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED } from './eventPhotoDeletion';
 
 type ReviewerContext = {
   role: string;
@@ -1184,7 +1185,7 @@ export class AdminService {
   }
 
   static async clearAuditLogs() {
-    return await prisma.auditLog.deleteMany({});
+    return await prisma.auditLog.deleteMany({ where: { action: { notIn: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED] } } });
   }
 
   // Event Management

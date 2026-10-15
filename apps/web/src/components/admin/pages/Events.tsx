@@ -16,6 +16,7 @@ import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
+import { EventPhotoDeleteRequests } from './EventPhotoDeleteRequests';
 import { AdminDateTimePicker } from '../AdminDateTimePicker';
 import { addDays, useManilaNow } from '../../../utils/manilaTime';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
@@ -802,7 +803,7 @@ export function Events() {
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; event: AdminEvent | null }>({ open: false, event: null });
   const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null, expiresAt?: string, createdAt?: string }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
-  const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports'>(notificationTarget('event_submission') ? 'submissions' : 'events');
+  const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports' | 'photoRequests'>(notificationTarget('event_submission') ? 'submissions' : 'events');
   const adminUser = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
   }, []);
@@ -1358,7 +1359,7 @@ export function Events() {
       </div>
 
       {/* Tab Toggle */}
-      <div className="flex bg-gray-100 dark:bg-gray-800/60 dark:border dark:border-gray-700/60 rounded-xl p-1 gap-1 w-fit animate-reveal">
+      <div className="flex flex-wrap bg-gray-100 dark:bg-gray-800/60 dark:border dark:border-gray-700/60 rounded-xl p-1 gap-1 w-fit animate-reveal">
         <button
           onClick={() => setActiveTab('events')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
@@ -1397,7 +1398,18 @@ export function Events() {
           <FileText className="w-4 h-4" />
           Automated Reports
         </button>
+        <button
+          onClick={() => setActiveTab('photoRequests')}
+          className={`flex min-h-11 items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold ${activeTab === 'photoRequests' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white' : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100'}`}
+        >
+          <Trash2 className="h-4 w-4" />Requesting history
+        </button>
       </div>
+
+      {activeTab === 'photoRequests' && <EventPhotoDeleteRequests
+        onPreview={image => setSelectedImage({ ...image, url: resolveEventImageUrl(image.url) ?? image.url })}
+        onApproved={() => { setReportDataCache({}); void loadSubmissionsRef.current(false); refreshReportRef.current(); }}
+      />}
 
       {error && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3">
@@ -2109,7 +2121,10 @@ export function Events() {
       {/* Photo Proof Zoom Modal */}
       {selectedImage && createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
-          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-label={selectedImage.title || 'Attendance photo'} className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-modal" onClick={e => e.stopPropagation()} onKeyDown={event => {
+            if (event.key === 'Escape') setSelectedImage(null);
+            if (event.key === 'Tab') { event.preventDefault(); event.currentTarget.querySelector('button')?.focus(); }
+          }}>
             <div className="w-full flex items-center justify-between pb-3 text-white">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold tracking-wide text-white/90">
@@ -2117,8 +2132,10 @@ export function Events() {
                 </span>
               </div>
               <button 
+                autoFocus
+                aria-label="Close attendance photo"
                 onClick={() => setSelectedImage(null)} 
-                className="p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer"
+                className="min-h-11 min-w-11 p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer"
               >
                 <XCircle className="w-7 h-7" />
               </button>

@@ -2,7 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../prismaClient', () => ({ prisma: { eventSubmission: { findMany: vi.fn() } } }));
+vi.mock('../prismaClient', () => ({ prisma: { eventSubmission: { findMany: vi.fn() }, auditLog: { findMany: vi.fn() } } }));
 vi.mock('../http/authentication', () => ({
   authenticateRequest: (req: any, res: any, next: any) => {
     const userId = req.headers.authorization?.replace('Bearer ', '');
@@ -11,6 +11,7 @@ vi.mock('../http/authentication', () => ({
     next();
   },
   requireUserAccess: (_req: any, _res: any, next: any) => next(),
+  requireModeratorAccess: (_req: any, _res: any, next: any) => next(),
   cachedSessionUser: vi.fn(),
 }));
 vi.mock('../http/idVerificationAccess', () => ({ requireApprovedId: vi.fn() }));
@@ -37,7 +38,10 @@ const submission = (id: string, status = 'approved') => ({
 });
 
 describe('GET /api/events/history', () => {
-  beforeEach(() => vi.mocked(prisma.eventSubmission.findMany).mockReset());
+  beforeEach(() => {
+    vi.mocked(prisma.eventSubmission.findMany).mockReset();
+    vi.mocked(prisma.auditLog.findMany).mockReset().mockResolvedValue([]);
+  });
 
   it('requires a signed-in user before reading submissions', async () => {
     expect((await request(app).get('/api/events/history')).status).toBe(401);
@@ -96,5 +100,16 @@ describe('GET /api/events/history', () => {
       expect((await request(app).get(`/api/events/history?${query}`).set('Authorization', 'Bearer alice')).status).toBe(400);
     }
     expect(prisma.eventSubmission.findMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps history details after photo approval and scopes request statuses to the user', async () => {
+    vi.mocked(prisma.eventSubmission.findMany).mockResolvedValueOnce([{ ...submission('one'), attendanceImageUrl: '' }] as any);
+    vi.mocked(prisma.auditLog.findMany).mockResolvedValueOnce([{
+      id: 'event-photo-delete:one', action: 'EVENT_PHOTO_DELETE_APPROVED',
+      details: JSON.stringify({ submissionId: 'one', eventId: 'event-one', eventTitle: 'Event one', photoUrl: 'photo.jpg', reason: 'Private photo' }),
+    }] as any);
+    const response = await request(app).get('/api/events/history').set('Authorization', 'Bearer alice');
+    expect(response.body.items[0]).toMatchObject({ id: 'one', attendanceImageUrl: '', event: { title: 'Event one' }, deletionRequest: { status: 'approved', reason: 'Private photo' } });
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: 'alice', OR: [{ id: { startsWith: 'event-photo-delete:one:' }, action: 'EVENT_PHOTO_DELETE_APPROVED' }] }) }));
   });
 });

@@ -62,6 +62,7 @@ import { offlineMutationQueue } from '../../shared/offline/offlineMutationQueue'
 import type { OfflineMutationRecord } from '../../shared/offline/offlineMutationQueue.types';
 import { EventAttendanceOverlay } from './EventAttendanceOverlay';
 import { EventHistoryPhoto } from './EventHistoryPhoto';
+import { EventPhotoDeleteRequest } from './EventPhotoDeleteRequest';
 import { RejectionModal } from './RejectionModal';
 import { LeaderboardPagination } from './LeaderboardPagination';
 import {
@@ -3231,11 +3232,12 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
         {item.status === 'rejected' && !!item.rejectionReason && (
           <Text style={[styles.metaTextSmallDark, { color: theme.colors.textSecondary }]}>Reason: {item.rejectionReason}</Text>
         )}
-        <EventHistoryPhoto
+        {item.deletionRequest?.status !== 'approved' && <EventHistoryPhoto
           key={item.attendanceImageUrl ?? 'missing-photo'}
           imageUrl={item.attendanceImageUrl}
           eventTitle={item.event.title}
-        />
+        />}
+        <EventPhotoDeleteRequest item={item} token={token} onRequested={() => { void historyFeed.refresh(); }} />
       </View>
     );
   };

@@ -12,8 +12,11 @@ import { sendDirectNotification } from '../services/notificationService';
 import path from 'path';
 import type { Prisma } from '@prisma/client';
 import { decodeCursor, encodeCursor, pageLimit } from '../http/cursorPagination';
+import { eventPhotoDeletionRoutes } from './eventPhotoDeletionRoutes';
+import { photoDeleteRequestId, photoDeleteRequestPrefix, photoDeleteDetails, PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED } from '../services/eventPhotoDeletion';
 
 const eventRoutes = Router();
+eventRoutes.use(eventPhotoDeletionRoutes);
 const gamificationService = new GamificationService();
 
 eventRoutes.get(
@@ -153,10 +156,18 @@ eventRoutes.get(
       take: limit + 1,
     });
     const page = found.slice(0, limit);
+    const requests = page.length ? await prisma.auditLog.findMany({
+      where: { userId, action: { in: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED] }, OR: page.map(item => item.attendanceImageUrl
+        ? { id: photoDeleteRequestId(item.id, item.attendanceImageUrl) }
+        : { id: { startsWith: photoDeleteRequestPrefix(item.id) }, action: PHOTO_DELETE_APPROVED }) },
+      select: { id: true, details: true, action: true },
+      orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
+    }) : [];
+    const pendingRequests = new Map(requests.map(row => [photoDeleteDetails(row.details).submissionId, { id: row.id, status: row.action === PHOTO_DELETE_APPROVED ? 'approved' : 'pending', reason: photoDeleteDetails(row.details).reason }]));
     const edge = page[page.length - 1];
     return res.json({
       nextCursor: found.length > limit && edge ? encodeCursor({ id: edge.id, at: edge.submittedAt.toISOString() }) : null,
-      items: page,
+      items: page.map(item => ({ ...item, deletionRequest: pendingRequests.get(item.id) ?? null })),
     });
   }),
 );
