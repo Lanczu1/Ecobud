@@ -1,4 +1,5 @@
 import { useScreenActive } from '../../shared/ui/ScreenActivity';
+import { ChallengePhotoDeleteRequest } from './EventPhotoDeleteRequest';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -1942,6 +1943,19 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
                                 </View>
                               </TouchableOpacity>
                             )}
+
+                            {(['proofUrl', 'afterProofUrl'] as const).map(photoField => {
+                              const photoUrl = item.sub?.[photoField];
+                              const deletionRequest = item.sub?.photoDeletionRequests?.[photoField];
+                              if (!photoUrl && !deletionRequest) return null;
+                              return <View key={`${item.sub.id}:${photoField}:${photoUrl ?? 'removed'}`} style={{ marginBottom: 12 }}>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' }}>{photoField === 'proofUrl' ? 'Proof photo' : 'After photo'}</Text>
+                                {photoField === 'afterProofUrl' && photoUrl && <TouchableOpacity accessibilityRole="button" accessibilityLabel="View after photo" onPress={() => setPreviewImage(photoUrl)} style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden' }}>
+                                  <Image source={{ uri: photoUrl }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
+                                </TouchableOpacity>}
+                                <ChallengePhotoDeleteRequest submissionId={item.sub.id} photoField={photoField} photoUrl={photoUrl} title={challenge.title} deletionRequest={deletionRequest} token={model.session?.token} onRequested={() => { void model.refreshEverything(); }} />
+                              </View>;
+                            })}
 
                             {/* Rewards / Claim Button */}
                             <View style={{ marginTop: 4, gap: 10 }}>

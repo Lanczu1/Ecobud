@@ -2,6 +2,7 @@ import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts'
 import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } from '../ContentBadgeReward';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
+import { EventPhotoDeleteRequests } from './EventPhotoDeleteRequests';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -665,7 +666,7 @@ export function Challenges() {
   const [pdfUserId, setPdfUserId] = useState<string | null>(null);
 
   // ── Submissions tab state ────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'challenges' | 'submissions'>(notificationTarget('challenge_submission') ? 'submissions' : 'challenges');
+  const [activeTab, setActiveTab] = useState<'challenges' | 'submissions' | 'photoRequests'>(notificationTarget('challenge_submission') ? 'submissions' : 'challenges');
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 3, total: 0, totalPages: 1, totalResidents: 0 });
@@ -1258,7 +1259,7 @@ export function Challenges() {
         />
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">Challenges</h2>
@@ -1280,9 +1281,9 @@ export function Challenges() {
               : 'Design and manage eco-challenges across all 52 barangays'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Tab toggle */}
-          <div className="flex bg-gray-100 dark:bg-gray-800/50 rounded-xl p-1 gap-1">
+          <div className="flex flex-wrap bg-gray-100 dark:bg-gray-800/50 rounded-xl p-1 gap-1">
             <button
               onClick={() => setActiveTab('challenges')}
               className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
@@ -1306,6 +1307,13 @@ export function Challenges() {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('photoRequests')}
+              className={`min-h-11 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'photoRequests' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-white dark:border dark:border-gray-700' : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100'}`}
+            >
+              <Trash2 className="w-3.5 h-3.5 inline mr-1.5" />Request Deletion
+            </button>
           </div>
           {activeTab === 'challenges' && (
             <button onClick={() => { if (drafts.start()) setModal('add'); }} className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200">
@@ -1322,7 +1330,9 @@ export function Challenges() {
         </div>
       )}
 
-      {activeTab === 'challenges' ? (
+      {activeTab === 'photoRequests' ? (
+        <EventPhotoDeleteRequests resource="challenges" onPreview={setSelectedImage} onApproved={() => { void loadSubmissionsRef.current(false); }} />
+      ) : activeTab === 'challenges' ? (
         <>
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
@@ -2061,7 +2071,10 @@ export function Challenges() {
       {/* Image preview modal */}
       {selectedImage && createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setSelectedImage(null)}>
-          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-label={selectedImage.title || 'Photo proof'} className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-modal" onClick={e => e.stopPropagation()} onKeyDown={event => {
+            if (event.key === 'Escape') setSelectedImage(null);
+            if (event.key === 'Tab') { event.preventDefault(); event.currentTarget.querySelector('button')?.focus(); }
+          }}>
             <div className="w-full flex items-center justify-between pb-3 text-white">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold tracking-wide text-white/90">
@@ -2074,7 +2087,7 @@ export function Challenges() {
                   </span>
                 )}
               </div>
-              <button onClick={() => setSelectedImage(null)} className="p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer">
+              <button autoFocus aria-label="Close photo preview" onClick={() => setSelectedImage(null)} className="min-h-11 min-w-11 p-1.5 text-white/70 hover:text-white transition-colors cursor-pointer">
                 <XCircle className="w-7 h-7" />
               </button>
             </div>

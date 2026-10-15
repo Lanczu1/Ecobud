@@ -12,6 +12,7 @@ interface PhotoRequest {
   requestedAt: string;
   reviewedAt?: string;
   photoUrl: string | null;
+  photoField?: 'proofUrl' | 'afterProofUrl';
   user: { name: string; profile: { displayName: string | null; city: string | null } | null } | null;
 }
 interface RequestPage {
@@ -19,9 +20,10 @@ interface RequestPage {
   pagination: { page: number; totalPages: number; total: number };
 }
 
-export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
+export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'events' }: {
   onPreview: (image: { url: string; title: string }) => void;
   onApproved: () => void;
+  resource?: 'events' | 'challenges';
 }) {
   const [status, setStatus] = useState<'pending' | 'approved'>('pending');
   const [page, setPage] = useState(1);
@@ -33,6 +35,8 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
   const [search, setSearch] = useState('');
   const [counts, setCounts] = useState({ pending: 0, approved: 0 });
   const generation = useRef(0);
+  const entityLabel = resource === 'challenges' ? 'Challenge' : 'Event';
+  const endpoint = `/admin/${resource}/photo-delete-requests`;
   // A silent load (live sync) swaps the rows in place without the spinner or clearing errors first.
   const load = useCallback(async (silent = false) => {
     const current = ++generation.current;
@@ -43,8 +47,8 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
     try {
       const otherStatus = status === 'pending' ? 'approved' : 'pending';
       const [response, other] = await Promise.all([
-        adminGet<RequestPage>(`/admin/events/photo-delete-requests?status=${status}&page=${page}&pageSize=20`, { bypassCache: true }),
-        adminGet<RequestPage>(`/admin/events/photo-delete-requests?status=${otherStatus}&page=1&pageSize=1`, { bypassCache: true }),
+        adminGet<RequestPage>(`${endpoint}?status=${status}&page=${page}&pageSize=20`, { bypassCache: true }),
+        adminGet<RequestPage>(`${endpoint}?status=${otherStatus}&page=1&pageSize=1`, { bypassCache: true }),
       ]);
       if (current === generation.current) {
         setCounts(status === 'pending'
@@ -58,7 +62,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
       // A failed background sync keeps the rows on screen; the next push retries.
       if (current === generation.current && !silent) setError(err instanceof Error ? err.message : 'Could not load photo delete requests.');
     } finally { if (current === generation.current) setLoading(false); }
-  }, [page, status]);
+  }, [page, status, endpoint]);
 
   useEffect(() => {
     void load();
@@ -80,7 +84,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
     setError(null);
     setNotice(null);
     try {
-      await adminPost(`/admin/events/photo-delete-requests/${encodeURIComponent(item.id)}/approve`, {});
+      await adminPost(`${endpoint}/${encodeURIComponent(item.id)}/approve`, {});
       setNotice('Approved. The photo was removed; history details, attendance, and rewards were retained.');
       onApproved();
       await load();
@@ -122,7 +126,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
       <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
-          <input type="search" aria-label="Search photo requests on this page" placeholder="Search this page by participant, event, or reason..." value={search} onChange={event => setSearch(event.target.value)} className="min-h-11 w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pr-4 pl-10 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-white" />
+          <input type="search" aria-label="Search photo requests on this page" placeholder={`Search this page by participant, ${entityLabel.toLowerCase()}, or reason...`} value={search} onChange={event => setSearch(event.target.value)} className="min-h-11 w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pr-4 pl-10 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-white" />
         </div>
         <div className="flex flex-wrap items-center gap-1.5" aria-label="Request status filters">
           {(['pending', 'approved'] as const).map(filter => <button key={filter} type="button" aria-pressed={status === filter} onClick={() => { if (filter === status) return; setStatus(filter); setPage(1); setData(null); setNotice(null); }} className={`min-h-11 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${status === filter ? 'border-green-700 bg-green-700 text-white shadow-sm' : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-green-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-200'} ${focus}`}>{filter === 'pending' ? 'Pending' : 'Approved'}</button>)}
@@ -139,7 +143,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
         : <div className="overflow-x-auto" role="region" aria-label="Photo deletion requests table" tabIndex={0}>
           <table className="w-full min-w-[1050px] text-left">
             <thead><tr className="border-b border-gray-100 bg-gray-50/70 text-xs font-semibold tracking-wider text-gray-600 uppercase dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-300">
-              {['Participant', 'Event Title', 'Photo Proof', 'Reason', 'Status', 'Requested Date', 'Action'].map(label => <th key={label} scope="col" className="px-5 py-3.5">{label}</th>)}
+              {['Participant', `${entityLabel} Title`, 'Photo Proof', 'Reason', 'Status', 'Requested Date', 'Action'].map(label => <th key={label} scope="col" className="px-5 py-3.5">{label}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">{filteredRequests.map(item => {
               const displayName = item.user?.profile?.displayName || item.user?.name || 'Former user';
@@ -154,7 +158,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved }: {
                 <td className="px-5 py-4">{photoUrl ? <button type="button" onClick={() => onPreview({ url: photoUrl, title: `${displayName} - ${item.eventTitle}` })} aria-label={`View requested photo for ${displayName}, ${item.eventTitle}`} className={`group relative block h-11 w-14 overflow-hidden rounded-lg border border-gray-200 shadow-xs transition-all hover:ring-2 hover:ring-green-500 dark:border-gray-700 ${focus}`}>
                   <img src={photoUrl} alt={`Attendance photo for ${item.eventTitle}`} loading="lazy" className="h-full w-full object-cover" />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><ImageIcon className="h-4 w-4 text-white" aria-hidden="true" /></div>
-                </button> : <span className="text-xs text-gray-600 italic dark:text-gray-300">Photo removed</span>}</td>
+                </button> : <span className="text-xs text-gray-600 italic dark:text-gray-300">Photo removed</span>}{item.photoField && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{item.photoField === 'afterProofUrl' ? 'After photo' : 'Proof photo'}</p>}</td>
                 <td className="px-5 py-4"><p className="min-w-44 max-w-72 break-words whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{item.reason}</p></td>
                 <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-xs font-semibold ${item.status === 'pending' ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300'}`}>{item.status === 'pending' ? <Clock className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}{item.status === 'pending' ? 'Pending Approval' : 'Approved'}</span></td>
                 <td className="px-5 py-4"><span className="text-xs whitespace-nowrap text-gray-600 dark:text-gray-300">{new Date(item.requestedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</span>{item.reviewedAt && <p className="mt-1 text-xs whitespace-nowrap text-gray-600 dark:text-gray-300">Approved {new Date(item.reviewedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' })}</p>}</td>

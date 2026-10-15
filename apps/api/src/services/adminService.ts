@@ -9,6 +9,7 @@ import { apiCache } from "../lib/cache";
 import { getTotalCoinsRedeemed } from './redemptionStatsService';
 import { activityByDayQuery } from './adminActivityTrend';
 import { PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED } from './eventPhotoDeletion';
+import { CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED } from './challengePhotoDeletion';
 
 type ReviewerContext = {
   role: string;
@@ -1185,7 +1186,7 @@ export class AdminService {
   }
 
   static async clearAuditLogs() {
-    return await prisma.auditLog.deleteMany({ where: { action: { notIn: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED] } } });
+    return await prisma.auditLog.deleteMany({ where: { action: { notIn: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED, CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED] } } });
   }
 
   // Event Management

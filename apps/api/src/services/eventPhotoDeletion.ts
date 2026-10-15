@@ -49,15 +49,15 @@ export async function requestEventPhotoDeletion(userId: string, submissionId: st
 }
 
 type Reviewer = { userId: string; role: string; city?: string | null };
-function reviewerScope(auth: Reviewer): Prisma.AuditLogWhereInput {
+export function reviewerScope(auth: Reviewer): Prisma.AuditLogWhereInput {
   if (auth.role === 'admin') return {};
   const barangay = eventBarangay(auth.city);
   if (auth.role !== 'moderator' || !barangay) throw new HttpError(403, 'An assigned barangay is required to review photo requests.');
   return { user: { profile: { city: { equals: barangay, mode: 'insensitive' } } } };
 }
 
-export async function listEventPhotoDeletionRequests(auth: Reviewer, status: 'pending' | 'approved', page: number, pageSize: number) {
-  const where: Prisma.AuditLogWhereInput = { ...reviewerScope(auth), action: status === 'pending' ? PHOTO_DELETE_PENDING : PHOTO_DELETE_APPROVED };
+export async function listEventPhotoDeletionRequests(auth: Reviewer, status: 'pending' | 'approved', page: number, pageSize: number, actions = { pending: PHOTO_DELETE_PENDING, approved: PHOTO_DELETE_APPROVED }) {
+  const where: Prisma.AuditLogWhereInput = { ...reviewerScope(auth), action: actions[status] };
   const [rows, total] = await Promise.all([
     prisma.auditLog.findMany({ where, include: { user: { select: { id: true, name: true, profile: { select: { displayName: true, city: true } } } } }, orderBy: [{ timestamp: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.auditLog.count({ where }),

@@ -11,6 +11,30 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
   token?: string;
   onRequested: () => void;
 }) {
+  return <PhotoDeleteRequest title={item.event.title} photoUrl={item.attendanceImageUrl} deletionRequest={item.deletionRequest} onRequested={onRequested}
+    sendRequest={token ? reason => ecobudApi.requestEventPhotoDeletion(token, item.id, reason, item.attendanceImageUrl!) : undefined} />;
+}
+
+export function ChallengePhotoDeleteRequest({ submissionId, photoField, photoUrl, title, deletionRequest, token, onRequested }: {
+  submissionId: string;
+  photoField: 'proofUrl' | 'afterProofUrl';
+  photoUrl?: string | null;
+  title: string;
+  deletionRequest?: EventSubmissionHistoryItem['deletionRequest'];
+  token?: string;
+  onRequested: () => void;
+}) {
+  return <PhotoDeleteRequest title={title} photoUrl={photoUrl} deletionRequest={deletionRequest} onRequested={onRequested}
+    sendRequest={token ? reason => ecobudApi.requestChallengePhotoDeletion(token, submissionId, photoField, reason, photoUrl!) : undefined} />;
+}
+
+function PhotoDeleteRequest({ title, photoUrl, deletionRequest, sendRequest, onRequested }: {
+  title: string;
+  photoUrl?: string | null;
+  deletionRequest?: EventSubmissionHistoryItem['deletionRequest'];
+  sendRequest?: (reason: string) => Promise<unknown>;
+  onRequested: () => void;
+}) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = React.useState(false);
@@ -18,7 +42,7 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [sent, setSent] = React.useState(false);
-  if (item.deletionRequest?.status === 'approved') {
+  if (deletionRequest?.status === 'approved') {
     return <View style={[requestStyles.statusRow, { backgroundColor: theme.colors.surfaceMuted }]}>
       <Ionicons name="image-outline" size={18} color={theme.colors.textSecondary} />
       <View style={{ flex: 1, gap: 3 }}>
@@ -27,17 +51,17 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
       </View>
     </View>;
   }
-  if (item.deletionRequest?.status === 'pending' || sent) {
+  if (deletionRequest?.status === 'pending' || sent) {
     return <View accessibilityLiveRegion="polite" style={[requestStyles.statusRow, { backgroundColor: theme.colors.surfaceMuted }]}>
       <Ionicons name="time-outline" size={18} color={theme.colors.textSecondary} />
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Photo deletion requested</Text>
         <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Waiting for admin or moderator approval.</Text>
-        <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Reason: {item.deletionRequest?.reason ?? reason.trim()}</Text>
+        <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 }}>Reason: {deletionRequest?.reason ?? reason.trim()}</Text>
       </View>
     </View>;
   }
-  if (!token || !item.attendanceImageUrl) return null;
+  if (!sendRequest || !photoUrl) return null;
 
   const close = () => { if (!submitting) setOpen(false); };
   const submit = async () => {
@@ -45,7 +69,7 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
     setSubmitting(true);
     setError(null);
     try {
-      await ecobudApi.requestEventPhotoDeletion(token, item.id, reason.trim(), item.attendanceImageUrl!);
+      await sendRequest(reason.trim());
       setSent(true);
       setOpen(false);
       onRequested();
@@ -64,11 +88,11 @@ export function EventPhotoDeleteRequest({ item, token, onRequested }: {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={requestStyles.scroll}>
           <View accessibilityViewIsModal style={[requestStyles.card, { backgroundColor: theme.colors.card }]}>
             <Text accessibilityRole="header" style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700' }}>Request photo deletion</Text>
-            <Text style={{ color: theme.colors.textSecondary }}>{item.event.title}</Text>
-            <Text style={{ color: theme.colors.textSecondary }}>Your photo stays visible until approved. Your history details, attendance, and rewards will be kept.</Text>
+            <Text style={{ color: theme.colors.textSecondary }}>{title}</Text>
+            <Text style={{ color: theme.colors.textSecondary }}>Your photo stays visible until approved. Your history details and rewards will be kept.</Text>
             <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>Reason (required)</Text>
             <TextInput
-              accessibilityLabel="Reason for deleting the attendance photo"
+              accessibilityLabel="Reason for deleting this photo"
               multiline maxLength={500} editable={!submitting} value={reason} onChangeText={setReason}
               placeholder="Why would you like this photo removed?"
               placeholderTextColor={theme.colors.textSecondary}

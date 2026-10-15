@@ -21,8 +21,11 @@ import { sendDirectNotification } from '../services/notificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
 
 import { apiCache } from '../lib/cache';
+import { challengePhotoDeletionRoutes } from './challengePhotoDeletionRoutes';
+import { challengePhotoDeletionStatuses } from '../services/challengePhotoDeletion';
 
 const challengeRoutes = Router();
+challengeRoutes.use(challengePhotoDeletionRoutes);
 const gamificationService = new GamificationService();
 const MAX_AI_ATTEMPTS = 3;
 
@@ -242,6 +245,8 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     }),
   ]);
 
+  const photoDeletionStatuses = await challengePhotoDeletionStatuses(userId, allSubmissions);
+
   // Index by challengeInstanceId
   const userChallengeByInstanceId = new Map(
     userChallenges.map(uc => [uc.challengeInstanceId, uc])
@@ -290,6 +295,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
           status: latestSubmission.rewardAwarded ? 'completed' : latestSubmission.status,
           proofUrl: latestSubmission.proofUrl,
           afterProofUrl: latestSubmission.afterProofUrl,
+          photoDeletionRequests: photoDeletionStatuses.get(latestSubmission.id) ?? {},
           detectedQuantity: latestSubmission.detectedQuantity,
           reservedQuantity: latestSubmission.reservedQuantity,
           qrToken: latestSubmission.qrToken,
@@ -305,6 +311,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
           status: sub.rewardAwarded ? 'completed' : sub.status,
           proofUrl: sub.proofUrl,
           afterProofUrl: sub.afterProofUrl,
+          photoDeletionRequests: photoDeletionStatuses.get(sub.id) ?? {},
           detectedQuantity: sub.detectedQuantity,
           reservedQuantity: sub.reservedQuantity,
           qrToken: sub.qrToken,
@@ -556,7 +563,8 @@ challengeRoutes.get(
       take: 100,
     });
 
-    return res.json({ items });
+    const photoDeletionStatuses = await challengePhotoDeletionStatuses(req.auth!.userId, items);
+    return res.json({ items: items.map(item => ({ ...item, photoDeletionRequests: photoDeletionStatuses.get(item.id) ?? {} })) });
   }),
 );
 

@@ -13,20 +13,44 @@ vi.mock('../http/authentication', () => ({
   requireModeratorAccess: (req: any, res: any, next: any) => ['admin', 'moderator'].includes(req.auth.role) ? next() : res.sendStatus(403),
 }));
 vi.mock('../services/eventPhotoDeletion', () => ({ requestEventPhotoDeletion: vi.fn(), listEventPhotoDeletionRequests: vi.fn(), approveEventPhotoDeletion: vi.fn() }));
+vi.mock('../services/challengePhotoDeletion', () => ({ requestChallengePhotoDeletion: vi.fn(), listChallengePhotoDeletionRequests: vi.fn(), approveChallengePhotoDeletion: vi.fn() }));
 vi.mock('../services/adminLiveEvents', () => ({ adminLiveEvents: { emit: vi.fn() } }));
-vi.mock('../services/supabaseRealtimeService', () => ({ supabaseRealtimeService: { publishUserEventsRefresh: vi.fn() } }));
+vi.mock('../services/supabaseRealtimeService', () => ({ supabaseRealtimeService: { publishUserEventsRefresh: vi.fn(), publishUserSectionRefresh: vi.fn() } }));
 
 import { requestEventPhotoDeletion, listEventPhotoDeletionRequests, approveEventPhotoDeletion } from '../services/eventPhotoDeletion';
 import { errorResponder } from '../http/errorResponder';
 import { eventPhotoDeletionRoutes, adminEventPhotoDeletionRoutes } from './eventPhotoDeletionRoutes';
+import { challengePhotoDeletionRoutes, adminChallengePhotoDeletionRoutes } from './challengePhotoDeletionRoutes';
+import { requestChallengePhotoDeletion, approveChallengePhotoDeletion } from '../services/challengePhotoDeletion';
 const app = express();
 app.use(express.json());
 app.use('/api/events', eventPhotoDeletionRoutes);
 app.use('/api/admin/events/photo-delete-requests', adminEventPhotoDeletionRoutes);
+app.use('/api/challenges', challengePhotoDeletionRoutes);
+app.use('/api/admin/challenges/photo-delete-requests', adminChallengePhotoDeletionRoutes);
 app.use(errorResponder);
 
 describe('photo delete request HTTP access and validation', () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it('requires a valid challenge photo field and reason', async () => {
+    for (const body of [{ reason: 'Private photo', photoUrl: 'photo.jpg', photoField: 'userId' }, { reason: ' ', photoUrl: 'photo.jpg', photoField: 'proofUrl' }]) {
+      expect((await request(app).post('/api/challenges/submissions/one/delete-request').set('Authorization', 'Bearer user').send(body)).status).toBe(400);
+    }
+    expect(requestChallengePhotoDeletion).not.toHaveBeenCalled();
+  });
+
+  it('binds challenge requests to the signed-in user and selected photo', async () => {
+    vi.mocked(requestChallengePhotoDeletion).mockResolvedValue({ id: 'challenge-request', status: 'pending', reason: 'Private photo' });
+    const response = await request(app).post('/api/challenges/submissions/one/delete-request').set('Authorization', 'Bearer user').send({ userId: 'someone-else', reason: ' Private photo ', photoUrl: 'photo.jpg', photoField: 'afterProofUrl' });
+    expect(response.status).toBe(200);
+    expect(requestChallengePhotoDeletion).toHaveBeenCalledWith('viewer', 'one', 'afterProofUrl', 'Private photo', 'photo.jpg');
+  });
+
+  it('prevents regular users from approving challenge deletion requests', async () => {
+    expect((await request(app).post('/api/admin/challenges/photo-delete-requests/request/approve').set('Authorization', 'Bearer user')).status).toBe(403);
+    expect(approveChallengePhotoDeletion).not.toHaveBeenCalled();
+  });
 
   it('requires authentication for requests and review', async () => {
     expect((await request(app).post('/api/events/submissions/one/delete-request').send({})).status).toBe(401);
