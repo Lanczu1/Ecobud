@@ -11,7 +11,7 @@ import { removeReviewedIdPhoto } from '../services/idDocumentCleanup';
 
 export const idVerificationRoutes = Router();
 idVerificationRoutes.use(authenticateRequest, (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
-const submissionSchema = z.object({ legalName: z.string().trim().min(2).max(120), idType: z.enum(['government', 'school', 'barangay']), consent: z.literal('true') });
+const submissionSchema = z.object({ legalName: z.string().trim().min(2).max(120), idType: z.enum(['valid', 'government', 'school', 'barangay']), consent: z.literal('true') });
 const reviewSchema = z.object({ status: z.enum(['approved', 'rejected']), reason: z.string().trim().max(500).optional() })
   .refine(value => value.status !== 'rejected' || Boolean(value.reason), { message: 'A rejection reason is required.', path: ['reason'] });
 const submissionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, keyGenerator: (req: AuthenticatedRequest) => req.auth!.userId, standardHeaders: true, legacyHeaders: false });
@@ -27,7 +27,7 @@ idVerificationRoutes.get('/me', errorBoundary(async (req: AuthenticatedRequest, 
 
 idVerificationRoutes.post('/me', requireRoles('user'), submissionLimiter, avatarUploadMiddleware.single('image'), errorBoundary(async (req: AuthenticatedRequest, res) => {
   const payload = submissionSchema.parse(req.body);
-  if (!req.file) throw new HttpError(400, 'Please upload a clear photo of your ID.');
+  if (!req.file) throw new HttpError(400, 'Please upload a clear photo of your valid ID.');
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId }, select: { idVerificationStatus: true, profile: { select: { city: true } } } });
   if (['pending', 'approved'].includes(user.idVerificationStatus)) throw new HttpError(409, 'Your ID is already pending review or approved.');
   if (!user.profile?.city?.trim()) throw new HttpError(400, 'Please select your barangay in your profile first.');

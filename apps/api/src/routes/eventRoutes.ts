@@ -274,7 +274,7 @@ eventRoutes.post(
     const [event, registration, qrCode] = await Promise.all([
       prisma.event.findUnique({
         where: { id: eventId },
-        select: { id: true, isPublished: true, startDatetime: true, endDatetime: true },
+        select: { id: true, title: true, isPublished: true, startDatetime: true, endDatetime: true },
       }),
       prisma.eventRegistration.findUnique({
         where: { userId_eventId: { userId, eventId } },
@@ -348,6 +348,16 @@ eventRoutes.post(
         });
       });
       void supabaseRealtimeService.publishUserEventsRefresh(userId, { entityId: eventId, reason: 'event-attendance-submitted' });
+      await sendDirectNotification({
+        userId,
+        type: 'event',
+        title: 'Attendance approved',
+        message: `Your QR check-in for "${event.title}" was automatically approved. You can now claim your reward.`,
+        relatedId: eventId,
+        relatedType: 'event',
+        priority: 'high',
+        notificationKey: `event_qr_approved:${submission.id}`,
+      });
 
       return res.json({ success: true, message: 'Attendance automatically approved. You can now claim your reward.', submission });
     } catch (error: any) {

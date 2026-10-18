@@ -16,8 +16,8 @@ export function StreakFlame(props: StreakFlameProps) {
 
 const MemoizedStreakFlame = React.memo(function StreakFlameContent({ count, active, size = 88 }: StreakFlameProps) {
   if (isStreakFlameActive(count, active)) return <ActiveFlame size={size} />;
-  return <Image source={inactiveSource} resizeMode="contain" style={{ width: size, height: size }} accessibilityLabel={count < 3 ? 'Complete 3 challenges to ignite your streak' : 'Inactive streak flame'} />;
-}, (previous, next) => previous.size === next.size && isStreakFlameActive(previous.count, previous.active) === isStreakFlameActive(next.count, next.active) && (previous.count < 3) === (next.count < 3));
+  return <Image source={inactiveSource} resizeMode="contain" style={{ width: size, height: size }} accessibilityLabel={count < 1 ? 'Complete your first challenge to ignite your streak' : 'Inactive streak flame'} />;
+}, (previous, next) => previous.size === next.size && isStreakFlameActive(previous.count, previous.active) === isStreakFlameActive(next.count, next.active) && (previous.count < 1) === (next.count < 1));
 
 function ActiveFlame({ size }: { size: number }) {
   const animation = React.useRef<React.ElementRef<typeof LottieView>>(null);

@@ -16,8 +16,9 @@ import Svg, { Path } from 'react-native-svg';
 import LottieView from '../../shared/accessibility/AccessibleLottie';
 import { useAudioPlayer } from 'expo-audio';
 import type { EcoBudMobileModel } from '../types/home';
-import { isStreakFlameActive } from '../../shared/api/streakSummary';
 import { StreakFlame } from './StreakFlame';
+import { StreakExpiryStatus } from './StreakExpiryStatus';
+import { useStreakExpiry } from '../hooks/useStreakExpiry';
 import { triggerSuccessHaptic, triggerSelectionHaptic } from '../utils/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
@@ -246,7 +247,8 @@ function FloatingSpark({
 
 export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
   const count = Math.max(0, model.dashboard?.streak ?? 0);
-  const active = isStreakFlameActive(count, model.dashboard?.streakSummary?.active ?? false);
+  const expiry = useStreakExpiry(model.dashboard?.streakSummary);
+  const active = expiry.active;
   const [focused, setFocused] = React.useState<string | null>(null);
   const { width, height, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -536,16 +538,18 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
 
               <Text style={[styles.title, compactLayout && styles.compactTitle]}>
-                {count < 3 ? 'Light your streak' : active ? 'Streak Unlocked!' : 'Your streak is resting'}
+                {count < 1 ? 'Light your streak' : expiry.warning ? 'Keep your flame alive' : active ? 'Streak Unlocked!' : 'Your streak is resting'}
               </Text>
 
               <Text style={styles.description}>
-                {count < 3
-                  ? `Complete ${3 - count} more ${3 - count === 1 ? 'challenge' : 'challenges'} to light the flame and earn your first milestone reward.`
+                {count < 1
+                  ? 'Complete your first challenge and claim its reward to light the flame and start your 7-day timer.'
                   : active
                     ? `You've completed ${count} challenges. Keep going to grow your streak and earn bigger rewards.`
                     : 'Your challenge count is saved. Complete a challenge or use Restore Streak to bring back the flame.'}
               </Text>
+
+              <StreakExpiryStatus summary={model.dashboard?.streakSummary} expiry={expiry} dark onRefresh={() => { void model.refreshEverything(); }} onViewChallenges={() => { model.setActiveOverlay(null); model.setActiveTab('challenges'); }} />
 
               {reward ? (
                 <View style={styles.rewardSection}>
@@ -598,7 +602,7 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
                 style={[styles.close, focused === 'rewards' && styles.focus]}
               >
                 <Text style={styles.closeText}>
-                  {count >= 3 && !active ? 'View rewards & restore' : 'View streak rewards'}
+                  {count >= 1 && !active ? 'View rewards & restore' : 'View streak rewards'}
                 </Text>
               </Pressable>
             </Animated.View>

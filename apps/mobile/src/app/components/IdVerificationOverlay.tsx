@@ -25,7 +25,6 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
   const loadInFlight = useRef(false);
   const [error, setError] = useState('');
   const [legalName, setLegalName] = useState('');
-  const [idType, setIdType] = useState('government');
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const preparedPhoto = useRef<{ source: string; uri: string } | null>(null);
   const [consent, setConsent] = useState(false);
@@ -87,7 +86,7 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
           preparedPhoto.current = { source: photo.uri, uri: image.uri };
         }
       }
-      const next = await ecobudApi.submitIdVerification(token, preparedPhoto.current.uri, legalName.trim(), idType, setProgress);
+      const next = await ecobudApi.submitIdVerification(token, preparedPhoto.current.uri, legalName.trim(), 'valid', setProgress);
       setResult(next); setPhoto(null); setConsent(false);
       await model.refreshIdVerification(next);
     } catch (e) {
@@ -108,11 +107,8 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Full name as shown on your ID</Text>
         <TextInput accessibilityLabel="Full name on ID" value={legalName} editable={!busy} maxLength={120} onChangeText={setLegalName} autoCapitalize="words" style={{ color: theme.colors.textPrimary, borderWidth: 1, borderColor: theme.colors.inputBorder, borderRadius: 10, padding: 12 }} />
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>ID type</Text>
-        {([['government', 'Government ID'], ['barangay', 'Barangay ID']] as const).map(([value, label]) =>
-          <TouchableOpacity key={value} disabled={busy} accessibilityRole="radio" accessibilityState={{ checked: idType === value }} onPress={() => setIdType(value)} style={{ padding: 12, borderWidth: 1, borderColor: idType === value ? theme.colors.primary : theme.colors.inputBorder, borderRadius: 10 }}>
-            <Text style={{ color: theme.colors.textPrimary }}>{idType === value ? '● ' : '○ '}{label}</Text>
-          </TouchableOpacity>)}
-        <Text style={{ color: theme.colors.textMuted, lineHeight: 20 }}>Upload the front of your ID with your name and photo clearly visible. JPEG, PNG, or WebP, up to 5 MB. This photo is private and accessible to moderators assigned to your barangay.</Text>
+        <Text style={{ color: theme.colors.textPrimary }}>Valid ID</Text>
+        <Text style={{ color: theme.colors.textMuted, lineHeight: 20 }}>Upload the front of your valid ID with your name and photo clearly visible. JPEG, PNG, or WebP, up to 5 MB. This photo is private and accessible to moderators assigned to your barangay.</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           <TouchableOpacity disabled={busy || choosingPhoto} onPress={() => void choosePhoto(true)} style={{ padding: 12, opacity: busy || choosingPhoto ? 0.5 : 1 }}><Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Take ID photo</Text></TouchableOpacity>
           <TouchableOpacity disabled={busy || choosingPhoto} onPress={() => void choosePhoto(false)} style={{ padding: 12, opacity: busy || choosingPhoto ? 0.5 : 1 }}><Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Choose photo</Text></TouchableOpacity>

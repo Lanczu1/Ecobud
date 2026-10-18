@@ -30,7 +30,7 @@ export function SubmitIdIntroCard() {
       </View>
       <View style={styles.row}>
         <Ionicons name="camera-outline" size={19} color={green} />
-        <Text style={[styles.rowText, { color: theme.colors.textMuted }]}>A clear photo of a government, school, or barangay ID showing your name and photo.</Text>
+        <Text style={[styles.rowText, { color: theme.colors.textMuted }]}>A clear photo of a valid ID showing your name and photo.</Text>
       </View>
     </View>
     <View style={styles.row}>

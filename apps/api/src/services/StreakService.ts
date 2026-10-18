@@ -2,7 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { HttpError } from '../http/errorResponder';
 import { apiCache } from '../lib/cache';
-import { STREAK_MILESTONES, streakMonth, streakStatus } from '../utils/streakRules';
+import { STREAK_MILESTONES, STREAK_WINDOW_MS, streakLastActivity, streakMonth, streakStatus } from '../utils/streakRules';
 
 export class StreakService {
   constructor(private readonly database: PrismaClient = prisma) {}
@@ -10,9 +10,11 @@ export class StreakService {
   async summary(userId: string, db: Prisma.TransactionClient | PrismaClient = this.database) {
     const user = await db.user.findUnique({ where: { id: userId }, include: { streakMilestones: true } });
     if (!user) throw new HttpError(404, 'User not found.');
+    const lastActivity = streakLastActivity(user);
     return {
       currentStreak: user.currentStreak,
       lastChallengeAt: user.lastChallengeAt,
+      expiresAt: user.currentStreak >= 1 && lastActivity > 0 ? new Date(lastActivity + STREAK_WINDOW_MS) : null,
       ...streakStatus(user),
       milestones: STREAK_MILESTONES.map(milestone => ({
         ...milestone,
@@ -29,7 +31,7 @@ export class StreakService {
       const now = new Date();
       const status = streakStatus(user, now);
       if (status.active) return this.summary(userId, tx);
-      if (!status.canRestore) throw new HttpError(400, user.currentStreak < 3 ? 'Complete 3 challenges to unlock your streak.' : 'You have used all 3 restores this month.');
+      if (!status.canRestore) throw new HttpError(400, user.currentStreak < 1 ? 'Complete your first challenge to start your streak.' : 'You have used all 3 restores this month.');
       await tx.user.update({ where: { id: userId }, data: {
         streakRestoredAt: now,
         streakRestoreMonth: streakMonth(now),

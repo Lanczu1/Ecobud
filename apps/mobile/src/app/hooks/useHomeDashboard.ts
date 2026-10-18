@@ -1169,7 +1169,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   useEffect(() => {
     if (dashboard) {
       if (previousStreakRef.current !== null) {
-        if ([3, 10, 30, 100].some(milestone => previousStreakRef.current! < milestone && dashboard.streak >= milestone)) {
+        if ([1, 3, 10, 30, 100].some(milestone => previousStreakRef.current! < milestone && dashboard.streak >= milestone)) {
           setPendingStreakUnlock(true);
         }
       }

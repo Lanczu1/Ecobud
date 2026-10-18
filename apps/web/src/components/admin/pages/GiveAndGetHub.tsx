@@ -1084,6 +1084,7 @@ export function GiveAndGetHub() {
   const [listings, setListings] = useState<SwapListingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<SwapStats | null>(null);
+  const [assignedBarangay, setAssignedBarangay] = useState<string | null | undefined>(undefined);
   const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean, background?: boolean) => Promise<void>>(async () => {});
   const fetchInFlightRef = useRef(false);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
@@ -1118,10 +1119,11 @@ export function GiveAndGetHub() {
       if (statusToLoad === 'reported') params.set('reported', 'true');
       if (searchToLoad.trim()) params.set('search', searchToLoad.trim());
       const [listingsData, statsData] = await Promise.all([
-        adminGet<{ items: SwapListingItem[]; pagination: typeof pagination }>(`/give-and-get/swap-listings?${params.toString()}`, { bypassCache: fresh }),
+        adminGet<{ items: SwapListingItem[]; pagination: typeof pagination; scope: { barangay: string | null } }>(`/give-and-get/swap-listings?${params.toString()}`, { bypassCache: fresh }),
         adminGet<SwapStats>('/give-and-get/swap-listings/stats', { bypassCache: fresh }),
       ]);
       setListings(listingsData.items);
+      setAssignedBarangay(listingsData.scope.barangay);
       setPagination(listingsData.pagination);
       setStats(statsData);
     } catch (error: any) {
@@ -1271,7 +1273,7 @@ export function GiveAndGetHub() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">Manage Listings</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Review, approve, and moderate community swap listings</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{assignedBarangay ? `Review listings from residents of Brgy. ${assignedBarangay}.` : assignedBarangay === null ? 'Review, approve, and moderate listings from all barangays.' : 'Review, approve, and moderate community swap listings.'}</p>
         </div>
       </div>
 

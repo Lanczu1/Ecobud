@@ -3,10 +3,12 @@ import { AccessibilityInfo, ActivityIndicator, Animated, Easing, ScrollView, Sty
 import { Modal } from '../../shared/accessibility/primitives';
 import { Pressable, Text } from '../../shared/accessibility/primitives';
 import { ecobudApi, type StreakSummary } from '../../shared/api/ecobudApi';
-import { isStreakFlameActive, isStreakSummary, parseStreakSummary } from '../../shared/api/streakSummary';
+import { isStreakSummary, parseStreakSummary } from '../../shared/api/streakSummary';
 import { useTheme } from '../../shared/theme/ThemeContext';
 import type { EcoBudMobileModel } from '../types/home';
 import { StreakFlame } from './StreakFlame';
+import { StreakExpiryStatus } from './StreakExpiryStatus';
+import { useStreakExpiry } from '../hooks/useStreakExpiry';
 
 export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) {
   const { theme, isDark } = useTheme();
@@ -96,8 +98,12 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
   };
   const data = isStreakSummary(summary) ? summary : null;
   const next = data?.milestones.find(item => !item.awarded);
-  const active = data ? isStreakFlameActive(data.currentStreak, data.active) : false;
-  const building = (data?.currentStreak ?? 0) < 3;
+  const expiry = useStreakExpiry(data);
+  const active = expiry.active;
+  React.useEffect(() => {
+    if (data?.active && expiry.expired) void load();
+  }, [data?.active, expiry.expired, load]);
+  const building = (data?.currentStreak ?? 0) < 1;
   const target = next?.challenges ?? 100;
   const progress = Math.min(1, (data?.currentStreak ?? 0) / target);
   const accent = colors.primary;
@@ -130,20 +136,22 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
             {data && !loading ? <>
               <View style={[styles.hero, { backgroundColor: colors.surfaceMuted }]}>
                 <View style={styles.heroTop}>
-                  <StreakFlame count={data.currentStreak} active={data.active} size={88} />
+                  <StreakFlame count={data.currentStreak} active={active} size={88} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.count, { color: colors.textPrimary }]}>{data.currentStreak}</Text>
-                    <Text style={[styles.countLabel, { color: colors.textSecondary }]}>challenges completed</Text>
+                    <Text style={[styles.countLabel, { color: colors.textSecondary }]}>{data.currentStreak === 1 ? 'challenge completed' : 'challenges completed'}</Text>
                   </View>
                 </View>
                 <Text style={[styles.heroTitle, { color: colors.textPrimary }]}>{building ? 'A little effort lights the flame' : active ? 'Your streak is burning' : 'Your progress is safe'}</Text>
-                <Text style={[styles.body, { color: colors.textSecondary }]}>{building ? `${3 - data.currentStreak} more ${3 - data.currentStreak === 1 ? 'challenge' : 'challenges'} to ignite your streak.` : active ? 'Keep completing challenges to reach your next reward.' : 'The flame has cooled. Restore it or complete a challenge.'}</Text>
+                <Text style={[styles.body, { color: colors.textSecondary }]}>{building ? 'Complete your first challenge and claim its reward to start the 7-day timer.' : active ? 'Keep completing challenges to reach your next reward.' : 'The flame has cooled. Restore it or complete a challenge.'}</Text>
                 <View style={styles.progressHeading}>
                   <Text style={[styles.captionStrong, { color: accent }]}>{next ? `Next reward: ${target} challenges` : 'All milestones earned'}</Text>
                   <Text style={[styles.caption, { color: colors.textSecondary }]}>{Math.min(data.currentStreak, target)} / {target}</Text>
                 </View>
                 <View accessibilityRole="progressbar" accessibilityLabel="Progress toward the next challenge milestone" accessibilityValue={{ min: 0, max: target, now: Math.min(data.currentStreak, target) }} style={[styles.progressTrack, { backgroundColor: colors.border }]}><View style={{ width: `${progress * 100}%`, height: '100%', backgroundColor: accent, borderRadius: 4 }} /></View>
               </View>
+
+              <StreakExpiryStatus summary={data} expiry={expiry} dark={isDark} onRefresh={() => void load()} onViewChallenges={() => { model.setActiveOverlay(null); model.setActiveTab('challenges'); }} />
 
               <View style={styles.sectionHeading}><Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Milestone rewards</Text><Text style={[styles.caption, { color: colors.textSecondary }]}>Awarded automatically, once each</Text></View>
               {data.milestones.map(item => {
@@ -163,7 +171,7 @@ export function ChallengeStreakOverlay({ model }: { model: EcoBudMobileModel }) 
                 <View style={styles.rewardHeading}><Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Keep the flame alive</Text><Text style={[styles.captionStrong, { color: accent }]}>{data.restoresRemaining} / 3 restores</Text></View>
                 <Text style={[styles.body, { color: colors.textSecondary }]}>After 7 days without a challenge, the flame turns gray. Your count stays saved.</Text>
                 {!building && !active ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: !data.canRestore || restoring, busy: restoring }} disabled={!data.canRestore || restoring} onPress={() => void restore()} onFocus={() => setFocused('restore')} onBlur={() => setFocused(null)} style={[styles.button, data.canRestore ? buttonColors : { backgroundColor: isDark ? '#A8B3AE' : '#52685A' }, focusStyle('restore')]}><Text style={[styles.buttonText, { color: buttonTextColor }]}>{restoring ? 'Restoring…' : data.canRestore ? 'Restore Streak' : 'No restores left this month'}</Text></Pressable> : null}
-                <Text style={[styles.note, { color: colors.textSecondary }]}>{building ? 'Restore unlocks when you reach 3 challenges.' : 'Restore brings back the flame for 7 days. It adds no challenges or rewards.'} Your 3 restores reset each month.</Text>
+                <Text style={[styles.note, { color: colors.textSecondary }]}>{building ? 'Restore is available after your first completed challenge.' : 'Restore brings back the flame for 7 days. It adds no challenges or rewards.'} Your 3 restores reset each month.</Text>
               </View>
             </> : null}
           </ScrollView>

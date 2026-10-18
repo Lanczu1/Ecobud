@@ -38,7 +38,7 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
               {!isStreakActive
                 ? currentStreak === 0
                   ? 'Complete a challenge to start.'
-                  : currentStreak < 3 ? `${3 - currentStreak} more ${3 - currentStreak === 1 ? 'challenge' : 'challenges'} to ignite your streak.` : 'Count saved. Restore your streak.'
+                  : 'Count saved. Restore your streak.'
                 : 'Build your streak with challenges.'}
             </Text>
           </View>
@@ -54,7 +54,7 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
             >
               {visibleStreak}
             </Text>
-            <Text style={styles.streakUnit}>Challenges</Text>
+            <Text style={styles.streakUnit}>{visibleStreak === 1 ? 'Challenge' : 'Challenges'}</Text>
           </View>
           {onPressRewards && (
             <TouchableOpacity
@@ -72,7 +72,7 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
           <View
             style={styles.milestoneRow}
             accessible
-            accessibilityLabel={`Reward milestones: ${milestones.join(', ')} challenges. ${visibleStreak} challenges completed. ${nextMilestone ? `Next reward at ${nextMilestone} challenges.` : 'All milestones reached.'}`}
+            accessibilityLabel={`Reward milestones: ${milestones.join(', ')} challenges. ${visibleStreak} ${visibleStreak === 1 ? 'challenge' : 'challenges'} completed. ${nextMilestone ? `Next reward at ${nextMilestone} challenges.` : 'All milestones reached.'}`}
           >
             {milestones.map((milestone, index) => {
               const previous = milestones[index - 1] ?? 0;

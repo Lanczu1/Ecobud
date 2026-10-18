@@ -6,14 +6,30 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess, type AuthenticatedRequest } from '../http/authentication';
 import { sendDirectNotification } from '../services/notificationService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
+import { giveAndGetBarangay, giveAndGetResidentScope } from '../services/giveAndGetAccess';
 
 const router = Router();
+router.use(authenticateRequest, requireModeratorAccess, errorBoundary<AuthenticatedRequest>(async (req, _res, next) => {
+  giveAndGetBarangay(req.auth!);
+  next();
+}));
+
+router.param('id', errorBoundary<AuthenticatedRequest>(async (req, res, next) => {
+  if (req.auth!.role === 'admin') return next();
+  const where = { id: req.params.id, ...giveAndGetResidentScope(req.auth!) };
+  const item = req.path.startsWith('/swap-listings/')
+    ? await prisma.swapListing.findFirst({ where, select: { id: true } })
+    : await prisma.giveAndGetItem.findFirst({ where, select: { id: true } });
+  if (!item) return res.status(404).json({ message: 'Listing not found in your assigned barangay.' });
+  next();
+}));
 
 // Get all give and get items (admin view)
-router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const { skip, pageSize } = parseAdminPagination(req.query);
     const items = await prisma.giveAndGetItem.findMany({
+      where: giveAndGetResidentScope(req.auth!),
       skip,
       take: pageSize,
       include: {
@@ -46,11 +62,11 @@ router.get('/', authenticateRequest, requireModeratorAccess, async (req, res) =>
 });
 
 // Delete an item
-router.delete('/:id', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.delete('/:id', async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     await prisma.giveAndGetItem.delete({
-      where: { id },
+      where: { id, ...giveAndGetResidentScope(req.auth!) },
     });
     res.status(204).send();
   } catch (error) {
@@ -60,7 +76,7 @@ router.delete('/:id', authenticateRequest, requireModeratorAccess, async (req, r
 });
 
 // Update item status
-router.patch('/:id/status', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.patch('/:id/status', async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -70,7 +86,7 @@ router.patch('/:id/status', authenticateRequest, requireModeratorAccess, async (
     }
 
     const updatedItem = await prisma.giveAndGetItem.update({
-      where: { id },
+      where: { id, ...giveAndGetResidentScope(req.auth!) },
       data: { status },
     });
 
@@ -84,17 +100,13 @@ router.patch('/:id/status', authenticateRequest, requireModeratorAccess, async (
 // ─── Swap Listings (Manage Listings) ─────────────────────────────────────────
 
 // Get all swap listings (admin view)
-router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
+router.get('/swap-listings', async (req: AuthenticatedRequest, res) => {
   try {
     const { status, reported } = req.query;
     const { page, pageSize, skip } = parseAdminPagination(req.query);
-    const where: any = { approvalStatus: { not: 'deleted' } };
+    const where: any = { approvalStatus: { not: 'deleted' }, ...giveAndGetResidentScope(req.auth!) };
     if (typeof req.query.recordId==='string') {
       where.id=req.query.recordId;
-      if (req.auth!.role==='moderator') {
-        const barangay={ equals:req.auth!.city?.trim() || '__unassigned__',mode:'insensitive' as const };
-        where.OR=[{ city:barangay },{ user:{ profile:{ city:barangay } } }];
-      }
     }
     if (status && status !== 'all') where.approvalStatus = status;
     if (reported === 'true') where.isReported = true;
@@ -138,7 +150,7 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
       quantity: listing.quantity,
     }));
 
-    res.json({ items: formatted, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
+    res.json({ items: formatted, scope: { barangay: giveAndGetBarangay(req.auth!) }, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
   } catch (error) {
     console.error('Error fetching swap listings for admin:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -146,7 +158,7 @@ router.get('/swap-listings', authenticateRequest, requireModeratorAccess, async 
 });
 
 // Approve a swap listing
-router.get('/swap-listings/:id/reports', authenticateRequest, requireModeratorAccess, errorBoundary(async (req, res) => {
+router.get('/swap-listings/:id/reports', errorBoundary(async (req, res) => {
   const listing = await prisma.swapListing.findUnique({ where: { id: req.params.id }, select: { id: true } });
   if (!listing) return res.status(404).json({ message: 'Listing not found.' });
   const { page, pageSize, skip } = parseAdminPagination(req.query);
@@ -165,11 +177,11 @@ router.get('/swap-listings/:id/reports', authenticateRequest, requireModeratorAc
   });
 }));
 
-router.patch('/swap-listings/:id/approve', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
+router.patch('/swap-listings/:id/approve', async (req: AuthenticatedRequest, res) => {
   try {
     const listing = await prisma.$transaction(async tx => {
       const approved = await tx.swapListing.update({
-        where: { id: req.params.id },
+        where: { id: req.params.id, ...giveAndGetResidentScope(req.auth!) },
         data: { approvalStatus: 'approved', isActive: true, isReported: false, reportCount: 0, reportReason: null },
       });
       await tx.swapListingReport.updateMany({ where: { listingId: req.params.id, resolvedAt: null }, data: { resolvedAt: new Date() } });
@@ -208,11 +220,11 @@ router.patch('/swap-listings/:id/approve', authenticateRequest, requireModerator
 });
 
 // Reject a swap listing
-router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
+router.patch('/swap-listings/:id/reject', async (req: AuthenticatedRequest, res) => {
   try {
     const { reason } = req.body;
     const listing = await prisma.swapListing.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id, ...giveAndGetResidentScope(req.auth!) },
       data: { approvalStatus: 'rejected', isActive: false, reportReason: reason || null },
     });
 
@@ -248,16 +260,16 @@ router.patch('/swap-listings/:id/reject', authenticateRequest, requireModeratorA
 });
 
 // Report a swap listing (user-facing, but routed through admin for moderation)
-router.patch('/swap-listings/:id/report', authenticateRequest, requireModeratorAccess, errorBoundary<AuthenticatedRequest>(async (req, res) => {
+router.patch('/swap-listings/:id/report', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const result = await submitSwapReport(req.params.id, req.auth!.userId, swapReportSchema.parse(req.body), true);
   supabaseRealtimeService.publishSwapEvent({ actorUserId: req.auth!.userId, targetUserId: result.ownerId, eventType: 'listing', listingId: result.listingId }).catch(() => {});
   res.json({ message: 'Listing flagged for review.' });
 }));
 
 // Delete a swap listing (admin)
-router.delete('/swap-listings/:id', authenticateRequest, requireModeratorAccess, async (req: AuthenticatedRequest, res) => {
+router.delete('/swap-listings/:id', async (req: AuthenticatedRequest, res) => {
   try {
-    const listing = await prisma.swapListing.delete({ where: { id: req.params.id }, select: { userId: true } });
+    const listing = await prisma.swapListing.delete({ where: { id: req.params.id, ...giveAndGetResidentScope(req.auth!) }, select: { userId: true } });
     supabaseRealtimeService.publishSwapEvent({
       actorUserId: req.auth!.userId,
       targetUserId: listing.userId,
@@ -272,14 +284,15 @@ router.delete('/swap-listings/:id', authenticateRequest, requireModeratorAccess,
 });
 
 // Get swap listing stats
-router.get('/swap-listings/stats', authenticateRequest, requireModeratorAccess, async (req, res) => {
+router.get('/swap-listings/stats', async (req: AuthenticatedRequest, res) => {
   try {
+    const scope = giveAndGetResidentScope(req.auth!);
     const [total, pending, approved, rejected, reported] = await Promise.all([
-      prisma.swapListing.count({ where: { approvalStatus: { not: 'deleted' } } }),
-      prisma.swapListing.count({ where: { approvalStatus: 'pending' } }),
-      prisma.swapListing.count({ where: { approvalStatus: 'approved' } }),
-      prisma.swapListing.count({ where: { approvalStatus: 'rejected' } }),
-      prisma.swapListing.count({ where: { isReported: true, approvalStatus: { not: 'deleted' } } }),
+      prisma.swapListing.count({ where: { ...scope, approvalStatus: { not: 'deleted' } } }),
+      prisma.swapListing.count({ where: { ...scope, approvalStatus: 'pending' } }),
+      prisma.swapListing.count({ where: { ...scope, approvalStatus: 'approved' } }),
+      prisma.swapListing.count({ where: { ...scope, approvalStatus: 'rejected' } }),
+      prisma.swapListing.count({ where: { ...scope, isReported: true, approvalStatus: { not: 'deleted' } } }),
     ]);
     res.json({ total, pending, approved, rejected, reported });
   } catch (error) {

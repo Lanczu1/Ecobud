@@ -4,7 +4,7 @@ Residents can enter the app before ID approval. They can browse Challenges, Eco 
 
 ## Resident flow
 
-Email OTP or Google sign-in creates an active account with a separate `not_submitted` ID status. An ID submission screen opens for accounts that have not submitted an ID. Residents can continue browsing, or submit their legal name, a government/school/barangay ID photo, and consent to review. Photos must be JPEG, PNG, or WebP and no larger than 5 MB. Settings displays the verification status; rejection includes the moderator's reason and allows resubmission.
+Email OTP or Google sign-in creates an active account with a separate `not_submitted` ID status. An ID submission screen opens for accounts that have not submitted an ID. Residents can continue browsing, or submit their legal name, a valid ID photo, and consent to review. The mobile form displays a single Valid ID label and submits `valid` as the ID type. The API also accepts `government`, `school`, and `barangay` for older app versions; existing submission types are preserved. The existing text column supports `valid` without a database migration. Photos must be JPEG, PNG, or WebP and no larger than 5 MB. Settings displays the verification status; rejection includes the moderator's reason and allows resubmission.
 
 ## Moderator review
 

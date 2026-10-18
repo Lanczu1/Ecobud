@@ -167,6 +167,7 @@ export interface StreakSummary {
   restoresRemaining: number;
   canRestore: boolean;
   lastChallengeAt: string | null;
+  expiresAt?: string | null;
   milestones: { challenges: number; points: number; ecoCoins: number; badge: string | null; awarded: boolean }[];
 }
 

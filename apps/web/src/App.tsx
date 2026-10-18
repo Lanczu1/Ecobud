@@ -78,7 +78,7 @@ function renderSection(section: AdminSection, role?: string) {
           case 'Challenges':       return <Challenges />;
           case 'Badges':           return <Badges />;
           case 'Events':           return <Events />;
-          case 'Give and Get Hub': return role === 'moderator' ? <GiveAndGetHub /> : <Dashboard />;
+          case 'Give and Get Hub': return <GiveAndGetHub />;
           case 'Redeem':          return <Redeem />;
           case 'Reports':          return role === 'moderator' ? <BarangayReports role="moderator" /> : <Reports />;
           case 'Announcements':    return <Announcements />;
@@ -129,7 +129,7 @@ export default function App() {
     if (!isAuthenticated) return;
     const section=new URLSearchParams(routeHash.split('?')[1] || '').get('section');
     const allowed: AdminSection[]=['Dashboard','Announcements','Notifications','ID Verification','Users','Learning Content','Challenges','Badges','Events','Give and Get Hub','Redeem','User Activity & Transactions','Reports'];
-    if ((section === 'Give and Get Hub' || section === 'Notifications') && adminUserRole !== 'moderator') {
+    if (section === 'Notifications' && adminUserRole !== 'moderator') {
       setActiveSection('Dashboard');
       window.location.hash = adminHref('Dashboard');
     } else if (allowed.includes(section as AdminSection)) setActiveSection(section as AdminSection);

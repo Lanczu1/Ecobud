@@ -22,36 +22,43 @@ export async function sendStreakWarnings(now = new Date()) {
   });
   if (!openChallenges) return;
 
-  const inWarningWindow = {
-    gt: new Date(now.getTime() - STREAK_WINDOW_MS),
-    lte: new Date(now.getTime() - (STREAK_WINDOW_MS - STREAK_WARNING_MS)),
-  };
-  const users = await prisma.user.findMany({
-    where: {
-      role: 'user',
-      status: 'active',
-      currentStreak: { gte: 3 },
-      OR: [{ lastChallengeAt: inWarningWindow }, { streakRestoredAt: inWarningWindow }],
-      // A warning for the current 7-day window can only have been created in the last 2 days.
-      notifications: { none: { notificationKey: { startsWith: KEY_PREFIX }, createdAt: { gt: new Date(now.getTime() - STREAK_WARNING_MS) } } },
-    },
-    select: { id: true, currentStreak: true, lastChallengeAt: true, streakRestoredAt: true },
-    take: 200,
-  });
-
-  for (const user of users) {
-    const lastActivity = streakLastActivity(user);
-    const remaining = lastActivity + STREAK_WINDOW_MS - now.getTime();
-    if (remaining <= 0 || remaining > STREAK_WARNING_MS) continue;
-    const days = Math.ceil(remaining / DAY_MS);
-    await sendDirectNotification({
-      userId: user.id,
-      type: 'streak',
-      title: `Your streak flame goes out in ${days} ${days === 1 ? 'day' : 'days'}`,
-      message: `Complete a challenge to keep your ${user.currentStreak}-challenge streak active.`,
-      priority: 'high',
-      notificationKey: `${KEY_PREFIX}${lastActivity}`,
+  for (const days of [2, 1] as const) {
+    const minimumRemaining = days === 2 ? DAY_MS : 0;
+    const maximumRemaining = days === 2 ? STREAK_WARNING_MS : DAY_MS;
+    const inWarningWindow = {
+      gt: new Date(now.getTime() - STREAK_WINDOW_MS + minimumRemaining),
+      lte: new Date(now.getTime() - STREAK_WINDOW_MS + maximumRemaining),
+    };
+    const prefix = days === 2 ? KEY_PREFIX : `${KEY_PREFIX}1-day:`;
+    const users = await prisma.user.findMany({
+      where: {
+        role: 'user',
+        status: 'active',
+        currentStreak: { gte: 1 },
+        AND: [
+          { OR: [{ lastChallengeAt: inWarningWindow }, { streakRestoredAt: inWarningWindow }] },
+          { OR: [{ lastChallengeAt: null }, { lastChallengeAt: { lte: inWarningWindow.lte } }] },
+          { OR: [{ streakRestoredAt: null }, { streakRestoredAt: { lte: inWarningWindow.lte } }] },
+        ],
+        notifications: { none: { notificationKey: { startsWith: prefix }, createdAt: { gt: new Date(now.getTime() - STREAK_WARNING_MS) } } },
+      },
+      select: { id: true, currentStreak: true, lastChallengeAt: true, streakRestoredAt: true },
+      take: 200,
     });
+
+    for (const user of users) {
+      const lastActivity = streakLastActivity(user);
+      const remaining = lastActivity + STREAK_WINDOW_MS - now.getTime();
+      if (remaining <= minimumRemaining || remaining > maximumRemaining) continue;
+      await sendDirectNotification({
+        userId: user.id,
+        type: 'streak',
+        title: days === 1 ? 'Your streak expires within 24 hours' : 'Your streak expires within 2 days',
+        message: `Complete a challenge and claim its reward to keep your ${user.currentStreak}-challenge streak active. Your challenge count stays saved.`,
+        priority: 'high',
+        notificationKey: `${prefix}${lastActivity}`,
+      });
+    }
   }
 }
 

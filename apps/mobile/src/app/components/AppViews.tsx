@@ -72,6 +72,8 @@ import { ChallengesViewSkeleton, LeaderboardSkeleton, TrackerCardsSkeleton } fro
 import { triggerSelectionHaptic } from '../utils/haptics';
 import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
 import { TextSizeMultiplierContext } from '../../shared/accessibility/primitives';
+import { VerificationStatusBadge } from './VerificationStatusBadge';
+import { TrackerStreakCard } from './TrackerStreakCard';
 
 const getValidImageUrl = (url: string | null | undefined) => {
   return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
@@ -473,7 +475,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
               <Text style={[styles.welcomeTitle, { marginTop: 0 }]}>
                 {model.userDisplayName.split(' ')[0]}
               </Text>
-              <MaterialCommunityIcons name="hand-wave" size={scale(26)} color="#F59E0B" style={{ transform: [{ rotate: '-10deg' }] }} />
+              <VerificationStatusBadge status={model.idVerificationStatus} onPress={() => model.setActiveOverlay('idVerification')} size={32} />
             </View>
           </View>
           <View
@@ -2209,27 +2211,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
           <TrackerCardsSkeleton />
         ) : (
           <>
-            {/* ── Current Streak Card wrapped in CoachMarkTarget ── */}
-            <CoachMarkTarget
-              name="ecoStreak"
-              borderRadius={moderateScale(24)}
-              active={model.coachMarksVisible && model.coachMarksCurrentStep === 2}
-              pollWhileActive={!model.coachMarksReplay}
-              onMeasure={(rect) => {
-                model.setSpotlightTargetRect?.(rect);
-              }}
-              style={{ marginBottom: verticalScale(20) }}
-            >
-              <SummaryCards
-                currentStreak={getDisplayStreak(model)}
-                streakActive={model.dashboard?.streakSummary?.active ?? false}
-                ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
-                onPressRewards={() => model.setActiveOverlay('streakRewards')}
-                onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
-                style={{ marginBottom: 0 }}
-              />
-            </CoachMarkTarget>
-
+            <TrackerStreakCard model={model} />
 
         {/* ── Level Progress Card ────────────────────────────────────────── */}
         <View style={{ marginTop: 24 }}>
@@ -2311,7 +2293,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
               <View style={{ width: '100%', minWidth: 0, alignItems: 'center' }}>
                 {(() => {
                   const currentStreak = getDisplayStreak(model);
-                  const isStreakActive = currentStreak >= 3 && (model.dashboard?.streakSummary?.active ?? false);
+                  const isStreakActive = currentStreak >= 1 && (model.dashboard?.streakSummary?.active ?? false);
 
                   return isStreakActive ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
@@ -2326,7 +2308,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                         {currentStreak > 0 ? `${currentStreak} ${currentStreak === 1 ? 'challenge' : 'challenges'} completed` : 'Start your challenge streak'}
                       </Text>
                       <Text style={{ fontSize: 12, color: theme.colors.textSecondary, textAlign: 'center' }}>
-                        {currentStreak === 0 ? 'Complete your first challenge.' : currentStreak < 3 ? `${3 - currentStreak} more ${3 - currentStreak === 1 ? 'challenge' : 'challenges'} to ignite your streak.` : 'Streak inactive. Your count is saved.'}
+                        {currentStreak === 0 ? 'Complete your first challenge and claim its reward to start the 7-day timer.' : 'Streak inactive. Your count is saved.'}
                       </Text>
                     </View>
                   );
@@ -2729,6 +2711,7 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
             </TouchableOpacity>
 
             <View style={profileStyles.profileMeta}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(2) }}>
               <Text
                 style={[profileStyles.profileName, isSmallDevice && { fontSize: responsiveFontSize(16), marginBottom: 1 }]}
                 numberOfLines={1}
@@ -2737,6 +2720,8 @@ export function ProfileView({ model }: { model: EcoBudMobileModel }) {
               >
                 {model.userDisplayName}
               </Text>
+              <VerificationStatusBadge status={model.idVerificationStatus} onPress={() => model.setActiveOverlay('idVerification')} size={26} />
+              </View>
               <Text
                 style={[profileStyles.profileEmail, isSmallDevice && { fontSize: responsiveFontSize(11), marginBottom: verticalScale(4) }]}
                 numberOfLines={1}

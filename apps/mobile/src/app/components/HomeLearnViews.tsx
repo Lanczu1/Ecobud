@@ -19,6 +19,7 @@ import { UpcomingEventCard } from './UpcomingEventCard';
 import { UnifiedProgressCard } from './UnifiedProgressCard';
 import { ForYouFeed } from './ForYouFeed';
 import { HomeAnnouncements } from './HomeAnnouncements';
+import { VerificationStatusBadge } from './VerificationStatusBadge';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
@@ -163,9 +164,12 @@ export const HomeView = React.memo(function HomeView({ model, section }: HomeDas
               {greeting!.text}
             </Text>
           </View>
-          <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary }]}>
-            {firstName}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>
+            <Text style={[styles.welcomeTitle, { marginTop: 0, color: theme.colors.textPrimary, flexShrink: 1 }]}>
+              {firstName}
+            </Text>
+            <VerificationStatusBadge status={model.idVerificationStatus} onPress={() => model.setActiveOverlay('idVerification')} size={32} />
+          </View>
           <Text style={[styles.welcomeSubtitle, { marginTop: verticalScale(4), marginBottom: 0, color: theme.colors.textMuted }]}>Great to see you again!</Text>
         </View>
 

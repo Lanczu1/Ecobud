@@ -6,7 +6,7 @@ export type HomeDashboardRowProps = { model: EcoBudMobileModel; section?: HomeDa
 export const HOME_DASHBOARD_ROWS: HomeDashboardSection[] = [0, 1, 2, 3];
 
 const rowDependencies: Record<HomeDashboardSection, readonly (keyof EcoBudMobileModel)[]> = {
-  0: ['userDisplayName', 'profile', 'session', 'notificationCount', 'hasUsableInternet', 'setActiveOverlay', 'setActiveTab'],
+  0: ['userDisplayName', 'idVerificationStatus', 'profile', 'session', 'notificationCount', 'hasUsableInternet', 'setActiveOverlay', 'setActiveTab'],
   1: ['todaysCompletedHabits', 'setActiveOverlay', 'setActiveTab'],
   2: ['dashboard', 'session', 'activeOverlay', 'earnedPoints', 'leaderboard', 'setActiveOverlay', 'setProgressBarLayout'],
   3: ['announcements', 'notificationDestination', 'setNotificationDestination', 'session', 'lessons', 'challenges', 'events', 'todaysCompletedHabits', 'openLesson', 'openChallengeMission', 'setActiveOverlay', 'setActiveTab'],

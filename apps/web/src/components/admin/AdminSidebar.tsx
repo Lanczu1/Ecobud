@@ -41,7 +41,6 @@ export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarPro
   const isModerator = user?.role === 'moderator';
 
   const visibleMenuItems = menuItems.filter((item) => {
-    if (item.name === 'Give and Get Hub' && !isModerator) return false;
     if (item.name === 'User Activity & Transactions' && user?.role !== 'admin') return false;
     if (!isModerator && item.name === 'ID Verification') return false;
     if (!isModerator && item.name === 'Notifications') return false;

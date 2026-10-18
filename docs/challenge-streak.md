@@ -1,5 +1,78 @@
 # Challenge streak
 
+## Current rule: timer starts on the first completion
+
+The first eligible completed challenge reward claim now ignites the flame and starts a seven-day timer. One or two completed challenges no longer wait for the third completion. Only a zero-challenge account shows Streak timer not started. Later eligible completions refresh the timer to seven days. When the timer expires, the flame becomes inactive and the lifetime challenge count remains saved.
+
+Existing one/two-challenge accounts use their persisted latest completion or restore timestamp. An upgrade does not restart the clock or modify user records. Restore is available after the first completion when inactive, with the existing three-use monthly limit. Bonus milestones remain 3, 10, 30, and 100 challenges; starting the timer at one does not award the three-challenge bonus.
+
+Yellow warnings remain active above 24 and up to 48 hours remaining. Red warnings apply at 24 hours or less. Both push stages now include residents with one or two completed challenges, with separate deduplication keys as before. The existing daytime delivery window and active-challenge requirement are retained.
+
+- Hard Gate PASS: 53 streak/countdown/reminder tests passed, along with API/mobile TypeScript checks and Android export. Tests cover first/second-completion activation, exact seven-day expiry, restore at counts one and two, monthly restore limits, unchanged milestones, both push stages, and duplicate prevention.
+- Purpose Gate PASS: Home, Tracker, calendar, reward panel, flame accessibility labels, and celebration copy consistently reflect first-completion activation. The calendar and flame no longer imply that one/two challenges are locked.
+- Liveliness PASS: existing EcoBud countdown design and ENERGY 1 / RHYTHM 2 / MOTION 1 retained, including yellow/red urgency palettes and the isolated live countdown.
+- Craftsmanship PASS for this scope: actual-component browser fixtures showed an active flame/countdown at one challenge, yellow at 48 hours and red at 24 hours for that account, inactive saved progress after expiry at two challenges, and the not-started state only at zero. Restore at one reactivated the flame/countdown while the next bonus stayed at three challenges. The first completion also triggers the existing queued streak celebration. Browser fixtures substitute labeled native flame/audio; push tests use mocked delivery, and no live device installation or push was performed.
+
+Preview: `apps/mobile/build/streak-expiry-preview/first-challenge-active.png`.
+
+Earlier three-challenge ignition references in the UI iteration history below describe the previous behavior. The current timer start threshold is one completed challenge.
+
+## Expiry warning in the mobile UI
+
+### Countdown and locked-state redesign
+
+The status panels now use a shared header, palette, action, and countdown layout. Active streaks show a days-remaining label above separate hours, minutes, and seconds blocks. The countdown reads the API expiry timestamp, updates each second only while its screen is active, and cleans up its interval when hidden or unmounted. These updates stay inside the countdown component. The screen-level status retains its slower refresh and schedules exact updates at the 48-hour, 24-hour, and expiry boundaries.
+
+Before ignition, the panel says Streak timer not started, highlights how many challenges remain, and shows three progress segments with the real completed count. It shows no countdown before the timer starts. Sync and inactive states retain their implemented actions and explanations. All panels still use View challenges to open the existing Challenges tab.
+
+Design read: existing EcoBud mobile activity status, ENERGY 1 / RHYTHM 2 / MOTION 1. The countdown is the active-state focal point; three progress segments explain the actual three-challenge threshold. Timer/alarm/lock icons identify the state. Tabular numerals prevent digit-width shifts; inset blocks align comparable time units. Green remains informational, yellow marks the early deadline, and red marks the final day. No decorative animation was added.
+
+- Hard Gate PASS: 42 streak/countdown/reminder tests, mobile TypeScript, and Android export passed. Browser fixtures checked the actual components at 320px and 375px. Countdown labels and body text wrapped within their panels. The action measured 48.8px high in the final browser fixture. All 15 muted-text/inset/button color pairs checked exceed 4.5:1, with a minimum of 5.17:1. Production time/count values come from server data; fixture screenshots are explicitly test data.
+- Purpose Gate PASS: time blocks distinguish hours/minutes/seconds, the day label prevents ambiguity over longer timers, and the locked-state progress explains the exact unlock requirement. State icons and colors identify actual conditions rather than decoration.
+- Liveliness PASS: declared 1/2/1 dials, existing EcoBud identity and typography, a prominent time display when active, and a different progress composition when locked.
+- Craftsmanship PASS for the changed scope: live seconds visibly advanced from 00 to 52 while minutes rolled from 30 to 29. View challenges was clicked from locked and countdown states and reached the fixture destination. The normal active state showed a countdown without a warning. The missing-expiry state retained Refresh streak and did not invent time. Light, dark, and onyx variants were exercised; 320px light rewards and 375px onyx Tracker layouts were visually checked. The clean final standalone preview logged no runtime errors. One MutationObserver error was recorded during earlier iframe navigation; no application MutationObserver code was introduced. Browser-native flame/audio remain labeled fixture substitutions, and device installation/playback was not performed.
+
+Redesign screenshots: `apps/mobile/build/streak-expiry-preview/locked-redesign.png` and `countdown-redesign.png`.
+
+### Yellow and red warning stages with separate pushes
+
+The shared warning on Tracker, the flame screen, and the rewards panel is yellow when more than 24 and at most 48 hours remain. It changes to red at exactly 24 hours and stays red until expiry. The red heading explicitly says Your streak expires within 24 hours, so urgency does not rely on color alone.
+
+The reminder scheduler queues one high-priority push/inbox notification for each stage in each activity window. The 1-day stage has a separate notification key and query filter, so the earlier 2-day reminder cannot suppress it. The original 2-day key is retained to avoid repeating reminders created before this change. Existing notification and delivery uniqueness constraints also protect against duplicate delivery jobs. A completion or restore starts a new reminder cycle; expired, locked, inactive-account, and recently renewed streaks do not receive obsolete warnings. The scheduler retains its 15-minute check interval, 8 AM to 8 PM Philippine delivery window, and available-challenge check.
+
+- Hard Gate PASS for the changed warning: 36 streak/reminder tests and API/mobile TypeScript checks passed. Browser fixtures verified yellow at 48 hours and red at 24 hours on Tracker, and red at 12 hours in the rewards panel. The 320px light layout and 375px onyx layout wrap without clipping the warning text. Red text contrast is 6.80:1 in light mode and 11.16:1 in dark/onyx; the light-mode action is 8.31:1. Actions retain their 48px minimum height.
+- Purpose Gate PASS: yellow marks the early warning and red marks the final day. An explicit urgency heading and remaining-time text explain the difference without depending on color alone.
+- Liveliness PASS: existing EcoBud composition retained, ENERGY 1 / RHYTHM 1 / MOTION 1 for the status panel, with no additional decoration or animation.
+- Craftsmanship PASS for this scope: View challenges was clicked from yellow and red Tracker warnings and reached the fixture destination. Tests cover exact boundaries, both reminders in order, repeated polls without duplicate sends, legacy reminder keys, restored/newly completed streaks, failed notification-creation retry, and batch filtering. Tests mock notification delivery; no live push was sent to a phone. Browser-native flame/audio fixtures remain explicitly labeled substitutions.
+
+Preview screenshots: `apps/mobile/build/streak-expiry-preview/streak-yellow.png` and `streak-red.png`.
+
+### Tracker placement and visible status for every streak state
+
+`TrackerStreakCard` now renders the existing Your Eco Streak card followed directly by its expiry section, before the level card. The same section appears below the hero in streak rewards and in the flame screen. With fewer than three completed challenges it says Streak timer not started and explains how to unlock it. Active streaks show the countdown even outside the warning window; the final 48 hours use the amber warning. Inactive streaks explain how to reactivate the flame. An older API without `expiresAt` shows an explicit sync message and refresh action instead of silently hiding the section or inventing a date.
+
+The Tracker retrieves the latest summary on activation, resumes syncing when the app returns to the foreground, and refreshes once per minute while visible. Cached dashboard data remains available during synchronization. Loading and sync failures have visible feedback and retry behavior. The summary drives both the Tracker flame and its expiry status. The original coach-mark target remains on the streak card.
+
+- Hard Gate PASS: mobile TypeScript and Android export passed; 19 streak expiry tests passed. Browser fixtures of the actual Tracker component verified the two-challenge state at 375px and active/inactive states at 320px. Text wraps below the card rather than overlapping the level card. Green status colors use dark text on light backgrounds and light text on dark backgrounds; the existing warning contrast and 48px action height are retained.
+- Purpose Gate PASS: the persistent status explains why a two-challenge account has no countdown; green communicates a normal or informational state and amber identifies actual approaching expiry. No artwork or motion was added.
+- Liveliness PASS: existing EcoBud streak-card direction retained, ENERGY 1 / RHYTHM 1 / MOTION 1 for the added status, with the timer or status heading as its focal point.
+- Craftsmanship PASS for this scope: View challenges was clicked from both locked and warning Tracker states and reached the fixture destination. Sync failure showed Retry streak sync; clicking it cleared the error. An older response showed Refresh streak and stayed honest about missing expiry metadata. Light, dark, and onyx were exercised with explicitly labeled fixtures. Native flames/audio were substituted only in the browser; the Android bundle contains the actual assets. Device installation and playback were not performed.
+
+Tracker screenshots: `apps/mobile/build/streak-expiry-preview/tracker-locked.png` and `tracker-warning.png`. Android export: `apps/mobile/build/streak-tracker-status-export/`.
+
+The flame screen and streak rewards panel show an amber warning during the final 48 hours of an active, unlocked streak. It displays remaining days/hours/minutes and a View challenges action that closes the overlay and opens the Challenges tab. The clock refreshes every 15 seconds while the app is active and immediately on resume. The warning disappears after expiry or when a completion/restore extends the deadline beyond 48 hours.
+
+The API summary now includes `expiresAt`, calculated seven days after the later of the most recent completed challenge and restore. This needs the updated API and mobile code together, without a database migration. Older summaries remain readable but do not display an estimated deadline. At expiry, the rewards panel refreshes its server state so restore eligibility is current.
+
+Design read: an activity warning within the existing EcoBud streak screens; ENERGY 1 / RHYTHM 1 / MOTION 1 for the new warning. Amber communicates a deadline, and the countdown is its focal point. No new animation or artwork was added.
+
+- Hard Gate PASS for the warning: 19 expiry tests, mobile/API TypeScript checks, and a browser bundle of the actual components passed. The button measures 48px tall. Browser verification showed wrapped content at 320px; the full-width fixture had no page overflow. Text contrast is 7.91:1 in light mode and 10.46:1 in dark/onyx, with 8.67:1 for the light-mode button. Real production deadlines come from the API; preview data is explicitly labeled.
+- Purpose Gate PASS: the amber panel identifies approaching expiry, the countdown gives remaining time, and View challenges leads to the action that keeps the streak active.
+- Liveliness PASS: declared 1/1/1 dials, existing EcoBud flame identity and typography retained, with a readable countdown and no extra motion.
+- Craftsmanship PASS for the changed scope: View challenges was clicked from both actual overlay components and reached the fixture's Challenges destination. Active 72-hour and expired states showed no warning. Restore reactivated the flame and removed the warning. Light, dark, and onyx were checked using explicit API fixtures. The browser substitutes labeled native animation/audio fixtures; it logged existing React Native Web animation/pointer-events warnings, with no final-page runtime errors. Native device behavior was not independently exercised.
+
+The fixture and screenshot are in `apps/mobile/build/streak-expiry-preview/`. They are ignored build artifacts and contain test data rather than live user records.
+
 Completed challenge reward claims increment the lifetime challenge count once per challenge instance. Lessons, habits, events, and repeat submissions do not increment it. Multiple challenges on the same day each count.
 
 | Completed challenges | Bonus points | Bonus eco coins | Badge |
@@ -11,7 +84,7 @@ Completed challenge reward claims increment the lifetime challenge count once pe
 
 These are the suggested initial amounts. Rewards are automatic and awarded once per milestone, in the same transaction as the challenge reward. A unique milestone record and user row lock prevent duplicate awards.
 
-The flame unlocks at three completed challenges. Counts of zero, one, or two show the gray flame and progress toward ignition. Once unlocked, the flame turns gray exactly seven days after the latest challenge completion or restore. Inactivity never deletes the count. A completed challenge reactivates an unlocked flame. Restore changes only its active status for seven days, adds no rewards or challenges, and is limited to three uses per calendar month in Asia/Manila. Unused restores do not carry over; active retries do not consume another use.
+The flame starts at one completed challenge. A count of zero shows the gray flame and the first-completion instruction. Once started, the flame turns gray exactly seven days after the latest challenge completion or restore. Inactivity never deletes the count. A completed challenge reactivates the flame. Restore changes only its active status for seven days, adds no rewards or challenges, and is limited to three uses per calendar month in Asia/Manila. Unused restores do not carry over; active retries do not consume another use.
 
 ## Migration and activation
 
