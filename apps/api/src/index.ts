@@ -6,6 +6,7 @@ import { idVerificationRoutes } from './routes/idVerificationRoutes';
 import { announcementAdminRoutes, announcementResidentRoutes } from './routes/announcementRoutes';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationService';
 import { startStreakReminderScheduler, stopStreakReminderScheduler } from './services/streakReminderScheduler';
+import { startEventStartScheduler, stopEventStartScheduler } from './services/eventStartScheduler';
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
@@ -257,6 +258,7 @@ startPresenceCleanupScheduler();
 startLessonPublishScheduler(); startNotificationWorker(); startIdDocumentCleanup();
 startAdminNotificationWorker();
 startStreakReminderScheduler();
+startEventStartScheduler();
 
 let shuttingDown = false;
 const shutdownSchedulers = () => {
@@ -266,6 +268,7 @@ const shutdownSchedulers = () => {
   stopLessonPublishScheduler(); stopNotificationWorker(); stopIdDocumentCleanup();
   stopAdminNotificationWorker();
   stopStreakReminderScheduler();
+  stopEventStartScheduler();
   server.close(() => {
     void prisma.$disconnect().finally(() => process.exit(0));
   });

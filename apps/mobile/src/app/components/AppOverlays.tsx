@@ -39,7 +39,7 @@ import { Text, TouchableOpacity, TextInput } from '../../shared/accessibility/pr
 import { Animated } from '../../shared/accessibility/animations';
 import { useResponsive, responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { isLowEndDevice } from '../../shared/performance/deviceTier';
+import { useLiteMode } from '../../shared/performance/deviceTier';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { getLessonDownloadProps } from './LearnLessonCard';
 import { ConnectionErrorCard } from '../../shared/ui/ConnectionErrorCard';
@@ -1603,8 +1603,12 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const setActiveOverlay = model.setActiveOverlay;
 
   const playPopSound = () => {
-    player.seekTo(0);
-    player.play();
+    try {
+      player.seekTo(0);
+      player.play();
+    } catch {
+      // The overlay may close before a scheduled sound cue runs.
+    }
   };
 
   const { width, height } = useWindowDimensions();
@@ -1618,7 +1622,8 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   const topDestinationY = Math.max(insets.top, height * 0.08) - particleOffset;
   const sideInset = width * 0.12;
 
-  const numParticles = isLowEndDevice() ? 12 : 24;
+  const budget = useCelebrationBudget(24);
+  const numParticles = budget.particles;
   const particleAnims = React.useRef(
     Array.from({ length: numParticles }, () => ({
       pos: new Animated.ValueXY({ x: originX, y: originY }),
@@ -1630,7 +1635,8 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
   React.useEffect(() => {
     particleAnims.forEach((particle) => {
       particle.pos.setValue({ x: originX, y: originY });
-      particle.scale.setValue(0);
+      // Lite mode skips the grow-in, one animated value less per particle.
+      particle.scale.setValue(budget.lite ? 1 : 0);
       particle.opacity.setValue(0);
     });
 
@@ -1653,11 +1659,11 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
             easing: Easing.inOut(Easing.cubic),
             useNativeDriver: true,
           }),
-          Animated.timing(particle.scale, {
+          ...(budget.lite ? [] : [Animated.timing(particle.scale, {
             toValue: 1,
             duration: 420,
             useNativeDriver: true,
-          }),
+          })]),
           Animated.sequence([
             Animated.timing(particle.opacity, { toValue: 1, duration: 140, useNativeDriver: true }),
             Animated.delay(420),
@@ -1671,13 +1677,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
       ]);
     });
 
-    const timers = [
-      setTimeout(() => playPopSound(), 80),
-      setTimeout(() => playPopSound(), 250),
-      setTimeout(() => playPopSound(), 420),
-      setTimeout(() => playPopSound(), 590),
-      setTimeout(() => playPopSound(), 760),
-    ];
+    const timers = budget.popDelays.map(delay => setTimeout(() => playPopSound(), delay));
 
     Animated.parallel(animations).start(({ finished }) => {
       if (!finished) return;
@@ -1688,7 +1688,7 @@ export function ClaimParticlesOverlay({ model }: { model: EcoBudMobileModel }) {
     return () => {
       timers.forEach((t) => clearTimeout(t));
     };
-  }, [numParticles, originX, originY, particleAnims, profileTarget?.x, profileTarget?.y, setActiveOverlay, sideInset, topDestinationY, width]);
+  }, [budget, numParticles, originX, originY, particleAnims, profileTarget?.x, profileTarget?.y, setActiveOverlay, sideInset, topDestinationY, width]);
 
   return (
     <View
@@ -5257,6 +5257,25 @@ function ExpCounter({ targetPoints, compact = false }: { targetPoints: number; c
 type ProgressBarLayout = { x: number; y: number; width: number; height: number };
 type RewardParticle = { pos: Animated.ValueXY; scale: Animated.Value; opacity: Animated.Value };
 
+/**
+ * How much a reward celebration may draw. Low-end phones, and anyone who turned on "Optimize performance",
+ * get a short version: fewer particles on a single straight flight, two sound cues instead of five, less
+ * confetti, no embers and no endlessly looping rings, so the claim lands smoothly instead of stuttering.
+ */
+function useCelebrationBudget(fullParticles: number) {
+  const lite = useLiteMode();
+  return React.useMemo(() => lite
+    ? { lite, particles: Math.min(8, fullParticles), confetti: 8, embers: 0, popDelays: [100, 500] }
+    : { lite, particles: fullParticles, confetti: 20, embers: 6, popDelays: [100, 350, 600, 850, 1100] },
+  [lite, fullParticles]);
+}
+
+// Looping decorations stop once the reward particles take off, so the device spends its frames on the flight.
+function stopLoops(loops: React.MutableRefObject<Animated.CompositeAnimation[]>) {
+  loops.current.forEach(loop => loop.stop());
+  loops.current = [];
+}
+
 // Brings the home level card into view, then waits until its bar reports the same spot twice in a row.
 async function measureHomeProgressBar(read: () => ProgressBarLayout | null): Promise<ProgressBarLayout | null> {
   let previousY: number | null = null;
@@ -5272,14 +5291,30 @@ async function measureHomeProgressBar(read: () => ProgressBarLayout | null): Pro
   return null;
 }
 
-// One reward particle: bursts out from the origin, then arcs to its landing point.
+// One reward particle: bursts out from the origin, then arcs to its landing point. In lite mode it flies
+// straight there in one step, which needs a third of the animated values.
 function rewardParticleFlight(
   particle: RewardParticle,
   index: number,
   count: number,
   origin: { x: number; y: number },
   landing: { x: number; y: number },
+  lite = false,
 ) {
+  if (lite) {
+    particle.scale.setValue(1);
+    return Animated.sequence([
+      Animated.delay(index * 60),
+      Animated.parallel([
+        Animated.timing(particle.pos, { toValue: landing, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.sequence([
+          Animated.timing(particle.opacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+          Animated.delay(400),
+          Animated.timing(particle.opacity, { toValue: 0, duration: 130, useNativeDriver: true }),
+        ]),
+      ]),
+    ]);
+  }
   const flightDuration = 720;
   const angle = (Math.PI * 2 * index) / count + (Math.random() - 0.5) * 0.4;
   const radius = scale(70) + Math.random() * scale(50);
@@ -5372,7 +5407,9 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   const bgOpacity = React.useRef(new Animated.Value(1)).current;
 
   const [isAnimatingPoints, setIsAnimatingPoints] = React.useState(false);
-  const numParticles = model.completionCelebrationType === 'claim' ? 24 : 12;
+  const budget = useCelebrationBudget(model.completionCelebrationType === 'claim' ? 24 : 12);
+  const numParticles = budget.particles;
+  const loopsRef = React.useRef<Animated.CompositeAnimation[]>([]);
   const particleAnims = React.useRef(
     Array.from({ length: 24 }, () => ({
       pos: new Animated.ValueXY({ x: 0, y: 0 }),
@@ -5384,6 +5421,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
   const startPointsAnimation = () => {
     if (animationStartedRef.current) return;
     animationStartedRef.current = true;
+    stopLoops(loopsRef);
     triggerSuccessHaptic();
     const originPromise = new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
       const originView = rewardOriginRef.current;
@@ -5443,9 +5481,10 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
       const animations = particleAnims.slice(0, numParticles).map((particle, index) => rewardParticleFlight(
         particle, index, numParticles, { x: originX, y: originY },
         { x: targetX + (Math.random() - 0.5) * landingSpread, y: targetY },
+        budget.lite,
       ));
 
-      [100, 350, 600, 850, 1100].forEach((delay) => {
+      budget.popDelays.forEach((delay) => {
         pendingTimeoutsRef.current.push(setTimeout(playPopSound, delay));
       });
 
@@ -5487,37 +5526,41 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
       ]),
     ]).start();
 
-    // Rotating Ring around Checkmark
-    Animated.loop(
-      Animated.timing(checkRotate, {
-        toValue: 1,
-        duration: 8000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // The rotating ring and breathing glow run without end, so lite mode leaves them still.
+    if (!budget.lite) {
+      loopsRef.current = [
+        // Rotating Ring around Checkmark
+        Animated.loop(
+          Animated.timing(checkRotate, {
+            toValue: 1,
+            duration: 8000,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        ),
+        // Breathing Glow of Outer Badge
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowScale, {
+              toValue: 1.1,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowScale, {
+              toValue: 0.9,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+          ])
+        ),
+      ];
+      loopsRef.current.forEach(loop => loop.start());
+    }
+    return () => stopLoops(loopsRef);
+  }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse, budget.lite]);
 
-    // Breathing Glow of Outer Badge
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowScale, {
-          toValue: 1.1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowScale, {
-          toValue: 0.9,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-
-  }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse]);
-
-  const confettiPieces = React.useMemo(() => generateConfettiPieces(isLowEndDevice() ? 10 : 20), []);
-  const embers = React.useMemo(() => generateEmbers(isLowEndDevice() ? 3 : 6), []);
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(budget.confetti), [budget.confetti]);
+  const embers = React.useMemo(() => generateEmbers(budget.embers), [budget.embers]);
 
   return (
     <View style={[styles.fullscreenOverlay, isAnimatingPoints && { backgroundColor: 'transparent' }]}>
@@ -5794,7 +5837,7 @@ export function LessonCompleteOverlay({ model }: { model: EcoBudMobileModel }) {
       </Animated.View>
 
       <View ref={particleLayerRef} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none">
-        {particleAnims.map((particle, index) => (
+        {particleAnims.slice(0, numParticles).map((particle, index) => (
           <Animated.View
             key={index}
             renderToHardwareTextureAndroid
@@ -5836,8 +5879,12 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const [continueStarted, setContinueStarted] = React.useState(false);
 
   const playPopSound = () => {
-    player.seekTo(0);
-    player.play();
+    try {
+      player.seekTo(0);
+      player.play();
+    } catch {
+      // The overlay may close before a scheduled sound cue runs.
+    }
   };
 
   const { width, height } = useWindowDimensions();
@@ -5870,9 +5917,11 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const bgOpacity = React.useRef(new Animated.Value(1)).current;
 
   const [isAnimatingPoints, setIsAnimatingPoints] = React.useState(false);
-  const numParticles = 24;
+  const budget = useCelebrationBudget(24);
+  const numParticles = budget.particles;
+  const loopsRef = React.useRef<Animated.CompositeAnimation[]>([]);
   const particleAnims = React.useRef(
-    Array.from({ length: numParticles }, () => ({
+    Array.from({ length: 24 }, () => ({
       pos: new Animated.ValueXY({ x: width / 2 - 15, y: height / 2 - 80 }),
       scale: new Animated.Value(0),
       opacity: new Animated.Value(0),
@@ -5882,6 +5931,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
   const startPointsAnimation = () => {
     if (animationStartedRef.current) return;
     animationStartedRef.current = true;
+    stopLoops(loopsRef);
     setContinueStarted(true);
     model.setActiveTab('home', true);
 
@@ -5906,16 +5956,13 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
       }))).start();
 
       // Leaves land on the level bar; coins leave toward the top-right.
-      const animations = particleAnims.map((particle, index) => rewardParticleFlight(
+      const animations = particleAnims.slice(0, numParticles).map((particle, index) => rewardParticleFlight(
         particle, index, numParticles, origin,
         index % 2 !== 0 ? { x: width + 100, y: 150 } : { x: barX + (Math.random() * 40 - 20), y: barY },
+        budget.lite,
       ));
 
-      setTimeout(() => playPopSound(), 100);
-      setTimeout(() => playPopSound(), 350);
-      setTimeout(() => playPopSound(), 600);
-      setTimeout(() => playPopSound(), 850);
-      setTimeout(() => playPopSound(), 1100);
+      budget.popDelays.forEach(delay => pendingTimeoutsRef.current.push(setTimeout(playPopSound, delay)));
 
       Animated.parallel(animations).start(() => {
         model.setActiveOverlay(null);
@@ -5954,33 +6001,43 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
       ]),
     ]).start();
 
-    Animated.loop(
-      Animated.timing(checkRotate, {
-        toValue: 1,
-        duration: 8000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // The rotating ring and breathing glow run without end, so lite mode leaves them still.
+    if (!budget.lite) {
+      loopsRef.current = [
+        Animated.loop(
+          Animated.timing(checkRotate, {
+            toValue: 1,
+            duration: 8000,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        ),
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowScale, {
+              toValue: 1.1,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowScale, {
+              toValue: 0.9,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+          ])
+        ),
+      ];
+      loopsRef.current.forEach(loop => loop.start());
+    }
+    return () => stopLoops(loopsRef);
+  }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse, budget.lite]);
 
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowScale, {
-          toValue: 1.1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowScale, {
-          toValue: 0.9,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [contentScale, contentOpacity, checkScale, shineAnim, checkRotate, glowScale, btnPulse]);
+  // Sound cues still pending when the overlay closes are cancelled with it.
+  const pendingTimeoutsRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+  React.useEffect(() => () => pendingTimeoutsRef.current.forEach(clearTimeout), []);
 
-  const confettiPieces = React.useMemo(() => generateConfettiPieces(20), []);
-  const embers = React.useMemo(() => generateEmbers(6), []);
+  const confettiPieces = React.useMemo(() => generateConfettiPieces(budget.confetti), [budget.confetti]);
+  const embers = React.useMemo(() => generateEmbers(budget.embers), [budget.embers]);
 
   return (
     <View style={[styles.fullscreenOverlay, isAnimatingPoints && { backgroundColor: 'transparent' }]}>
@@ -6243,7 +6300,7 @@ export function EventApprovedOverlay({ model }: { model: EcoBudMobileModel }) {
       </Animated.View>
 
       <View ref={particleLayerRef} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none">
-        {particleAnims.map((particle, index) => (
+        {particleAnims.slice(0, numParticles).map((particle, index) => (
           <Animated.View
             key={index}
             renderToHardwareTextureAndroid
