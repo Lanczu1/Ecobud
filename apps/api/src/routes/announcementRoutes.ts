@@ -3,7 +3,8 @@ import { prisma } from '../prismaClient';
 import { authenticateRequest, requireModeratorAccess, AuthenticatedRequest } from '../http/authentication';
 import { z } from 'zod';
 import { errorBoundary, HttpError } from '../http/errorResponder';
-import { announcementSchema, effectiveAnnouncementStatus } from '../services/announcementRules';
+import { announcementSchema, destinationKinds, effectiveAnnouncementStatus, storedActionValue } from '../services/announcementRules';
+import { assertDestination, findDestinations } from '../services/announcementDestinations';
 import { challengeUploadMiddleware } from '../http/uploadMiddleware';
 import { AdminController } from '../controllers/adminController';
 import { BARANGAYS } from '../utils/announcementBarangays';
@@ -36,6 +37,26 @@ async function editableAnnouncement(req: AuthenticatedRequest) {
 }
 announcementAdminRoutes.get('/barangays', errorBoundary<AuthenticatedRequest>(async (req, res) => {
   res.json({ items: BARANGAYS, assignedBarangay: assignedBarangay(req), canCreate: req.auth!.role === 'admin' || !!assignedBarangay(req) });
+}));
+// Destinations for the action button, searched by title. A moderator always posts to their own barangay,
+// so availability is judged for that audience whatever the request says.
+const destinationQuery = z.object({
+  type: z.enum(['challenge', 'event', 'lesson']),
+  search: z.string().trim().max(100).optional(),
+  id: z.string().trim().min(1).max(128).optional(),
+  targetAudience: z.enum(['All Residents', 'Specific Barangay', 'Multiple Barangays']).default('All Residents'),
+  barangays: z.string().max(5000).optional(),
+  publishAt: z.string().datetime().optional(),
+});
+announcementAdminRoutes.get('/destinations', errorBoundary<AuthenticatedRequest>(async (req, res) => {
+  const query = destinationQuery.parse(req.query);
+  const barangay = assignedBarangay(req);
+  if (req.auth!.role === 'moderator' && !barangay) throw new HttpError(403, 'Your moderator account needs an assigned barangay.');
+  const audience = req.auth!.role === 'moderator'
+    ? { targetAudience: 'Specific Barangay', barangays: [barangay!] }
+    : { targetAudience: query.targetAudience, barangays: query.targetAudience === 'All Residents' ? [] : (query.barangays ?? '').split(',').map(b => b.trim()).filter(Boolean) };
+  const at = query.publishAt && Date.parse(query.publishAt) > Date.now() ? new Date(query.publishAt) : new Date();
+  res.json({ items: await findDestinations(query.type, { search: query.search, id: query.id, audience, at }) });
 }));
 announcementAdminRoutes.get('/:id', errorBoundary<AuthenticatedRequest>(async (req,res) => {
   const item=await prisma.announcement.findUnique({ where:{ id:req.params.id },include });
@@ -101,20 +122,17 @@ async function prepare(input: ReturnType<typeof announcementSchema.parse>) {
   if (barangays.length) {
     if (barangays.some(b => !BARANGAYS.some(known => known === b))) throw new HttpError(400, 'Choose a valid Nagcarlan barangay.');
   }
-  const targets = { 'View Eco Challenge': prisma.challenge, 'View Eco Event': prisma.event, 'View Learning Module': prisma.lesson, 'View Rewards': prisma.redeemItem };
-  const target = targets[input.ctaType as keyof typeof targets];
-  if (target) {
-    const id = input.ctaValue!;
-    const found = input.ctaType === 'View Eco Challenge' ? await prisma.challenge.findUnique({ where: { id } })
-      : input.ctaType === 'View Eco Event' ? await prisma.event.findUnique({ where: { id } })
-      : input.ctaType === 'View Learning Module' ? await prisma.lesson.findUnique({ where: { id } })
-      : await prisma.redeemItem.findUnique({ where: { id } });
-    if (!found) throw new HttpError(400, 'The action destination does not exist.');
+  const publishAt = input.status === 'Published' ? new Date() : input.publishAt ? new Date(input.publishAt) : null;
+  const kind = destinationKinds[input.ctaType as keyof typeof destinationKinds];
+  if (kind) {
+    // Residents first see the button when the announcement goes live; drafts only need the record to exist.
+    const liveAt = input.status === 'Published' || input.status === 'Scheduled' ? publishAt ?? new Date() : null;
+    await assertDestination(kind, input.ctaValue!, { targetAudience: input.targetAudience, barangays }, liveAt);
   }
   const images = [...new Set(input.images ?? (input.image ? [input.image] : []))];
-  return { ...input, images, image: images[0] ?? null, barangays, publishAt: input.status === 'Published' ? new Date() : input.publishAt ? new Date(input.publishAt) : null,
+  return { ...input, images, image: images[0] ?? null, barangays, publishAt,
     expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-    ctaLabel: input.ctaType === 'No Action' ? null : input.ctaLabel, ctaValue: input.ctaType === 'No Action' ? null : input.ctaValue };
+    ctaLabel: input.ctaType === 'No Action' ? null : input.ctaLabel, ctaValue: storedActionValue(input.ctaType, input.ctaValue) };
 }
 
 export const announcementResidentRoutes = Router();

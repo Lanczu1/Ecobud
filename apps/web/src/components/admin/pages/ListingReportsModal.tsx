@@ -60,7 +60,7 @@ export function ListingReportsModal({ listing, onClose }: { listing: { id: strin
         if (liveKey.current === key) setData(current => JSON.stringify(current) === JSON.stringify(result) ? current : result);
       })
       .catch(() => {});
-  });
+  }, true, ['giveget']);
   return createPortal(
     <div className={`listing-reports-overlay fixed inset-0 z-9999 flex items-center justify-center bg-black/60 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={close}>
       <div role="dialog" aria-modal="true" aria-labelledby="listing-reports-title" className={`listing-reports-dialog flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-xl dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 ${closing ? 'animate-modal-exit' : 'animate-modal'}`} onClick={event => event.stopPropagation()} onKeyDown={event => {

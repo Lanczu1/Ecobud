@@ -1,8 +1,14 @@
+import type { CSSProperties } from 'react';
+
 // Kept out of the admin pages so the app can show these while a page's code is still downloading.
 
-export function Skeleton({ className = '' }: { className?: string }) {
-  return <div aria-hidden="true" className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded ${className}`} />;
+/** The one placeholder block every admin skeleton is built from. */
+export function Skeleton({ className = '', style }: { className?: string; style?: CSSProperties }) {
+  return <div aria-hidden="true" className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded ${className}`} style={style} />;
 }
+
+// Announced to screen readers only when standing alone; inside a page skeleton the page announces itself.
+const statusProps = (label?: string) => label ? { role: 'status', 'aria-label': label } : {};
 
 const CELL_WIDTHS = ['w-40', 'w-24', 'w-20', 'w-28', 'w-16', 'w-24', 'w-20', 'w-16', 'w-12'];
 
@@ -51,8 +57,8 @@ export function StatCardsSkeleton({ count = 4 }: { count?: number }) {
 }
 
 /** Image cards in a responsive grid, as on Events, Give and Get Hub and Redeem. */
-export function CardGridSkeleton({ count = 6 }: { count?: number }) {
-  return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+export function CardGridSkeleton({ count = 6, label }: { count?: number; label?: string }) {
+  return <div {...statusProps(label)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
     {Array.from({ length: count }).map((_, i) => (
       <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
         <Skeleton className="h-32 w-full rounded-none" />
@@ -68,8 +74,8 @@ export function CardGridSkeleton({ count = 6 }: { count?: number }) {
 }
 
 /** Stacked rows, as on ID Verification and Announcements. */
-export function RowListSkeleton({ count = 4 }: { count?: number }) {
-  return <div className="space-y-4">
+export function RowListSkeleton({ count = 4, label }: { count?: number; label?: string }) {
+  return <div {...statusProps(label)} className="space-y-4">
     {Array.from({ length: count }).map((_, i) => (
       <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
         <div className="flex items-center gap-4">

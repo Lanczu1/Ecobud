@@ -1,14 +1,30 @@
 export const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:3000';
 const API_BASE = `${API_HOST}/api`;
 
+function newClientId() {
+  try { return crypto.randomUUID(); }
+  catch { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`; }
+}
+
+/** This tab's id. The server echoes it on live pushes, so the tab can tell its own changes from other people's. */
+export const ADMIN_CLIENT_ID = newClientId();
+
 function getToken(): string {
   return localStorage.getItem('ecobud_admin_token') || '';
 }
 
-function authHeaders(): HeadersInit {
+function authHeaders(): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${getToken()}`,
+    'X-Admin-Client': ADMIN_CLIENT_ID,
+  };
+}
+
+function formHeaders(): Record<string, string> {
+  return {
+    Authorization: `Bearer ${getToken()}`,
+    'X-Admin-Client': ADMIN_CLIENT_ID,
   };
 }
 
@@ -37,185 +53,158 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json();
 }
 
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
+// One store of read answers for the session. Each keeps the raw body, so every caller parses its own copy,
+// and the ETag, so a refresh the server answers with 304 costs no body.
+//  - fresh (under 15s, not cleared): reads without bypassCache use it instead of asking again;
+//  - any age: pages open with it at once and refresh behind it (getLastAdminData);
+//  - clearing marks entries stale rather than dropping them, so the next read still asks the server.
+interface StoredResponse {
+  path: string;
+  body: string;
+  etag: string | null;
+  startedAt: number;
+  receivedAt: number;
+  stale: boolean;
 }
 
-const memoryCache = new Map<string, CacheEntry<any>>();
-const inFlightRequests = new Map<string, Promise<any>>();
-const CACHE_TTL_MS = 15_000;
+const FRESH_MS = 15_000;
+const MAX_STORED = 120;
+const MAX_STORED_CHARS = 2_000_000;
+const responses = new Map<string, StoredResponse>();
+const inFlightRequests = new Map<string, { promise: Promise<unknown>; startedAt: number }>();
 
-// Last body received per read, kept as text so each caller gets its own parsed copy.
-// It outlives clearAdminApiCache on purpose: a refresh still asks the server, which
-// answers 304 with no body when nothing changed.
-const CONDITIONAL_READ_MAX_ENTRIES = 80;
-const CONDITIONAL_READ_MAX_CHARS = 1_000_000;
-const conditionalReads = new Map<string, { etag: string; body: string }>();
+// After this tab changes something, the server pushes that change back to it. Reads the tab made after its
+// change finished already include it, so for a short while those answers are reused instead of fetched again.
+let lastOwnWriteAt = 0;
+let reuseOwnUntil = 0;
+const OWN_PUSH_REUSE_MS = 3_000;
+
+const storeKey = (path: string) => `${getToken()}:${path}`;
+
+function remember(key: string, entry: StoredResponse) {
+  responses.delete(key);
+  responses.set(key, entry);
+  while (responses.size > MAX_STORED) {
+    const oldest = responses.keys().next().value;
+    if (oldest === undefined) break;
+    responses.delete(oldest);
+  }
+}
 
 export function invalidateAdminApiPath(path: string) {
   clearAdminApiCache(path);
 }
 
+/** Makes stored answers (all, or those under pathPrefix) stale, so the next read asks the server. */
 export function clearAdminApiCache(pathPrefix?: string) {
-  if (!pathPrefix) {
-    memoryCache.clear();
-    return;
-  }
-  for (const key of memoryCache.keys()) {
-    if (key.startsWith(pathPrefix)) {
-      memoryCache.delete(key);
-    }
+  for (const entry of responses.values()) {
+    if (!pathPrefix || entry.path.startsWith(pathPrefix)) entry.stale = true;
   }
 }
 
-// The last answer per read for this session, however old. A page opens with it straight away
-// and refreshes behind it, so revisiting a page never waits on the network. Cache clears do not
-// touch it: the page always asks the server again after showing it.
-const LAST_RESPONSE_MAX_ENTRIES = 120;
-const lastResponses = new Map<string, unknown>();
-
-function rememberResponse(path: string, data: unknown) {
-  const key = `${getToken()}:${path}`;
-  lastResponses.delete(key);
-  lastResponses.set(key, data);
-  while (lastResponses.size > LAST_RESPONSE_MAX_ENTRIES) {
-    const oldest = lastResponses.keys().next().value;
-    if (oldest === undefined) break;
-    lastResponses.delete(oldest);
-  }
+/** A push carried only this tab's own changes: reuse what was read after them for a moment. */
+export function markOwnChangePush() {
+  reuseOwnUntil = Date.now() + OWN_PUSH_REUSE_MS;
 }
 
-/** The last data this session received for path, or null. It may be stale; refresh after showing it. */
-export function getLastAdminData<T>(path: string): T | null {
-  return (lastResponses.get(`${getToken()}:${path}`) as T | undefined) ?? null;
+/** A push carried someone else's change (or an unknown one): every stored answer is out of date. */
+export function markForeignChangePush() {
+  reuseOwnUntil = 0;
+  clearAdminApiCache();
 }
 
+/** The answer for path if it is under 15 seconds old and nothing has changed since, or null. */
 export function getCachedAdminData<T>(path: string): T | null {
-  const entry = memoryCache.get(path);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
-    memoryCache.delete(path);
-    return null;
-  }
-  return entry.data as T;
+  const entry = responses.get(storeKey(path));
+  if (!entry || entry.stale || Date.now() - entry.receivedAt > FRESH_MS) return null;
+  return JSON.parse(entry.body) as T;
+}
+
+/** The last answer this session received for path, however old, or null. Show it, then refresh. */
+export function getLastAdminData<T>(path: string): T | null {
+  const entry = responses.get(storeKey(path));
+  return entry ? JSON.parse(entry.body) as T : null;
 }
 
 export async function adminGet<T>(path: string, options?: { bypassCache?: boolean }): Promise<T> {
+  const key = storeKey(path);
+  const stored = responses.get(key);
+
+  // Screens clear their own paths before reloading, so staleness is ignored here: what counts is that the
+  // answer was read after this tab's change, and that no one else's change has arrived since (which ends reuse).
+  if (Date.now() < reuseOwnUntil) {
+    if (stored && stored.startedAt >= lastOwnWriteAt) return JSON.parse(stored.body) as T;
+    const running = inFlightRequests.get(key);
+    if (running && running.startedAt >= lastOwnWriteAt) return running.promise as Promise<T>;
+  }
+
   if (!options?.bypassCache) {
-    const cached = getCachedAdminData<T>(path);
-    if (cached !== null) {
-      return cached;
-    }
+    if (stored && !stored.stale && Date.now() - stored.receivedAt <= FRESH_MS) return JSON.parse(stored.body) as T;
+    // Request deduplication: an identical read already on its way is shared unless a fresh read was asked for.
+    const running = inFlightRequests.get(key);
+    if (running) return running.promise as Promise<T>;
   }
 
-  // Request deduplication: if identical path is already in flight, reuse it unless a fresh read was requested.
-  if (inFlightRequests.has(path) && !options?.bypassCache) {
-    return inFlightRequests.get(path)!;
-  }
-
+  const startedAt = Date.now();
   const fetchPromise = (async () => {
-    const readKey = `${getToken()}:${path}`;
-    const remembered = conditionalReads.get(readKey);
-    const headers = { ...(authHeaders() as Record<string, string>) };
-    if (remembered) headers['If-None-Match'] = remembered.etag;
+    const headers = authHeaders();
+    if (stored?.etag) headers['If-None-Match'] = stored.etag;
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'GET',
       headers,
       cache: 'no-store',
     });
-    if (remembered && res.status === 304) return JSON.parse(remembered.body) as T;
-    if (!res.ok || res.status === 204) return handleResponse<T>(res);
-    const body = await res.text();
-    const etag = res.headers.get('ETag');
-    conditionalReads.delete(readKey);
-    if (etag && body.length <= CONDITIONAL_READ_MAX_CHARS) {
-      conditionalReads.set(readKey, { etag, body });
-      while (conditionalReads.size > CONDITIONAL_READ_MAX_ENTRIES) {
-        const oldest = conditionalReads.keys().next().value;
-        if (oldest === undefined) break;
-        conditionalReads.delete(oldest);
-      }
-    }
-    return JSON.parse(body) as T;
+    if (stored?.etag && res.status === 304) return { body: stored.body, etag: stored.etag };
+    if (!res.ok || res.status === 204) return { data: await handleResponse<T>(res) };
+    return { body: await res.text(), etag: res.headers.get('ETag') };
   })();
-  inFlightRequests.set(path, fetchPromise);
+  const parsed = fetchPromise.then(result => 'data' in result ? result.data as T : JSON.parse(result.body) as T);
+  // Callers that share this read still get its error; this only stops an unhandled-rejection report.
+  parsed.catch(() => {});
+  inFlightRequests.set(key, { promise: parsed, startedAt });
   try {
-    const data = await fetchPromise;
+    const result = await fetchPromise;
     // A newer fresh read for the same path supersedes this one; keep its answer, not this older one.
-    if (inFlightRequests.get(path) === fetchPromise) {
-      memoryCache.set(path, { data, timestamp: Date.now() });
-      rememberResponse(path, data);
+    if ('body' in result && inFlightRequests.get(key)?.promise === parsed && result.body.length <= MAX_STORED_CHARS) {
+      remember(key, { path, body: result.body, etag: result.etag, startedAt, receivedAt: Date.now(), stale: false });
     }
-    return data;
+    return await parsed;
   } finally {
-    if (inFlightRequests.get(path) === fetchPromise) inFlightRequests.delete(path);
+    if (inFlightRequests.get(key)?.promise === parsed) inFlightRequests.delete(key);
   }
 }
 
-export async function adminPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
-  clearAdminApiCache();
-  return handleResponse<T>(res);
+async function adminWrite<T>(path: string, init: RequestInit): Promise<T> {
+  try {
+    return await handleResponse<T>(await fetch(`${API_BASE}${path}`, init));
+  } finally {
+    lastOwnWriteAt = Date.now();
+    clearAdminApiCache();
+  }
 }
 
-export async function adminPut<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
-  clearAdminApiCache();
-  return handleResponse<T>(res);
+export function adminPost<T>(path: string, body: unknown): Promise<T> {
+  return adminWrite<T>(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
 }
 
-export async function adminPatch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
-  clearAdminApiCache();
-  return handleResponse<T>(res);
+export function adminPut<T>(path: string, body: unknown): Promise<T> {
+  return adminWrite<T>(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
 }
 
-export async function adminPostForm<T>(path: string, body: FormData): Promise<T> {
-  const headers: HeadersInit = {
-    Authorization: `Bearer ${getToken()}`,
-  };
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers,
-    body,
-  });
-  clearAdminApiCache();
-  return handleResponse<T>(res);
+export function adminPatch<T>(path: string, body: unknown): Promise<T> {
+  return adminWrite<T>(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) });
 }
 
-export async function adminPutForm<T>(path: string, body: FormData): Promise<T> {
-  const headers: HeadersInit = {
-    Authorization: `Bearer ${getToken()}`,
-  };
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PUT',
-    headers,
-    body,
-  });
-  clearAdminApiCache();
-  return handleResponse<T>(res);
+export function adminPostForm<T>(path: string, body: FormData): Promise<T> {
+  return adminWrite<T>(path, { method: 'POST', headers: formHeaders(), body });
 }
 
-export async function adminDelete(path: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  clearAdminApiCache();
-  return handleResponse<void>(res);
+export function adminPutForm<T>(path: string, body: FormData): Promise<T> {
+  return adminWrite<T>(path, { method: 'PUT', headers: formHeaders(), body });
+}
+
+export function adminDelete(path: string): Promise<void> {
+  return adminWrite<void>(path, { method: 'DELETE', headers: authHeaders() });
 }
 
 // Saves a file response (PDF, Excel) using the server's filename when it sends one.

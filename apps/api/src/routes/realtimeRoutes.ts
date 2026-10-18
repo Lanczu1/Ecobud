@@ -6,7 +6,7 @@ import {
   requireModeratorAccess,
   requireUserAccess,
 } from '../http/authentication';
-import { adminLiveEvents } from '../services/adminLiveEvents';
+import { adminClientId, adminLiveEvents, type AdminLiveChange } from '../services/adminLiveEvents';
 import { errorBoundary } from '../http/errorResponder';
 import { presenceService } from '../services/presenceService';
 import { supabaseRealtimeService } from '../services/supabaseRealtimeService';
@@ -43,13 +43,25 @@ realtimeRoutes.get(
     res.flushHeaders();
     res.write('retry: 3000\n\n');
 
+    // Changes inside 250ms go out as one message: the screens they touch, and whether every one of them
+    // came from this browser (which has then already reloaded what it changed).
+    const client = adminClientId(req.header('x-admin-client'));
     let closed = false;
     let pending: NodeJS.Timeout | null = null;
-    const send = () => {
-      if (closed || pending) return;
+    let sections: Set<string> | 'all' = new Set();
+    let own = true;
+    const send = (change: AdminLiveChange) => {
+      if (closed) return;
+      if (change.sections === 'all' || sections === 'all') sections = 'all';
+      else for (const section of change.sections) sections.add(section);
+      own = own && client !== null && change.origin === client;
+      if (pending) return;
       pending = setTimeout(() => {
         pending = null;
-        if (!closed) res.write('data: change\n\n');
+        if (closed) return;
+        res.write(`data: ${JSON.stringify({ sections: sections === 'all' ? 'all' : [...sections], own })}\n\n`);
+        sections = new Set();
+        own = true;
       }, 250);
     };
     const unsubscribe = adminLiveEvents.subscribe(send);

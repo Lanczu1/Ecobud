@@ -46,7 +46,7 @@ import {
 } from './services/lessonPublishScheduler';
 import { appVersionRoutes } from './routes/appVersionRoutes';
 import { barangayRoutes } from './routes/barangayRoutes';
-import { adminLiveEvents } from './services/adminLiveEvents';
+import { adminClientId, adminLiveEvents, sectionsForPath } from './services/adminLiveEvents';
 
 const app = express();
 const production = process.env.NODE_ENV === 'production';
@@ -194,15 +194,22 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
-// Tell open admin dashboards to refresh after any successful write.
+// Tell open admin dashboards which screens to refresh after a successful write, and whose write it was.
 app.use('/api', (req, res, next) => {
   const isWrite = req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE';
+  const origin = adminClientId(req.header('x-admin-client'));
   if (isWrite && !req.path.startsWith('/realtime/')) {
+    const sections = sectionsForPath(req.path);
     res.once('finish', () => {
-      if (res.statusCode < 400) adminLiveEvents.emit();
+      if (res.statusCode < 400) adminLiveEvents.emit(sections, origin);
     });
   }
-  next();
+  adminLiveEvents.withOrigin(origin, release => {
+    // Registered after the write listener above, so the write itself still goes out as this browser's.
+    res.once('finish', release);
+    res.once('close', release);
+    next();
+  });
 });
 
 app.use('/api/app/version', appVersionRoutes);

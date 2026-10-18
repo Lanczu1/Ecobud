@@ -59,14 +59,18 @@ export function reviewerScope(auth: Reviewer): Prisma.AuditLogWhereInput {
 
 export async function listEventPhotoDeletionRequests(auth: Reviewer, status: 'pending' | 'approved', page: number, pageSize: number, actions = { pending: PHOTO_DELETE_PENDING, approved: PHOTO_DELETE_APPROVED }) {
   const where: Prisma.AuditLogWhereInput = { ...reviewerScope(auth), action: actions[status] };
-  const [rows, total] = await Promise.all([
+  const otherStatus = status === 'pending' ? 'approved' : 'pending';
+  // The other tab's total comes with the page, so the screen shows both counts from one request.
+  const [rows, total, otherTotal] = await Promise.all([
     prisma.auditLog.findMany({ where, include: { user: { select: { id: true, name: true, profile: { select: { displayName: true, city: true } } } } }, orderBy: [{ timestamp: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.auditLog.count({ where }),
+    prisma.auditLog.count({ where: { ...reviewerScope(auth), action: actions[otherStatus] } }),
   ]);
-  return paginatedResult(rows.map(row => {
+  const result = paginatedResult(rows.map(row => {
     const details = photoDeleteDetails(row.details);
     return { id: row.id, status, requestedAt: row.timestamp, user: row.user, ...details, photoUrl: status === 'pending' ? details.photoUrl : null, ...(details.photos ? { photos: status === 'pending' ? details.photos : null } : {}) };
   }), page, pageSize, total);
+  return { ...result, counts: status === 'pending' ? { pending: total, approved: otherTotal } : { pending: otherTotal, approved: total } };
 }
 
 export async function approveEventPhotoDeletion(auth: Reviewer, requestId: string) {

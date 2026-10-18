@@ -1,8 +1,5 @@
 // Kept out of Badges.tsx so the app can show it while that page's code is still downloading.
-
-function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded ${className}`} />;
-}
+import { Skeleton } from './PageSkeletons';
 
 export function BadgeCountSkeleton() {
   return <Skeleton className="h-4 w-44" />;

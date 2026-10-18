@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAdminLiveRefresh } from '../../hooks/useAdminLiveRefresh';
+import { ALL_BUT_PRESENCE } from '../../services/adminRealtimeService';
+import { getLastAdminData } from '../../utils/adminApi';
 import { useToast } from '../../context/ToastContext';
 import { fetchNotificationPage, restoreBrowserPush, type NotificationPage } from '../../services/adminNotifications';
 
@@ -10,10 +12,15 @@ const submissionAlerts: Record<string,[string,string]> = {
 };
 
 const Context = createContext<{ data: NotificationPage | null; error: string; refresh: () => Promise<void> } | null>(null);
+/** The newest-first list of every notification, as the bell and the page's "All" view show it. */
+export const SHARED_QUERY='filter=all';
+
 export function AdminNotificationProvider({ children, enabled=true }: { children: ReactNode; enabled?: boolean }) {
-  const [data,setData]=useState<NotificationPage | null>(null);
+  // The bell and the Notifications page's default view share this list, opened from the last copy at once.
+  const [data,setData]=useState<NotificationPage | null>(() => getLastAdminData<NotificationPage>(`/admin/notifications?${SHARED_QUERY}`));
   const [error,setError]=useState('');
-  const inFlight=useRef(false);
+  const running=useRef<Promise<void> | null>(null);
+  const again=useRef(false);
   const mounted=useRef(false);
   const { success: showAlert }=useToast();
   const seen=useRef<Set<string> | null>(null);
@@ -34,12 +41,20 @@ export function AdminNotificationProvider({ children, enabled=true }: { children
     seen.current=known; newestSeen.current=newest;
     for (const [kind,count] of Object.entries(fresh)) showAlert(count===1 ? submissionAlerts[kind][0] : `${count} ${submissionAlerts[kind][1]}`);
   },[showAlert]);
-  const refresh=useCallback(async () => {
-    if (!enabled || inFlight.current) return;
-    inFlight.current=true;
-    try { const result=await fetchNotificationPage(); if (mounted.current) { setData(result); setError(''); announce(result); } }
-    catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : 'Could not load notifications.'); }
-    finally { inFlight.current=false; }
+  // A refresh asked for while one runs waits for it and then reads once more, so a caller that just
+  // changed something (marked read, deleted) always ends up with a list that includes the change.
+  const refresh=useCallback((): Promise<void> => {
+    if (!enabled) return Promise.resolve();
+    if (running.current) { again.current=true; return running.current; }
+    const run=(async () => {
+      do {
+        again.current=false;
+        try { const result=await fetchNotificationPage(new URLSearchParams(SHARED_QUERY)); if (mounted.current) { setData(result); setError(''); announce(result); } }
+        catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : 'Could not load notifications.'); }
+      } while (again.current && mounted.current);
+    })();
+    running.current=run.finally(() => { running.current=null; });
+    return running.current;
   },[enabled,announce]);
   useEffect(() => {
     if (!enabled) return;
@@ -47,7 +62,8 @@ export function AdminNotificationProvider({ children, enabled=true }: { children
     void refresh(); void restoreBrowserPush().catch(() => {});
     return () => { mounted.current=false; };
   },[refresh,enabled]);
-  useAdminLiveRefresh(() => { if (navigator.onLine) void refresh(); },enabled);
+  // Notifications come from almost any change, but never from residents merely coming online.
+  useAdminLiveRefresh(() => { if (navigator.onLine) void refresh(); },enabled,ALL_BUT_PRESENCE);
   return <Context.Provider value={{ data,error,refresh }}>{children}</Context.Provider>;
 }
 export function useAdminNotifications() {

@@ -1,4 +1,5 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import { useRefreshSpin } from '../../../hooks/useRefreshSpin';
 import type { LocalDraft } from '../../../utils/localDraftStore';
 import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
@@ -9,7 +10,7 @@ import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
-import { StatSkeleton } from './PageSkeletons';
+import { CardGridSkeleton, RowListSkeleton, StatSkeleton } from './PageSkeletons';
 
 interface RedeemItem {
   id: string;
@@ -103,6 +104,10 @@ export function Redeem() {
   const [loading, setLoading] = useState(!seed);
   const [stats, setStats] = useState<RedeemStats | null>(() => getLastAdminData<RedeemStats>('/redeem/stats'));
   const itemsVersion = useRef(0);
+  const [refreshSpinning, runRefresh] = useRefreshSpin();
+  const [requestsSpinning, runRequestsRefresh] = useRefreshSpin();
+  const itemStatsLoaded = useRef(false);
+  const requestStatsLoaded = useRef(false);
   const requestsVersion = useRef(0);
   const lastSearch = useRef(search);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -149,7 +154,8 @@ export function Redeem() {
 
   // ─── Items ──────────────────────────────────────────────────────────────
 
-  const fetchItems = useCallback(async (silent = false) => {
+  // withStats: catalog totals cover every item, so paging and filtering skip them (see the effect below).
+  const fetchItems = useCallback(async (silent = false, withStats = true) => {
     const version = ++itemsVersion.current;
     const path = itemsPath(itemPage, filterStatus, search);
     // An older copy of this page shows at once while the requests below bring it up to date.
@@ -160,13 +166,13 @@ export function Redeem() {
       if (!silent && !last) setLoading(true);
       const [itemsData, statsData] = await Promise.all([
         adminGet<{ items: RedeemItem[]; pagination: typeof itemPagination }>(path),
-        adminGet<RedeemStats>('/redeem/stats'),
+        withStats ? adminGet<RedeemStats>('/redeem/stats') : Promise.resolve(null),
       ]);
+      if (statsData) { setStats(statsData); itemStatsLoaded.current = true; }
       // A later page or filter has been asked for; its answer wins.
       if (version !== itemsVersion.current) return;
       setItems(itemsData.items);
       setItemPagination(itemsData.pagination);
-      setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch redeem items', error);
       if (!silent) toast.error(error.message || 'Failed to fetch redeem items');
@@ -325,7 +331,8 @@ export function Redeem() {
 
   // ─── Requests ───────────────────────────────────────────────────────────
 
-  const fetchRequests = useCallback(async (silent = false) => {
+  // withStats: request totals cover every request, so paging and filtering skip them (see the effect below).
+  const fetchRequests = useCallback(async (silent = false, withStats = true) => {
     const version = ++requestsVersion.current;
     const params = new URLSearchParams({ page: String(requestPage), pageSize: '25' });
     const target=notificationTarget('redemption'); if (target) params.set('recordId',target);
@@ -343,13 +350,13 @@ export function Redeem() {
       if (!silent && !last) setRequestsLoading(true);
       const [reqsData, statsData] = await Promise.all([
         adminGet<{ items: RedeemRequest[]; pagination: typeof requestPagination }>(path),
-        adminGet<RequestStats>('/redeem/requests/stats'),
+        withStats ? adminGet<RequestStats>('/redeem/requests/stats') : Promise.resolve(null),
       ]);
+      if (statsData) { setRequestStats(statsData); requestStatsLoaded.current = true; }
       // A later page or filter has been asked for; its answer wins.
       if (version !== requestsVersion.current) return;
       setRequests(reqsData.items);
       setRequestPagination(reqsData.pagination);
-      setRequestStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch requests', error);
       if (!silent) toast.error(error.message || 'Failed to fetch requests');
@@ -364,8 +371,9 @@ export function Redeem() {
     const typing = lastSearch.current !== search;
     lastSearch.current = search;
     const timer = setTimeout(() => {
-      if (mainTab === 'items') void fetchItems();
-      if (mainTab === 'requests') void fetchRequests();
+      // Paging, filters and search leave the totals alone; they load once here and then on pushes and actions.
+      if (mainTab === 'items') void fetchItems(false, !itemStatsLoaded.current);
+      if (mainTab === 'requests') void fetchRequests(false, !requestStatsLoaded.current);
     }, typing ? 250 : 0);
     return () => clearTimeout(timer);
   }, [mainTab, requestFilter, fetchItems, fetchRequests, search]);
@@ -374,6 +382,7 @@ export function Redeem() {
   useEffect(() => {
     // 1. Subscribe to adminRealtimeService
     const unsubscribe = adminRealtimeService.connect({
+      sections: ['redeem'],
       onRedeemRefresh: () => {
         if (mainTabRef.current === 'items') fetchItems(true);
         if (mainTabRef.current === 'requests') fetchRequests(true);
@@ -496,15 +505,12 @@ export function Redeem() {
         </div>
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => {
-              fetchItems();
-              if (mainTab === 'requests') fetchRequests();
-            }}
-            disabled={loading || requestsLoading}
+            onClick={() => void runRefresh(() => Promise.all([fetchItems(), mainTab === 'requests' ? fetchRequests() : null]))}
+            disabled={loading || requestsLoading || refreshSpinning}
             title="Refresh Data"
             className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all shadow-sm disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 text-gray-500 dark:text-gray-400 ${(loading || requestsLoading) ? 'animate-spin text-emerald-500' : ''}`} />
+            <RefreshCw className={`w-4 h-4 text-gray-500 dark:text-gray-400 ${refreshSpinning && !loading && !requestsLoading ? 'animate-spin text-emerald-500' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           {mainTab === 'items' && (
@@ -577,17 +583,7 @@ export function Redeem() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 space-y-4 animate-pulse">
-                  <div className="h-36 bg-gray-200 dark:bg-gray-800 rounded-xl" />
-                  <div className="space-y-2">
-                    <div className="w-3/4 h-4 bg-gray-200 dark:bg-gray-800 rounded" />
-                    <div className="w-1/2 h-3 bg-gray-200 dark:bg-gray-800 rounded" />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CardGridSkeleton count={3} label="Loading reward catalog" />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-reveal delay-280">
               {filteredItems.map(item => (
@@ -683,27 +679,14 @@ export function Redeem() {
                   {f.icon}{f.label}
                 </button>
               ))}
-              <button onClick={() => fetchRequests()} title="Refresh requests" className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all duration-200">
-                <RefreshCw className={`w-4 h-4 ${requestsLoading ? 'animate-spin' : ''}`} />
+              <button onClick={() => void runRequestsRefresh(() => fetchRequests())} title="Refresh requests" className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all duration-200">
+                <RefreshCw className={`w-4 h-4 ${requestsSpinning && !requestsLoading ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
 
           {requestsLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 space-y-3 animate-pulse">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-xl bg-gray-200 dark:bg-gray-800 shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <div className="w-48 h-4 bg-gray-200 dark:bg-gray-800 rounded" />
-                      <div className="w-32 h-3 bg-gray-200 dark:bg-gray-800 rounded" />
-                    </div>
-                    <div className="w-28 h-9 bg-gray-200 dark:bg-gray-800 rounded-xl" />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <RowListSkeleton count={4} label="Loading redemption requests" />
           ) : filteredRequests.length === 0 ? (
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-12 text-center animate-reveal delay-160">
               <Clock className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3 opacity-40" /><p className="text-gray-500 dark:text-gray-400 font-medium">No redemption requests found</p>

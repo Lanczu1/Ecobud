@@ -1,9 +1,5 @@
 // Kept out of the report pages so the app can show these while that code is still downloading.
-import type { CSSProperties } from 'react';
-
-export function Skeleton({ className = '', style }: { className?: string; style?: CSSProperties }) {
-  return <div className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded-lg ${className}`} style={style} />;
-}
+import { Skeleton } from './PageSkeletons';
 
 // Fixed heights so the placeholder bars do not jump on every render.
 const BAR_HEIGHTS = [55, 80, 40, 95, 65, 75, 50];

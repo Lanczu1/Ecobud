@@ -87,7 +87,8 @@ export function Badges() {
     finally { if (!silent) setLoading(false); }
   }
   useEffect(() => { void load(!!cachedOnOpen); }, []);
-  useAdminLiveRefresh(() => void load(true));
+  // Earned counts move when residents finish lessons, challenges, events or swaps.
+  useAdminLiveRefresh(() => void load(true), true, ['badges', 'lessons', 'challenges', 'events', 'giveget', 'users']);
   function open(badge: Badge | null) {
     editorTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIsClosing(false);

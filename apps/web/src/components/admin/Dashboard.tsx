@@ -1,11 +1,6 @@
 import { Users, Trophy, BookOpen, Coins, AlertCircle } from 'lucide-react';
+import { Skeleton } from './pages/PageSkeletons';
 import { useAdminStats } from './useAdminStats';
-
-
-
-function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
-  return <div className={`animate-pulse bg-gray-200 rounded-lg ${className}`} style={style} />;
-}
 
 export function Dashboard() {
   const { stats, loading, error } = useAdminStats('Failed to load dashboard data.');

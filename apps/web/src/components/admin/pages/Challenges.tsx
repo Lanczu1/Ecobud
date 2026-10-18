@@ -1,4 +1,6 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import { Skeleton } from './PageSkeletons';
+import { useRefreshSpin } from '../../../hooks/useRefreshSpin';
 import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } from '../ContentBadgeReward';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
@@ -162,10 +164,6 @@ const AI_TARGET_OPTIONS = ['Plastic Bottle', 'Glass Bottle', 'Plastic Wrapper'];
 function categoryFromTargets(targets: string[]) {
   if (targets.length === 0) return 'General';
   return targets.length === 1 ? targets[0] : 'Mixed Items';
-}
-
-function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded ${className}`} />;
 }
 
 interface FormData {
@@ -682,6 +680,8 @@ export function Challenges() {
 
   // ── Submissions tab state ────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'challenges' | 'submissions' | 'photoRequests'>(notificationTarget('challenge_submission') ? 'submissions' : 'challenges');
+  const [photoTabOpened, setPhotoTabOpened] = useState(activeTab === 'photoRequests');
+  if (activeTab === 'photoRequests' && !photoTabOpened) setPhotoTabOpened(true);
   const [submissions, setSubmissions] = useState<ChallengeSubmission[]>([]);
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 3, total: 0, totalPages: 1, totalResidents: 0 });
@@ -691,6 +691,7 @@ export function Challenges() {
   const submissionsLoaded = useRef(false);
   const submissionsInFlightQuery = useRef('');
   const submissionsWantedQuery = useRef('');
+  const [submissionsSpinning, runSubmissionsRefresh] = useRefreshSpin();
   const lastSearch = useRef('');
   const lastSubSearch = useRef('');
   const userJson = localStorage.getItem('ecobud_admin_user');
@@ -852,16 +853,27 @@ export function Challenges() {
     return () => clearTimeout(timer);
   }, [page, search, filterStatus]);
 
-  // One subscription for the page's lifetime: a server push quietly updates both lists,
-  // whichever tab is open, so every tab is current when it is shown.
+  // One subscription for the page's lifetime. A push reloads the open list; the challenge list, when
+  // hidden, is marked out of date and reloads on return. Submissions always reload: their tab shows a
+  // pending count.
+  const activeTabRef = useRef(activeTab);
+  useLayoutEffect(() => { activeTabRef.current = activeTab; });
+  const challengesOutdated = useRef(false);
+  useEffect(() => {
+    if (activeTab !== 'challenges' || !challengesOutdated.current) return;
+    challengesOutdated.current = false;
+    void loadChallengesRef.current();
+  }, [activeTab]);
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
     adminRealtimeService.connect({
+      sections: ['challenges'],
       onContentRefresh: () => {
         clearAdminApiCache('/admin/challenges');
         clearAdminApiCache('/admin/submissions');
-        void loadChallengesRef.current();
+        if (activeTabRef.current === 'challenges') void loadChallengesRef.current();
+        else challengesOutdated.current = true;
         void loadSubmissionsRef.current(false);
       },
     }).then((unsub) => {
@@ -907,7 +919,6 @@ export function Challenges() {
     }
     finally { setProcessingSubId(null); }
   };
-
 
   const [rejectModal, setRejectModal] = useState<{
     open: boolean;
@@ -1367,10 +1378,10 @@ export function Challenges() {
         </div>
       )}
 
-      {/* Mounted with the page so deletion requests load alongside challenges and submissions. */}
-      <div hidden={activeTab !== 'photoRequests'}>
+      {/* Mounted the first time its tab opens, then kept so switching back is instant. */}
+      {photoTabOpened && <div hidden={activeTab !== 'photoRequests'}>
         <EventPhotoDeleteRequests resource="challenges" onPreview={setSelectedImage} onApproved={() => { void loadSubmissionsRef.current(false); }} />
-      </div>
+      </div>}
       {activeTab === 'photoRequests' ? null : activeTab === 'challenges' ? (
         <>
       {/* Stats */}
@@ -1536,8 +1547,8 @@ export function Challenges() {
                 <strong>Submissions Filtered by User & Challenge:</strong> Multiple submissions from the same user are grouped together hierarchically per challenge so you can review consecutive Before & After photos easily.
               </div>
             </div>
-            <button onClick={() => void loadSubmissions()} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg">
-              <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading || submissionsRefreshing ? 'animate-spin' : ''}`} />
+            <button onClick={() => void runSubmissionsRefresh(() => loadSubmissions())} className="text-xs text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 font-semibold shrink-0 bg-blue-100/70 dark:bg-blue-800/40 px-3 py-1.5 rounded-lg">
+              <RefreshCw className={`w-3.5 h-3.5 ${(submissionsRefreshing || submissionsSpinning) && !submissionsLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>

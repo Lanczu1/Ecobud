@@ -175,7 +175,7 @@ class SupabaseRealtimeService {
     const channel = section === 'learn' ? GLOBAL_CHANNELS.learn
       : section === 'events' ? GLOBAL_CHANNELS.events
       : GLOBAL_CHANNELS.challenges;
-    adminLiveEvents.emit();
+    adminLiveEvents.emit(section === 'learn' ? ['lessons'] : section === 'events' ? ['events'] : section === 'swap' ? ['giveget'] : section === 'tracker' ? 'all' : ['challenges']);
 
     return this.publish(channel, 'refresh', {
       actorRole: input.actorRole ?? 'system',
@@ -241,7 +241,8 @@ class SupabaseRealtimeService {
     input: RealtimeSignalInput,
   ) {
     const channel = section === 'dashboard' ? ADMIN_CHANNELS.dashboard : ADMIN_CHANNELS.users;
-    adminLiveEvents.emit();
+    // Presence changes come often and only matter to Users and the dashboard figures.
+    adminLiveEvents.emit(input.reason.startsWith('presence-') ? ['presence'] : [section]);
 
     return this.publish(channel, 'refresh', {
       actorRole: input.actorRole ?? 'system',

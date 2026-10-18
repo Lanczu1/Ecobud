@@ -1,16 +1,30 @@
-import { API_HOST, clearAdminApiCache } from '../utils/adminApi';
+import { ADMIN_CLIENT_ID, API_HOST, markForeignChangePush, markOwnChangePush } from '../utils/adminApi';
 
 export interface PresenceData {
   onlineUserIds: string[];
 }
 
+/** The admin screens a change can touch; the server names them on every push. */
+export type AdminChangeSection =
+  | 'challenges' | 'events' | 'lessons' | 'badges' | 'users' | 'presence' | 'announcements'
+  | 'giveget' | 'redeem' | 'idVerification' | 'notifications' | 'dashboard';
+
 export interface AdminRealtimeHandlers {
+  /** The changes this screen shows. Left out, it refreshes on every change. */
+  sections?: AdminChangeSection[];
   onContentRefresh?: () => void;
   onUsersRefresh?: () => void;
   onStatsRefresh?: () => void;
   onRedeemRefresh?: () => void;
   onPresenceChange?: (presence: PresenceData) => void;
 }
+
+/** Every section except presence: for screens that need any real change but not residents coming and going. */
+export const ALL_BUT_PRESENCE: AdminChangeSection[] = [
+  'challenges', 'events', 'lessons', 'badges', 'users', 'announcements', 'giveget', 'redeem', 'idVerification', 'notifications', 'dashboard',
+];
+
+type PendingChange = { sections: Set<AdminChangeSection> | 'all'; own: boolean };
 
 const POLL_INTERVAL_MS = 30_000;
 // While the stream is delivering, the poll only covers changes the stream cannot see.
@@ -32,7 +46,9 @@ class AdminRealtimeService {
   private reconnectDelay = RECONNECT_MIN_MS;
   private lastNotifyAt = 0;
   private lastStreamDataAt = 0;
+  private hasStreamed = false;
   private isNotifying = false;
+  private pending: PendingChange | null = null;
 
   async connect(handlers: AdminRealtimeHandlers): Promise<() => void> {
     this.subscribers.add(handlers);
@@ -53,7 +69,7 @@ class AdminRealtimeService {
     this.timer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       if (this.isLive() && Date.now() - this.lastNotifyAt < LIVE_POLL_INTERVAL_MS) return;
-      this.queuePush();
+      this.queuePush('all', false);
     }, POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', this.handleVisibility);
     window.addEventListener('focus', this.handleFocus);
@@ -70,18 +86,27 @@ class AdminRealtimeService {
     this.reconnectTimer = null;
     this.stream?.abort();
     this.stream = null;
+    this.pending = null;
     document.removeEventListener('visibilitychange', this.handleVisibility);
     window.removeEventListener('focus', this.handleFocus);
     window.removeEventListener('online', this.handleOnline);
   }
 
+  // Pushes that arrived while the tab was hidden are held, then delivered when it is shown again.
+  // Without a working stream nothing was heard, so the screens catch up in full.
   private handleVisibility = () => {
-    if (document.visibilityState === 'visible') this.queuePush();
+    if (document.visibilityState !== 'visible') return;
+    if (!this.isLive()) this.queuePush('all', false);
+    else if (this.pending) this.schedule();
   };
 
-  private handleFocus = () => this.queuePush();
+  // A live stream already delivered every change; focus only matters when it is down.
+  private handleFocus = () => {
+    if (!this.isLive()) this.queuePush('all', false);
+  };
+
   private handleOnline = () => {
-    this.queuePush();
+    this.queuePush('all', false);
     if (!this.stream) {
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -98,7 +123,7 @@ class AdminRealtimeService {
     try {
       if (!token) throw new Error('Not signed in.');
       const response = await fetch(`${API_HOST}/api/realtime/admin-stream`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+        headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream', 'X-Admin-Client': ADMIN_CLIENT_ID },
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -106,18 +131,21 @@ class AdminRealtimeService {
       wasLive = true;
       this.lastStreamDataAt = Date.now();
       this.reconnectDelay = RECONNECT_MIN_MS;
-      // Changes made while the stream was down were missed, so catch up once on connect.
-      this.queuePush();
+      // Changes made while a previous stream was down were missed, so catch up once on reconnect.
+      // The first connection needs no catch-up: the screens have just loaded.
+      if (this.hasStreamed) this.queuePush('all', false);
+      this.hasStreamed = true;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let tail = '';
+      let buffer = '';
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         this.lastStreamDataAt = Date.now();
-        const text = tail + decoder.decode(value, { stream: true });
-        if (text.includes('data:')) this.queuePush();
-        tail = text.slice(-4);
+        buffer += decoder.decode(value, { stream: true });
+        const messages = buffer.split('\n\n');
+        buffer = messages.pop() ?? '';
+        for (const message of messages) this.readMessage(message);
       }
     } catch {
       // Polling keeps the screens current until the stream comes back.
@@ -137,23 +165,57 @@ class AdminRealtimeService {
     }
   }
 
-  private queuePush() {
+  // One server-sent message: data is {"sections": [...] | "all", "own": boolean}. Anything else
+  // (an older server's "change") is treated as an unknown change to every screen.
+  private readMessage(message: string) {
+    const data = message.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n');
+    if (!data) return;
+    try {
+      const change = JSON.parse(data) as { sections?: unknown; own?: unknown };
+      const sections = Array.isArray(change.sections) ? change.sections as AdminChangeSection[] : 'all';
+      this.queuePush(sections, change.own === true);
+    } catch {
+      this.queuePush('all', false);
+    }
+  }
+
+  private queuePush(sections: AdminChangeSection[] | 'all', own: boolean) {
+    const pending = this.pending ?? { sections: new Set<AdminChangeSection>(), own: true };
+    if (sections === 'all' || pending.sections === 'all') pending.sections = 'all';
+    else for (const section of sections) pending.sections.add(section);
+    pending.own = pending.own && own;
+    this.pending = pending;
+    this.schedule();
+  }
+
+  private schedule() {
     if (this.pushTimer) return;
     const wait = Math.max(PUSH_DELAY_MS, PUSH_MIN_GAP_MS - (Date.now() - this.lastNotifyAt));
     this.pushTimer = setTimeout(() => {
       this.pushTimer = null;
-      // A hidden tab refreshes from handleVisibility when it is shown again.
-      if (document.visibilityState === 'visible') this.notifyAll();
+      // A hidden tab keeps the change and delivers it from handleVisibility when it is shown again.
+      if (document.visibilityState !== 'visible' || !this.pending) return;
+      const change = this.pending;
+      this.pending = null;
+      this.notify(change);
     }, wait);
   }
 
+  /** Refreshes every screen now, as for a change to all of them made by someone else. */
   notifyAll() {
+    this.notify({ sections: 'all', own: false });
+  }
+
+  private notify(change: PendingChange) {
     if (this.isNotifying) return;
     this.isNotifying = true;
     this.lastNotifyAt = Date.now();
-    clearAdminApiCache();
+    if (change.own) markOwnChangePush();
+    else markForeignChangePush();
     try {
       this.subscribers.forEach((sub) => {
+        const wanted = change.sections === 'all' || !sub.sections || sub.sections.some(section => (change.sections as Set<AdminChangeSection>).has(section));
+        if (!wanted) return;
         try {
           sub.onUsersRefresh?.();
           sub.onStatsRefresh?.();

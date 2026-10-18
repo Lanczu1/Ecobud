@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRefreshSpin } from '../../../hooks/useRefreshSpin';
 import { Calendar, CheckCircle2, Clock, Image as ImageIcon, Loader2, MapPin, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { adminGet, adminPost, API_HOST, getLastAdminData } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
@@ -20,6 +21,8 @@ interface PhotoRequest {
 interface RequestPage {
   items: PhotoRequest[];
   pagination: { page: number; totalPages: number; total: number };
+  /** Both tabs' totals, sent with every page. */
+  counts?: { pending: number; approved: number };
 }
 
 export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'events' }: {
@@ -36,6 +39,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
   const [approving, setApproving] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [counts, setCounts] = useState({ pending: 0, approved: 0 });
+  const [refreshSpinning, runRefresh] = useRefreshSpin();
   const generation = useRef(0);
   const entityLabel = resource === 'challenges' ? 'Challenge' : 'Event';
   const endpoint = `/admin/${resource}/photo-delete-requests`;
@@ -44,21 +48,23 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
     const current = ++generation.current;
     // An older copy of this page shows at once while the requests below bring it up to date.
     const last = silent ? null : getLastAdminData<RequestPage>(`${endpoint}?status=${status}&page=${page}&pageSize=20`);
-    if (last) setData(last);
+    if (last) { setData(last); if (last.counts) setCounts(last.counts); }
     if (!silent) {
       setLoading(!last);
       setError(null);
     }
     try {
-      const otherStatus = status === 'pending' ? 'approved' : 'pending';
-      const [response, other] = await Promise.all([
-        adminGet<RequestPage>(`${endpoint}?status=${status}&page=${page}&pageSize=20`, { bypassCache: true }),
-        adminGet<RequestPage>(`${endpoint}?status=${otherStatus}&page=1&pageSize=1`, { bypassCache: true }),
-      ]);
-      if (current === generation.current) {
-        setCounts(status === 'pending'
+      const response = await adminGet<RequestPage>(`${endpoint}?status=${status}&page=${page}&pageSize=20`, { bypassCache: true });
+      // A server without counts on the page needs one more read for the other tab's total.
+      const counts = response.counts ?? await (async () => {
+        const otherStatus = status === 'pending' ? 'approved' : 'pending';
+        const other = await adminGet<RequestPage>(`${endpoint}?status=${otherStatus}&page=1&pageSize=1`, { bypassCache: true });
+        return status === 'pending'
           ? { pending: response.pagination.total, approved: other.pagination.total }
-          : { pending: other.pagination.total, approved: response.pagination.total });
+          : { pending: other.pagination.total, approved: response.pagination.total };
+      })();
+      if (current === generation.current) {
+        setCounts(counts);
         if (page > response.pagination.totalPages) { setPage(response.pagination.totalPages); return; }
         setData(response);
         setError(null);
@@ -78,10 +84,10 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
-    void adminRealtimeService.connect({ onContentRefresh: () => { if (!disposed) void load(true); } })
+    void adminRealtimeService.connect({ sections: [resource === 'challenges' ? 'challenges' : 'events'], onContentRefresh: () => { if (!disposed) void load(true); } })
       .then(stop => { if (disposed) stop(); else unsubscribe = stop; });
     return () => { disposed = true; unsubscribe?.(); };
-  }, [load]);
+  }, [load, resource]);
 
   const approve = async (item: PhotoRequest) => {
     if (approving) return;
@@ -122,8 +128,8 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
         <Trash2 className="h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
         <p className="text-sm text-emerald-800 dark:text-emerald-300"><strong>Photo deletion requests:</strong> Review the participant's reason before approving. History details, attendance, and rewards are retained.</p>
       </div>
-      <button type="button" onClick={() => void load()} disabled={loading} className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-emerald-100/70 px-3 py-1.5 text-xs font-semibold text-emerald-800 disabled:opacity-50 dark:bg-emerald-800/40 dark:text-emerald-200 ${focus}`}>
-        <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />Refresh
+      <button type="button" onClick={() => void runRefresh(() => load())} disabled={(loading && !data) || refreshSpinning} className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-emerald-100/70 px-3 py-1.5 text-xs font-semibold text-emerald-800 disabled:opacity-50 dark:bg-emerald-800/40 dark:text-emerald-200 ${focus}`}>
+        <RefreshCw className={`h-3.5 w-3.5 ${refreshSpinning ? 'animate-spin' : ''}`} aria-hidden="true" />Refresh
       </button>
     </div>
 

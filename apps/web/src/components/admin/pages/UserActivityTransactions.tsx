@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight, Eye, EyeOff, MapPin, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { adminGet, clearAdminApiCache, getLastAdminData } from '../../../utils/adminApi';
-import { adminRealtimeService } from '../../../services/adminRealtimeService';
+import { ALL_BUT_PRESENCE, adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './UserActivityTransactions.css';
@@ -106,7 +106,7 @@ export function UserActivityTransactions() {
     refresh.current = () => void load();
     void load();
     let disconnect: (() => void) | undefined;
-    void adminRealtimeService.connect({ onUsersRefresh: () => void load() }).then(stop => { if (alive) disconnect = stop; else stop(); });
+    void adminRealtimeService.connect({ sections: ALL_BUT_PRESENCE, onUsersRefresh: () => void load() }).then(stop => { if (alive) disconnect = stop; else stop(); });
     return () => { alive = false; disconnect?.(); };
   }, [query]);
 

@@ -17,6 +17,7 @@ import { ecobudApi, ecobudApiOrigin, type ResidentAnnouncement } from '../../sha
 import { type EcoBudMobileModel } from '../types/home';
 import { resolveMediaUrl, getCategoryDetails } from '../utils/appUtils';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
+import { homeService } from '../services/homeService';
 
 const previewText = (text: string) =>
   text
@@ -41,6 +42,8 @@ export function HomeAnnouncements({ model }: { model: EcoBudMobileModel }) {
   const [selected, setSelected] = useState<ResidentAnnouncement | null>(null);
   const [selectedImgIndex, setSelectedImgIndex] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  // True while the action button checks its destination, so a second tap does not open it twice.
+  const [opening, setOpening] = useState(false);
   const { showNotification } = useInAppNotification();
   const destination = model.notificationDestination;
   const token = model.session?.token;
@@ -76,21 +79,72 @@ export function HomeAnnouncements({ model }: { model: EcoBudMobileModel }) {
 
   if (!items.length && !selected) return null;
 
-  const openAction = (item: ResidentAnnouncement) => {
-    if (item.ctaType === 'Open External Link' && /^https?:\/\//i.test(item.ctaValue || '')) {
-      void Linking.openURL(item.ctaValue!).catch(() => {});
+  const unavailable = (what: string) =>
+    showNotification({ title: `${what} unavailable`, message: `This ${what.toLowerCase()} is no longer available to you.`, tone: 'warning' });
+  const offline = (what: string) =>
+    showNotification({ title: `Unable to open ${what.toLowerCase()}`, message: 'Please check your connection and try again.', tone: 'error' });
+
+  // Each action opens exactly what the announcement names, through the same flows notifications use.
+  // A destination that was deleted or is not open to this resident gets a message, not a different screen.
+  const openAction = async (item: ResidentAnnouncement) => {
+    if (item.ctaType === 'Open External Link') {
+      const url = item.ctaValue || '';
+      if (!/^https:\/\/\S+$/i.test(url)) {
+        showNotification({ title: 'Link unavailable', message: 'This link is not a secure web address, so it was not opened.', tone: 'warning' });
+        return;
+      }
+      await Linking.openURL(url).catch(() =>
+        showNotification({ title: 'Unable to open link', message: 'Your phone could not open this link.', tone: 'error' }));
       return;
     }
-    setSelected(null);
-    setShowAll(false);
-    if (item.ctaType === 'View Learning Module' && item.ctaValue) void model.openLesson(item.ctaValue);
-    else if (item.ctaType === 'View Eco Event') model.setActiveOverlay('events');
-    else if (item.ctaType === 'View Rewards') model.setActiveOverlay('rewards');
-    else if (item.ctaType === 'View Eco Challenge') {
-      const challenge = model.challenges.find(entry => entry.id === item.ctaValue);
-      if (challenge) model.openChallengeMission(challenge);
-      else model.setActiveTab('challenges');
+    if (item.ctaType === 'View Rewards') {
+      setSelected(null);
+      setShowAll(false);
+      model.setActiveOverlay('rewards');
+      return;
     }
+    const id = item.ctaValue;
+    if (!id || !token) return;
+
+    if (item.ctaType === 'View Learning Module') {
+      if (!model.lessons.some(lesson => lesson.id === id)) {
+        const found = await homeService.getLessons(token, id).catch(() => null);
+        if (!found) return offline('Learning module');
+        if (!found.length) return unavailable('Learning module');
+        // Brings the module into the home list, which the lesson screen reads from.
+        await model.refreshEverything();
+      }
+      setSelected(null);
+      setShowAll(false);
+      await model.openLesson(id);
+    } else if (item.ctaType === 'View Eco Challenge') {
+      const matches = (entry: { id: string; cycle?: { instanceId?: string } | null }) => entry.id === id || entry.cycle?.instanceId === id;
+      let challenge = model.challenges.find(matches);
+      if (!challenge) {
+        const fetched = await homeService.getChallenges(token).catch(() => null);
+        if (!fetched) return offline('Challenge');
+        challenge = fetched.items?.find(matches);
+      }
+      if (!challenge) return unavailable('Challenge');
+      setSelected(null);
+      setShowAll(false);
+      model.openChallengeMission(challenge);
+    } else if (item.ctaType === 'View Eco Event') {
+      const found = await ecobudApi.fetchEvents(token, { id, limit: 1 }).catch(() => null);
+      if (!found) return offline('Event');
+      if (!found.items.length) return unavailable('Event');
+      setSelected(null);
+      setShowAll(false);
+      model.setActiveOverlay(null);
+      model.setFocusedEventId(id);
+      model.setActiveOverlay('events');
+    }
+  };
+
+  const pressAction = (item: ResidentAnnouncement) => {
+    if (opening) return;
+    setOpening(true);
+    void openAction(item).finally(() => setOpening(false));
   };
 
   const handleSelectAnnouncement = (item: ResidentAnnouncement) => {
@@ -482,7 +536,9 @@ export function HomeAnnouncements({ model }: { model: EcoBudMobileModel }) {
                 {selected.ctaLabel && selected.ctaType !== 'No Action' && (
                   <TouchableOpacity
                     accessibilityRole="button"
-                    onPress={() => openAction(selected)}
+                    accessibilityState={{ busy: opening, disabled: opening }}
+                    disabled={opening}
+                    onPress={() => pressAction(selected)}
                     style={[
                       s.ctaButton,
                       {

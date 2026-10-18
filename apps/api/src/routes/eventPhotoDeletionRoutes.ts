@@ -12,7 +12,7 @@ const requestSchema = z.object({ reason: z.string().trim().min(5).max(500), phot
 eventPhotoDeletionRoutes.post('/submissions/:submissionId/delete-request', authenticateRequest, requireUserAccess, errorBoundary(async (req: AuthenticatedRequest, res) => {
   const body = requestSchema.parse(req.body);
   const result = await requestEventPhotoDeletion(req.auth!.userId, req.params.submissionId, body.reason, body.photoUrl);
-  adminLiveEvents.emit();
+  adminLiveEvents.emit(['events']);
   void supabaseRealtimeService.publishUserEventsRefresh(req.auth!.userId, { reason: 'event-photo-delete-requested' });
   res.json(result);
 }));
@@ -26,7 +26,7 @@ adminEventPhotoDeletionRoutes.get('/', errorBoundary(async (req: AuthenticatedRe
 }));
 adminEventPhotoDeletionRoutes.post('/:requestId/approve', errorBoundary(async (req: AuthenticatedRequest, res) => {
   const result = await approveEventPhotoDeletion(req.auth!, req.params.requestId);
-  adminLiveEvents.emit();
+  adminLiveEvents.emit(['events']);
   if (result.userId) void supabaseRealtimeService.publishUserEventsRefresh(result.userId, { entityId: result.eventId, reason: 'event-photo-delete-approved' });
   res.json({ success: true, alreadyApproved: result.alreadyApproved });
 }));

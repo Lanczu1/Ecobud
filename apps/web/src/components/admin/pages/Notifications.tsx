@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { adminDelete, adminGet, adminPatch, adminPut, getLastAdminData } from '../../../utils/adminApi';
+import { adminDelete, adminGet, adminPatch, adminPut, getCachedAdminData, getLastAdminData } from '../../../utils/adminApi';
 import { adminHref, browserPushEnabled, browserPushSupported, disableBrowserPush, enableBrowserPush, fetchNotificationPage,
   notificationCategories, notificationRecordHref, type AdminNotification, type NotificationPage, type NotificationPreferences } from '../../../services/adminNotifications';
-import { useAdminNotifications } from '../AdminNotificationProvider';
+import { SHARED_QUERY, useAdminNotifications } from '../AdminNotificationProvider';
+import { ALL_BUT_PRESENCE } from '../../../services/adminRealtimeService';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { Bell, CheckCheck, RefreshCw, Settings, Trash2, X } from 'lucide-react';
 import { RecordIcon, StatusChip, notificationCategoryLabels as labels, notificationStatus } from '../notificationParts';
@@ -17,11 +18,13 @@ const notice='rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm tex
 function readRole() { try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role || ''; } catch { return ''; } }
 
 export function Notifications() {
-  const { refresh }=useAdminNotifications();
+  const { data: shared, error: sharedError, refresh }=useAdminNotifications();
   const role=readRole();
   const [filter,setFilter]=useState('all'); const [category,setCategory]=useState('');
+  // The default view is the bell's own list, so it is fetched once for both; other views fetch their own.
+  const usesShared=filter==='all' && !category;
   // Reopening the page shows the last list at once and refreshes it behind the scenes.
-  const [page,setPage]=useState<NotificationPage | null>(() => getLastAdminData<NotificationPage>(`/admin/notifications?${new URLSearchParams({ filter: 'all' })}`)); const [loading,setLoading]=useState(() => !page); const [error,setError]=useState('');
+  const [page,setPage]=useState<NotificationPage | null>(() => shared ?? getLastAdminData<NotificationPage>(`/admin/notifications?${SHARED_QUERY}`)); const [loading,setLoading]=useState(() => !page); const [error,setError]=useState('');
   const [busy,setBusy]=useState(false); const [selected,setSelected]=useState<AdminNotification | null>(null);
   const [detailError,setDetailError]=useState(''); const [detailLoading,setDetailLoading]=useState(false);
   const [prefs,setPrefs]=useState<NotificationPreferences | null>(() => getLastAdminData<NotificationPreferences>('/admin/notifications/preferences')); const [prefsError,setPrefsError]=useState('');
@@ -29,6 +32,7 @@ export function Notifications() {
   const request=useRef(0); const loadedMore=useRef(false);
   const notificationId=new URLSearchParams(window.location.hash.split('?')[1] || '').get('notification');
   const load=useCallback(async (append=false, cursor?: NotificationPage['next']) => {
+    if (!append && usesShared) { request.current++; loadedMore.current=false; setError(''); await refresh(); return; }
     const version=++request.current; setError(''); loadedMore.current=append;
     const q=new URLSearchParams({ filter }); if (category) q.set('category',category);
     if (append && cursor) { q.set('before',cursor.before); q.set('beforeId',cursor.beforeId); }
@@ -38,9 +42,24 @@ export function Notifications() {
     try { const result=await fetchNotificationPage(q); if (version===request.current) setPage(current => ({ ...result, items: append && current ? [...current.items,...result.items.filter(item=>!current.items.some(old=>old.id===item.id))] : result.items })); }
     catch (e) { if (version===request.current) setError(e instanceof Error ? e.message : 'Could not load notifications.'); }
     finally { if (version===request.current) setLoading(false); }
-  },[filter,category]);
-  useEffect(() => { void load(); return () => { request.current++; }; },[load]);
-  // Background refresh of the newest page; older pages the admin already loaded stay in place.
+  },[filter,category,usesShared,refresh]);
+  // Opening the default view right after the bell refreshed needs no second read of the same list.
+  useEffect(() => {
+    if (!(usesShared && getCachedAdminData(`/admin/notifications?${SHARED_QUERY}`))) void load();
+    return () => { request.current++; };
+  },[load,usesShared]);
+  // The shared list arrives through the bell's provider; older pages the admin loaded stay below it.
+  useEffect(() => {
+    if (!usesShared) return;
+    if (!shared) { if (sharedError) { setError(sharedError); setLoading(false); } return; }
+    setPage(current => {
+      if (!current || !loadedMore.current) return shared;
+      const fresh=new Set(shared.items.map(item=>item.id));
+      return { ...shared,next:current.next,items:[...shared.items,...current.items.filter(item=>!fresh.has(item.id))] };
+    });
+    setError(''); setLoading(false);
+  },[shared,sharedError,usesShared]);
+  // Background refresh of the newest page for the other views; older pages the admin already loaded stay in place.
   useAdminLiveRefresh(() => {
     const version=request.current;
     const q=new URLSearchParams({ filter }); if (category) q.set('category',category);
@@ -52,7 +71,7 @@ export function Notifications() {
         return { ...result,next:current.next,items:[...result.items,...current.items.filter(item=>!fresh.has(item.id))] };
       });
     }).catch(() => {});
-  });
+  },!usesShared,ALL_BUT_PRESENCE);
   useEffect(() => {
     let cancelled=false;
     void adminGet<NotificationPreferences>('/admin/notifications/preferences',{ bypassCache:true }).then(value=>{ if (!cancelled) setPrefs(value); }).catch(e=>{ if (!cancelled) setPrefsError(e.message); });
@@ -71,7 +90,7 @@ export function Notifications() {
   },[notificationId,refresh]);
   const markRead=async (id?:string) => {
     setBusy(true); setError('');
-    try { await adminPatch(id ? `/admin/notifications/${encodeURIComponent(id)}/read` : '/admin/notifications/read-all',{}); await load(); await refresh(); }
+    try { await adminPatch(id ? `/admin/notifications/${encodeURIComponent(id)}/read` : '/admin/notifications/read-all',{}); await load(); if (!usesShared) await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not update read status.'); }
     finally { setBusy(false); }
   };
@@ -81,7 +100,7 @@ export function Notifications() {
     try {
       await adminDelete(id ? `/admin/notifications/${encodeURIComponent(id)}` : '/admin/notifications');
       if (!id || id===notificationId) window.location.hash=adminHref('Notifications');
-      await load(); await refresh();
+      await load(); if (!usesShared) await refresh();
     }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not remove notifications.'); }
     finally { setBusy(false); }

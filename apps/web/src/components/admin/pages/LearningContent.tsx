@@ -11,7 +11,7 @@ import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
-import { StatSkeleton } from './PageSkeletons';
+import { StatSkeleton, Skeleton } from './PageSkeletons';
 
 interface Lesson {
   id: string;
@@ -52,10 +52,6 @@ const getLessonStatus = (lesson: Lesson) => {
 };
 
 const CATEGORIES = ['General', 'Recycling', 'Climate', 'Waste', 'Lifestyle', 'Energy', 'Water', 'Nature', 'Food'];
-
-function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded-lg ${className}`} />;
-}
 
 function OptimizedInput({ value, onChange, ...props }: any) {
   const [localValue, setLocalValue] = useState(value);
@@ -672,6 +668,7 @@ export function LearningContent() {
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
     adminRealtimeService.connect({
+      sections: ['lessons'],
       onContentRefresh: () => {
         clearAdminApiCache('/admin/lessons');
         void loadRef.current();

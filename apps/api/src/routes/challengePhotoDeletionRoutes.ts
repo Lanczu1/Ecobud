@@ -18,7 +18,7 @@ challengePhotoDeletionRoutes.post('/submissions/:submissionId/delete-request', a
   const result = body.photoField === 'both'
     ? await requestChallengePhotosDeletion(req.auth!.userId, req.params.submissionId, body.reason, body.photos)
     : await requestChallengePhotoDeletion(req.auth!.userId, req.params.submissionId, body.photoField, body.reason, body.photoUrl);
-  adminLiveEvents.emit();
+  adminLiveEvents.emit(['challenges']);
   void supabaseRealtimeService.publishUserSectionRefresh(req.auth!.userId, 'challenges', { reason: 'challenge-photo-delete-requested' });
   res.json(result);
 }));
@@ -32,7 +32,7 @@ adminChallengePhotoDeletionRoutes.get('/', errorBoundary(async (req: Authenticat
 }));
 adminChallengePhotoDeletionRoutes.post('/:requestId/approve', errorBoundary(async (req: AuthenticatedRequest, res) => {
   const result = await approveChallengePhotoDeletion(req.auth!, req.params.requestId);
-  adminLiveEvents.emit();
+  adminLiveEvents.emit(['challenges']);
   if (result.userId) void supabaseRealtimeService.publishUserSectionRefresh(result.userId, 'challenges', { entityId: result.challengeInstanceId, reason: 'challenge-photo-delete-approved' });
   res.json({ success: true, alreadyApproved: result.alreadyApproved });
 }));

@@ -4,7 +4,7 @@ import { adminGet, adminPost, clearAdminApiCache, API_HOST, getLastAdminData } f
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
 import { AdminPagination } from '../AdminPagination';
-import { StatSkeleton } from './PageSkeletons';
+import { StatSkeleton, Skeleton } from './PageSkeletons';
 
 interface AdminUser {
   id: string;
@@ -29,10 +29,6 @@ const roleColors: Record<string, string> = {
   moderator: 'bg-purple-50 text-purple-700 border-purple-100',
   admin: 'bg-orange-50 text-orange-700 border-orange-100',
 };
-
-function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
-}
 
 function UserAvatar({ user }: { user: AdminUser }) {
   const [error, setError] = useState(false);
@@ -110,6 +106,7 @@ export function ManageUsers() {
   useEffect(() => {
     let unsubscribe: () => void;
     adminRealtimeService.connect({
+      sections: ['users', 'presence', 'idVerification'],
       onUsersRefresh: () => {
         clearAdminApiCache('/admin/users');
         void loadUsersRef.current();
@@ -188,7 +185,6 @@ export function ManageUsers() {
       const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
       return matchTab && matchStatus && matchSearch;
     }), [users, search, filterStatus, viewTab]);
-
 
   return (
     <div className="p-8 space-y-6 bg-gray-50/50 min-h-full">

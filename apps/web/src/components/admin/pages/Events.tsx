@@ -1,4 +1,5 @@
 import { useLocalDrafts, useDraftAutosave } from '../../../hooks/useLocalDrafts';
+import { useRefreshSpin } from '../../../hooks/useRefreshSpin';
 import { ContentBadgeReward, useContentBadgeReward, type BadgeRewardPayload } from '../ContentBadgeReward';
 import type { DraftController } from '../../../hooks/useLocalDrafts';
 import { LocalDraftPanel } from '../LocalDraftPanel';
@@ -23,7 +24,7 @@ import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { StatSkeleton, TableSkeleton } from './PageSkeletons';
+import { StatSkeleton, TableSkeleton, Skeleton } from './PageSkeletons';
 
 function QrExpiration({ expiresAt, createdAt }: { expiresAt?: string; createdAt?: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -238,10 +239,6 @@ function getEventStatus(event: AdminEvent) {
   if (Date.parse(event.startDatetime) <= now) return 'Ongoing';
   if (getRegistrationCount(event) >= event.capacity) return 'Full';
   return 'Upcoming';
-}
-
-function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />;
 }
 
 interface FormData {
@@ -818,6 +815,17 @@ export function Events() {
   const [qrModal, setQrModal] = useState<{ open: boolean, eventId: string | null, qrData: string | null, loading: boolean, error?: string | null, expiresAt?: string, createdAt?: string }>({ open: false, eventId: null, qrData: null, loading: false, error: null });
   const [reportModal, setReportModal] = useState<{ open: boolean, eventId: string | null, eventTitle: string }>({ open: false, eventId: null, eventTitle: '' });
   const [activeTab, setActiveTab] = useState<'events' | 'submissions' | 'reports' | 'photoRequests'>(notificationTarget('event_submission') ? 'submissions' : 'events');
+  const onReportsTab = activeTab === 'reports';
+  const activeTabRef = useRef(activeTab);
+  useLayoutEffect(() => { activeTabRef.current = activeTab; });
+  const eventsOutdated = useRef(false);
+  useEffect(() => {
+    if ((activeTab !== 'events' && activeTab !== 'reports') || !eventsOutdated.current) return;
+    eventsOutdated.current = false;
+    void loadEventsRef.current();
+  }, [activeTab]);
+  const [photoTabOpened, setPhotoTabOpened] = useState(activeTab === 'photoRequests');
+  if (activeTab === 'photoRequests' && !photoTabOpened) setPhotoTabOpened(true);
   const adminUser = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
   }, []);
@@ -847,6 +855,7 @@ export function Events() {
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [submissionsPagination, setSubmissionsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
+  const [submissionsSpinning, runSubmissionsRefresh] = useRefreshSpin();
   const submissionsRefreshInFlight = useRef(false);
   const submissionsRequestKey = useRef('');
   const submissionsRefreshQueued = useRef<{ showLoading: boolean } | null>(null);
@@ -958,9 +967,13 @@ export function Events() {
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
     adminRealtimeService.connect({
+      sections: ['events'],
+      // The event list (shown on Events and Reports) reloads now when visible, or on return when hidden.
+      // Submissions always reload: their tab shows a pending count. Reports refresh only on their tab.
       onContentRefresh: () => {
         clearAdminApiCache('/admin/events');
-        void loadEventsRef.current();
+        if (activeTabRef.current === 'events' || activeTabRef.current === 'reports') void loadEventsRef.current();
+        else eventsOutdated.current = true;
         void loadSubmissionsRef.current(false);
         refreshReportRef.current();
       },
@@ -997,6 +1010,8 @@ export function Events() {
         if (active && queued) { queued = false; void refresh(); }
       }
     };
+    // Report figures are only shown on the Reports tab, so they load (and refresh) only while it is open.
+    if (!onReportsTab) return () => { active = false; };
     refreshReportRef.current = () => { void refresh(); refreshReportDetailsRef.current(); };
     const initial = setTimeout(() => void refresh(), search.trim() ? 250 : 0);
     return () => {
@@ -1004,7 +1019,7 @@ export function Events() {
       clearTimeout(initial);
       refreshReportRef.current = () => {};
     };
-  }, [page, search, barangayFilter]);
+  }, [page, search, barangayFilter, onReportsTab]);
 
   useEffect(() => {
     if (activeTab !== 'reports' || !expandedReport) return;
@@ -1427,13 +1442,13 @@ export function Events() {
         </button>
       </div>
 
-      {/* Mounted with the page so requests load alongside events, submissions and reports. */}
-      <div hidden={activeTab !== 'photoRequests'}>
+      {/* Mounted the first time its tab opens, then kept so switching back is instant. */}
+      {photoTabOpened && <div hidden={activeTab !== 'photoRequests'}>
         <EventPhotoDeleteRequests
           onPreview={image => setSelectedImage({ ...image, url: resolveEventImageUrl(image.url) ?? image.url })}
           onApproved={() => { setReportDataCache({}); void loadSubmissionsRef.current(false); refreshReportRef.current(); }}
         />
-      </div>
+      </div>}
 
       {error && (
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3">
@@ -1661,11 +1676,11 @@ export function Events() {
               </div>
             </div>
             <button 
-              onClick={() => void loadSubmissions()}
-              disabled={submissionsLoading}
+              onClick={() => void runSubmissionsRefresh(() => loadSubmissions(false))}
+              disabled={submissionsLoading || submissionsSpinning}
               className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline flex items-center gap-1.5 font-semibold shrink-0 bg-emerald-100/70 dark:bg-emerald-800/40 px-3 py-1.5 rounded-lg active:scale-95 transition-all"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${submissionsLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${submissionsSpinning && !submissionsLoading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
@@ -2135,7 +2150,6 @@ export function Events() {
           <button onClick={() => setReviewNotice(null)} className="rounded-md p-0.5 opacity-60 transition-opacity hover:opacity-100" aria-label="Dismiss notification"><X className="h-4 w-4" /></button>
         </div>
       )}
-
 
       {/* Photo Proof Zoom Modal */}
       {selectedImage && createPortal(

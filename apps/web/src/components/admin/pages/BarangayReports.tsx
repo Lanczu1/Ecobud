@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { adminGet, API_HOST, getCachedAdminData, getLastAdminData } from '../../../utils/adminApi';
 import { BarangayReportSkeleton } from './ReportsSkeleton';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
+import { ALL_BUT_PRESENCE } from '../../../services/adminRealtimeService';
 import { Reports as SystemReports } from './Reports';
 
 type Report = {
@@ -65,7 +66,7 @@ export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
         setReport(current => current && JSON.stringify({ ...current, generatedAt: '' }) === JSON.stringify({ ...data, generatedAt: '' }) ? current : data);
       })
       .catch(() => {});
-  });
+  }, true, ALL_BUT_PRESENCE);
 
   async function download(format: 'pdf' | 'excel') {
     if (!report || loading || exporting) return;

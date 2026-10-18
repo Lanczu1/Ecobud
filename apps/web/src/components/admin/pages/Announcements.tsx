@@ -17,7 +17,8 @@ import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './Announcements.css';
 import { AnnouncementEditor } from './AnnouncementEditor';
-import { StatSkeleton } from './PageSkeletons';
+import { AnnouncementDestinationPicker, destinationKindFor } from './AnnouncementDestinationPicker';
+import { StatSkeleton, Skeleton } from './PageSkeletons';
 
 const categories = [
   'General',
@@ -87,6 +88,24 @@ const localDate = (v: string | null) =>
 
 const iso = (v: string) => (v ? new Date(`${v}:00+08:00`).toISOString() : null);
 
+const isHttpsUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !!url.hostname;
+  } catch {
+    return false;
+  }
+};
+
+/** What is missing from an enabled action button, mirroring the server's checks, or null when it is complete. */
+function actionButtonProblem(a: Announcement): string | null {
+  if (a.ctaType === 'No Action') return null;
+  if (!a.ctaLabel?.trim()) return 'Enter a button label for the action button.';
+  if (destinationKindFor[a.ctaType] && !a.ctaValue) return 'Choose where the action button goes.';
+  if (a.ctaType === 'Open External Link' && !isHttpsUrl(a.ctaValue?.trim() ?? '')) return 'Enter a valid HTTPS link, for example https://example.com.';
+  return null;
+}
+
 const audience = (a: Announcement) =>
   a.targetAudience === 'All Residents'
     ? a.targetAudience
@@ -109,10 +128,6 @@ const statusColors: Record<string, string> = {
   Draft: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
   Archived: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800',
 };
-
-function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 dark:bg-gray-800 rounded ${className}`} />;
-}
 
 function safeLink(value: string) {
   return /^https?:\/\//i.test(value) ? value : undefined;
@@ -464,7 +479,7 @@ export function Announcements() {
       .catch(() => setBarangayError('Unable to load barangays. Reopen this page to retry.'));
 
   }, []);
-  useAdminLiveRefresh(() => { if (navigator.onLine) void load(true, true); });
+  useAdminLiveRefresh(() => { if (navigator.onLine) void load(true, true); }, true, ['announcements']);
 
   // Auto-dismiss notice after 4 seconds
   useEffect(() => {
@@ -628,6 +643,11 @@ export function Announcements() {
     if (editor && !uploadingImage) {
       if (!editor.content.trim() || editor.content.length > 20000) {
         setSaveError('Content is required and must be 20,000 characters or fewer.');
+        return;
+      }
+      const actionProblem = actionButtonProblem(editor);
+      if (actionProblem) {
+        setSaveError(actionProblem);
         return;
       }
       void persist(editor);
@@ -1342,7 +1362,11 @@ export function Announcements() {
                     <input
                       type="checkbox"
                       checked={editor.ctaType !== 'No Action'}
-                      onChange={e => change('ctaType', e.target.checked ? 'Open External Link' : 'No Action')}
+                      onChange={e => {
+                        change('ctaType', e.target.checked ? 'Open External Link' : 'No Action');
+                        // A destination kept from before would not fit the new type, so it is cleared either way.
+                        change('ctaValue', null);
+                      }}
                       className="rounded border-gray-300 dark:border-gray-700 text-green-600 focus:ring-green-500 w-4 h-4 cursor-pointer"
                     />
                     <span>Enable Action Button</span>
@@ -1376,7 +1400,7 @@ export function Announcements() {
                             }}
                             className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200"
                           >
-                            {actions.map(v => (
+                            {actions.filter(v => v !== 'No Action').map(v => (
                               <option key={v} value={v}>
                                 {v}
                               </option>
@@ -1385,23 +1409,43 @@ export function Announcements() {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
-                          {editor.ctaType === 'Open External Link' ? 'HTTPS URL *' : 'Destination Record ID *'}
-                        </label>
-                        <input
-                          required
-                          type={editor.ctaType === 'Open External Link' ? 'url' : 'text'}
-                          value={editor.ctaValue || ''}
-                          onChange={e => change('ctaValue', e.target.value)}
-                          placeholder={
-                            editor.ctaType === 'Open External Link'
-                              ? 'https://example.com'
-                              : 'ID of challenge or event'
-                          }
-                          className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200"
-                        />
-                      </div>
+                      {destinationKindFor[editor.ctaType] ? (
+                        <div>
+                          <span className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                            {editor.ctaType === 'View Eco Challenge' ? 'Challenge *' : editor.ctaType === 'View Eco Event' ? 'Event *' : 'Learning Module *'}
+                          </span>
+                          <AnnouncementDestinationPicker
+                            key={editor.ctaType}
+                            kind={destinationKindFor[editor.ctaType]!}
+                            value={editor.ctaValue}
+                            onChange={id => change('ctaValue', id)}
+                            targetAudience={editor.targetAudience}
+                            barangays={editor.barangays}
+                            publishAt={editor.status === 'Scheduled' ? editor.publishAt : null}
+                            disabled={busy}
+                          />
+                        </div>
+                      ) : editor.ctaType === 'View Rewards' ? (
+                        <p className="text-xs text-gray-600 dark:text-gray-300">
+                          Opens the Rewards section of the resident app. No destination is needed.
+                        </p>
+                      ) : (
+                        <div>
+                          <label htmlFor="announcement-cta-url" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                            HTTPS URL *
+                          </label>
+                          <input
+                            id="announcement-cta-url"
+                            required
+                            type="url"
+                            inputMode="url"
+                            value={editor.ctaValue || ''}
+                            onChange={e => change('ctaValue', e.target.value)}
+                            placeholder="https://example.com"
+                            className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-200"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

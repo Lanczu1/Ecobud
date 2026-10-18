@@ -1103,6 +1103,7 @@ export function GiveAndGetHub() {
   const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean, background?: boolean) => Promise<void>>(async () => {});
   const fetchInFlightRef = useRef(false);
   const fetchQueuedRef = useRef(false);
+  const statsOutdated = useRef(true);
   const lastSearchRef = useRef(search);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [detailsModalListing, setDetailsModalListing] = useState<SwapListingItem | null>(null);
@@ -1126,6 +1127,9 @@ export function GiveAndGetHub() {
   });
 
   const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search, fresh = false, background = false) => {
+    // Totals cover every listing, so paging, filtering and searching leave them alone. They reload on the
+    // first load, after a push and after an action here (both background reloads).
+    if (background) statsOutdated.current = true;
     // A request made while another runs is kept and sent next, so a quick page change is never dropped.
     if (fetchInFlightRef.current) { fetchQueuedRef.current = true; return; }
     fetchInFlightRef.current = true;
@@ -1140,14 +1144,18 @@ export function GiveAndGetHub() {
       const last = getLastAdminData<ListingsPage>(path);
       if (last) { showPage(last); setLoading(false); }
       else if (!background) setLoading(true);
+      const wantStats = statsOutdated.current;
+      statsOutdated.current = false;
       const [listingsData, statsData] = await Promise.all([
         adminGet<ListingsPage>(path, { bypassCache: fresh }),
-        adminGet<SwapStats>(STATS_PATH, { bypassCache: fresh }),
+        wantStats ? adminGet<SwapStats>(STATS_PATH, { bypassCache: fresh }).catch(error => { statsOutdated.current = true; throw error; }) : Promise.resolve(null),
       ]);
+      // Totals do not depend on the page, so they apply even when a newer page request replaces this one.
+      if (statsData) setStats(statsData);
       if (fetchQueuedRef.current) return;
       showPage(listingsData);
-      setStats(statsData);
     } catch (error: any) {
+      statsOutdated.current = true;
       console.error('Failed to fetch swap listings', error);
       toast.error(error.message || 'Failed to fetch swap listings');
     } finally {
@@ -1175,6 +1183,7 @@ export function GiveAndGetHub() {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     adminRealtimeService.connect({
+      sections: ['giveget'],
       onContentRefresh: () => {
         clearAdminApiCache('/give-and-get/swap-listings');
         void fetchListingsRef.current(page, filterStatus, search, true, true);
@@ -1363,7 +1372,7 @@ export function GiveAndGetHub() {
 
       {/* Listings Grid */}
       {loading ? (
-        <CardGridSkeleton />
+        <CardGridSkeleton label="Loading listings" />
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredListings.map(listing => (

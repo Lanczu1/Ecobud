@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useRefreshSpin } from '../../../hooks/useRefreshSpin';
+import { RowListSkeleton, StatSkeleton } from './PageSkeletons';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, Eye,
@@ -81,6 +83,7 @@ export function IdVerification() {
   const [items, setItems] = useState<Submission[]>(() => seed?.items.filter(item => item.status === 'pending') ?? []);
   const [total, setTotal] = useState(() => !seed ? 0 : notificationTarget('id_verification') ? seed.items.filter(item => item.status === 'pending').length : seed.total);
   const [loading, setLoading] = useState(!seed);
+  const [refreshSpinning, runRefresh] = useRefreshSpin();
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [resident, setResident] = useState('');
@@ -127,7 +130,7 @@ export function IdVerification() {
     } finally { if (version === requestVersion.current) setLoading(false); }
   }, [page]);
   useEffect(() => { void load(); return () => { requestVersion.current++; }; }, [load]);
-  useAdminLiveRefresh(() => { if (!reviewBusy.current) void load(true); });
+  useAdminLiveRefresh(() => { if (!reviewBusy.current) void load(true); }, true, ['idVerification']);
   useEffect(() => {
     if (!selected) return;
     const controller = new AbortController();
@@ -200,12 +203,12 @@ export function IdVerification() {
       <div className="flex items-center gap-4 shrink-0">
         <span className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${waiting ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'}`}>{waiting ? <Clock className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}</span>
         <div>
-          <p className={`text-3xl font-serif font-bold leading-none ${waiting ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{loading ? <span className="inline-block w-10 h-7 rounded bg-current opacity-10 animate-pulse" aria-label="Loading count" /> : error ? '—' : total.toLocaleString()}</p>
+          <p className={`text-3xl font-serif font-bold leading-none ${waiting ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{loading ? <StatSkeleton className="h-7 w-10" /> : error ? '—' : total.toLocaleString()}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1.5">{waiting ? (total === 1 ? 'ID waiting for review' : 'IDs waiting for review') : loading || error ? 'Pending review' : 'No IDs waiting for review'}</p>
         </div>
       </div>
       <div className="flex-1 flex items-start gap-3 md:border-l md:border-gray-100 md:dark:border-gray-800 md:pl-6"><ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" /><p className="text-sm text-gray-600 dark:text-gray-300">Compare the submitted name and photo with the ID before approving. Include a clear reason when rejecting so the resident knows what to correct.</p></div>
-      <button type="button" onClick={() => void load()} disabled={loading} className="self-start md:self-center text-xs text-gray-700 dark:text-gray-200 flex items-center gap-1.5 font-semibold shrink-0 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-2 rounded-lg disabled:opacity-50 transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+      <button type="button" onClick={() => void runRefresh(() => load())} disabled={loading || refreshSpinning} className="self-start md:self-center text-xs text-gray-700 dark:text-gray-200 flex items-center gap-1.5 font-semibold shrink-0 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-2 rounded-lg disabled:opacity-50 transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${refreshSpinning && !loading ? 'animate-spin' : ''}`} />Refresh</button>
     </div>
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 space-y-3 animate-reveal delay-160">
       <div className="flex flex-col xl:flex-row gap-3 items-stretch justify-between">
@@ -221,7 +224,7 @@ export function IdVerification() {
       </div>
     </div>
     {error && <div role="alert" className="flex items-center gap-2 p-4 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}
-    {loading ? <div role="status" aria-label="Loading ID submissions" className="space-y-4">{[0, 1, 2].map(index => <div key={index} className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 animate-pulse flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800" /><div className="space-y-2 flex-1"><div className="h-4 w-1/3 rounded bg-gray-100 dark:bg-gray-800" /><div className="h-3 w-1/2 rounded bg-gray-100 dark:bg-gray-800" /></div></div>)}</div> : !error && groups.length === 0 ? <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-12 text-center shadow-sm"><Layers className="w-12 h-12 mx-auto text-gray-400 opacity-30 mb-4" /><h3 className="font-semibold text-gray-700 dark:text-gray-300">No ID Submissions</h3><p className="text-sm text-gray-500 mt-1">{search || resident ? 'No matches on this page. Adjust your search or resident filter.' : 'There are no pending ID submissions in your barangay.'}</p></div> : <div className="space-y-5">
+    {loading ? <RowListSkeleton count={3} label="Loading ID submissions" /> : !error && groups.length === 0 ? <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-12 text-center shadow-sm"><Layers className="w-12 h-12 mx-auto text-gray-400 opacity-30 mb-4" /><h3 className="font-semibold text-gray-700 dark:text-gray-300">No ID Submissions</h3><p className="text-sm text-gray-500 mt-1">{search || resident ? 'No matches on this page. Adjust your search or resident filter.' : 'There are no pending ID submissions in your barangay.'}</p></div> : <div className="space-y-5">
       {groups.map(group => {
         const groupKey = `barangay:${group.barangay}`;
         const submissions = group.people.flatMap(person => person.submissions);
