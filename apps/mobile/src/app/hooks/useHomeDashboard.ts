@@ -1,6 +1,7 @@
 import { getQuizLessonProgress, getVideoProgressLimit, isLocalLessonProgressNewer } from '../utils/lessonProgress';
 import { decodeProfileSnapshot, profileSnapshotKey } from '../utils/profileSnapshot';
 import { useNotifications } from './useNotifications';
+import { crossedStreakMilestone } from '../../shared/api/streakSummary';
 import { takeUnseenBadges } from '../utils/badgeUnlockQueue';
 import { type MascotDock, parseMascotDock } from '../utils/mascotDock';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
@@ -1169,7 +1170,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   useEffect(() => {
     if (dashboard) {
       if (previousStreakRef.current !== null) {
-        if ([1, 3, 10, 30, 100].some(milestone => previousStreakRef.current! < milestone && dashboard.streak >= milestone)) {
+        if (crossedStreakMilestone(previousStreakRef.current, dashboard.streak)) {
           setPendingStreakUnlock(true);
         }
       }

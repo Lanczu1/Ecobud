@@ -175,3 +175,23 @@ Design read: ECOBUD streak celebration for mobile users, restoring the previous 
 - Purpose Gate PASS: dark green restores the requested celebration backdrop; one central flame communicates streak status, and the primary action opens the rewards panel.
 - Liveliness PASS: declared dials, central flame focal point, structural spacing, and existing ECOBUD mint accent.
 - Craftsmanship PASS: source routes icon taps and milestone triggers to the restored overlay, reward button to the existing rewards panel, and Close/Escape to dismissal. Native Lottie playback remains a device verification item; browser fixture uses an explicitly labeled placeholder.
+
+## Compact streak timer
+
+Design read: retain ECOBUD's existing streak card and theme palettes, with a subordinate status strip below it. ENERGY 2 / RHYTHM 2 / MOTION 1. The strip uses a short label and a single tabular `Xd HH:MM:SS` countdown so the challenge count stays the focal point. Zero completions show only “Timer not started”. Yellow and red retain the existing 48-hour and 24-hour thresholds. Large icon tiles, explanatory paragraphs, progress segments, and repeated challenge buttons were removed from this strip; missing server expiry retains a working Refresh control.
+
+- Hard Gate PASS: mobile TypeScript check passed; actual component browser fixture verified yellow at 320px/light, red at 375px/onyx, and not-started at 320px/onyx. Countdown visibly advanced by seconds. This is a browser fixture with explicitly substituted native animation/audio, not an installed-device test.
+- Purpose Gate PASS: existing warning colors convey urgency; compact tabular digits prevent changing number widths, and row wrapping accommodates larger text without truncation.
+- Liveliness PASS: declared dials retained; the existing flame/card remains the focal point and the small strip gives it structural separation from the level card.
+- Craftsmanship PASS: no new controls or fabricated timers; the zero state has no running countdown. Server expiry, first-completion start rule, and both push reminder stages are unchanged by this presentation-only edit.
+
+## Animated timer bar and milestone feedback
+
+Design read: keep the compact status strip and existing celebration composition, ENERGY 2 / RHYTHM 2 / MOTION 1. A 5px bar beneath the live countdown shows the fraction remaining in the seven-day window, with short eased fill transitions. Yellow/red thresholds remain unchanged. The celebration count advances to the current total; exact 3/10/30/100 milestones give the count badge one brief local highlight, without a repeating or full-screen flash. Reduced motion suppresses this new movement, and the app's performance preference is respected through the shared animation wrapper.
+
+- Hard Gate PASS: mobile TypeScript passed; 59 focused timer/reminder tests passed, including every milestone boundary, repeated refresh, initial load, decreases, and a refresh that skips a count. Browser fixture shows the compact red countdown bar and the 10-challenge overlay; View streak rewards opened the working rewards panel. Native animation/audio remain explicitly substituted in this fixture.
+- Purpose Gate PASS: bar length represents actual server expiry relative to seven days, tabular digits retain readable seconds, and the local highlight directs attention to the milestone count.
+- Liveliness PASS: existing flame remains the focal point, compact timing feedback stays subordinate, and the reward count gets a single brief celebration accent.
+- Craftsmanship PASS: animations and listeners clean up on unmount; countdown pauses while its screen is inactive. Existing milestone queue waits for other overlays to close and does not retrigger on unchanged counts. Native visual timing still needs verification in an installed build.
+
+Android export also passed (1,396 modules), producing `apps/mobile/build/streak-tracker-status-export`. This validates bundling, not installation on a phone.

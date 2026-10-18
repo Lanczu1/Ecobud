@@ -25,6 +25,10 @@ export function isStreakFlameActive(count: number, active: boolean): boolean {
   return count >= 1 && active;
 }
 
+export function crossedStreakMilestone(previous: number | null, current: number): boolean {
+  return previous !== null && [1, 3, 10, 30, 100].some(milestone => previous < milestone && current >= milestone);
+}
+
 export function streakExpiry(summary: Pick<StreakSummary, 'currentStreak' | 'active' | 'expiresAt'> | null | undefined, now = Date.now()) {
   const expiresAt = summary?.expiresAt ? Date.parse(summary.expiresAt) : NaN;
   const remainingMs = Number.isFinite(expiresAt) ? expiresAt - now : null;

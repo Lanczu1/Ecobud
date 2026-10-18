@@ -2,13 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../prismaClient', () => ({ prisma: {} }));
 import { StreakService } from './StreakService';
 import { STREAK_MILESTONES, STREAK_WINDOW_MS, streakMonth, streakStatus } from '../utils/streakRules';
-import { formatStreakTimeLeft, isStreakFlameActive, isStreakSummary, streakCountdownParts, streakExpiry } from '../../../mobile/src/shared/api/streakSummary';
+import { crossedStreakMilestone, formatStreakTimeLeft, isStreakFlameActive, isStreakSummary, streakCountdownParts, streakExpiry } from '../../../mobile/src/shared/api/streakSummary';
 
 const now = Date.parse('2026-10-18T12:00:00Z');
 const hour = 3600000;
 const summary = (remaining: number, active = true, currentStreak = 1) => ({ currentStreak, active, expiresAt: new Date(now + remaining).toISOString() });
 
 describe('streak expiry warning', () => {
+  it.each([1, 3, 10, 30, 100])('celebrates crossing %s challenges once', milestone => {
+    expect(crossedStreakMilestone(milestone - 1, milestone)).toBe(true);
+    expect(crossedStreakMilestone(milestone, milestone)).toBe(false);
+    expect(crossedStreakMilestone(milestone + 1, milestone)).toBe(false);
+    expect(crossedStreakMilestone(null, milestone)).toBe(false);
+  });
+  it('detects milestones when refresh skips a count', () => {
+    expect(crossedStreakMilestone(8, 11)).toBe(true);
+    expect(crossedStreakMilestone(11, 12)).toBe(false);
+  });
   it.each([
     [86400000, { days: 1, hours: 0, minutes: 0, seconds: 0 }],
     [90061000, { days: 1, hours: 1, minutes: 1, seconds: 1 }],

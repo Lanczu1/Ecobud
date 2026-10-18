@@ -255,7 +255,28 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
   const { preferences } = useAccessibility();
   const textMultiplier = { Small: 1, Medium: 1.15, Large: 1.35 }[preferences.size] * fontScale;
   const compactLayout = textMultiplier >= 1.3 || height - insets.top - insets.bottom < 700;
-  const [reduceMotion, setReduceMotion] = React.useState(false);
+  const [reduceMotion, setReduceMotion] = React.useState(true);
+  const badgeFlash = React.useRef(new Animated.Value(0)).current;
+  const countAnimation = React.useRef(new Animated.Value(count)).current;
+  const [displayCount, setDisplayCount] = React.useState(count);
+
+  React.useEffect(() => {
+    if (reduceMotion !== false || preferences.performance || !active) {
+      badgeFlash.setValue(0);
+      setDisplayCount(count);
+      return;
+    }
+    countAnimation.setValue(Math.max(0, count - 1));
+    const listener = countAnimation.addListener(({ value }) => setDisplayCount(Math.round(value)));
+    const counter = Animated.timing(countAnimation, { toValue: count, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: false });
+    const flash = Animated.sequence([
+      Animated.timing(badgeFlash, { toValue: 0.3, duration: 180, useNativeDriver: true }),
+      Animated.timing(badgeFlash, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]);
+    counter.start();
+    if ([3, 10, 30, 100].includes(count)) flash.start();
+    return () => { counter.stop(); flash.stop(); countAnimation.removeListener(listener); };
+  }, [active, count, reduceMotion, preferences.performance, badgeFlash, countAnimation]);
 
   // Audio player for trigger celebration sound
   const popAudio = useAudioPlayer(require('../../../assets/sound sfx/pop.mp3'));
@@ -532,8 +553,9 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
             {/* Badges & Content with Slide-In Entrance */}
             <Animated.View style={[styles.detailsSection, compactLayout && styles.compactDetails, { transform: [{ translateY: itemsSlide }] }]}>
               <View style={[styles.countBadge, !active && styles.inactiveBadge]}>
+                <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, { backgroundColor: '#FFFFFF', opacity: badgeFlash }]} />
                 <Text style={[styles.count, !active && { color: '#FFFFFF' }]}>
-                  {count} {count === 1 ? 'CHALLENGE' : 'CHALLENGES'}
+                  {displayCount} {count === 1 ? 'CHALLENGE' : 'CHALLENGES'}
                 </Text>
               </View>
 
@@ -638,7 +660,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  countBadge: { backgroundColor: '#FF7900', borderRadius: 24, paddingHorizontal: 18, paddingVertical: 9, marginBottom: 4 },
+  countBadge: { backgroundColor: '#FF7900', borderRadius: 24, paddingHorizontal: 18, paddingVertical: 9, marginBottom: 4, overflow: 'hidden' },
   inactiveBadge: { backgroundColor: '#41534D' },
   count: { color: '#071C19', fontSize: 13, fontWeight: '900', textAlign: 'center' },
   title: { color: '#FFFFFF', fontSize: 36, fontWeight: '900', textAlign: 'center', maxWidth: 420 },
