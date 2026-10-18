@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Award } from 'lucide-react';
 import { adminGet, adminPostForm } from '../../utils/adminApi';
 import { BadgeArtworkPicker } from './pages/BadgeArtworkPicker';
+import { Skeleton } from './pages/PageSkeletons';
 
 export type BadgeRewardPayload = { enabled: boolean; name?: string; description?: string; iconUrl?: string; accentColor?: string };
 type RewardDetails = { name: string; description: string; iconUrl: string; accentColor: string; active?: boolean };
@@ -56,7 +57,7 @@ export function ContentBadgeReward({ reward, disabled = false }: { reward: Retur
   return <section className="space-y-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 p-5">
     <label className="flex items-center gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200"><input type="checkbox" checked={reward.enabled} disabled={disabled || reward.loading || !!reward.error} onChange={e => reward.setEnabled(e.target.checked)} className="h-4 w-4 accent-green-600" />Badge reward (optional)</label>
     <p className="text-xs text-gray-500 dark:text-gray-400">Saved with this activity and synced to Badges. Earned badges stay with residents when this reward is turned off.</p>
-    {reward.loading && <p role="status" className="text-sm text-gray-500">Loading badge reward…</p>}
+    {reward.loading && <div role="status" aria-label="Loading badge reward" className="flex items-center gap-3"><Skeleton className="h-12 w-12 rounded-xl" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-56" /></div></div>}
     {reward.error && <p role="alert" className="text-sm text-red-600">{reward.error} <button type="button" onClick={reward.retry} className="underline">Retry</button></p>}
     {reward.enabled && !reward.loading && <fieldset disabled={disabled} className="space-y-4">
       <label className="block text-sm text-gray-700 dark:text-gray-300">Badge Name *<input maxLength={80} value={details.name} onChange={e => setDetails({ ...details, name: e.target.value })} className={fieldStyle} placeholder="e.g. Waste Wise" /></label>

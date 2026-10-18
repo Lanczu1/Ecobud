@@ -8,7 +8,7 @@ import { formatReportDate, formatReportTimestamp } from '../utils/barangayReport
 
 export const barangayReportRoutes = Router();
 barangayReportRoutes.get('/', errorBoundary<AuthenticatedRequest>(async (req, res) => {
-  res.json(await getBarangayReport(req.auth!, req.query));
+  res.json(await getBarangayReport(req.auth!, req.query, new Date(), { fresh: req.query.fresh === '1' }));
 }));
 for (const format of ['pdf', 'excel']) {
   barangayReportRoutes.get(`/${format}`, errorBoundary<AuthenticatedRequest>(async (req, res) => {

@@ -1,9 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Search, Filter, UserCheck, UserX, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react';
-import { adminGet, adminPost, clearAdminApiCache, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, clearAdminApiCache, API_HOST, getLastAdminData } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
 import { AdminPagination } from '../AdminPagination';
+import { StatSkeleton } from './PageSkeletons';
 
 interface AdminUser {
   id: string;
@@ -57,24 +58,40 @@ function UserAvatar({ user }: { user: AdminUser }) {
   );
 }
 
+type UsersPage = {
+  items: AdminUser[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  stats: { total: number; online: number; offline: number };
+};
+
+function usersPath(page: number, search: string, tab: 'Members' | 'Staff') {
+  const params = new URLSearchParams({ page: String(page), pageSize: '10', role: tab === 'Members' ? 'user' : 'staff' });
+  if (search.trim()) params.set('search', search.trim());
+  return `/admin/users?${params.toString()}`;
+}
+
 export function ManageUsers() {
   const [userPage, setUserPage] = useState(1);
-  const [userPagination, setUserPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [userStats, setUserStats] = useState({ total: 0, online: 0, offline: 0 });
-  const [loading, setLoading] = useState(true);
+  const [seed] = useState(() => getLastAdminData<UsersPage>(usersPath(1, '', 'Members')));
+  const [userPagination, setUserPagination] = useState(seed?.pagination ?? { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [users, setUsers] = useState<AdminUser[]>(seed?.items ?? []);
+  const [userStats, setUserStats] = useState(seed?.stats ?? { total: 0, online: 0, offline: 0 });
+  const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [viewTab, setViewTab] = useState<'Members' | 'Staff'>('Members');
 
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const loadVersion = useRef(0);
+  const lastSearch = useRef(search);
 
   const loadUsers = async (page = userPage, query = search, tab = viewTab) => {
+    const version = ++loadVersion.current;
     try {
-      const params = new URLSearchParams({ page: String(page), pageSize: '10', role: tab === 'Members' ? 'user' : 'staff' });
-      if (query.trim()) params.set('search', query.trim());
-      const data = await adminGet<{ items: AdminUser[]; pagination: typeof userPagination; stats: typeof userStats }>(`/admin/users?${params.toString()}`, { bypassCache: true });
+      const data = await adminGet<UsersPage>(usersPath(page, query, tab), { bypassCache: true });
+      // A later page, tab or search has been asked for; its answer wins.
+      if (version !== loadVersion.current) return;
       setUsers(data.items);
       setUserPagination(data.pagination);
       setUserStats(data.stats);
@@ -123,8 +140,14 @@ export function ManageUsers() {
   }, [search, viewTab]);
 
   useEffect(() => {
-    setLoading(true);
-    const timer = setTimeout(() => void loadUsers(userPage, search, viewTab), 300);
+    // An older copy of this page shows at once while the request brings it up to date.
+    const last = getLastAdminData<UsersPage>(usersPath(userPage, search, viewTab));
+    if (last) { setUsers(last.items); setUserPagination(last.pagination); setUserStats(last.stats); setLoading(false); }
+    else setLoading(true);
+    // Only typing waits; the first load, tabs and paging fetch right away.
+    const typing = lastSearch.current !== search;
+    lastSearch.current = search;
+    const timer = setTimeout(() => void loadUsers(userPage, search, viewTab), typing ? 300 : 0);
     return () => clearTimeout(timer);
   }, [userPage, search, viewTab]);
 
@@ -205,9 +228,9 @@ export function ManageUsers() {
       {/* Stats Row */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: `Total ${viewTab}`, value: loading ? '—' : userStats.total, color: 'text-gray-900', bg: 'bg-white' },
-          { label: 'Online', value: loading ? '—' : userStats.online, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Offline', value: loading ? '—' : userStats.offline, color: 'text-red-600', bg: 'bg-red-50' },
+          { label: `Total ${viewTab}`, value: loading ? <StatSkeleton /> : userStats.total, color: 'text-gray-900', bg: 'bg-white' },
+          { label: 'Online', value: loading ? <StatSkeleton /> : userStats.online, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Offline', value: loading ? <StatSkeleton /> : userStats.offline, color: 'text-red-600', bg: 'bg-red-50' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (

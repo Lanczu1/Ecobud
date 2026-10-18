@@ -10,13 +10,14 @@ import {
   CalendarClock, FileText, Wifi, ArrowLeft, ArrowRight,
   ExternalLink, ChevronLeft, ChevronRight, Tag
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { adminGet, getLastAdminData, adminPost, adminPut, adminDelete, adminPostForm, API_HOST } from '../../../utils/adminApi';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './Announcements.css';
 import { AnnouncementEditor } from './AnnouncementEditor';
+import { StatSkeleton } from './PageSkeletons';
 
 const categories = [
   'General',
@@ -389,8 +390,10 @@ export function Announcements() {
     try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'moderator'; }
     catch { return false; }
   })();
-  const [items, setItems] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Reopening the page shows the last list at once and refreshes it behind the scenes.
+  const [seed] = useState(() => getLastAdminData<{ items: Announcement[] }>('/admin/announcements'));
+  const [items, setItems] = useState<Announcement[]>(seed?.items ?? []);
+  const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
@@ -455,7 +458,7 @@ export function Announcements() {
   }
 
   useEffect(() => {
-    void load();
+    void load(true, !!seed);
     void adminGet<{ items: string[]; assignedBarangay: string | null }>('/admin/announcements/barangays')
       .then(v => { setBarangays(v.items); setAssignedBarangay(v.assignedBarangay); })
       .catch(() => setBarangayError('Unable to load barangays. Reopen this page to retry.'));
@@ -712,10 +715,10 @@ export function Announcements() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Announcements', value: loading ? '—' : items.length, color: 'text-gray-900 dark:text-white', icon: Megaphone },
-          { label: 'Published', value: loading ? '—' : items.filter(a => a.status === 'Published').length, color: 'text-green-600 dark:text-green-400', icon: Send },
-          { label: 'Drafts', value: loading ? '—' : items.filter(a => a.status === 'Draft').length, color: 'text-gray-500 dark:text-gray-400', icon: FileText },
-          { label: 'Scheduled', value: loading ? '—' : items.filter(a => a.status === 'Scheduled').length, color: 'text-amber-600 dark:text-amber-400', icon: CalendarClock },
+          { label: 'Total Announcements', value: loading ? <StatSkeleton /> : items.length, color: 'text-gray-900 dark:text-white', icon: Megaphone },
+          { label: 'Published', value: loading ? <StatSkeleton /> : items.filter(a => a.status === 'Published').length, color: 'text-green-600 dark:text-green-400', icon: Send },
+          { label: 'Drafts', value: loading ? <StatSkeleton /> : items.filter(a => a.status === 'Draft').length, color: 'text-gray-500 dark:text-gray-400', icon: FileText },
+          { label: 'Scheduled', value: loading ? <StatSkeleton /> : items.filter(a => a.status === 'Scheduled').length, color: 'text-amber-600 dark:text-amber-400', icon: CalendarClock },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
           return (

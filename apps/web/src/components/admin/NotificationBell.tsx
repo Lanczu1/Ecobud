@@ -4,6 +4,7 @@ import { adminHref } from '../../services/adminNotifications';
 import { useAdminNotifications } from './AdminNotificationProvider';
 import { RecordIcon, StatusChip, notificationCategoryLabels, notificationStatus } from './notificationParts';
 import './NotificationBell.css';
+import { Skeleton } from './pages/PageSkeletons';
 
 export function NotificationBell({ scopeLabel }: { scopeLabel: string }) {
   const { data,error,refresh }=useAdminNotifications();
@@ -26,7 +27,7 @@ export function NotificationBell({ scopeLabel }: { scopeLabel: string }) {
       <div className="notification-dropdown-header"><div><h2>Notifications</h2><p>{scopeLabel}</p></div><button data-close type="button" aria-label="Close notifications" onClick={() => { setOpen(false); trigger.current?.focus(); }} className="notification-close"><X size={16}/></button></div>
       <div className="notification-dropdown-list">
         {error && <div role="alert" className="p-4 text-sm text-red-700 dark:text-red-300">{error} <button type="button" onClick={() => void refresh()} className="underline">Retry</button></div>}
-        {!data && !error && <p role="status" className="p-4 text-sm">Loading notifications…</p>}
+        {!data && !error && <div role="status" aria-label="Loading notifications" className="p-4"><div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="flex items-center gap-3"><Skeleton className="h-8 w-8 shrink-0 rounded-lg" /><div className="flex-1 space-y-1.5"><Skeleton className="h-3.5 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>)}</div></div>}
         {data?.items.length===0 && <p className="p-4 text-sm text-gray-500 dark:text-gray-400">No notifications yet. New updates will appear here.</p>}
         <ul>{data?.items.slice(0,3).map(item => <li key={item.id} className={!item.isRead ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}><a onClick={() => setOpen(false)} href={adminHref('Notifications',{ notification:item.id })} className="notification-preview">
           <RecordIcon recordType={item.recordType} unread={!item.isRead} />

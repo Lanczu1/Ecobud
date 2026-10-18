@@ -69,6 +69,28 @@ export function clearAdminApiCache(pathPrefix?: string) {
   }
 }
 
+// The last answer per read for this session, however old. A page opens with it straight away
+// and refreshes behind it, so revisiting a page never waits on the network. Cache clears do not
+// touch it: the page always asks the server again after showing it.
+const LAST_RESPONSE_MAX_ENTRIES = 120;
+const lastResponses = new Map<string, unknown>();
+
+function rememberResponse(path: string, data: unknown) {
+  const key = `${getToken()}:${path}`;
+  lastResponses.delete(key);
+  lastResponses.set(key, data);
+  while (lastResponses.size > LAST_RESPONSE_MAX_ENTRIES) {
+    const oldest = lastResponses.keys().next().value;
+    if (oldest === undefined) break;
+    lastResponses.delete(oldest);
+  }
+}
+
+/** The last data this session received for path, or null. It may be stale; refresh after showing it. */
+export function getLastAdminData<T>(path: string): T | null {
+  return (lastResponses.get(`${getToken()}:${path}`) as T | undefined) ?? null;
+}
+
 export function getCachedAdminData<T>(path: string): T | null {
   const entry = memoryCache.get(path);
   if (!entry) return null;
@@ -120,7 +142,11 @@ export async function adminGet<T>(path: string, options?: { bypassCache?: boolea
   inFlightRequests.set(path, fetchPromise);
   try {
     const data = await fetchPromise;
-    if (inFlightRequests.get(path) === fetchPromise) memoryCache.set(path, { data, timestamp: Date.now() });
+    // A newer fresh read for the same path supersedes this one; keep its answer, not this older one.
+    if (inFlightRequests.get(path) === fetchPromise) {
+      memoryCache.set(path, { data, timestamp: Date.now() });
+      rememberResponse(path, data);
+    }
     return data;
   } finally {
     if (inFlightRequests.get(path) === fetchPromise) inFlightRequests.delete(path);

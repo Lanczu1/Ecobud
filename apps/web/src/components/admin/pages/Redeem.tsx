@@ -4,11 +4,12 @@ import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Gift, Trash2, Search, CheckCircle, XCircle, Package, Plus, Edit2, Tag, Coins, Upload, X, Clock, User, AlertTriangle, Eye, Loader2, RefreshCw } from 'lucide-react';
-import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminDelete, adminPatch, adminPost, adminPostForm, API_HOST, getLastAdminData } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { useToast } from '../../../context/ToastContext';
+import { StatSkeleton } from './PageSkeletons';
 
 interface RedeemItem {
   id: string;
@@ -80,6 +81,13 @@ interface RedeemDraft {
   imageFile: File | null; category: string; stock: string;
 }
 
+function itemsPath(page: number, status: string, search: string) {
+  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  if (status !== 'all') params.set('status', status);
+  if (search.trim()) params.set('search', search.trim());
+  return `/redeem?${params.toString()}`;
+}
+
 export function Redeem() {
   const drafts = useLocalDrafts<RedeemDraft>('redeem');
   const [mainTab, setMainTab] = useState<'items' | 'requests'>(notificationTarget('redemption') ? 'requests' : 'items');
@@ -89,9 +97,14 @@ export function Redeem() {
   const [requestPagination, setRequestPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [items, setItems] = useState<RedeemItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<RedeemStats | null>(null);
+  // Reopening the page shows the last first page at once and refreshes it behind the scenes.
+  const [seed] = useState(() => getLastAdminData<{ items: RedeemItem[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } }>(itemsPath(1, 'all', '')));
+  const [items, setItems] = useState<RedeemItem[]>(seed?.items ?? []);
+  const [loading, setLoading] = useState(!seed);
+  const [stats, setStats] = useState<RedeemStats | null>(() => getLastAdminData<RedeemStats>('/redeem/stats'));
+  const itemsVersion = useRef(0);
+  const requestsVersion = useRef(0);
+  const lastSearch = useRef(search);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editItem, setEditItem] = useState<RedeemItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -137,15 +150,20 @@ export function Redeem() {
   // ─── Items ──────────────────────────────────────────────────────────────
 
   const fetchItems = useCallback(async (silent = false) => {
+    const version = ++itemsVersion.current;
+    const path = itemsPath(itemPage, filterStatus, search);
+    // An older copy of this page shows at once while the requests below bring it up to date.
+    const last = getLastAdminData<{ items: RedeemItem[]; pagination: typeof itemPagination }>(path);
+    const lastStats = getLastAdminData<RedeemStats>('/redeem/stats');
+    if (last) { setItems(last.items); setItemPagination(last.pagination); if (lastStats) setStats(lastStats); setLoading(false); }
     try {
-      if (!silent) setLoading(true);
-      const params = new URLSearchParams({ page: String(itemPage), pageSize: '25' });
-      if (filterStatus !== 'all') params.set('status', filterStatus);
-      if (search.trim()) params.set('search', search.trim());
+      if (!silent && !last) setLoading(true);
       const [itemsData, statsData] = await Promise.all([
-        adminGet<{ items: RedeemItem[]; pagination: typeof itemPagination }>(`/redeem?${params.toString()}`),
+        adminGet<{ items: RedeemItem[]; pagination: typeof itemPagination }>(path),
         adminGet<RedeemStats>('/redeem/stats'),
       ]);
+      // A later page or filter has been asked for; its answer wins.
+      if (version !== itemsVersion.current) return;
       setItems(itemsData.items);
       setItemPagination(itemsData.pagination);
       setStats(statsData);
@@ -308,19 +326,27 @@ export function Redeem() {
   // ─── Requests ───────────────────────────────────────────────────────────
 
   const fetchRequests = useCallback(async (silent = false) => {
+    const version = ++requestsVersion.current;
+    const params = new URLSearchParams({ page: String(requestPage), pageSize: '25' });
+    const target=notificationTarget('redemption'); if (target) params.set('recordId',target);
+    if (target) params.set('status','all');
+    else if (requestFilterRef.current === 'archive') params.set('status', 'claimed');
+    else if (requestFilterRef.current === 'all') params.set('status', 'active');
+    else params.set('status', requestFilterRef.current);
+    if (search.trim()) params.set('search', search.trim());
+    const path = `/redeem/requests?${params.toString()}`;
+    // An older copy of this page shows at once while the requests below bring it up to date.
+    const last = getLastAdminData<{ items: RedeemRequest[]; pagination: typeof requestPagination }>(path);
+    const lastStats = getLastAdminData<RequestStats>('/redeem/requests/stats');
+    if (last) { setRequests(last.items); setRequestPagination(last.pagination); if (lastStats) setRequestStats(lastStats); setRequestsLoading(false); }
     try {
-      if (!silent) setRequestsLoading(true);
-      const params = new URLSearchParams({ page: String(requestPage), pageSize: '25' });
-      const target=notificationTarget('redemption'); if (target) params.set('recordId',target);
-      if (target) params.set('status','all');
-      else if (requestFilterRef.current === 'archive') params.set('status', 'claimed');
-      else if (requestFilterRef.current === 'all') params.set('status', 'active');
-      else params.set('status', requestFilterRef.current);
-      if (search.trim()) params.set('search', search.trim());
+      if (!silent && !last) setRequestsLoading(true);
       const [reqsData, statsData] = await Promise.all([
-        adminGet<{ items: RedeemRequest[]; pagination: typeof requestPagination }>(`/redeem/requests?${params.toString()}`),
+        adminGet<{ items: RedeemRequest[]; pagination: typeof requestPagination }>(path),
         adminGet<RequestStats>('/redeem/requests/stats'),
       ]);
+      // A later page or filter has been asked for; its answer wins.
+      if (version !== requestsVersion.current) return;
       setRequests(reqsData.items);
       setRequestPagination(reqsData.pagination);
       setRequestStats(statsData);
@@ -334,12 +360,15 @@ export function Redeem() {
 
   // Initial fetch and filter change
   useEffect(() => {
+    // Only typing waits; the first load, tabs, filters and paging fetch right away.
+    const typing = lastSearch.current !== search;
+    lastSearch.current = search;
     const timer = setTimeout(() => {
       if (mainTab === 'items') void fetchItems();
       if (mainTab === 'requests') void fetchRequests();
-    }, 250);
+    }, typing ? 250 : 0);
     return () => clearTimeout(timer);
-  }, [mainTab, requestFilter, fetchItems, fetchRequests]);
+  }, [mainTab, requestFilter, fetchItems, fetchRequests, search]);
 
   // Real-time synchronization & automatic periodic background refresh
   useEffect(() => {
@@ -628,7 +657,7 @@ export function Redeem() {
                 return (
                   <div key={s.label} className={`${s.bg} rounded-2xl border ${s.border} p-5 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 animate-reveal ${delayClass}`}>
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{s.label}</p>
-                    <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{requestsLoading ? '—' : s.value}</p>
+                    <p className={`text-3xl font-serif font-bold mt-1 ${s.color}`}>{requestsLoading ? <StatSkeleton /> : s.value}</p>
                   </div>
                 );
               })}

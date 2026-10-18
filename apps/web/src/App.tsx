@@ -6,6 +6,9 @@ import { AdminSection } from './components/admin/AdminSidebar';
 import { ToastProvider } from './context/ToastContext';
 import { AdminNotificationProvider } from './components/admin/AdminNotificationProvider';
 import { adminHref, revokeAdminPushSession } from './services/adminNotifications';
+import { BadgesPageSkeleton } from './components/admin/pages/BadgesSkeleton';
+import { BarangayReportsPageSkeleton, SystemReportsPageSkeleton } from './components/admin/pages/ReportsSkeleton';
+import { AdminPageSkeleton } from './components/admin/pages/PageSkeletons';
 
 const WEB_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 const WEB_ABSOLUTE_TIMEOUT_MS = 12 * 60 * 60 * 1000;
@@ -33,32 +36,82 @@ function hasValidStoredAdminSession(): boolean {
   return true;
 }
 
-const Dashboard = lazy(() => import('./components/admin/Dashboard').then((m) => ({ default: m.Dashboard })));
-const IdVerification = lazy(() => import('./components/admin/pages/IdVerification').then(m => ({ default: m.IdVerification })));
-const Notifications = lazy(() => import('./components/admin/pages/Notifications').then(m => ({ default: m.Notifications })));
-const ManageUsers = lazy(() => import('./components/admin/pages/ManageUsers').then((m) => ({ default: m.ManageUsers })));
-const UserActivityTransactions = lazy(() => import('./components/admin/pages/UserActivityTransactions').then(m => ({ default: m.UserActivityTransactions })));
-const LearningContent = lazy(() => import('./components/admin/pages/LearningContent').then((m) => ({ default: m.LearningContent })));
-const Challenges = lazy(() => import('./components/admin/pages/Challenges').then((m) => ({ default: m.Challenges })));
-const Events = lazy(() => import('./components/admin/pages/Events').then((m) => ({ default: m.Events })));
-const GiveAndGetHub = lazy(() => import('./components/admin/pages/GiveAndGetHub').then((m) => ({ default: m.GiveAndGetHub })));
-const Redeem = lazy(() => import('./components/admin/pages/Redeem').then((m) => ({ default: m.Redeem })));
-const Reports = lazy(() => import('./components/admin/pages/Reports').then((m) => ({ default: m.Reports })));
-const BarangayReports = lazy(() => import('./components/admin/pages/BarangayReports').then((m) => ({ default: m.Reports })));
-const Announcements = lazy(() => import('./components/admin/pages/Announcements').then((m) => ({ default: m.Announcements })));
+// Page code, loaded on first visit. After sign-in the pages a role can open are fetched quietly in the
+// background too, so switching pages waits for data only, never for a code download.
+const pageLoaders = {
+  Dashboard: () => import('./components/admin/Dashboard').then(m => ({ default: m.Dashboard })),
+  IdVerification: () => import('./components/admin/pages/IdVerification').then(m => ({ default: m.IdVerification })),
+  Notifications: () => import('./components/admin/pages/Notifications').then(m => ({ default: m.Notifications })),
+  ManageUsers: () => import('./components/admin/pages/ManageUsers').then(m => ({ default: m.ManageUsers })),
+  UserActivityTransactions: () => import('./components/admin/pages/UserActivityTransactions').then(m => ({ default: m.UserActivityTransactions })),
+  LearningContent: () => import('./components/admin/pages/LearningContent').then(m => ({ default: m.LearningContent })),
+  Challenges: () => import('./components/admin/pages/Challenges').then(m => ({ default: m.Challenges })),
+  Events: () => import('./components/admin/pages/Events').then(m => ({ default: m.Events })),
+  GiveAndGetHub: () => import('./components/admin/pages/GiveAndGetHub').then(m => ({ default: m.GiveAndGetHub })),
+  Redeem: () => import('./components/admin/pages/Redeem').then(m => ({ default: m.Redeem })),
+  Reports: () => import('./components/admin/pages/Reports').then(m => ({ default: m.Reports })),
+  BarangayReports: () => import('./components/admin/pages/BarangayReports').then(m => ({ default: m.Reports })),
+  Announcements: () => import('./components/admin/pages/Announcements').then(m => ({ default: m.Announcements })),
+  Badges: () => import('./components/admin/pages/Badges').then(m => ({ default: m.Badges })),
+};
+type PageName = keyof typeof pageLoaders;
+const pagesByRole: Record<'admin' | 'moderator', PageName[]> = {
+  admin: ['Dashboard', 'Notifications', 'ManageUsers', 'UserActivityTransactions', 'LearningContent', 'Challenges', 'Badges', 'Events', 'GiveAndGetHub', 'Redeem', 'Reports', 'Announcements'],
+  moderator: ['Announcements', 'Notifications', 'IdVerification', 'Challenges', 'Events', 'GiveAndGetHub', 'Redeem', 'BarangayReports'],
+};
 
-function SectionFallback() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-80 w-full py-12">
-      <div className="w-9 h-9 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
-      <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 tracking-wide uppercase">
-        Loading module...
-      </span>
-    </div>
-  );
+function preloadPages(role?: string) {
+  const pages = pagesByRole[role === 'moderator' ? 'moderator' : 'admin'];
+  // One at a time while the browser is idle, so the open page keeps the network to itself.
+  const next = (index: number) => {
+    if (index >= pages.length) return;
+    const run = () => void pageLoaders[pages[index]]().catch(() => {}).finally(() => next(index + 1));
+    if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 2000 });
+    else setTimeout(run, 200);
+  };
+  next(0);
 }
 
-const Badges = lazy(() => import('./components/admin/pages/Badges').then((m) => ({ default: m.Badges })));
+const Dashboard = lazy(pageLoaders.Dashboard);
+const IdVerification = lazy(pageLoaders.IdVerification);
+const Notifications = lazy(pageLoaders.Notifications);
+const ManageUsers = lazy(pageLoaders.ManageUsers);
+const UserActivityTransactions = lazy(pageLoaders.UserActivityTransactions);
+const LearningContent = lazy(pageLoaders.LearningContent);
+const Challenges = lazy(pageLoaders.Challenges);
+const Events = lazy(pageLoaders.Events);
+const GiveAndGetHub = lazy(pageLoaders.GiveAndGetHub);
+const Redeem = lazy(pageLoaders.Redeem);
+const Reports = lazy(pageLoaders.Reports);
+const BarangayReports = lazy(pageLoaders.BarangayReports);
+const Announcements = lazy(pageLoaders.Announcements);
+const Badges = lazy(pageLoaders.Badges);
+
+const dashboardSkeleton = <AdminPageSkeleton subtitle="" body="table" />;
+
+// While a page's code downloads, show that page's skeleton instead of a spinner.
+function sectionSkeleton(section: string, role?: string) {
+  switch (section) {
+    case 'Dashboard': return dashboardSkeleton;
+    case 'Notifications': return <AdminPageSkeleton title="Notifications" stats={0} body="table" />;
+    case 'Users': return <AdminPageSkeleton stats={3} action body="table" />;
+    case 'User Activity & Transactions': return role === 'admin'
+      ? <AdminPageSkeleton title="User Activity & Transactions" subtitle="Choose a resident to show their transactions. History stays hidden until you open it." stats={0} body="table" />
+      : <AdminPageSkeleton title="Challenges" action body="table" />;
+    case 'Learning Content': return <AdminPageSkeleton title="Learning Content" subtitle="Create and manage eco-education articles and modules" action body="table" />;
+    case 'Challenges': return <AdminPageSkeleton title="Challenges" action body="table" />;
+    case 'Badges': return <BadgesPageSkeleton />;
+    case 'Reports': return role === 'moderator' ? <BarangayReportsPageSkeleton /> : <SystemReportsPageSkeleton />;
+    case 'Events': return <AdminPageSkeleton title="Events" subtitle="Organize and track community eco-events" action body="grid" />;
+    case 'Give and Get Hub': return <AdminPageSkeleton title="Manage Listings" stats={5} body="grid" />;
+    case 'Redeem': return <AdminPageSkeleton title="Redeem" subtitle="Manage reward catalog and redemption requests (Auto-syncing live)" action body="grid" />;
+    case 'ID Verification': return role === 'moderator'
+      ? <AdminPageSkeleton title="ID Verification" subtitle="Review and manage resident ID submissions in your assigned barangay." stats={0} body="list" />
+      : dashboardSkeleton;
+    case 'Announcements': return <AdminPageSkeleton title="Announcements" subtitle="Create, publish, and manage community announcements" action body="list" />;
+    default: return dashboardSkeleton;
+  }
+}
 
 function renderSection(section: AdminSection, role?: string) {
   const accessibleSection = role === 'moderator' && ['Learning Content', 'Badges'].includes(section)
@@ -66,7 +119,7 @@ function renderSection(section: AdminSection, role?: string) {
     : section;
 
   return (
-    <Suspense fallback={<SectionFallback />}>
+    <Suspense fallback={sectionSkeleton(accessibleSection, role)}>
       {(() => {
         switch (accessibleSection) {
           case 'Dashboard':        return <Dashboard />;
@@ -119,6 +172,10 @@ export default function App() {
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem('ecobud_dark_mode') === 'true';
   });
+
+  useEffect(() => {
+    if (isAuthenticated) preloadPages(adminUserRole);
+  }, [isAuthenticated, adminUserRole]);
 
   useEffect(() => {
     const update=() => setRouteHash(window.location.hash);

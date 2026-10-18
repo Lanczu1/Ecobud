@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { adminDelete, adminGet, adminPatch, adminPut } from '../../../utils/adminApi';
+import { adminDelete, adminGet, adminPatch, adminPut, getLastAdminData } from '../../../utils/adminApi';
 import { adminHref, browserPushEnabled, browserPushSupported, disableBrowserPush, enableBrowserPush, fetchNotificationPage,
   notificationCategories, notificationRecordHref, type AdminNotification, type NotificationPage, type NotificationPreferences } from '../../../services/adminNotifications';
 import { useAdminNotifications } from '../AdminNotificationProvider';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { Bell, CheckCheck, RefreshCw, Settings, Trash2, X } from 'lucide-react';
 import { RecordIcon, StatusChip, notificationCategoryLabels as labels, notificationStatus } from '../notificationParts';
+import { Skeleton, TableSkeleton } from './PageSkeletons';
 
 const field='min-h-11 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 const fieldLabel='space-y-1 text-xs font-semibold text-gray-600 dark:text-gray-300';
@@ -19,17 +20,21 @@ export function Notifications() {
   const { refresh }=useAdminNotifications();
   const role=readRole();
   const [filter,setFilter]=useState('all'); const [category,setCategory]=useState('');
-  const [page,setPage]=useState<NotificationPage | null>(null); const [loading,setLoading]=useState(true); const [error,setError]=useState('');
+  // Reopening the page shows the last list at once and refreshes it behind the scenes.
+  const [page,setPage]=useState<NotificationPage | null>(() => getLastAdminData<NotificationPage>(`/admin/notifications?${new URLSearchParams({ filter: 'all' })}`)); const [loading,setLoading]=useState(() => !page); const [error,setError]=useState('');
   const [busy,setBusy]=useState(false); const [selected,setSelected]=useState<AdminNotification | null>(null);
   const [detailError,setDetailError]=useState(''); const [detailLoading,setDetailLoading]=useState(false);
-  const [prefs,setPrefs]=useState<NotificationPreferences | null>(null); const [prefsError,setPrefsError]=useState('');
+  const [prefs,setPrefs]=useState<NotificationPreferences | null>(() => getLastAdminData<NotificationPreferences>('/admin/notifications/preferences')); const [prefsError,setPrefsError]=useState('');
   const [pushEnabled,setPushEnabled]=useState(false); const [settingsOpen,setSettingsOpen]=useState(false); const [saved,setSaved]=useState('');
   const request=useRef(0); const loadedMore=useRef(false);
   const notificationId=new URLSearchParams(window.location.hash.split('?')[1] || '').get('notification');
   const load=useCallback(async (append=false, cursor?: NotificationPage['next']) => {
-    const version=++request.current; setLoading(true); setError(''); loadedMore.current=append;
+    const version=++request.current; setError(''); loadedMore.current=append;
     const q=new URLSearchParams({ filter }); if (category) q.set('category',category);
     if (append && cursor) { q.set('before',cursor.before); q.set('beforeId',cursor.beforeId); }
+    // An older copy of this list shows at once while the request brings it up to date.
+    const last=append ? null : getLastAdminData<NotificationPage>(`/admin/notifications?${q}`);
+    if (last) { setPage(last); setLoading(false); } else setLoading(true);
     try { const result=await fetchNotificationPage(q); if (version===request.current) setPage(current => ({ ...result, items: append && current ? [...current.items,...result.items.filter(item=>!current.items.some(old=>old.id===item.id))] : result.items })); }
     catch (e) { if (version===request.current) setError(e instanceof Error ? e.message : 'Could not load notifications.'); }
     finally { if (version===request.current) setLoading(false); }
@@ -107,7 +112,7 @@ export function Notifications() {
     {settingsOpen && <section aria-label="Notification settings" className={`${card} animate-reveal p-5 motion-reduce:animate-none sm:p-6`}>
       <h2 className="font-bold text-gray-900 dark:text-white">Browser alerts</h2>
       <p className="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">Regular updates stay in your inbox. Browser alerts cover grouped review reminders and system failures. Quiet hours use Philippine time.</p>
-      {!prefs && !prefsError && <p role="status" className="mt-4 text-sm text-gray-500 dark:text-gray-400">Loading notification settings…</p>}
+      {!prefs && !prefsError && <div role="status" aria-label="Loading notification settings" className="mt-4 space-y-3">{[0, 1, 2].map(i => <div key={i} className="flex items-center gap-3"><Skeleton className="h-5 w-5 rounded" /><Skeleton className="h-4 w-56" /></div>)}</div>}
       {!browserPushSupported() && <p className={`${notice} mt-4`}>Browser alerts are unavailable here. Use a supported browser over HTTPS.</p>}
       {prefs && !prefs.publicKey && <p className={`${notice} mt-4`}>Browser push is awaiting server setup. In-app notifications remain available.</p>}
       {prefs && <>
@@ -130,7 +135,7 @@ export function Notifications() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         {selected && <RecordIcon recordType={selected.recordType} />}
         <div className="min-w-0 flex-1 basis-48">
-          {detailLoading && <p role="status" className="text-sm text-gray-500 dark:text-gray-400">Loading update…</p>}
+          {detailLoading && <div role="status" aria-label="Loading update" className="space-y-2"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /></div>}
           {selected && <><h2 className="text-lg font-bold text-gray-900 dark:text-white">{selected.title}</h2>
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400"><StatusChip status={notificationStatus(selected)} /><span>{selected.barangays.join(', ') || 'All barangays'} · {new Date(selected.createdAt).toLocaleString()}</span></p></>}
         </div>
@@ -166,7 +171,7 @@ export function Notifications() {
     </div>
 
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{error} <button type="button" onClick={()=>void load()} className="ml-2 rounded font-semibold underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">Retry</button></div>}
-    {loading && <p role="status" className={`${page?.items.length ? '' : 'rounded-2xl border border-gray-200 p-8 text-center dark:border-gray-800'} text-sm text-gray-500 dark:text-gray-400`}>Loading notifications…</p>}
+    {loading && !page?.items.length && <TableSkeleton rows={6} columns={4} label="Loading notifications" />}
     {!loading && !error && page?.items.length===0 && <div className={`${card} p-10 text-center`}><Bell aria-hidden="true" className="mx-auto mb-3 h-8 w-8 text-gray-400" /><p className="text-sm text-gray-600 dark:text-gray-400">No notifications match this filter.</p></div>}
     {page?.items.length ? <ul className={`${card} animate-reveal delay-160 divide-y divide-gray-100 overflow-hidden motion-reduce:animate-none dark:divide-gray-800`}>{page.items.map(item=><li className={`flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-4 sm:px-5 ${!item.isRead ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}`} key={item.id}>
       <RecordIcon recordType={item.recordType} unread={!item.isRead} />

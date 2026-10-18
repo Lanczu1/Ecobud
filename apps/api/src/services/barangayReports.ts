@@ -4,6 +4,7 @@ import { HttpError } from '../http/errorResponder';
 import { BARANGAYS } from '../utils/announcementBarangays';
 import { effectiveAnnouncementStatus } from './announcementRules';
 import { eventBarangay } from './eventAccess';
+import { apiCache } from '../lib/cache';
 
 type ReportAuth = { role: string; city?: string | null };
 export async function authorizeEventReport(auth: ReportAuth, eventId: string) {
@@ -41,9 +42,19 @@ export function reportPeriod(query: { from?: unknown; to?: unknown }, now = new 
   return { from: String(from), to: String(to), range: { gte: start, lt: end } };
 }
 
-export async function getBarangayReport(auth: ReportAuth, query: { barangay?: unknown; from?: unknown; to?: unknown }, now = new Date()) {
+// The report runs about twenty counts, which queue behind a small hosted connection pool. Reopening the page
+// or exporting what is on screen reuses the figures for a short while; fresh skips them (Refresh, live updates).
+const REPORT_CACHE_SECONDS = 20;
+
+export async function getBarangayReport(auth: ReportAuth, query: { barangay?: unknown; from?: unknown; to?: unknown }, now = new Date(), options: { fresh?: boolean } = {}) {
   const barangay = reportScope(auth, query.barangay);
   const period = reportPeriod(query, now);
+  const key = `barangay_report:${auth.role}:${barangay ?? 'all'}:${period.from}:${period.to}`;
+  if (options.fresh) apiCache.delete(key);
+  return apiCache.getOrSet(key, REPORT_CACHE_SECONDS, () => buildBarangayReport(auth, barangay, period, now));
+}
+
+async function buildBarangayReport(auth: ReportAuth, barangay: string | null, period: ReturnType<typeof reportPeriod>, now: Date) {
   const resident: Prisma.UserWhereInput = { role: 'user', ...(barangay ? { profile: { city: { equals: barangay, mode: 'insensitive' } } } : {}) };
   const event: Prisma.EventWhereInput = barangay ? { barangay } : {};
   const submission = { user: resident, createdAt: period.range };

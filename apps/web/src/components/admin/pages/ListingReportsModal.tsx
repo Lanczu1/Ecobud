@@ -4,6 +4,7 @@ import { adminGet } from '../../../utils/adminApi';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { AdminPagination } from '../AdminPagination';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
+import { Skeleton } from './PageSkeletons';
 
 interface ReportPage {
   items: { id: string; account: string; reportName: string; reason: string; occurrences: number; createdAt: string; resolvedAt: string | null }[];
@@ -78,7 +79,7 @@ export function ListingReportsModal({ listing, onClose }: { listing: { id: strin
           {data && <p className="mt-2 text-sm font-semibold">{data.activeCount} active reports · {data.totalReports} total reports</p>}
         </div>
         <div className="overflow-y-auto p-5">
-          {loading ? <p role="status">Loading reports…</p> : error ? <div role="alert"><p>{error}</p><button type="button" className="mt-3 rounded-lg border px-3 py-2" onClick={() => setRetry(value => value + 1)}>Try again</button></div> : data?.items.length ? <div className="space-y-3">
+          {loading ? <div role="status" aria-label="Loading reports"><div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="flex items-center gap-3"><Skeleton className="h-8 w-8 shrink-0 rounded-lg" /><div className="flex-1 space-y-1.5"><Skeleton className="h-3.5 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>)}</div></div> : error ? <div role="alert"><p>{error}</p><button type="button" className="mt-3 rounded-lg border px-3 py-2" onClick={() => setRetry(value => value + 1)}>Try again</button></div> : data?.items.length ? <div className="space-y-3">
             {data.items.map(report => <article key={report.id} className="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{report.resolvedAt ? 'Resolved' : 'Awaiting review'} · {new Date(report.createdAt).toLocaleString()}</p>
               <dl className="space-y-2 text-sm">

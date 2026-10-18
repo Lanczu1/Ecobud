@@ -4,13 +4,14 @@ import { LocalDraftPanel } from '../LocalDraftPanel';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Plus, Edit3, Trash2, Clock, Eye, Search, AlertCircle, X, Loader2, Star } from 'lucide-react';
-import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminPostForm, adminPutForm, adminDelete, adminPatch, API_HOST, clearAdminApiCache, getLastAdminData } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { ContentBadgeReward, useContentBadgeReward } from '../ContentBadgeReward';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
+import { StatSkeleton } from './PageSkeletons';
 
 interface Lesson {
   id: string;
@@ -589,12 +590,22 @@ function LessonModal({ onClose, onSave, initial, drafts }: ModalProps) {
   );
 }
 
+function lessonsPath(page: number, search: string, status: string) {
+  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  const target = notificationTarget('lesson'); if (target) params.set('recordId', target);
+  if (search.trim()) params.set('search', search.trim());
+  if (status !== 'All') params.set('status', status);
+  return `/admin/lessons?${params.toString()}`;
+}
+
 export function LearningContent() {
   const drafts = useLocalDrafts<LessonDraft>('learning');
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Reopening the page shows the last first page at once and refreshes it behind the scenes.
+  const [seed] = useState(() => getLastAdminData<{ items: Lesson[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } }>(lessonsPath(1, '', 'All')));
+  const [pagination, setPagination] = useState(seed?.pagination ?? { page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [lessons, setLessons] = useState<Lesson[]>(seed?.items ?? []);
+  const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -604,14 +615,19 @@ export function LearningContent() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => {});
+  const loadVersion = useRef(0);
+  const lastSearch = useRef(search);
 
   const load = async (fresh = false) => {
+    const version = ++loadVersion.current;
+    const path = lessonsPath(page, search, filterStatus);
+    // An older copy of this page shows at once while the request below brings it up to date.
+    const last = getLastAdminData<{ items: Lesson[]; pagination: typeof pagination }>(path);
+    if (last) { setLessons(last.items); setPagination(last.pagination); setLoading(false); }
     try {
-      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
-      const target=notificationTarget('lesson'); if (target) params.set('recordId',target);
-      if (search.trim()) params.set('search', search.trim());
-      if (filterStatus !== 'All') params.set('status', filterStatus);
-      const data = await adminGet<{ items: Lesson[]; pagination: typeof pagination }>(`/admin/lessons?${params.toString()}`, { bypassCache: fresh });
+      const data = await adminGet<{ items: Lesson[]; pagination: typeof pagination }>(path, { bypassCache: fresh });
+      // A later page or filter has been asked for; its answer wins.
+      if (version !== loadVersion.current) return;
       setLessons(data.items);
       setPagination(data.pagination);
       setError(null);
@@ -625,7 +641,10 @@ export function LearningContent() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(true), 250);
+    // Only typing waits; the first load, filters and paging fetch right away.
+    const typing = lastSearch.current !== search;
+    lastSearch.current = search;
+    const timer = setTimeout(() => void load(true), typing ? 250 : 0);
     return () => clearTimeout(timer);
   }, [page, search, filterStatus]);
 
@@ -751,10 +770,10 @@ export function LearningContent() {
       {/* Stats */}
       <div className="flex w-full gap-4 flex-wrap pb-2">
         {[
-          { label: 'Total Content', value: loading ? '—' : lessons.length, extra: 'modules', color: 'text-gray-900' },
-          { label: 'Published', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Published').length, extra: 'live', color: 'text-green-600' },
-          { label: 'Auto Publish', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Auto Publish').length, extra: 'scheduled', color: 'text-blue-600' },
-          { label: 'Drafts', value: loading ? '—' : lessons.filter(c => getLessonStatus(c) === 'Draft').length, extra: 'unpublished', color: 'text-yellow-600' },
+          { label: 'Total Content', value: loading ? <StatSkeleton /> : lessons.length, extra: 'modules', color: 'text-gray-900' },
+          { label: 'Published', value: loading ? <StatSkeleton /> : lessons.filter(c => getLessonStatus(c) === 'Published').length, extra: 'live', color: 'text-green-600' },
+          { label: 'Auto Publish', value: loading ? <StatSkeleton /> : lessons.filter(c => getLessonStatus(c) === 'Auto Publish').length, extra: 'scheduled', color: 'text-blue-600' },
+          { label: 'Drafts', value: loading ? <StatSkeleton /> : lessons.filter(c => getLessonStatus(c) === 'Draft').length, extra: 'unpublished', color: 'text-yellow-600' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : 'delay-160';
           return (

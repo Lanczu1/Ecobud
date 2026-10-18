@@ -11,7 +11,7 @@ import {
   ChevronDown, ChevronRight, User, Layers, Filter, 
   RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, EyeOff, Info, FileText, CheckSquare, FileDown
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminDownload, API_HOST, clearAdminApiCache, getCachedAdminData } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminDownload, API_HOST, clearAdminApiCache, getCachedAdminData, getLastAdminData } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
@@ -655,9 +655,15 @@ function ChallengeDetailModal({ challenge, onClose, onEdit, isModerator }: Chall
 export function Challenges() {
   const drafts = useLocalDrafts<ChallengeDraft>('challenges');
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Reopening the page shows the last first page at once and refreshes it behind the scenes.
+  const [seed] = useState(() => {
+    const params = new URLSearchParams({ page: '1', pageSize: '25' });
+    const target = notificationTarget('challenge'); if (target) params.set('recordId', target);
+    return getLastAdminData<{ items: Challenge[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } }>(`/admin/challenges?${params.toString()}`);
+  });
+  const [pagination, setPagination] = useState(seed?.pagination ?? { page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [challenges, setChallenges] = useState<Challenge[]>(seed?.items ?? []);
+  const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -797,6 +803,9 @@ export function Challenges() {
       setSubmissionsLoading(false);
       return;
     }
+    // An older copy of this page shows at once while the request below brings it up to date.
+    const last = reuseInFlight ? getLastAdminData<SubmissionsResponse>(`/admin/submissions?${query}`) : null;
+    if (last) { showSubmissionsPage(last); setSubmissionsLoading(false); }
     if (submissionsRefreshInFlight.current) {
       if (reuseInFlight && !submissionsRefreshQueued.current && submissionsInFlightQuery.current === query) {
         if (showLoading) setSubmissionsRefreshing(true);

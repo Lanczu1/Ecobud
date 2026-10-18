@@ -12,7 +12,7 @@ import {
   CheckCircle2, XCircle, ShieldCheck, RefreshCw, FileDown
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, adminDownload, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminPutForm, adminDownload, API_HOST, clearAdminApiCache, getLastAdminData } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
@@ -23,6 +23,7 @@ import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { StatSkeleton, TableSkeleton } from './PageSkeletons';
 
 function QrExpiration({ expiresAt, createdAt }: { expiresAt?: string; createdAt?: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -780,9 +781,20 @@ function EventModal({ onClose, onSave, initial, drafts, barangays, assignedBaran
 export function Events() {
   const drafts = useLocalDrafts<FormData>('events');
   const [page, setPage] = useState(1);
-  const [eventPagination, setEventPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
-  const [events, setEvents] = useState<AdminEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Reopening the page shows the last first page at once and refreshes it behind the scenes.
+  const [seed] = useState(() => {
+    const params = new URLSearchParams({ page: '1', pageSize: '25' });
+    const target = notificationTarget('event'); if (target) params.set('recordId', target);
+    try {
+      const user = JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null');
+      const city = user?.role === 'moderator' ? user.city?.trim() : '';
+      if (city) params.set('barangay', city);
+    } catch { /* no stored user */ }
+    return getLastAdminData<{ items: AdminEvent[]; pagination: { page: number; pageSize: number; total: number; totalPages: number } }>(`/admin/events?${params.toString()}`);
+  });
+  const [eventPagination, setEventPagination] = useState(seed?.pagination ?? { page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [events, setEvents] = useState<AdminEvent[]>(seed?.items ?? []);
+  const [loading, setLoading] = useState(!seed);
   const eventsRefreshInFlight = useRef(false);
   const eventsRequestKey = useRef('');
   const eventsRefreshQueued = useRef(false);
@@ -858,7 +870,13 @@ export function Events() {
     }
     submissionsRefreshInFlight.current = true;
     submissionsRequestKey.current = requestKey;
-    if (showLoading) setSubmissionsLoading(true);
+    // An older copy of this page shows at once while the request below brings it up to date.
+    const last = getLastAdminData<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?${requestKey}`);
+    if (last) {
+      setSubmissions(last.items.filter(submission => submission.submissionType === 'EVENT' || submission.challenge?.type === 'EVENT'));
+      setSubmissionsPagination(last.pagination);
+      setSubmissionsLoading(false);
+    } else if (showLoading) setSubmissionsLoading(true);
     try {
       const data = await adminGet<{ items: EventSubmission[]; pagination: typeof submissionsPagination }>(`/admin/submissions?${params.toString()}`, { bypassCache: true });
       if (submissionsRefreshQueued.current) return;
@@ -870,7 +888,7 @@ export function Events() {
       console.error('Failed to load event submissions', err);
     } finally {
       submissionsRefreshInFlight.current = false;
-      if (showLoading) setSubmissionsLoading(false);
+      if (showLoading || last) setSubmissionsLoading(false);
       if (submissionsRefreshQueued.current) {
         const queued = submissionsRefreshQueued.current;
         submissionsRefreshQueued.current = null;
@@ -1214,9 +1232,10 @@ export function Events() {
             
             <div className="p-5 sm:p-8 flex flex-col items-center bg-gray-50/50 overflow-y-auto min-h-0">
               {qrModal.loading ? (
-                <div className="flex flex-col items-center justify-center p-12">
-                  <Loader2 className="w-8 h-8 text-green-600 animate-spin mb-4" />
-                  <p className="text-gray-500 text-sm">Loading QR Code...</p>
+                <div role="status" aria-label="Loading QR code" className="flex flex-col items-center gap-4 p-6 w-full">
+                  <Skeleton className="h-56 w-56 rounded-2xl" />
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-10 w-48 rounded-xl" />
                 </div>
               ) : qrModal.qrData ? (
                 <div className="flex flex-col items-center w-full">
@@ -1429,10 +1448,10 @@ export function Events() {
           {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Total Events', value: loading ? '—' : events.length, color: 'text-gray-900' },
-          { label: 'Upcoming', value: loading ? '—' : events.filter(e => getEventStatus(e) === 'Upcoming').length, color: 'text-blue-600' },
-          { label: 'Total Attendees', value: loading ? '—' : totalAttendees, color: 'text-green-600' },
-          { label: 'Past Events', value: loading ? '—' : events.filter(e => getEventStatus(e) === 'Past').length, color: 'text-gray-500' },
+          { label: 'Total Events', value: loading ? <StatSkeleton /> : events.length, color: 'text-gray-900' },
+          { label: 'Upcoming', value: loading ? <StatSkeleton /> : events.filter(e => getEventStatus(e) === 'Upcoming').length, color: 'text-blue-600' },
+          { label: 'Total Attendees', value: loading ? <StatSkeleton /> : totalAttendees, color: 'text-green-600' },
+          { label: 'Past Events', value: loading ? <StatSkeleton /> : events.filter(e => getEventStatus(e) === 'Past').length, color: 'text-gray-500' },
         ].map((s, idx) => {
           const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
           return (
@@ -1625,7 +1644,7 @@ export function Events() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-medium truncate">{s.label}</p>
-                    <p className={`text-3xl font-serif font-bold tabular-nums leading-tight ${s.color}`}>{submissionsLoading ? '—' : s.value}</p>
+                    <p className={`text-3xl font-serif font-bold tabular-nums leading-tight ${s.color}`}>{submissionsLoading ? <StatSkeleton /> : s.value}</p>
                   </div>
                 </div>
               );
@@ -1692,10 +1711,7 @@ export function Events() {
           {/* Submissions List / Table */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden animate-reveal delay-280">
             {submissionsLoading ? (
-              <div className="p-12 text-center">
-                <Loader2 className="w-8 h-8 text-green-600 animate-spin mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">Loading event submissions...</p>
-              </div>
+              <TableSkeleton bare rows={5} columns={5} label="Loading event submissions" />
             ) : filteredSubmissions.length === 0 ? (
               <div className="p-12 text-center">
                 <ShieldCheck className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" />
@@ -1879,10 +1895,7 @@ export function Events() {
             </div>
 
             {loading ? (
-              <div className="p-12 text-center">
-                <Loader2 className="w-8 h-8 text-green-600 animate-spin mx-auto mb-3" />
-                <p className="text-gray-500 dark:text-gray-400 text-sm">Loading events...</p>
-              </div>
+              <TableSkeleton bare rows={5} columns={6} label="Loading events" />
             ) : events.length === 0 ? (
               <div className="p-12 text-center">
                 <FileText className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" />
@@ -1965,8 +1978,9 @@ export function Events() {
                         </tr>
 
                         {/* Expanded Details Row */}
-                        {isExpanded && !reportData && (
-                          <tr><td colSpan={9} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">{reportLoading === event.id ? 'Loading report details…' : 'Report details are not available.'}</td></tr>
+                        {isExpanded && !reportData && (reportLoading === event.id
+                          ? <tr><td colSpan={9} className="px-6 py-4"><TableSkeleton bare rows={3} columns={5} label="Loading report details" /></td></tr>
+                          : <tr><td colSpan={9} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Report details are not available.</td></tr>
                         )}
                         {isExpanded && reportData && (
                           <tr>

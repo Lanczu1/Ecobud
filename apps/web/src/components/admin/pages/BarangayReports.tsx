@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { adminGet, API_HOST } from '../../../utils/adminApi';
+import { adminGet, API_HOST, getCachedAdminData, getLastAdminData } from '../../../utils/adminApi';
+import { BarangayReportSkeleton } from './ReportsSkeleton';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { Reports as SystemReports } from './Reports';
 
@@ -19,20 +20,33 @@ export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
   const [from, setFrom] = useState(() => `${todayPht().slice(0, 7)}-01`);
   const [to, setTo] = useState(todayPht);
   const [barangay, setBarangay] = useState('all');
-  const [report, setReport] = useState<Report | null>(null);
-  const [barangays, setBarangays] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const params = new URLSearchParams({ from, to, ...(isAdmin ? { barangay } : {}) }).toString();
+  // A report seen in the last few seconds opens at once instead of behind the skeleton.
+  const [report, setReport] = useState<Report | null>(() => getLastAdminData<Report>(`/admin/reports/barangay?${params}`));
+  const [barangays, setBarangays] = useState<string[]>(() => report?.barangays ?? []);
+  const [loading, setLoading] = useState(() => !report);
   const [error, setError] = useState('');
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const params = new URLSearchParams({ from, to, ...(isAdmin ? { barangay } : {}) }).toString();
+  const freshNext = useRef(false);
+  const recount = () => { freshNext.current = true; setRefresh(value => value + 1); };
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError(''); setReport(null); setExportError('');
-    if (!from || !to || from > to) { setError('Choose a valid start and end date.'); setLoading(false); return; }
-    adminGet<Report>(`/admin/reports/barangay?${params}`, { bypassCache: true })
+    setError(''); setExportError('');
+    if (!from || !to || from > to) { setReport(null); setError('Choose a valid start and end date.'); setLoading(false); return; }
+    // Refresh and Retry ask the server to recount; switching dates or barangay may reuse recent figures.
+    const fresh = freshNext.current;
+    freshNext.current = false;
+    const path = `/admin/reports/barangay?${params}`;
+    const cached = fresh ? null : getCachedAdminData<Report>(path);
+    if (cached) { setReport(cached); setBarangays(cached.barangays); setLoading(false); return; }
+    // An older copy of this report shows at once while the request brings it up to date.
+    const last = getLastAdminData<Report>(path);
+    if (last) { setReport(last); setBarangays(last.barangays); setLoading(false); }
+    else { setLoading(true); setReport(null); }
+    adminGet<Report>(fresh ? `${path}&fresh=1` : path, { bypassCache: fresh })
       .then(data => { if (alive) { setReport(data); setBarangays(data.barangays); } })
       .catch(err => { if (alive) setError(err instanceof Error ? err.message : 'Could not load reports.'); })
       .finally(() => { if (alive) setLoading(false); });
@@ -44,7 +58,7 @@ export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
   useAdminLiveRefresh(() => {
     if (system || !from || !to || from > to) return;
     const requested = params;
-    adminGet<Report>(`/admin/reports/barangay?${requested}`, { bypassCache: true })
+    adminGet<Report>(`/admin/reports/barangay?${requested}&fresh=1`, { bypassCache: true })
       .then(data => {
         if (liveParams.current !== requested) return;
         // generatedAt changes on every read, so compare the figures only.
@@ -90,15 +104,15 @@ export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
         </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-        <button className={control} onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh</button>
+        <button className={control} onClick={recount} disabled={loading}>Refresh</button>
         <button className={control} disabled={!report || loading || !!exporting} onClick={() => void download('pdf')}>{exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>
         <button className={control} disabled={!report || loading || !!exporting} onClick={() => void download('excel')}>{exporting === 'excel' ? 'Exporting…' : 'Export Excel'}</button>
         </div>
       </div>
       <p className="text-xs text-gray-600 dark:text-gray-300">Dates use Asia/Manila. Select up to 366 days. The default is this month.</p>
       </div>
-      {loading && <p role="status" className="py-8">Loading barangay report…</p>}
-      {error && <div role="alert" className="rounded-lg border border-red-300 p-4 text-red-800 dark:text-red-200">{error}<button className={`${control} ml-3`} onClick={() => setRefresh(value => value + 1)}>Retry</button></div>}
+      {loading && <BarangayReportSkeleton />}
+      {error && <div role="alert" className="rounded-lg border border-red-300 p-4 text-red-800 dark:text-red-200">{error}<button className={`${control} ml-3`} onClick={recount}>Retry</button></div>}
       {exportError && <p role="alert" className="text-red-800 dark:text-red-200">{exportError}</p>}
       {!loading && report && <>
         <p className="text-sm font-semibold">{report.barangay ? `Barangay ${report.barangay}` : 'All barangays'} · {report.from} to {report.to}</p>

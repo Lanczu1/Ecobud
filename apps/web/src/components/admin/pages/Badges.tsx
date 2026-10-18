@@ -4,7 +4,8 @@ import { Award, Plus, Search, X, Edit3, Trash2, Loader2, AlertCircle } from 'luc
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './Badges.css';
 import { BadgeArtworkPicker } from './BadgeArtworkPicker';
-import { adminGet, adminPost, adminPut, adminPatch, adminDelete, adminPostForm } from '../../../utils/adminApi';
+import { BadgeCountSkeleton, BadgeListSkeleton } from './BadgesSkeleton';
+import { adminGet, adminPost, adminPut, adminPatch, adminDelete, adminPostForm, getLastAdminData } from '../../../utils/adminApi';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 
 type Badge = { id: string; name: string; description: string; iconUrl: string; requiredPoints: number; accentColor: string | null; active: boolean; awardType: string; targetCount: number; bonusPoints: number; lesson?: { title: string } | null; challenge?: { title: string } | null; event?: { title: string } | null; swapListing?: { title: string } | null; _count: { users: number } };
@@ -23,8 +24,10 @@ function BadgeImage({ url, name }: { url: string; name: string }) {
 }
 
 export function Badges() {
-  const [items, setItems] = useState<Badge[]>([]);
-  const [loading, setLoading] = useState(true);
+  // A list fetched in the last few seconds shows straight away and refreshes quietly behind it.
+  const [cachedOnOpen] = useState(() => getLastAdminData<{ items: Badge[] }>('/admin/badges'));
+  const [items, setItems] = useState<Badge[]>(cachedOnOpen?.items ?? []);
+  const [loading, setLoading] = useState(!cachedOnOpen);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
@@ -83,7 +86,7 @@ export function Badges() {
     catch (e) { if (!silent) setError(e instanceof Error ? e.message : 'Unable to load badges.'); }
     finally { if (!silent) setLoading(false); }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(!!cachedOnOpen); }, []);
   useAdminLiveRefresh(() => void load(true));
   function open(badge: Badge | null) {
     editorTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -108,14 +111,21 @@ export function Badges() {
       const payload = { ...form, iconUrl };
       if (editing) await adminPut(`/admin/badges/${editing.id}`, payload);
       else await adminPost('/admin/badges', payload);
-      closeModal('editor'); setNotice(editing ? 'Badge updated.' : 'Badge created.'); await load();
+      closeModal('editor'); setNotice(editing ? 'Badge updated.' : 'Badge created.'); await load(true);
     } catch (e) { setFormError(e instanceof Error ? e.message : 'Unable to save badge.'); }
     finally { setSaving(false); }
   }
   async function remove(badge: Badge) {
     setSaving(true); setDeleteError('');
-    try { await adminDelete(`/admin/badges/${badge.id}`); closeModal('delete'); setNotice('Badge deleted.'); await load(); }
+    try { await adminDelete(`/admin/badges/${badge.id}`); closeModal('delete'); setNotice('Badge deleted.'); setItems(current => current.filter(item => item.id !== badge.id)); void load(true); }
     catch (e) { setDeleteError(e instanceof Error ? e.message : 'Unable to delete badge.'); }
+    finally { setSaving(false); }
+  }
+  async function toggleActive(badge: Badge) {
+    const setActive = (active: boolean) => setItems(current => current.map(item => item.id === badge.id ? { ...item, active } : item));
+    setSaving(true); setError(''); setActive(!badge.active);
+    try { await adminPatch(`/admin/badges/${badge.id}/active`, { active: !badge.active }); void load(true); }
+    catch (e) { setActive(badge.active); setError(e instanceof Error ? e.message : 'Unable to update badge status.'); }
     finally { setSaving(false); }
   }
   const filtered = items.filter(b => `${b.name} ${b.description}`.toLowerCase().includes(search.toLowerCase()));
@@ -127,12 +137,12 @@ export function Badges() {
     <p className="text-sm text-gray-600 dark:text-gray-300">Activity badges sync with their content and unlock after completion. Turn off a reward to stop future awards while preserving earned badges.</p>
     {notice && <p role="status" className="text-sm text-green-700 dark:text-green-300">{notice}</p>}
     {error && <div role="alert" className="text-sm text-red-600">{error} <button className="underline" onClick={() => void load()}>Retry</button></div>}
-    <div className="flex flex-wrap items-center justify-between gap-3"><label className="relative block w-full sm:max-w-sm"><Search aria-hidden="true" size={18} className="absolute left-3 top-3 text-gray-400" /><input aria-label="Search badges" placeholder="Search badges" value={search} onChange={e => setSearch(e.target.value)} className={`${inputStyle} pl-10`} /></label><span className="text-sm text-gray-500">{items.length} badges · {items.reduce((n, b) => n + b._count.users, 0)} earned awards</span></div>
-    {loading ? <p role="status" className="py-12 text-center text-gray-500">Loading badges…</p> : !error && filtered.length === 0 ? <div className="rounded-xl border border-gray-200 bg-white p-12 text-center dark:bg-gray-900 dark:border-gray-700"><Award className="mx-auto mb-3 text-green-600" size={32} /><p>{search ? 'No badges match your search.' : 'No badges yet. Create your first point badge.'}</p></div> : <div className="space-y-3">{filtered.map(badge => <article key={badge.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 dark:bg-gray-900 dark:border-gray-700">
+    <div className="flex flex-wrap items-center justify-between gap-3"><label className="relative block w-full sm:max-w-sm"><Search aria-hidden="true" size={18} className="absolute left-3 top-3 text-gray-400" /><input aria-label="Search badges" placeholder="Search badges" value={search} onChange={e => setSearch(e.target.value)} className={`${inputStyle} pl-10`} /></label>{loading ? <BadgeCountSkeleton /> :<span className="text-sm text-gray-500">{items.length} badges · {items.reduce((n, b) => n + b._count.users, 0)} earned awards</span>}</div>
+    {loading ? <BadgeListSkeleton /> :!error && filtered.length === 0 ? <div className="rounded-xl border border-gray-200 bg-white p-12 text-center dark:bg-gray-900 dark:border-gray-700"><Award className="mx-auto mb-3 text-green-600" size={32} /><p>{search ? 'No badges match your search.' : 'No badges yet. Create your first point badge.'}</p></div> : <div className="space-y-3">{filtered.map(badge => <article key={badge.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 dark:bg-gray-900 dark:border-gray-700">
       <div className="rounded-xl border-l-4 bg-gray-50 p-3 dark:bg-gray-800" style={{ borderLeftColor: badge.accentColor || '#16A34A' }}><BadgeImage url={badge.iconUrl} name={badge.name} /></div>
       <div className="min-w-0 flex-1 basis-48"><h3 className="font-semibold break-words">{badge.name}</h3><p className="mt-1 text-sm text-gray-500 dark:text-gray-400 break-words">{badge.description}</p><p className="mt-2 text-sm font-medium text-green-700 dark:text-green-300">{requirement(badge)}{special(badge) && ' · System milestone'}</p></div>
       <div className="text-sm text-gray-500 dark:text-gray-400">{badge._count.users.toLocaleString()} earned</div>
-      <button disabled={saving} onClick={async () => { setSaving(true); setError(''); try { await adminPatch(`/admin/badges/${badge.id}/active`, { active: !badge.active }); await load(); } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update badge status.'); } finally { setSaving(false); } }} className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${badge.active ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:text-gray-300'}`} title={badge.active ? 'Turn off future badge awards' : 'Enable future badge awards'}>{badge.active ? 'Active' : 'Inactive'}</button>
+      <button disabled={saving} onClick={() => void toggleActive(badge)} className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${badge.active ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:text-gray-300'}`} title={badge.active ? 'Turn off future badge awards' : 'Enable future badge awards'}>{badge.active ? 'Active' : 'Inactive'}</button>
       <div className="flex gap-2"><button disabled={saving} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40" onClick={() => open(badge)}><Edit3 className="w-3 h-3" />Edit</button><button aria-label={`Delete ${badge.name}`} disabled={saving || special(badge) || badge._count.users > 0} title={special(badge) ? 'System milestone' : badge._count.users ? 'Earned badges are preserved' : 'Delete Badge'} className="flex items-center justify-center px-3 py-2 bg-red-50 text-red-600 text-xs font-semibold rounded-xl hover:bg-red-100 transition-colors disabled:opacity-60" onClick={() => requestDelete(badge)}><Trash2 className="w-3 h-3" /></button></div>
     </article>)}</div>}
     {isOpen && createPortal(

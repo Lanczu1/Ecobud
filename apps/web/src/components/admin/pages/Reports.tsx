@@ -16,10 +16,7 @@ import {
 import { useAdminStats } from '../useAdminStats';
 import { API_HOST } from '../../../utils/adminApi';
 import { useToast } from '../../../context/ToastContext';
-
-function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
-  return <div className={`animate-pulse bg-gray-200 rounded-lg ${className}`} style={style} />;
-}
+import { BarChartSkeleton, KpiCardsSkeleton, OverviewCardsSkeleton, SummaryRowsSkeleton } from './ReportsSkeleton';
 
 export function Reports() {
   const { stats, loading, error } = useAdminStats('Failed to load report data.');
@@ -240,18 +237,7 @@ export function Reports() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
-                <div className="flex justify-between">
-                  <div className="space-y-2 flex-1">
-                    <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-8 w-20" />
-                  </div>
-                  <Skeleton className="w-11 h-11 rounded-xl" />
-                </div>
-                <Skeleton className="h-4 w-32" />
-              </div>
-            ))
+          ? <KpiCardsSkeleton />
           : kpis.map((k, idx) => {
               const delayClass = idx === 0 ? '' : idx === 1 ? 'delay-60' : idx === 2 ? 'delay-160' : 'delay-280';
               return (
@@ -287,11 +273,7 @@ export function Reports() {
             </span>
           </div>
           {loading ? (
-            <div className="flex items-end gap-3 h-40 pt-4">
-              {Array.from({ length: 7 }).map((_, i) => (
-                <Skeleton key={i} className="flex-1 rounded-t-lg" style={{ height: `${30 + Math.random() * 70}%` }} />
-              ))}
-            </div>
+            <BarChartSkeleton />
           ) : stats ? (
             <div className="flex items-end gap-2 h-40">
               {stats.activityTrend.map(d => {
@@ -326,11 +308,7 @@ export function Reports() {
             </span>
           </div>
           {loading ? (
-            <div className="flex items-end gap-3 h-40 pt-4">
-              {Array.from({ length: 7 }).map((_, i) => (
-                <Skeleton key={i} className="flex-1 rounded-t-lg" style={{ height: `${20 + Math.random() * 80}%` }} />
-              ))}
-            </div>
+            <BarChartSkeleton />
           ) : stats ? (
             <div className="flex items-end gap-2 h-40">
               {stats.activityTrend.map(d => {
@@ -371,14 +349,10 @@ export function Reports() {
             </thead>
             <tbody className="">
               {loading ? (
-                Array.from({ length: 7 }).map((_, i) => (
-                  <tr key={i}>
-                    <td className="px-6 py-3.5"><Skeleton className="h-4 w-32" /></td>
-                    <td className="px-4 py-3.5"><Skeleton className="h-4 w-12" /></td>
-                    <td className="px-4 py-3.5"><Skeleton className="h-4 w-12" /></td>
-                  </tr>
-                ))
-              ) : stats ? (
+                <SummaryRowsSkeleton />
+              ) : !stats ? (
+                <tr><td colSpan={3} className="px-6 py-8 text-center text-sm text-gray-400">Activity data is unavailable.</td></tr>
+              ) : (
                 [...stats.activityTrend].reverse().map(d => (
                   <tr key={d.date} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-3.5 text-sm font-semibold text-gray-900">{d.dateLabel}</td>
@@ -386,15 +360,6 @@ export function Reports() {
                     <td className="px-4 py-3.5 text-sm text-blue-600 font-bold">+{d.signups}</td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="px-6 py-8 text-center">
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Loading data...</span>
-                    </div>
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
@@ -402,6 +367,7 @@ export function Reports() {
       </div>
 
       {/* Platform Overview */}
+      {loading && <OverviewCardsSkeleton />}
       {!loading && stats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 animate-reveal delay-160">
           {[

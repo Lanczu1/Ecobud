@@ -29,12 +29,13 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { adminGet, adminDelete, adminPatch, adminPut, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminDelete, adminPatch, adminPut, API_HOST, clearAdminApiCache, getLastAdminData } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
 import { ListingReportsModal } from './ListingReportsModal';
+import { CardGridSkeleton, StatCardsSkeleton } from './PageSkeletons';
 
 interface SwapListingItem {
   id: string;
@@ -1076,17 +1077,33 @@ function RejectListingModal({
   );
 }
 
+type ListingsPage = { items: SwapListingItem[]; pagination: { page: number; pageSize: number; total: number; totalPages: number }; scope: { barangay: string | null } };
+const STATS_PATH = '/give-and-get/swap-listings/stats';
+
+function listingsPath(page: number, status: string, search: string) {
+  const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+  const target = notificationTarget('listing', 'listing_report'); if (target) params.set('recordId', target);
+  if (['pending', 'approved', 'rejected'].includes(status)) params.set('status', status);
+  if (status === 'reported') params.set('reported', 'true');
+  if (search.trim()) params.set('search', search.trim());
+  return `/give-and-get/swap-listings?${params.toString()}`;
+}
+
 export function GiveAndGetHub() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
-  const [listings, setListings] = useState<SwapListingItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<SwapStats | null>(null);
-  const [assignedBarangay, setAssignedBarangay] = useState<string | null | undefined>(undefined);
+  // Reopening the page shows the last first page at once and refreshes it behind the scenes.
+  const [seed] = useState(() => getLastAdminData<ListingsPage>(listingsPath(1, 'all', '')));
+  const [pagination, setPagination] = useState(seed?.pagination ?? { page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [listings, setListings] = useState<SwapListingItem[]>(seed?.items ?? []);
+  const [loading, setLoading] = useState(!seed);
+  const [stats, setStats] = useState<SwapStats | null>(() => getLastAdminData<SwapStats>(STATS_PATH));
+  const [assignedBarangay, setAssignedBarangay] = useState<string | null | undefined>(seed ? seed.scope.barangay : undefined);
   const fetchListingsRef = useRef<(page?: number, status?: string, search?: string, fresh?: boolean, background?: boolean) => Promise<void>>(async () => {});
   const fetchInFlightRef = useRef(false);
+  const fetchQueuedRef = useRef(false);
+  const lastSearchRef = useRef(search);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; listingId: string | null }>({ open: false, listingId: null });
   const [detailsModalListing, setDetailsModalListing] = useState<SwapListingItem | null>(null);
   const [reportsListing, setReportsListing] = useState<SwapListingItem | null>(null);
@@ -1109,22 +1126,26 @@ export function GiveAndGetHub() {
   });
 
   const fetchListings = async (pageToLoad = page, statusToLoad = filterStatus, searchToLoad = search, fresh = false, background = false) => {
-    if (fetchInFlightRef.current) return;
+    // A request made while another runs is kept and sent next, so a quick page change is never dropped.
+    if (fetchInFlightRef.current) { fetchQueuedRef.current = true; return; }
     fetchInFlightRef.current = true;
+    const path = listingsPath(pageToLoad, statusToLoad, searchToLoad);
+    const showPage = (data: ListingsPage) => {
+      setListings(data.items);
+      setAssignedBarangay(data.scope.barangay);
+      setPagination(data.pagination);
+    };
     try {
-      if (!background) setLoading(true);
-      const params = new URLSearchParams({ page: String(pageToLoad), pageSize: '25' });
-      const target=notificationTarget('listing','listing_report'); if (target) params.set('recordId',target);
-      if (['pending', 'approved', 'rejected'].includes(statusToLoad)) params.set('status', statusToLoad);
-      if (statusToLoad === 'reported') params.set('reported', 'true');
-      if (searchToLoad.trim()) params.set('search', searchToLoad.trim());
+      // An older copy of this page shows at once while the requests below bring it up to date.
+      const last = getLastAdminData<ListingsPage>(path);
+      if (last) { showPage(last); setLoading(false); }
+      else if (!background) setLoading(true);
       const [listingsData, statsData] = await Promise.all([
-        adminGet<{ items: SwapListingItem[]; pagination: typeof pagination; scope: { barangay: string | null } }>(`/give-and-get/swap-listings?${params.toString()}`, { bypassCache: fresh }),
-        adminGet<SwapStats>('/give-and-get/swap-listings/stats', { bypassCache: fresh }),
+        adminGet<ListingsPage>(path, { bypassCache: fresh }),
+        adminGet<SwapStats>(STATS_PATH, { bypassCache: fresh }),
       ]);
-      setListings(listingsData.items);
-      setAssignedBarangay(listingsData.scope.barangay);
-      setPagination(listingsData.pagination);
+      if (fetchQueuedRef.current) return;
+      showPage(listingsData);
       setStats(statsData);
     } catch (error: any) {
       console.error('Failed to fetch swap listings', error);
@@ -1132,6 +1153,10 @@ export function GiveAndGetHub() {
     } finally {
       setLoading(false);
       fetchInFlightRef.current = false;
+      if (fetchQueuedRef.current) {
+        fetchQueuedRef.current = false;
+        void fetchListingsRef.current();
+      }
     }
   };
 
@@ -1140,7 +1165,10 @@ export function GiveAndGetHub() {
   });
 
   useEffect(() => {
-    const timer = setTimeout(() => void fetchListings(page, filterStatus, search, true), 300);
+    // Only typing waits; the first load, filters and paging fetch right away.
+    const typing = lastSearchRef.current !== search;
+    lastSearchRef.current = search;
+    const timer = setTimeout(() => void fetchListings(page, filterStatus, search, true), typing ? 300 : 0);
     return () => clearTimeout(timer);
   }, [page, filterStatus, search]);
 
@@ -1278,6 +1306,7 @@ export function GiveAndGetHub() {
       </div>
 
       {/* Stats */}
+      {!stats && loading && <StatCardsSkeleton count={5} />}
       {stats && (
         <div className="grid grid-cols-5 gap-4">
           {[
@@ -1334,9 +1363,7 @@ export function GiveAndGetHub() {
 
       {/* Listings Grid */}
       {loading ? (
-        <div className="flex justify-center p-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-        </div>
+        <CardGridSkeleton />
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredListings.map(listing => (

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, CheckCircle2, Clock, Image as ImageIcon, Loader2, MapPin, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { adminGet, adminPost, API_HOST } from '../../../utils/adminApi';
+import { adminGet, adminPost, API_HOST, getLastAdminData } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
+import { StatSkeleton, TableSkeleton } from './PageSkeletons';
 
 interface PhotoRequest {
   id: string;
@@ -41,8 +42,11 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
   // A silent load (live sync) swaps the rows in place without the spinner or clearing errors first.
   const load = useCallback(async (silent = false) => {
     const current = ++generation.current;
+    // An older copy of this page shows at once while the requests below bring it up to date.
+    const last = silent ? null : getLastAdminData<RequestPage>(`${endpoint}?status=${status}&page=${page}&pageSize=20`);
+    if (last) setData(last);
     if (!silent) {
-      setLoading(true);
+      setLoading(!last);
       setError(null);
     }
     try {
@@ -108,7 +112,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
         <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${stat.chip}`}><stat.Icon className={`h-6 w-6 ${stat.color}`} aria-hidden="true" /></div>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-gray-600 dark:text-gray-300">{stat.label}</p>
-          <p className={`font-serif text-3xl font-bold leading-tight tabular-nums ${stat.color}`}>{loading && !data ? '...' : error ? 'Unavailable' : stat.value}</p>
+          <p className={`font-serif text-3xl font-bold leading-tight tabular-nums ${stat.color}`}>{loading && !data ? <StatSkeleton /> : error ? 'Unavailable' : stat.value}</p>
         </div>
       </div>)}
     </div>
@@ -139,7 +143,7 @@ export function EventPhotoDeleteRequests({ onPreview, onApproved, resource = 'ev
     {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"><p>{error}</p><button type="button" onClick={() => void load()} className={`min-h-11 rounded-lg border border-current px-4 ${focus}`}>Try again</button></div>}
 
     <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      {loading && !data ? <div role="status" className="p-12 text-center"><Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-green-700 dark:text-green-300" aria-hidden="true" /><p className="text-sm text-gray-600 dark:text-gray-300">Loading photo delete requests...</p></div>
+      {loading && !data ? <TableSkeleton bare rows={4} columns={5} label="Loading photo delete requests" />
         : filteredRequests.length === 0 ? <div className="p-12 text-center"><Trash2 className="mx-auto mb-3 h-12 w-12 text-gray-400 dark:text-gray-500" aria-hidden="true" /><p className="font-medium text-gray-700 dark:text-gray-200">{error ? 'Photo delete requests could not be loaded.' : search.trim() ? 'No requests match your search.' : status === 'pending' ? 'No pending photo delete requests.' : 'No approved photo deletions yet.'}</p><p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{search.trim() ? 'Search applies to the current page.' : 'Requests sent by participants from mobile will appear here.'}</p></div>
         : <div className="overflow-x-auto" role="region" aria-label="Photo deletion requests table" tabIndex={0}>
           <table className="w-full min-w-[1050px] text-left">

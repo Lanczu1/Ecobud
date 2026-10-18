@@ -109,7 +109,7 @@ export function Dashboard() {
           {loading ? (
             <div className="flex items-end gap-3 h-32">
               {Array.from({ length: 7 }).map((_, i) => (
-                <Skeleton key={i} className="flex-1" style={{ height: `${40 + Math.random() * 60}%` }} />
+                <Skeleton key={i} className="flex-1" style={{ height: `${[55, 80, 45, 95, 65, 75, 50][i]}%` }} />
               ))}
             </div>
           ) : stats ? (

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight, Eye, EyeOff, MapPin, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
-import { adminGet, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, clearAdminApiCache, getLastAdminData } from '../../../utils/adminApi';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import './UserActivityTransactions.css';
+import { Skeleton, TableSkeleton } from './PageSkeletons';
 
 type Entry = {
   id: string; reference: string; userId: string; userName: string; email: string; barangay: string;
@@ -69,7 +70,7 @@ export function UserActivityTransactions() {
       if (!alive) return;
       if (busy) { queued = true; return; }
       busy = true;
-      if (isPageNavigation && displayedPage.current !== requestedPage) setLoading(true);
+      if (isPageNavigation && displayedPage.current !== requestedPage && !last) setLoading(true);
       try {
         const next = await adminGet<Feed>(`/admin/user-activity?${query}`, { bypassCache: true });
         if (alive) {
@@ -91,8 +92,17 @@ export function UserActivityTransactions() {
         if (alive) { setLoading(false); if (queued) { queued = false; void load(); } }
       }
     };
-    setLoading(true);
-    if (!isPageNavigation) setFeed(null);
+    // An older copy of these results shows at once while the request brings it up to date.
+    const last = getLastAdminData<Feed>(`/admin/user-activity?${query}`);
+    if (last) {
+      displayedPage.current = last.pagination.page;
+      setFeed(last);
+      setChoices({ barangays: last.barangays, categories: last.categories, statuses: last.statuses });
+      setLoading(false);
+    } else {
+      setLoading(true);
+      if (!isPageNavigation) setFeed(null);
+    }
     refresh.current = () => void load();
     void load();
     let disconnect: (() => void) | undefined;
@@ -172,7 +182,7 @@ export function UserActivityTransactions() {
         </div>
       </details>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-        <span>{feed ? `${feed.pagination.total.toLocaleString()} records · ${feed.users.toLocaleString()} ${feed.users === 1 ? 'resident' : 'residents'}` : 'Loading records'}{filters.userId && ' · Selected resident'}</span>
+        <span>{feed ? `${feed.pagination.total.toLocaleString()} records · ${feed.users.toLocaleString()} ${feed.users === 1 ? 'resident' : 'residents'}` : <Skeleton className="inline-block h-3 w-40 align-middle" />}{filters.userId && ' · Selected resident'}</span>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={!feed?.items.length} onClick={showAllTransactions} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><Eye className="h-3.5 w-3.5" />Show all transactions</button>
           <button type="button" disabled={!expandedUsers.size} onClick={() => setExpandedUsers(new Set())} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-600 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><EyeOff className="h-3.5 w-3.5" />Hide all transactions</button>
@@ -180,10 +190,10 @@ export function UserActivityTransactions() {
       </div>
     </div>
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{error}{feed && ' Showing the last successful refresh.'}<button type="button" onClick={() => refresh.current()} className="ml-3 font-semibold underline">Retry</button></div>}
-    {loading && !feed && <div role="status" className="rounded-2xl border border-gray-200 p-8 text-center text-gray-500 dark:border-gray-800">Loading user history…</div>}
+    {loading && !feed && <TableSkeleton rows={6} columns={5} label="Loading user history" />}
     <div className="relative" aria-busy={loading}>
-    {loading && feed && <div role="status" className="pointer-events-none absolute inset-x-0 top-4 z-10 flex justify-center"><span className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">Loading page {page}…</span></div>}
-    <div ref={records} key={pageMotion.revision} data-direction={pageMotion.revision ? pageMotion.direction : undefined} inert={loading} className={`activity-page-records space-y-6 ${loading && feed ? 'activity-page-loading' : ''}`}>
+    {loading && feed && <TableSkeleton rows={6} columns={5} label={`Loading page ${page}`} />}
+    <div ref={records} key={pageMotion.revision} data-direction={pageMotion.revision ? pageMotion.direction : undefined} inert={loading} hidden={loading && !!feed} className={`activity-page-records space-y-6 ${loading && feed ? 'activity-page-loading' : ''}`}>
     {feed && !feed.items.length && <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900"><Activity className="mx-auto mb-3 h-8 w-8 text-gray-400" /><h2 className="font-semibold text-gray-900 dark:text-white">No matching activity</h2><p className="mt-1 text-sm text-gray-500">Try another barangay, date range or search.</p></div>}
     {groups.map(([barangay, users]) => {
       const groupKey = `barangay:${barangay}`;
