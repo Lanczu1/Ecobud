@@ -14,7 +14,7 @@ const manilaTime = (value: Date) =>
   value.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
 
 /**
- * Tells residents who joined an event, and have not recorded their attendance yet, that it is now ongoing.
+ * Tells every resident who joined an event that it is now ongoing, with the step left for them, if any.
  * The alert arrives in the app and as a push notification; tapping it opens the event.
  */
 export async function notifyStartedEvents(now = new Date()) {
@@ -31,22 +31,30 @@ export async function notifyStartedEvents(now = new Date()) {
 
   for (const event of events) {
     const key = eventStartKey(event.id);
-    // REGISTERED residents have joined but not sent attendance; anyone further along needs no reminder.
+    // Everyone who joined, whatever their attendance stage; the message says what, if anything, is left to do.
     const registrations = await prisma.eventRegistration.findMany({
       where: {
         eventId: event.id,
-        status: 'REGISTERED',
+        status: { in: ['REGISTERED', 'PENDING_APPROVAL', 'ATTENDED', 'REWARD_CLAIMED'] },
         user: { status: 'active', notifications: { none: { notificationKey: key } } },
       },
-      select: { userId: true },
+      select: { userId: true, status: true },
       take: BATCH,
     });
-    for (const { userId } of registrations) {
+    for (const { userId, status } of registrations) {
+      const where = `Your event is happening now at ${event.location}.`;
+      const nextStep = status === 'PENDING_APPROVAL'
+        ? 'Your attendance photo is waiting for review, so there is nothing more to send.'
+        : status === 'ATTENDED'
+          ? 'Your attendance is approved. Open the event to claim your reward.'
+          : status === 'REWARD_CLAIMED'
+            ? 'Your attendance is recorded and your reward is claimed. Thanks for taking part.'
+            : `Scan the event QR code and send your attendance photo before it ends at ${manilaTime(event.endDatetime)}.`;
       await sendDirectNotification({
         userId,
         type: 'event',
         title: `${event.title} has started`,
-        message: `Your event is happening now at ${event.location}. Scan the event QR code and send your attendance photo before it ends at ${manilaTime(event.endDatetime)}.`,
+        message: `${where} ${nextStep}`,
         relatedId: event.id,
         relatedType: 'event',
         priority: 'high',

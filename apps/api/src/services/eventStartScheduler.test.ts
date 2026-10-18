@@ -13,7 +13,12 @@ const cleanup = { id: 'e1', title: 'River cleanup', location: 'Bucal river bank'
 describe('event start notifications', () => {
   beforeEach(() => {
     vi.mocked(prisma.event.findMany).mockReset().mockResolvedValue([cleanup] as any);
-    vi.mocked(prisma.eventRegistration.findMany).mockReset().mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }] as any);
+    vi.mocked(prisma.eventRegistration.findMany).mockReset().mockResolvedValue([
+      { userId: 'u1', status: 'REGISTERED' },
+      { userId: 'u2', status: 'PENDING_APPROVAL' },
+      { userId: 'u3', status: 'ATTENDED' },
+      { userId: 'u4', status: 'REWARD_CLAIMED' },
+    ] as any);
     vi.mocked(sendDirectNotification).mockReset();
   });
 
@@ -25,16 +30,37 @@ describe('event start notifications', () => {
     expect(where.endDatetime).toEqual({ gt: now });
   });
 
-  it('alerts joined residents who have not recorded attendance and were not alerted already', async () => {
+  it('alerts every resident who joined, at any attendance stage, once each', async () => {
     await notifyStartedEvents(now);
     const where = vi.mocked(prisma.eventRegistration.findMany).mock.calls[0][0]!.where as any;
-    expect(where).toEqual({ eventId: 'e1', status: 'REGISTERED', user: { status: 'active', notifications: { none: { notificationKey: eventStartKey('e1') } } } });
-    expect(sendDirectNotification).toHaveBeenCalledTimes(2);
+    expect(where).toEqual({
+      eventId: 'e1',
+      status: { in: ['REGISTERED', 'PENDING_APPROVAL', 'ATTENDED', 'REWARD_CLAIMED'] },
+      user: { status: 'active', notifications: { none: { notificationKey: eventStartKey('e1') } } },
+    });
+    expect(sendDirectNotification).toHaveBeenCalledTimes(4);
     expect(sendDirectNotification).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'u1', type: 'event', relatedId: 'e1', relatedType: 'event', priority: 'high', notificationKey: 'event-started:e1',
       title: 'River cleanup has started',
-      message: expect.stringContaining('Bucal river bank'),
+      message: expect.stringMatching(/Bucal river bank.*Scan the event QR code/),
     }));
+  });
+
+  it('tells a resident whose photo awaits review that there is nothing more to send', async () => {
+    await notifyStartedEvents(now);
+    expect(sendDirectNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'u2', notificationKey: 'event-started:e1',
+      message: expect.stringMatching(/waiting for review/),
+    }));
+    expect(vi.mocked(sendDirectNotification).mock.calls[1][0].message).not.toMatch(/Scan the event QR code/);
+  });
+
+  it('tells approved residents to claim their reward, and those who claimed it that they are done', async () => {
+    await notifyStartedEvents(now);
+    const messages = Object.fromEntries(vi.mocked(sendDirectNotification).mock.calls.map(([call]) => [call.userId, call.message]));
+    expect(messages.u3).toMatch(/approved\. Open the event to claim your reward/);
+    expect(messages.u4).toMatch(/reward is claimed/);
+    for (const id of ['u3', 'u4']) expect(messages[id]).not.toMatch(/Scan the event QR code/);
   });
 
   it('sends nothing when no event has just started', async () => {
