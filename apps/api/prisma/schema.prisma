@@ -495,6 +495,8 @@ model ChallengeSubmission {
   submissionRequestKey       String?                   @unique @map("submission_request_key")
   afterPhotoRequestKey       String?                   @unique @map("after_photo_request_key")
   claimRequestKey            String?                   @unique @map("claim_request_key")
+  // When the resident last sent a photo (Before, then After); reviews leave it alone.
+  submittedAt                DateTime                  @default(now()) @map("submitted_at")
   createdAt                  DateTime                  @default(now()) @map("created_at")
   updatedAt                  DateTime                  @updatedAt @map("updated_at")
   challengeInstance          ChallengeInstance         @relation(fields: [challengeInstanceId], references: [id], onDelete: Cascade)
@@ -507,6 +509,7 @@ model ChallengeSubmission {
   @@index([reviewedById])
   @@index([status], map: "challenge_submissions_status_idx")
   @@index([createdAt], map: "challenge_submissions_created_at_idx")
+  @@index([submittedAt], map: "challenge_submissions_submitted_at_idx")
   @@index([updatedAt], map: "challenge_submissions_updated_at_idx")
 }
 

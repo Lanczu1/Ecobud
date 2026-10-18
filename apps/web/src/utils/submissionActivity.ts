@@ -1,11 +1,12 @@
 export interface SubmissionActivity {
   id: string;
   createdAt: string;
-  updatedAt?: string;
+  submittedAt?: string;
 }
 
+// When the resident last sent a photo; reviews do not move it.
 export function submissionActivityAt(submission: SubmissionActivity): string {
-  return submission.updatedAt && Number.isFinite(Date.parse(submission.updatedAt)) ? submission.updatedAt : submission.createdAt;
+  return submission.submittedAt && Number.isFinite(Date.parse(submission.submittedAt)) ? submission.submittedAt : submission.createdAt;
 }
 
 export function latestSubmissionFirst(a: SubmissionActivity, b: SubmissionActivity): number {

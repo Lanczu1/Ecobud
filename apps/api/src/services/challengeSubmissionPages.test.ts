@@ -7,14 +7,14 @@ const date = (day: number) => new Date(Date.UTC(2026, 9, day));
 
 describe('latest challenge submission activity', () => {
   it('places an older submission with a new After photo above a newer Before photo', () => {
-    const before = { id: 'new-before', createdAt: date(18).toISOString(), updatedAt: date(18).toISOString() };
-    const after = { id: 'old-after', createdAt: date(10).toISOString(), updatedAt: date(19).toISOString() };
+    const before = { id: 'new-before', createdAt: date(18).toISOString(), submittedAt: date(18).toISOString() };
+    const after = { id: 'old-after', createdAt: date(10).toISOString(), submittedAt: date(19).toISOString() };
     expect([before, after].sort(latestSubmissionFirst).map(item => item.id)).toEqual(['old-after', 'new-before']);
     expect(after.createdAt).toBe(date(10).toISOString());
   });
 
   it('falls back to creation for older cached clients and resolves ties consistently', () => {
-    const a = { id: 'a', createdAt: date(18).toISOString(), updatedAt: 'invalid' };
+    const a = { id: 'a', createdAt: date(18).toISOString(), submittedAt: 'invalid' };
     const b = { id: 'b', createdAt: date(18).toISOString() };
     expect(submissionActivityAt(a)).toBe(a.createdAt);
     expect([a, b].sort(latestSubmissionFirst).map(item => item.id)).toEqual(['b', 'a']);
@@ -37,7 +37,7 @@ describe('latest challenge submission activity', () => {
     expect(selection.values).not.toContain('Old pending');
     expect(result.pagination.totalPages).toBe(2);
     expect(result.ids).toEqual(['visible']);
-    expect(query.mock.calls[1][0].sql).toContain('MAX(m.updated_at)');
+    expect(query.mock.calls[1][0].sql).toContain('MAX(m.submitted_at)');
     if (scope) expect(selection.values).toContain(scope);
   });
 });

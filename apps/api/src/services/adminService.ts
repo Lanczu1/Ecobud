@@ -704,7 +704,7 @@ export class AdminService {
     const [challengeSubs, eventSubs, challengeTotal, eventTotal] = await Promise.all([
       submissionType === 'event' ? Promise.resolve([]) : prisma.challengeSubmission.findMany({
         where,
-        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ submittedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         skip: groupedPage ? undefined : readSkip,
         take: groupedPage ? undefined : readTake,
         select: {
@@ -720,6 +720,7 @@ export class AdminService {
           reservedQuantity: true,
           createdAt: true,
           updatedAt: true,
+          submittedAt: true,
           rewardAwarded: true,
           user: {
             select: {
@@ -796,7 +797,7 @@ export class AdminService {
     ];
 
     unified.sort((a, b) => {
-      const activity = (item: typeof a) => 'updatedAt' in item ? item.updatedAt : item.createdAt;
+      const activity = (item: typeof a) => 'submittedAt' in item ? item.submittedAt : item.createdAt;
       return new Date(activity(b)).getTime() - new Date(activity(a)).getTime()
         || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id.localeCompare(a.id);
     });

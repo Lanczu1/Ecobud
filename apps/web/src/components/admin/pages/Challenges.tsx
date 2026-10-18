@@ -11,7 +11,7 @@ import {
   ChevronDown, ChevronRight, User, Layers, Filter, 
   RefreshCw, CheckCircle2, Clock, MapPin, Lock, Eye, EyeOff, Info, FileText, CheckSquare, FileDown
 } from 'lucide-react';
-import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminDownload, API_HOST, clearAdminApiCache } from '../../../utils/adminApi';
+import { adminGet, adminPost, adminPut, adminDelete, adminPostForm, adminDownload, API_HOST, clearAdminApiCache, getCachedAdminData } from '../../../utils/adminApi';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
@@ -70,9 +70,16 @@ interface ChallengeSubmission {
   rewardAwarded: boolean;
   createdAt: string;
   updatedAt?: string;
+  submittedAt?: string;
   submissionType?: string;
   user: { id: string; name: string; profile: { displayName: string | null; avatarUrl: string | null; city?: string | null } | null };
   challenge: { id: string; title: string; type: string; quantityUnit?: string; collectionPointName?: string };
+}
+
+interface SubmissionsResponse {
+  items: ChallengeSubmission[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number; totalResidents: number };
+  filterOptions?: { users: { id: string; name: string }[]; barangays: string[] };
 }
 
 interface DetectedBoxItem {
@@ -677,6 +684,7 @@ export function Challenges() {
   const [submissionsRefreshing, setSubmissionsRefreshing] = useState(false);
   const submissionsLoaded = useRef(false);
   const submissionsInFlightQuery = useRef('');
+  const submissionsWantedQuery = useRef('');
   const lastSearch = useRef('');
   const lastSubSearch = useRef('');
   const userJson = localStorage.getItem('ecobud_admin_user');
@@ -753,16 +761,42 @@ export function Challenges() {
 
   useLayoutEffect(() => { loadChallengesRef.current = load; });
 
-  // reuseInFlight: skip the refetch when the same query is already on its way (not for
-  // reloads after a review, which need data newer than the request in flight).
-  const loadSubmissions = async (showLoading = true, reuseInFlight = false) => {
-    const params = new URLSearchParams({ type: 'challenge', groupBy: 'barangay', page: String(submissionsPage) });
+  const submissionsQuery = (pageNumber: number) => {
+    const params = new URLSearchParams({ type: 'challenge', groupBy: 'barangay', page: String(pageNumber) });
     const target=notificationTarget('challenge_submission'); if (target) params.set('recordId',target);
     if (subSearch.trim()) params.set('search', subSearch.trim());
     if (subStatusFilter !== 'All') params.set('status', subStatusFilter);
     if (selectedUserIdFilter !== 'All') params.set('userId', selectedUserIdFilter);
     if (selectedBarangayFilter !== 'All') params.set('barangay', selectedBarangayFilter);
-    const query = params.toString();
+    return params.toString();
+  };
+
+  const showSubmissionsPage = (data: SubmissionsResponse) => {
+    // Filter to only challenge submissions; event submissions belong in the Events page.
+    setSubmissions(data.items.filter(isChallengeSubmission));
+    setSubmissionsPagination(data.pagination);
+    setSubmissionsPage(data.pagination.page);
+    setSubmissionFilterOptions(data.filterOptions ?? { users:[],barangays:[] });
+    submissionsLoaded.current = true;
+    // Warm the neighbouring pages so Previous and Next open from the cache.
+    if (activeTab !== 'submissions') return;
+    for (const neighbour of [data.pagination.page + 1, data.pagination.page - 1]) {
+      if (neighbour < 1 || neighbour > data.pagination.totalPages) continue;
+      void adminGet<SubmissionsResponse>(`/admin/submissions?${submissionsQuery(neighbour)}`).catch(() => {});
+    }
+  };
+
+  // reuseInFlight: paging and filtering, which may use a page cached in the last few seconds
+  // or a prefetch already on its way. Reloads after a review always ask the server.
+  const loadSubmissions = async (showLoading = true, reuseInFlight = false) => {
+    const query = submissionsQuery(submissionsPage);
+    submissionsWantedQuery.current = query;
+    const cached = reuseInFlight ? getCachedAdminData<SubmissionsResponse>(`/admin/submissions?${query}`) : null;
+    if (cached) {
+      showSubmissionsPage(cached);
+      setSubmissionsLoading(false);
+      return;
+    }
     if (submissionsRefreshInFlight.current) {
       if (reuseInFlight && !submissionsRefreshQueued.current && submissionsInFlightQuery.current === query) {
         if (showLoading) setSubmissionsRefreshing(true);
@@ -777,17 +811,10 @@ export function Challenges() {
     submissionsInFlightQuery.current = query;
     if (showLoading) setSubmissionsRefreshing(true);
     try {
-      const data = await adminGet<{
-        items: ChallengeSubmission[]; pagination: typeof submissionsPagination;
-        filterOptions: typeof submissionFilterOptions;
-      }>(`/admin/submissions?${query}`, { bypassCache: true });
-      if (submissionsRefreshQueued.current) return;
-      // Filter to only challenge submissions; event submissions belong in the Events page.
-      setSubmissions(data.items.filter(isChallengeSubmission));
-      setSubmissionsPagination(data.pagination);
-      setSubmissionsPage(data.pagination.page);
-      setSubmissionFilterOptions(data.filterOptions ?? { users:[],barangays:[] });
-      submissionsLoaded.current = true;
+      const data = await adminGet<SubmissionsResponse>(`/admin/submissions?${query}`, { bypassCache: !reuseInFlight });
+      // Drop the answer if the reviewer has already moved to another page or filter.
+      if (submissionsRefreshQueued.current || submissionsWantedQuery.current !== query) return;
+      showSubmissionsPage(data);
     } catch (err: any) {
       console.error('Failed to load submissions', err); 
       if (showLoading) toast.error(err.message || 'Failed to load submissions');
@@ -824,6 +851,7 @@ export function Challenges() {
     adminRealtimeService.connect({
       onContentRefresh: () => {
         clearAdminApiCache('/admin/challenges');
+        clearAdminApiCache('/admin/submissions');
         void loadChallengesRef.current();
         void loadSubmissionsRef.current(false);
       },
@@ -1832,7 +1860,7 @@ export function Challenges() {
                                                   <th className="px-5 py-3 w-36">Submission #</th>
                                                   <th className="px-4 py-3">Photos (Before / After)</th>
                                                   <th className="px-4 py-3">Stage / Status</th>
-                                                  <th className="px-4 py-3">Last Updated</th>
+                                                  <th className="px-4 py-3">Submitted Date</th>
                                                   <th className="px-5 py-3 text-right">Review Action</th>
                                                 </tr>
                                               </thead>
@@ -2058,9 +2086,9 @@ export function Challenges() {
               })}
             </div>
           )}
-          <fieldset disabled={submissionsLoading || submissionsRefreshing} aria-label="Challenge submissions pagination" className="min-w-0">
+          <fieldset disabled={submissionsLoading} aria-busy={submissionsRefreshing} aria-label="Challenge submissions pagination" className="min-w-0">
             <AdminPagination
-              page={submissionsPagination.page}
+              page={submissionsPage}
               totalPages={submissionsPagination.totalPages}
               total={submissionsPagination.total}
               onPageChange={setSubmissionsPage}

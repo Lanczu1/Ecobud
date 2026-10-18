@@ -857,6 +857,7 @@ challengeRoutes.post(
         afterProofUrl,
         status: 'final_review',
         afterPhotoRequestKey: requestKey,
+        submittedAt: new Date(),
       }
     });
 

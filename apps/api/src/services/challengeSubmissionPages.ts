@@ -17,7 +17,7 @@ function scopedSubmissions(barangay: string | undefined) {
     : Prisma.sql`WHERE p.city ILIKE ${barangay}`;
   return Prisma.sql`
     SELECT cs.id, cs."userId" AS user_id, cs.status::text AS status, cs."moderatorNotes" AS notes,
-      c.title AS challenge_title, cs.updated_at AS updated_at,
+      c.title AS challenge_title, cs.submitted_at AS submitted_at,
       COALESCE(NULLIF(p."displayName", ''), NULLIF(u.name, ''), 'Unknown') AS resident,
       COALESCE(NULLIF(BTRIM(p.city, E' \\t\\n\\r'), ''), ${UNASSIGNED}) AS city
     FROM "ChallengeSubmission" cs
@@ -56,7 +56,7 @@ export async function selectChallengeSubmissionPage(
       FROM (${scopedSubmissions(barangay)}) s ORDER BY s.user_id`),
     database.$queryRaw<{ city: string; total: number; pending: number; latest: Date }[]>(Prisma.sql`
       SELECT m.city, COUNT(*)::int AS total, (COUNT(*) FILTER (WHERE m.status = 'pending'))::int AS pending,
-        MAX(m.updated_at) AS latest
+        MAX(m.submitted_at) AS latest
       FROM (${matching}) m GROUP BY m.city`),
     database.$queryRaw<{ residents: number }[]>(Prisma.sql`
       SELECT COUNT(DISTINCT m.user_id)::int AS residents FROM (${matching}) m`),
