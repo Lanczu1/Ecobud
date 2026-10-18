@@ -240,8 +240,9 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
         moderatorNotes: true,
         challengeInstanceId: true,
         createdAt: true,
+        updatedAt: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
     }),
   ]);
 
@@ -270,7 +271,7 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
     const userChallenge = userChallengeByInstanceId.get(instance.id);
     const submissions = submissionsByInstanceId.get(instance.id) || [];
 
-    const latestSubmission = submissions.length > 0 ? submissions[0] : null;
+    const latestSubmission = submissions.reduce<typeof submissions[number] | null>((latest, sub) => !latest || sub.createdAt > latest.createdAt ? sub : latest, null);
 
     let finalStatus = userChallenge?.status || 'not_started';
     if (latestSubmission && finalStatus !== 'COMPLETED') {
@@ -292,6 +293,8 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
         submissionId: latestSubmission?.id,
         submission: latestSubmission ? {
           id: latestSubmission.id,
+          createdAt: latestSubmission.createdAt,
+          updatedAt: latestSubmission.updatedAt,
           status: latestSubmission.rewardAwarded ? 'completed' : latestSubmission.status,
           proofUrl: latestSubmission.proofUrl,
           afterProofUrl: latestSubmission.afterProofUrl,
@@ -308,6 +311,8 @@ const handleGetChallenges = errorBoundary(async (req: AuthenticatedRequest, res)
         } : undefined,
         submissions: submissions.map(sub => ({
           id: sub.id,
+          createdAt: sub.createdAt,
+          updatedAt: sub.updatedAt,
           status: sub.rewardAwarded ? 'completed' : sub.status,
           proofUrl: sub.proofUrl,
           afterProofUrl: sub.afterProofUrl,
@@ -559,7 +564,7 @@ challengeRoutes.get(
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: 100,
     });
 
@@ -854,6 +859,15 @@ challengeRoutes.post(
         afterPhotoRequestKey: requestKey,
       }
     });
+
+    void Promise.all([
+      supabaseRealtimeService.publishUserSectionBundle(userId, ['challenges', 'tracker'], {
+        actorRole: req.auth!.role, actorUserId: userId, entityId: actualInstanceId, reason: 'challenge-after-photo-submitted',
+      }),
+      supabaseRealtimeService.publishAdminSectionRefresh('dashboard', {
+        actorRole: req.auth!.role, actorUserId: userId, entityId: updated.id, reason: 'challenge-after-photo-submitted',
+      }),
+    ]);
 
     res.json({
       message: 'After photo submitted successfully! Awaiting final admin approval.',

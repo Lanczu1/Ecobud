@@ -1149,6 +1149,13 @@ function ChallengesContent({ model, onSearchKeyboardChange, keyboardHeight = 0 }
     }
   }
 
+  const latestGroupActivity = (group: InProgressGroup | CompletedGroup) => group.submissions.reduce((latest, { sub }) => {
+    const timestamp = Date.parse(sub.updatedAt || sub.createdAt || '');
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, 0);
+  inProgressGroups.sort((a, b) => latestGroupActivity(b) - latestGroupActivity(a) || a.challenge.id.localeCompare(b.challenge.id));
+  completedGroups.sort((a, b) => latestGroupActivity(b) - latestGroupActivity(a) || a.challenge.id.localeCompare(b.challenge.id));
+
   const currentActiveList = viewMode === 'Discover' ? discoverChallenges : [];
   const challengeColumnCount = largeText ? (width >= 900 ? 2 : 1) : width >= 900 ? 3 : 2;
   const challengeGridGap = scale(width < 360 ? 8 : 14);

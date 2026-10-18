@@ -704,7 +704,7 @@ export class AdminService {
     const [challengeSubs, eventSubs, challengeTotal, eventTotal] = await Promise.all([
       submissionType === 'event' ? Promise.resolve([]) : prisma.challengeSubmission.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         skip: groupedPage ? undefined : readSkip,
         take: groupedPage ? undefined : readTake,
         select: {
@@ -719,6 +719,7 @@ export class AdminService {
           detectedQuantity: true,
           reservedQuantity: true,
           createdAt: true,
+          updatedAt: true,
           rewardAwarded: true,
           user: {
             select: {
@@ -794,7 +795,11 @@ export class AdminService {
       }))
     ];
 
-    unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    unified.sort((a, b) => {
+      const activity = (item: typeof a) => 'updatedAt' in item ? item.updatedAt : item.createdAt;
+      return new Date(activity(b)).getTime() - new Date(activity(a)).getTime()
+        || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id.localeCompare(a.id);
+    });
     if (groupedPage) return { items: unified, pagination: groupedPage.pagination, filterOptions: groupedPage.filterOptions };
     const items = submissionType === 'all' ? unified.slice(skip, skip + pageSize) : unified;
     const total = challengeTotal + eventTotal;

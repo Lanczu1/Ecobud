@@ -225,14 +225,16 @@ interface EventReportData {
 
 const statusColors: Record<string, string> = {
   Upcoming: 'bg-blue-50 text-blue-700 border-blue-100',
+  Ongoing: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   Past: 'bg-gray-100 text-gray-500 border-gray-200',
   Full: 'bg-red-50 text-red-700 border-red-100',
 };
 
 function getEventStatus(event: AdminEvent) {
-  const now = new Date();
-  const eventDate = new Date(event.startDatetime);
-  if (eventDate < now) return 'Past';
+  // An event is only past once it ends; between start and end it is still running.
+  const now = Date.now();
+  if (Date.parse(event.endDatetime) <= now) return 'Past';
+  if (Date.parse(event.startDatetime) <= now) return 'Ongoing';
   if (getRegistrationCount(event) >= event.capacity) return 'Full';
   return 'Upcoming';
 }
@@ -1046,8 +1048,8 @@ export function Events() {
       const now = Date.now();
       const startA = Date.parse(a.startDatetime);
       const startB = Date.parse(b.startDatetime);
-      const upcomingA = startA >= now;
-      const upcomingB = startB >= now;
+      const upcomingA = Date.parse(a.endDatetime) > now;
+      const upcomingB = Date.parse(b.endDatetime) > now;
       if (upcomingA !== upcomingB) return upcomingA ? -1 : 1;
       return upcomingA ? startA - startB : startB - startA;
     });
@@ -1453,7 +1455,7 @@ export function Events() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input type="text" placeholder="Search events..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400 transition-all" />
         </div>
-        {['All', 'Upcoming', 'Past', 'Full'].map(f => (
+        {['All', 'Upcoming', 'Ongoing', 'Past', 'Full'].map(f => (
           <button key={f} onClick={() => setFilterStatus(f)} className={`px-4 py-2 text-sm rounded-xl border font-medium transition-all ${filterStatus === f ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{f}</button>
         ))}
       </div>

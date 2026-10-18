@@ -261,7 +261,7 @@ export interface EcoBudMobileModel {
   handleChallengeProgress: (challenge: ChallengeWithProgress, nextProgress: number) => Promise<void>;
   handleHabitCheckIn: (habitId: string) => Promise<void>;
   handleJoinEvent: (eventId: string) => Promise<boolean>;
-  handleClaimEventReward: (eventId: string) => Promise<void>;
+  handleClaimEventReward: (eventId: string, rewards?: Pick<EcoEvent, 'expReward' | 'ecoCoinsReward'>) => Promise<void>;
   handleAssistantSend: (seedMessage?: string) => Promise<void>;
   loadTrackerMonth: (offset: number) => Promise<void>;
   analyzeChallengeImage: (challengeId: string, uri: string) => Promise<{

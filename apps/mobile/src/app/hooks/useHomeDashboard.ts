@@ -2871,7 +2871,7 @@ export function useHomeDashboard(): EcoBudMobileModel {
   );
 
   const handleClaimEventReward = useCallback(
-    async (eventId: string) => {
+    async (eventId: string, rewards?: Pick<EcoEvent, 'expReward' | 'ecoCoinsReward'>) => {
       if (eventRewardClaimInFlightRef.current.has(eventId)) return;
       eventRewardClaimInFlightRef.current.add(eventId);
 
@@ -2881,7 +2881,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
             const activeSession = ensureSession();
             setRefreshing(true);
 
-            const event = events.find((e) => e.id === eventId);
+            // The Eco Events screen pages its own list, so the tapped event may not be in the dashboard's events.
+            const event = rewards ?? events.find((e) => e.id === eventId);
             const expReward = event?.expReward ?? 0;
             const coinReward = event?.ecoCoinsReward ?? 0;
             const result = await homeService.claimEventReward(activeSession.token, eventId);

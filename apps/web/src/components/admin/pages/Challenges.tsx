@@ -17,6 +17,7 @@ import { adminRealtimeService } from '../../../services/adminRealtimeService';
 import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
+import { latestSubmissionFirst, submissionActivityAt } from '../../../utils/submissionActivity';
 
 interface Challenge {
   id: string;
@@ -68,6 +69,7 @@ interface ChallengeSubmission {
   adminFinalApproved: boolean;
   rewardAwarded: boolean;
   createdAt: string;
+  updatedAt?: string;
   submissionType?: string;
   user: { id: string; name: string; profile: { displayName: string | null; avatarUrl: string | null; city?: string | null } | null };
   challenge: { id: string; title: string; type: string; quantityUnit?: string; collectionPointName?: string };
@@ -983,6 +985,7 @@ export function Challenges() {
         quantityUnit: string;
         totalQuantity: number;
         pendingCount: number;
+        latestCreatedAt: string;
         submissions: {
           sub: ChallengeSubmission;
           submissionNumber: number;
@@ -1030,7 +1033,7 @@ export function Challenges() {
           collectionCount: 0,
           finalReviewCount: 0,
           rejectedCount: 0,
-          latestCreatedAt: sub.createdAt,
+          latestCreatedAt: submissionActivityAt(sub),
           users: []
         });
       }
@@ -1043,8 +1046,8 @@ export function Challenges() {
       if (sub.status === 'final_review') brgyGroup.finalReviewCount += 1;
       if (sub.status === 'rejected') brgyGroup.rejectedCount += 1;
 
-      if (new Date(sub.createdAt).getTime() > new Date(brgyGroup.latestCreatedAt).getTime()) {
-        brgyGroup.latestCreatedAt = sub.createdAt;
+      if (new Date(submissionActivityAt(sub)).getTime() > new Date(brgyGroup.latestCreatedAt).getTime()) {
+        brgyGroup.latestCreatedAt = submissionActivityAt(sub);
       }
 
       let userGroup = brgyGroup.users.find(u => u.userId === userId);
@@ -1061,7 +1064,7 @@ export function Challenges() {
           collectionCount: 0,
           finalReviewCount: 0,
           rejectedCount: 0,
-          latestCreatedAt: sub.createdAt,
+          latestCreatedAt: submissionActivityAt(sub),
           challenges: []
         };
         brgyGroup.users.push(userGroup);
@@ -1075,8 +1078,8 @@ export function Challenges() {
       if (sub.status === 'final_review') userGroup.finalReviewCount += 1;
       if (sub.status === 'rejected') userGroup.rejectedCount += 1;
 
-      if (new Date(sub.createdAt).getTime() > new Date(userGroup.latestCreatedAt).getTime()) {
-        userGroup.latestCreatedAt = sub.createdAt;
+      if (new Date(submissionActivityAt(sub)).getTime() > new Date(userGroup.latestCreatedAt).getTime()) {
+        userGroup.latestCreatedAt = submissionActivityAt(sub);
       }
 
       let challengeGroup = userGroup.challenges.find(c => c.challengeId === challengeId);
@@ -1087,12 +1090,14 @@ export function Challenges() {
           quantityUnit,
           totalQuantity: 0,
           pendingCount: 0,
+          latestCreatedAt: submissionActivityAt(sub),
           submissions: []
         };
         userGroup.challenges.push(challengeGroup);
       }
 
       challengeGroup.totalQuantity += quantity;
+      if (Date.parse(submissionActivityAt(sub)) > Date.parse(challengeGroup.latestCreatedAt)) challengeGroup.latestCreatedAt = submissionActivityAt(sub);
       if (sub.status === 'pending' || sub.status === 'final_review') challengeGroup.pendingCount += 1;
       challengeGroup.submissions.push({
         sub,
@@ -1104,26 +1109,19 @@ export function Challenges() {
     barangayMap.forEach(brgyGroup => {
       brgyGroup.users.forEach(userGroup => {
         userGroup.challenges.forEach(ch => {
-          ch.submissions.sort((a, b) => b.submissionNumber - a.submissionNumber);
+          ch.submissions.sort((a, b) => latestSubmissionFirst(a.sub, b.sub));
         });
-        userGroup.challenges.sort((a, b) => b.pendingCount - a.pendingCount || a.challengeTitle.localeCompare(b.challengeTitle));
+        userGroup.challenges.sort((a, b) => Date.parse(b.latestCreatedAt) - Date.parse(a.latestCreatedAt) || a.challengeTitle.localeCompare(b.challengeTitle));
       });
 
-      // Sort users inside each barangay with pending count first
       brgyGroup.users.sort((a, b) => {
-        if (b.pendingCount !== a.pendingCount) {
-          return b.pendingCount - a.pendingCount;
-        }
-        return new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime();
+        return Date.parse(b.latestCreatedAt) - Date.parse(a.latestCreatedAt) || a.userId.localeCompare(b.userId);
       });
     });
 
     // Return sorted barangay list
     return Array.from(barangayMap.values()).sort((a, b) => {
-      if (b.pendingCount !== a.pendingCount) {
-        return b.pendingCount - a.pendingCount;
-      }
-      return a.barangay.localeCompare(b.barangay);
+      return Date.parse(b.latestCreatedAt) - Date.parse(a.latestCreatedAt) || a.barangay.localeCompare(b.barangay);
     });
   }, [submissions]);
 
@@ -1834,7 +1832,7 @@ export function Challenges() {
                                                   <th className="px-5 py-3 w-36">Submission #</th>
                                                   <th className="px-4 py-3">Photos (Before / After)</th>
                                                   <th className="px-4 py-3">Stage / Status</th>
-                                                  <th className="px-4 py-3">Date Submitted</th>
+                                                  <th className="px-4 py-3">Last Updated</th>
                                                   <th className="px-5 py-3 text-right">Review Action</th>
                                                 </tr>
                                               </thead>
@@ -1966,7 +1964,7 @@ export function Challenges() {
                                                       {/* Date */}
                                                       <td className="px-4 py-4">
                                                         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                                          {new Date(sub.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                                                          {new Date(submissionActivityAt(sub)).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
                                                         </span>
                                                       </td>
 

@@ -3071,7 +3071,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
           </TouchableOpacity>
 
           {(() => {
-            if (activeTab === 'past' && hasJoined) {
+            if (activeTab === 'past' && hasJoined && event.userStatus !== 'attended') {
               return (
                 <TouchableOpacity
                   style={[styles.quickJoinBtn, { backgroundColor: isDark ? theme.colors.primary : '#126027' }]}
@@ -3118,7 +3118,7 @@ export function EventsOverlay({ model }: { model: EcoBudMobileModel }) {
               return (
                 <TouchableOpacity
                   style={[styles.quickJoinBtn, { backgroundColor: '#F59E0B' }]}
-                  onPress={() => void model.handleClaimEventReward(event.id)}
+                  onPress={() => void model.handleClaimEventReward(event.id, event)}
                 >
                   <Text style={[styles.quickJoinBtnText, { color: '#FFF' }]}>Claim Reward</Text>
                 </TouchableOpacity>

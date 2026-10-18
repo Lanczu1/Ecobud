@@ -17,7 +17,7 @@ function scopedSubmissions(barangay: string | undefined) {
     : Prisma.sql`WHERE p.city ILIKE ${barangay}`;
   return Prisma.sql`
     SELECT cs.id, cs."userId" AS user_id, cs.status::text AS status, cs."moderatorNotes" AS notes,
-      c.title AS challenge_title,
+      c.title AS challenge_title, cs.updated_at AS updated_at,
       COALESCE(NULLIF(p."displayName", ''), NULLIF(u.name, ''), 'Unknown') AS resident,
       COALESCE(NULLIF(BTRIM(p.city, E' \\t\\n\\r'), ''), ${UNASSIGNED}) AS city
     FROM "ChallengeSubmission" cs
@@ -54,14 +54,15 @@ export async function selectChallengeSubmissionPage(
     database.$queryRaw<{ id: string; name: string; city: string }[]>(Prisma.sql`
       SELECT DISTINCT ON (s.user_id) s.user_id AS id, s.resident AS name, s.city
       FROM (${scopedSubmissions(barangay)}) s ORDER BY s.user_id`),
-    database.$queryRaw<{ city: string; total: number; pending: number }[]>(Prisma.sql`
-      SELECT m.city, COUNT(*)::int AS total, (COUNT(*) FILTER (WHERE m.status = 'pending'))::int AS pending
+    database.$queryRaw<{ city: string; total: number; pending: number; latest: Date }[]>(Prisma.sql`
+      SELECT m.city, COUNT(*)::int AS total, (COUNT(*) FILTER (WHERE m.status = 'pending'))::int AS pending,
+        MAX(m.updated_at) AS latest
       FROM (${matching}) m GROUP BY m.city`),
     database.$queryRaw<{ residents: number }[]>(Prisma.sql`
       SELECT COUNT(DISTINCT m.user_id)::int AS residents FROM (${matching}) m`),
   ]);
 
-  const sorted = groups.sort((left, right) => right.pending - left.pending || left.city.localeCompare(right.city));
+  const sorted = groups.sort((left, right) => new Date(right.latest).getTime() - new Date(left.latest).getTime() || left.city.localeCompare(right.city));
   const totalPages = Math.max(1, Math.ceil(sorted.length / GROUPS_PER_PAGE));
   const page = Math.min(Math.max(1, requestedPage), totalPages);
   const pageCities = sorted.slice((page - 1) * GROUPS_PER_PAGE, page * GROUPS_PER_PAGE).map(group => group.city);

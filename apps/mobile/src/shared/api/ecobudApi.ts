@@ -273,6 +273,8 @@ export interface ChallengeWithProgress {
     submissionId?: string;
     submission?: {
       id: string;
+      createdAt?: string;
+      updatedAt?: string;
       status: string;
       proofUrl: string | null;
       afterProofUrl: string | null;
