@@ -146,7 +146,9 @@ export async function adminGet<T>(path: string, options?: { bypassCache?: boolea
   }
 
   const startedAt = Date.now();
-  const fetchPromise = (async () => {
+  // A body worth storing, or a value with nothing to store (204 No Content).
+  type ReadResult = { kind: 'body'; body: string; etag: string | null } | { kind: 'data'; data: T };
+  const fetchPromise = (async (): Promise<ReadResult> => {
     const headers = authHeaders();
     if (stored?.etag) headers['If-None-Match'] = stored.etag;
     const res = await fetch(`${API_BASE}${path}`, {
@@ -154,18 +156,18 @@ export async function adminGet<T>(path: string, options?: { bypassCache?: boolea
       headers,
       cache: 'no-store',
     });
-    if (stored?.etag && res.status === 304) return { body: stored.body, etag: stored.etag };
-    if (!res.ok || res.status === 204) return { data: await handleResponse<T>(res) };
-    return { body: await res.text(), etag: res.headers.get('ETag') };
+    if (stored?.etag && res.status === 304) return { kind: 'body', body: stored.body, etag: stored.etag };
+    if (!res.ok || res.status === 204) return { kind: 'data', data: await handleResponse<T>(res) };
+    return { kind: 'body', body: await res.text(), etag: res.headers.get('ETag') };
   })();
-  const parsed = fetchPromise.then(result => 'data' in result ? result.data as T : JSON.parse(result.body) as T);
+  const parsed = fetchPromise.then(result => result.kind === 'data' ? result.data : JSON.parse(result.body) as T);
   // Callers that share this read still get its error; this only stops an unhandled-rejection report.
   parsed.catch(() => {});
   inFlightRequests.set(key, { promise: parsed, startedAt });
   try {
     const result = await fetchPromise;
     // A newer fresh read for the same path supersedes this one; keep its answer, not this older one.
-    if ('body' in result && inFlightRequests.get(key)?.promise === parsed && result.body.length <= MAX_STORED_CHARS) {
+    if (result.kind === 'body' && inFlightRequests.get(key)?.promise === parsed && result.body.length <= MAX_STORED_CHARS) {
       remember(key, { path, body: result.body, etag: result.etag, startedAt, receivedAt: Date.now(), stale: false });
     }
     return await parsed;
