@@ -38,7 +38,7 @@ import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 import { startFallbackPoll } from '../../shared/supabase/realtimeHealth';
-import { ecobudApi, type IdVerificationStatus, type EcoBadge } from '../../shared/api/ecobudApi';
+import { ecobudApi, EcoBudApiError, type IdVerificationStatus, type EcoBadge } from '../../shared/api/ecobudApi';
 import { resolveMediaUrl, shiftMonth } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { lessonDownloads, type LessonDownloadIndex } from '../../shared/offline/lessonDownloads';
@@ -570,6 +570,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
   }, []);
 
   const isRetryableOfflineActionError = useCallback((error: unknown) => {
+    if (error instanceof EcoBudApiError) {
+      return error.code === 'offline' || error.code === 'timeout';
+    }
+
     if (!(error instanceof Error)) {
       return false;
     }

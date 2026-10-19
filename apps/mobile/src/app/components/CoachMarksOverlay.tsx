@@ -61,6 +61,13 @@ interface StepConfig {
 
 const DIM_COLOR = 'rgba(10, 28, 22, 0.72)';
 
+// Step changes fade out, swap the screen behind the dim layer, then fade in once the target holds still.
+const STEP_FADE_OUT_MS = 140;
+const STEP_FADE_IN_MS = 220;
+// Longer than the 200ms target poll, so a target still scrolling into place never counts as settled.
+const REVEAL_SETTLE_MS = 220;
+const REVEAL_FALLBACK_MS = 1000;
+
 // Step configs tailored to guide through the REAL live screens
 const steps: StepConfig[] = [
   {
@@ -170,7 +177,7 @@ function CoachMarksScreen({
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState(initialStep);
-  const [pendingRevealStep, setPendingRevealStep] = useState<number | null>(null);
+  const [tooltipHeight, setTooltipHeight] = useState<number | null>(null);
   const spotlightTargetRect = useSyncExternalStore(coachMarkSpotlightStore.subscribe, coachMarkSpotlightStore.getSnapshot);
 
   const isSmallDevice = height <= 680 || width < 375;
@@ -187,16 +194,29 @@ function CoachMarksScreen({
   const spotlightCover = useRef(cardFade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })).current;
   const isAnimating = useRef(false);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const revealScheduled = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingReveal = useRef<{ step: number; show: () => void } | null>(null);
+
+  const clearRevealTimers = () => {
+    if (revealTimer.current !== null) clearTimeout(revealTimer.current);
+    if (settleTimer.current !== null) clearTimeout(settleTimer.current);
+    revealTimer.current = null;
+    settleTimer.current = null;
+  };
+
+  const revealPending = (pending: { step: number; show: () => void }) => {
+    if (pendingReveal.current !== pending) return;
+    clearRevealTimers();
+    pendingReveal.current = null;
+    // Start on the next frame so the new step's layout is committed before anything moves.
+    requestAnimationFrame(pending.show);
+  };
 
   useEffect(() => {
     if (visible) {
       coachMarkSpotlightStore.set(null);
       isAnimating.current = false;
       pendingReveal.current = null;
-      revealScheduled.current = false;
-      setPendingRevealStep(null);
       cardFade.setValue(1);
       cardSlide.setValue(0);
       mascotFade.setValue(1);
@@ -224,30 +244,25 @@ function CoachMarksScreen({
       }).start();
     }
 
-    return () => {
-      if (revealTimer.current !== null) {
-        clearTimeout(revealTimer.current);
-        revealTimer.current = null;
-      }
-    };
+    return clearRevealTimers;
   }, [visible, overlayFade, cardFade, cardSlide, mascotFade, mascotSlide, nextPressScale, backPressScale, onTabChange]);
 
+  // Every new measurement or card height restarts the settle wait, so the step fades in only
+  // after the target stops moving and the mascot has its final position.
   useEffect(() => {
     const pending = pendingReveal.current;
-    if (!visible || !replay || !pending || pending.step !== currentStep ||
+    if (!visible || !pending || pending.step !== currentStep ||
         activeTab !== steps[currentStep]?.targetTab) return;
 
     const needsTarget = currentStep >= 1 && currentStep <= 5;
     if (needsTarget && !spotlightTargetRect) return;
-    if (revealScheduled.current) return;
 
-    revealScheduled.current = true;
-    if (revealTimer.current !== null) clearTimeout(revealTimer.current);
-    if (pendingReveal.current !== pending) return;
-    pendingReveal.current = null;
-    setPendingRevealStep(null);
-    pending.show();
-  }, [visible, replay, currentStep, activeTab, spotlightTargetRect]);
+    if (settleTimer.current !== null) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => {
+      settleTimer.current = null;
+      revealPending(pending);
+    }, REVEAL_SETTLE_MS);
+  }, [visible, currentStep, activeTab, spotlightTargetRect, tooltipHeight]);
 
   // Closing unmounts this screen, so drop the measured target with it.
   useEffect(() => () => coachMarkSpotlightStore.set(null), []);
@@ -269,9 +284,8 @@ function CoachMarksScreen({
   const animateToStep = (nextIndex: number) => {
     if (isAnimating.current || nextIndex === currentStep) return;
     isAnimating.current = true;
-    if (revealTimer.current !== null) clearTimeout(revealTimer.current);
+    clearRevealTimers();
     pendingReveal.current = null;
-    revealScheduled.current = false;
     triggerSelectionHaptic();
 
     const isForward = nextIndex > currentStep;
@@ -281,58 +295,49 @@ function CoachMarksScreen({
       model?.setChallengesViewMode('Discover');
     }
 
-    // Automatically navigate to the REAL live screen in background
-    if (!replay && onTabChange && targetStep?.targetTab) {
-      onTabChange(targetStep.targetTab);
-    }
-
-    // Reset the shared scroll view; the Challenges and Learn lists scroll their own measured cards.
-    if (onScrollTo && !replay) {
-      if (targetStep?.targetTab !== 'challenges' && targetStep?.targetTab !== 'learn') {
-        onScrollTo(0, true);
-      }
-    } else if (onScrollTo && targetStep?.targetTab !== 'challenges' && targetStep?.targetTab !== 'learn') {
-      onScrollTo(0, true);
-    }
+    const fadeTo = (value: Animated.Value, toValue: number, duration: number, easing: (t: number) => number) =>
+      Animated.timing(value, { toValue, duration, easing, useNativeDriver: true });
 
     // Keep card and mascot movement on the native animation driver.
     Animated.parallel([
-      Animated.timing(cardFade, {
-        toValue: 0,
-        duration: 100,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardSlide, {
-        toValue: isForward ? -18 : 18,
-        duration: 100,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(mascotFade, {
-        toValue: 0,
-        duration: 100,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(mascotSlide, {
-        toValue: isForward ? -16 : 16,
-        duration: 100,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
+      fadeTo(cardFade, 0, STEP_FADE_OUT_MS, Easing.in(Easing.cubic)),
+      fadeTo(cardSlide, isForward ? -18 : 18, STEP_FADE_OUT_MS, Easing.in(Easing.cubic)),
+      fadeTo(mascotFade, 0, STEP_FADE_OUT_MS, Easing.in(Easing.cubic)),
+      fadeTo(mascotSlide, isForward ? -16 : 16, STEP_FADE_OUT_MS, Easing.in(Easing.cubic)),
     ]).start(({ finished }) => {
       if (!finished) {
         isAnimating.current = false;
         return;
       }
 
-      // Step 2: Switch to next step
+      const fadeIn = () => Animated.parallel([
+        fadeTo(cardFade, 1, STEP_FADE_IN_MS, Easing.out(Easing.cubic)),
+        fadeTo(cardSlide, 0, STEP_FADE_IN_MS, Easing.out(Easing.cubic)),
+        fadeTo(mascotFade, 1, STEP_FADE_IN_MS, Easing.out(Easing.cubic)),
+        fadeTo(mascotSlide, 0, STEP_FADE_IN_MS, Easing.out(Easing.cubic)),
+      ]).start(() => {
+        isAnimating.current = false;
+      });
+
+      // Set before the step changes so the settle effect sees it on the next render.
+      const pending = { step: nextIndex, show: fadeIn };
+      pendingReveal.current = pending;
+      revealTimer.current = setTimeout(() => {
+        revealTimer.current = null;
+        revealPending(pending);
+      }, REVEAL_FALLBACK_MS);
+
       if (model?.setSpotlightTargetRect) {
         model.setSpotlightTargetRect(null);
       }
-      if (replay && onTabChange && targetStep?.targetTab) {
+      // The live screen behind the overlay changes only while the card and mascot are hidden,
+      // so mounting it never competes with a running animation.
+      if (onTabChange && targetStep?.targetTab) {
         onTabChange(targetStep.targetTab);
+      }
+      // Reset the shared scroll view; the Challenges and Learn lists scroll their own measured cards.
+      if (onScrollTo && targetStep?.targetTab !== 'challenges' && targetStep?.targetTab !== 'learn') {
+        onScrollTo(0, true);
       }
       setCurrentStep(nextIndex);
       if (model?.setCoachMarksCurrentStep) {
@@ -340,50 +345,6 @@ function CoachMarksScreen({
       }
       cardSlide.setValue(isForward ? 18 : -18);
       mascotSlide.setValue(isForward ? 16 : -16);
-
-      const fadeIn = () => Animated.parallel([
-        Animated.timing(cardFade, {
-          toValue: 1,
-          duration: 160,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(cardSlide, {
-          toValue: 0,
-          duration: 160,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(mascotFade, {
-          toValue: 1,
-          duration: 160,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(mascotSlide, {
-          toValue: 0,
-          duration: 160,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        isAnimating.current = false;
-      });
-
-      if (replay && nextIndex !== steps.length - 1) {
-        const pending = { step: nextIndex, show: fadeIn };
-        pendingReveal.current = pending;
-        setPendingRevealStep(nextIndex);
-        revealTimer.current = setTimeout(() => {
-          revealTimer.current = null;
-          if (pendingReveal.current !== pending) return;
-          pendingReveal.current = null;
-          setPendingRevealStep(null);
-          fadeIn();
-        }, nextIndex === 3 || nextIndex === 4 ? 450 : 220);
-      } else {
-        fadeIn();
-      }
     });
   };
 
@@ -475,20 +436,31 @@ function CoachMarksScreen({
     : Math.max(safeTop + verticalScale(8), resolvedTarget.y - estimatedTooltipHeight - verticalScale(16));
 
   const isBottomRightMascot = isStep4 || isStep5;
+  const stacksWithTooltip = !isBottomRightMascot && !isTargetBottomRight;
+
+  // Long descriptions (step 3) outgrow the estimate, so the mascot uses the measured card height
+  // and shrinks to the space left beside the card instead of overlapping it.
+  const mascotGap = verticalScale(4);
+  const tooltipBottom = tooltipTop + (tooltipHeight ?? estimatedTooltipHeight);
+  const spaceForMascot = placeTooltipBelow
+    ? height - verticalScale(10) - tooltipBottom - mascotGap
+    : tooltipTop - mascotGap - (safeTop + verticalScale(4));
   const spotlightMascotSize = isBottomRightMascot
     ? Math.min(isSmallDevice ? 108 : 132, width * 0.3, height * 0.18)
-    : mascotSize;
+    : stacksWithTooltip
+      ? Math.min(mascotSize, spaceForMascot)
+      : mascotSize;
+  const showSpotlightMascot = spotlightMascotSize >= scale(72);
 
   // Place mascot so it stands clearly above or below the tooltip, avoiding the target cutout completely
   // Steps 4 and 5 anchor the mascot above the bottom navigation.
-  // Clamped to screen bounds to ensure it's always visible on smaller devices ("hindi na kita" fix)
   const mascotTop = isBottomRightMascot
     ? Math.max(safeTop, safeBottom - verticalScale(88) - spotlightMascotSize)
     : isTargetBottomRight
     ? resolvedTarget.y + resolvedTarget.height + verticalScale(4) // Right below the target hole
     : placeTooltipBelow
-      ? Math.min(tooltipTop + estimatedTooltipHeight + verticalScale(4), height - spotlightMascotSize - verticalScale(10))
-      : Math.max(safeTop + verticalScale(4), tooltipTop - spotlightMascotSize - verticalScale(4));
+      ? tooltipBottom + mascotGap
+      : tooltipTop - spotlightMascotSize - mascotGap;
 
   const cardWidthForMascot = Math.min(width - scale(32), 480);
   const cardLeftForMascot = (width - cardWidthForMascot) / 2;
@@ -504,11 +476,6 @@ function CoachMarksScreen({
   return (
     <Animated.View style={[styles.backdropHost, { opacity: overlayFade }]} pointerEvents="auto">
       <StatusBar style="light" />
-
-      {replay && pendingRevealStep !== null ? (
-        <View style={styles.standardDimmedBackdrop} />
-      ) : (
-      <>
 
       {/* ── STEP 2, 3, 4, 5 & 6: True Transparent Cutout Spotlight ── */}
       {currentStepData.stepNumber === 2 || currentStepData.stepNumber === 3 || currentStepData.stepNumber === 4 || currentStepData.stepNumber === 5 || currentStepData.stepNumber === 6 ? (
@@ -570,6 +537,7 @@ function CoachMarksScreen({
           })()}
 
           {/* Layer 4: ECOBUD Mascot – positioned cleanly relative to tooltip */}
+          {showSpotlightMascot && (
           <Animated.View
             pointerEvents="none"
             style={[
@@ -594,6 +562,7 @@ function CoachMarksScreen({
               style={{ width: spotlightMascotSize, height: spotlightMascotSize }}
             />
           </Animated.View>
+          )}
 
           {/* Layer 5 & 6: Coach Mark Tooltip with Centered Arrow dynamically positioned relative to Cutout Hole */}
           {(() => {
@@ -611,6 +580,10 @@ function CoachMarksScreen({
 
             return (
               <Animated.View
+                onLayout={(event) => {
+                  const measured = Math.round(event.nativeEvent.layout.height);
+                  setTooltipHeight((current) => (current === measured ? current : measured));
+                }}
                 style={[
                   styles.spotlightTooltipCard,
                   {
@@ -869,8 +842,6 @@ function CoachMarksScreen({
             </View>
           </SafeAreaView>
         </TouchableOpacity>
-      )}
-      </>
       )}
     </Animated.View>
   );
