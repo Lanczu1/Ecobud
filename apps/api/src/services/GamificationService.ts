@@ -7,7 +7,7 @@ import { UserActivityService } from './userActivityService';
 import { UserStatsService } from './UserStatsService';
 import { sendDirectNotification } from './notificationService';
 import { apiCache } from '../lib/cache';
-import { STREAK_MILESTONES } from '../utils/streakRules';
+import { STREAK_MILESTONES, liveStreak, nextChallengeStreak } from '../utils/streakRules';
 import { awardContentBadge } from './contentBadgeService';
 import { awardMilestoneBadges } from './badgeMilestoneService';
 
@@ -461,7 +461,7 @@ export class GamificationService {
 
     const now = new Date();
     const isChallenge = Boolean(action.metadata?.challengeId) && action.metadata?.streakEligible !== false;
-    const nextStreak = user.currentStreak + (isChallenge ? 1 : 0);
+    const nextStreak = isChallenge ? nextChallengeStreak(user, now) : user.currentStreak;
     if (isChallenge) {
       const awarded = await tx.streakMilestone.findMany({ where: { userId: user.id } });
       for (const milestone of STREAK_MILESTONES) {
@@ -569,7 +569,7 @@ export class GamificationService {
         pointsAwarded: action.pointsAwarded,
         ecoCoinsAwarded: action.ecoCoinsAwarded ?? 0,
         pointsTotal: updatedUser.points,
-        streak: updatedUser.currentStreak,
+        streak: liveStreak(updatedUser),
         userId: updatedUser.id,
       };
   }

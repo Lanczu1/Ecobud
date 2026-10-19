@@ -19,6 +19,7 @@ import type { EcoBudMobileModel } from '../types/home';
 import { StreakFlame } from './StreakFlame';
 import { StreakExpiryStatus } from './StreakExpiryStatus';
 import { useStreakExpiry } from '../hooks/useStreakExpiry';
+import { STREAK_FLAME_MINIMUM, savedStreakCount } from '../../shared/api/streakSummary';
 import { triggerSuccessHaptic, triggerSelectionHaptic } from '../utils/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAccessibility } from '../../shared/accessibility/AccessibilityContext';
@@ -249,6 +250,8 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
   const count = Math.max(0, model.dashboard?.streak ?? 0);
   const expiry = useStreakExpiry(model.dashboard?.streakSummary);
   const active = expiry.active;
+  const saved = Math.max(count, savedStreakCount(model.dashboard?.streakSummary));
+  const daysToFlame = STREAK_FLAME_MINIMUM - count;
   const [focused, setFocused] = React.useState<string | null>(null);
   const { width, height, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -560,15 +563,20 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
               </View>
 
               <Text style={[styles.title, compactLayout && styles.compactTitle]}>
-                {count < 1 ? 'Light your streak' : expiry.warning ? 'Keep your flame alive' : active ? 'Streak Unlocked!' : 'Your streak is resting'}
+                {saved < 1 ? 'Start your streak'
+                  : !active ? 'Your streak reset to 0'
+                    : expiry.warning ? 'Keep your streak alive'
+                      : daysToFlame > 0 ? 'Streak started!' : 'Streak on fire!'}
               </Text>
 
               <Text style={styles.description}>
-                {count < 1
-                  ? 'Complete your first challenge and claim its reward to light the flame and start your 7-day timer.'
-                  : active
-                    ? `You've completed ${count} challenges. Keep going to grow your streak and earn bigger rewards.`
-                    : 'Your challenge count is saved. Complete a challenge or use Restore Streak to bring back the flame.'}
+                {saved < 1
+                  ? 'Complete your first challenge and claim its reward to start your 7-day timer.'
+                  : !active
+                    ? `Use Restore Streak to get back your ${saved}-challenge streak, or complete a challenge to start again at 1.`
+                    : daysToFlame > 0
+                      ? `Complete challenges on ${daysToFlame} more ${daysToFlame === 1 ? 'day' : 'days'} to light the flame. Only one challenge counts per day.`
+                      : `Your streak is at ${count}. Keep going to grow your streak and earn bigger rewards.`}
               </Text>
 
               <StreakExpiryStatus summary={model.dashboard?.streakSummary} expiry={expiry} dark onRefresh={() => { void model.refreshEverything(); }} onViewChallenges={() => { model.setActiveOverlay(null); model.setActiveTab('challenges'); }} />
@@ -624,7 +632,7 @@ export function StreakUnlockedOverlay({ model }: { model: EcoBudMobileModel }) {
                 style={[styles.close, focused === 'rewards' && styles.focus]}
               >
                 <Text style={styles.closeText}>
-                  {count >= 1 && !active ? 'View rewards & restore' : 'View streak rewards'}
+                  {saved >= 1 && !active ? 'View rewards & restore' : 'View streak rewards'}
                 </Text>
               </Pressable>
             </Animated.View>

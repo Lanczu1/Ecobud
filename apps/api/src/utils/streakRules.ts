@@ -17,6 +17,30 @@ export function streakLastActivity(user: { lastChallengeAt: Date | null; streakR
   return Math.max(user.lastChallengeAt?.getTime() ?? 0, user.streakRestoredAt?.getTime() ?? 0);
 }
 
+type StreakActivity = { currentStreak: number; lastChallengeAt: Date | null; streakRestoredAt: Date | null };
+
+function manilaDay(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+export function isStreakActive(user: StreakActivity, now = new Date()): boolean {
+  const lastActivity = streakLastActivity(user);
+  return user.currentStreak >= 1 && lastActivity > 0 && now.getTime() - lastActivity < STREAK_WINDOW_MS;
+}
+
+// An expired streak reads as 0. The stored count is kept so a restore can bring it back.
+export function liveStreak(user: StreakActivity, now = new Date()): number {
+  return isStreakActive(user, now) ? user.currentStreak : 0;
+}
+
+// Only the first completed challenge of a Manila calendar day adds to the streak.
+// A challenge after the streak expired starts a new streak at 1.
+export function nextChallengeStreak(user: StreakActivity, now = new Date()): number {
+  if (!isStreakActive(user, now)) return 1;
+  if (user.lastChallengeAt && manilaDay(user.lastChallengeAt) === manilaDay(now)) return user.currentStreak;
+  return user.currentStreak + 1;
+}
+
 export function streakStatus(user: {
   currentStreak: number;
   lastChallengeAt: Date | null;
@@ -24,8 +48,7 @@ export function streakStatus(user: {
   streakRestoreMonth: string | null;
   streakRestoresUsed: number;
 }, now = new Date()) {
-  const lastActivity = streakLastActivity(user);
-  const active = user.currentStreak >= 1 && lastActivity > 0 && now.getTime() - lastActivity < STREAK_WINDOW_MS;
+  const active = isStreakActive(user, now);
   const restoresRemaining = Math.max(0, 3 - (user.streakRestoreMonth === streakMonth(now) ? user.streakRestoresUsed : 0));
   return { active, restoresRemaining, canRestore: user.currentStreak >= 1 && !active && restoresRemaining > 0 };
 }

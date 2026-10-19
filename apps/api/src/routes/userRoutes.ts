@@ -89,6 +89,8 @@ userRoutes.get(
           points: true,
           currentStreak: true,
           lastActionDate: true,
+          lastChallengeAt: true,
+          streakRestoredAt: true,
         },
       }),
       prisma.profile.findUnique({ where: { userId } }),
@@ -113,7 +115,7 @@ userRoutes.get(
       role: user?.role,
       status: user?.status,
       points: user?.points ?? 0,
-      currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
+      currentStreak: user ? resolveLiveStreak(user) : 0,
       profile: user ? profile : undefined,
       badges: user ? badges.map((item) => item.badge) : [],
       eventHistory:

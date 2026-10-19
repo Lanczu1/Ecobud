@@ -1,7 +1,7 @@
 import React from 'react';
 import { AccessibilityInfo, AppState, Image, View } from 'react-native';
 import LottieView from '../../shared/accessibility/AccessibleLottie';
-import { isStreakFlameActive } from '../../shared/api/streakSummary';
+import { STREAK_FLAME_MINIMUM, isStreakFlameActive } from '../../shared/api/streakSummary';
 import { useHomeAnimationVisibility } from './HomeAnimationVisibility';
 import { createLottiePlaybackController } from '../utils/homeAnimationVisibility';
 
@@ -16,8 +16,14 @@ export function StreakFlame(props: StreakFlameProps) {
 
 const MemoizedStreakFlame = React.memo(function StreakFlameContent({ count, active, size = 88 }: StreakFlameProps) {
   if (isStreakFlameActive(count, active)) return <ActiveFlame size={size} />;
-  return <Image source={inactiveSource} resizeMode="contain" style={{ width: size, height: size }} accessibilityLabel={count < 1 ? 'Complete your first challenge to ignite your streak' : 'Inactive streak flame'} />;
-}, (previous, next) => previous.size === next.size && isStreakFlameActive(previous.count, previous.active) === isStreakFlameActive(next.count, next.active) && (previous.count < 1) === (next.count < 1));
+  const daysToFlame = STREAK_FLAME_MINIMUM - count;
+  const label = count < 1
+    ? 'Complete your first challenge to start your streak'
+    : active && daysToFlame > 0
+      ? `Complete challenges on ${daysToFlame} more ${daysToFlame === 1 ? 'day' : 'days'} to light the flame`
+      : 'Inactive streak flame';
+  return <Image source={inactiveSource} resizeMode="contain" style={{ width: size, height: size }} accessibilityLabel={label} />;
+}, (previous, next) => previous.size === next.size && previous.count === next.count && previous.active === next.active);
 
 function ActiveFlame({ size }: { size: number }) {
   const animation = React.useRef<React.ElementRef<typeof LottieView>>(null);

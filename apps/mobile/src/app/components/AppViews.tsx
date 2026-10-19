@@ -54,6 +54,7 @@ import { CoachMarkTarget } from './CoachMarkTarget';
 import { RejectionModal } from './RejectionModal';
 import { LeaderboardPagination } from './LeaderboardPagination';
 import { StreakFlame } from './StreakFlame';
+import { savedStreakCount } from '../../shared/api/streakSummary';
 import { LevelCard, getLevelFromPoints } from './LevelCard';
 import { SummaryCards } from './SummaryCards';
 import { QuickActions } from './QuickActions';
@@ -498,6 +499,7 @@ export function HomeView({ model }: { model: EcoBudMobileModel }) {
         <SummaryCards
           currentStreak={getDisplayStreak(model)}
           streakActive={model.dashboard?.streakSummary?.active ?? false}
+          savedStreak={savedStreakCount(model.dashboard?.streakSummary)}
           ecoPoints={model.dashboard?.ecoPoints ?? model.session?.user.points ?? 0}
           onPressRewards={() => model.setActiveOverlay('streakRewards')}
           onOpenStreakOverlay={() => model.setActiveOverlay('streakUnlocked')}
@@ -2301,6 +2303,7 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                 {(() => {
                   const currentStreak = getDisplayStreak(model);
                   const isStreakActive = currentStreak >= 1 && (model.dashboard?.streakSummary?.active ?? false);
+                  const savedStreak = Math.max(currentStreak, savedStreakCount(model.dashboard?.streakSummary));
 
                   return isStreakActive ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: isDark ? theme.colors.surfaceMuted : '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 }}>
@@ -2312,10 +2315,10 @@ export function TrackerView({ model }: { model: EcoBudMobileModel }) {
                   ) : (
                     <View style={{ alignItems: 'center', marginBottom: 8, width: '100%', gap: 3 }}>
                       <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.textPrimary, textAlign: 'center' }}>
-                        {currentStreak > 0 ? `${currentStreak} ${currentStreak === 1 ? 'challenge' : 'challenges'} completed` : 'Start your challenge streak'}
+                        {savedStreak > 0 ? 'Streak reset to 0' : 'Start your challenge streak'}
                       </Text>
                       <Text style={{ fontSize: 12, color: theme.colors.textSecondary, textAlign: 'center' }}>
-                        {currentStreak === 0 ? 'Complete your first challenge and claim its reward to start the 7-day timer.' : 'Streak inactive. Your count is saved.'}
+                        {savedStreak > 0 ? `Restore it to get back your ${savedStreak}-challenge streak.` : 'Complete your first challenge and claim its reward to start the 7-day timer.'}
                       </Text>
                     </View>
                   );

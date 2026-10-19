@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('../prismaClient', () => ({ prisma: {} }));
 import { StreakService } from './StreakService';
-import { STREAK_MILESTONES, STREAK_WINDOW_MS, streakMonth, streakStatus } from '../utils/streakRules';
+import { STREAK_MILESTONES, STREAK_WINDOW_MS, liveStreak, nextChallengeStreak, streakMonth, streakStatus } from '../utils/streakRules';
 import { crossedStreakMilestone, formatStreakTimeLeft, isStreakFlameActive, isStreakSummary, streakCountdownParts, streakExpiry } from '../../../mobile/src/shared/api/streakSummary';
 
 const now = Date.parse('2026-10-18T12:00:00Z');
@@ -18,6 +18,10 @@ describe('streak expiry warning', () => {
   it('detects milestones when refresh skips a count', () => {
     expect(crossedStreakMilestone(8, 11)).toBe(true);
     expect(crossedStreakMilestone(11, 12)).toBe(false);
+  });
+  it('does not celebrate a restore from 0', () => {
+    expect(crossedStreakMilestone(0, 5)).toBe(false);
+    expect(crossedStreakMilestone(0, 1)).toBe(true);
   });
   it.each([
     [86400000, { days: 1, hours: 0, minutes: 0, seconds: 0 }],
@@ -86,16 +90,55 @@ describe('server streak expiry', () => {
     const result = await read({ currentStreak, lastChallengeAt: new Date(now) });
     expect(result.expiresAt?.getTime()).toBe(now + STREAK_WINDOW_MS);
     expect(streakStatus({ ...user, currentStreak, lastChallengeAt: new Date(now) }, new Date(now)).active).toBe(true);
-    expect(isStreakFlameActive(currentStreak, true)).toBe(true);
+    expect(isStreakFlameActive(currentStreak, true)).toBe(false);
     expect(streakExpiry({ ...result, active: true, expiresAt: result.expiresAt?.toISOString() }, now)).toMatchObject({ active: true, warning: false });
+  });
+  it('lights the flame at three while the streak is active', () => {
+    expect(isStreakFlameActive(3, true)).toBe(true);
+    expect(isStreakFlameActive(3, false)).toBe(false);
   });
   it.each([1, 2])('allows restore after seven days for a %s-challenge streak without clearing its count', currentStreak => {
     const status = streakStatus({ ...user, currentStreak, lastChallengeAt: new Date(now - STREAK_WINDOW_MS) }, new Date(now));
     expect(status).toMatchObject({ active: false, canRestore: true, restoresRemaining: 3 });
     expect(isStreakFlameActive(currentStreak, false)).toBe(false);
   });
+  it('shows 0 after expiry but keeps the saved count for restore', async () => {
+    const result = await read({ currentStreak: 5, lastChallengeAt: new Date(now - STREAK_WINDOW_MS) });
+    expect(result).toMatchObject({ currentStreak: 0, savedStreak: 5, active: false, canRestore: true });
+  });
   it('keeps the first bonus milestone at three challenges', () => {
     expect(STREAK_MILESTONES.map(item => item.challenges)).toEqual([3, 10, 30, 100]);
+  });
+});
+
+describe('one streak count per day', () => {
+  // 2026-10-18 12:00 UTC is 20:00 in Manila.
+  const base = { streakRestoredAt: null as Date | null };
+  it('starts at 1 for the first challenge', () => {
+    expect(nextChallengeStreak({ ...base, currentStreak: 0, lastChallengeAt: null }, new Date(now))).toBe(1);
+  });
+  it('does not count a second challenge on the same Manila day', () => {
+    const user = { ...base, currentStreak: 4, lastChallengeAt: new Date(now - 2 * hour) };
+    expect(nextChallengeStreak(user, new Date(now))).toBe(4);
+  });
+  it('counts the first challenge of the next Manila day', () => {
+    // 15:59 UTC is 23:59 Manila; 16:01 UTC is 00:01 the next Manila day.
+    const user = { ...base, currentStreak: 4, lastChallengeAt: new Date(Date.parse('2026-10-18T15:59:00Z')) };
+    expect(nextChallengeStreak(user, new Date(Date.parse('2026-10-18T16:01:00Z')))).toBe(5);
+  });
+  it('counts again after a few days inside the 7-day window', () => {
+    const user = { ...base, currentStreak: 4, lastChallengeAt: new Date(now - 6 * 24 * hour) };
+    expect(nextChallengeStreak(user, new Date(now))).toBe(5);
+  });
+  it('starts over at 1 after the streak expired', () => {
+    const user = { ...base, currentStreak: 9, lastChallengeAt: new Date(now - STREAK_WINDOW_MS) };
+    expect(liveStreak(user, new Date(now))).toBe(0);
+    expect(nextChallengeStreak(user, new Date(now))).toBe(1);
+  });
+  it('continues the restored count on a new day', () => {
+    const user = { currentStreak: 9, lastChallengeAt: new Date(now - 10 * 24 * hour), streakRestoredAt: new Date(now - hour) };
+    expect(liveStreak(user, new Date(now))).toBe(9);
+    expect(nextChallengeStreak(user, new Date(now))).toBe(10);
   });
 });
 

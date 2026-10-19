@@ -106,8 +106,7 @@ export function IdVerificationOverlay({ model }: { model: EcoBudMobileModel }) {
       {editable && <View onLayout={(event) => { formTop.current = event.nativeEvent.layout.y; }}><SurfaceCard style={{ padding: 18, gap: 14 }}>
         <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Full name as shown on your ID</Text>
         <TextInput accessibilityLabel="Full name on ID" value={legalName} editable={!busy} maxLength={120} onChangeText={setLegalName} autoCapitalize="words" style={{ color: theme.colors.textPrimary, borderWidth: 1, borderColor: theme.colors.inputBorder, borderRadius: 10, padding: 12 }} />
-        <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>ID type</Text>
-        <Text style={{ color: theme.colors.textPrimary }}>Valid ID</Text>
+        <Text style={{ color: theme.colors.textPrimary }}><Text style={{ fontWeight: '700' }}>ID type: </Text>Valid ID</Text>
         <Text style={{ color: theme.colors.textMuted, lineHeight: 20 }}>Upload the front of your valid ID with your name and photo clearly visible. JPEG, PNG, or WebP, up to 5 MB. This photo is private and accessible to moderators assigned to your barangay.</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           <TouchableOpacity disabled={busy || choosingPhoto} onPress={() => void choosePhoto(true)} style={{ padding: 12, opacity: busy || choosingPhoto ? 0.5 : 1 }}><Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Take ID photo</Text></TouchableOpacity>

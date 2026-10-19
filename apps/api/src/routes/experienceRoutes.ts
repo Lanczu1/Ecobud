@@ -101,7 +101,7 @@ experienceRoutes.get(
       user: {
         displayName: user?.profile?.displayName ?? user?.name ?? 'Eco Explorer',
         points: user?.points ?? 0,
-        currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
+        currentStreak: user ? resolveLiveStreak(user) : 0,
       },
       notificationsCount: Math.min(5, Math.max(1, upcomingEvents.length + 2)),
       weeklyProgress,
@@ -154,6 +154,8 @@ experienceRoutes.get(
           currentStreak: true,
           points: true,
           lastActionDate: true,
+          lastChallengeAt: true,
+          streakRestoredAt: true,
         },
       }),
     ]);
@@ -184,7 +186,7 @@ experienceRoutes.get(
 
     return res.json({
       month,
-      currentStreak: resolveLiveStreak(user?.currentStreak ?? 0, user?.lastActionDate),
+      currentStreak: user ? resolveLiveStreak(user) : 0,
       points: user?.points ?? 0,
       weeklyGoalProgress: Math.min(100, Math.round((uniqueDays.size / 7) * 100)),
       completedDays: [...uniqueDays],

@@ -54,7 +54,7 @@ export async function sendStreakWarnings(now = new Date()) {
         userId: user.id,
         type: 'streak',
         title: days === 1 ? 'Your streak expires within 24 hours' : 'Your streak expires within 2 days',
-        message: `Complete a challenge and claim its reward to keep your ${user.currentStreak}-challenge streak active. Your challenge count stays saved.`,
+        message: `Complete a challenge and claim its reward to keep your ${user.currentStreak}-challenge streak. If time runs out, it resets to 0 until you restore it.`,
         priority: 'high',
         notificationKey: `${prefix}${lastActivity}`,
       });

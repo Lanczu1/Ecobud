@@ -163,6 +163,8 @@ export interface PresenceSyncRequest {
 
 export interface StreakSummary {
   currentStreak: number;
+  // The count kept for restore. currentStreak reads 0 once the streak expires.
+  savedStreak?: number;
   active: boolean;
   restoresRemaining: number;
   canRestore: boolean;

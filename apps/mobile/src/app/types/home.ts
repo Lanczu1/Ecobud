@@ -90,6 +90,8 @@ export interface HeaderProps {
 export interface SummaryCardsProps {
   currentStreak: number;
   streakActive?: boolean;
+  // Count a restore would bring back after the streak resets to 0.
+  savedStreak?: number;
   ecoPoints: number;
   onPressRewards?: () => void;
   onOpenStreakOverlay?: () => void;

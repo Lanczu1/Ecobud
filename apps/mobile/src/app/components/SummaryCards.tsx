@@ -4,12 +4,12 @@ import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StreakFlame } from './StreakFlame';
-import { isStreakFlameActive } from '../../shared/api/streakSummary';
+import { STREAK_FLAME_MINIMUM, isStreakFlameActive } from '../../shared/api/streakSummary';
 import { type SummaryCardsProps } from '../types/home';
 import { getVisibleStreak } from '../utils/appUtils';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 
-export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, onPressRewards, onOpenStreakOverlay, style }: SummaryCardsProps) {
+export function SummaryCards({ currentStreak, streakActive = false, savedStreak = 0, ecoPoints, onPressRewards, onOpenStreakOverlay, style }: SummaryCardsProps) {
 
   const visibleStreak = getVisibleStreak(currentStreak);
   const isStreakActive = isStreakFlameActive(currentStreak, streakActive);
@@ -35,11 +35,13 @@ export function SummaryCards({ currentStreak, streakActive = false, ecoPoints, o
           <View style={{ flex: 1 }}>
             <Text style={styles.streakLabel}>YOUR ECO STREAK</Text>
             <Text style={styles.streakTagline} numberOfLines={2}>
-              {!isStreakActive
-                ? currentStreak === 0
-                  ? 'Complete a challenge to start.'
-                  : 'Count saved. Restore your streak.'
-                : 'Build your streak with challenges.'}
+              {!streakActive || currentStreak === 0
+                ? savedStreak > 0
+                  ? `Reset to 0. Restore your ${savedStreak}-challenge streak.`
+                  : 'Complete a challenge to start.'
+                : !isStreakActive
+                  ? `${STREAK_FLAME_MINIMUM - currentStreak} more ${STREAK_FLAME_MINIMUM - currentStreak === 1 ? 'day' : 'days'} to light the flame.`
+                  : 'Build your streak with challenges.'}
             </Text>
           </View>
         </View>

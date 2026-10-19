@@ -121,6 +121,8 @@ const toAuthResponse = (user: {
   points: number;
   currentStreak: number;
   lastActionDate: Date | null;
+  lastChallengeAt: Date | null;
+  streakRestoredAt: Date | null;
   profile: { displayName: string; avatarUrl: string | null; city?: string | null } | null;
 }, clientType: SessionClient = 'mobile', authTime = Math.floor(Date.now() / 1000)) => {
   const token = TokenService.sign({
@@ -150,7 +152,7 @@ const toAuthResponse = (user: {
       isGoogleAccount: user.googleIdentityId != null,
       idVerificationStatus: user.idVerificationStatus ?? 'not_submitted',
       points: user.points,
-      currentStreak: resolveLiveStreak(user.currentStreak, user.lastActionDate),
+      currentStreak: resolveLiveStreak(user),
       displayName: user.profile?.displayName ?? user.name,
       avatarUrl: user.profile?.avatarUrl ?? null,
       city: user.profile?.city ?? null,

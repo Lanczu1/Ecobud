@@ -5,7 +5,8 @@ const nonNegativeInteger = (value: unknown): value is number => typeof value ===
 export function isStreakSummary(value: unknown): value is StreakSummary {
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
-  return nonNegativeInteger(data.currentStreak) && typeof data.active === 'boolean'
+  return nonNegativeInteger(data.currentStreak) && (data.savedStreak === undefined || nonNegativeInteger(data.savedStreak))
+    && typeof data.active === 'boolean'
     && nonNegativeInteger(data.restoresRemaining) && data.restoresRemaining <= 3
     && typeof data.canRestore === 'boolean' && (data.lastChallengeAt === null || typeof data.lastChallengeAt === 'string')
     && (data.expiresAt === undefined || data.expiresAt === null || (typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt))))
@@ -21,12 +22,21 @@ export function parseStreakSummary(value: unknown): StreakSummary {
   return value;
 }
 
+export const STREAK_FLAME_MINIMUM = 3;
+
 export function isStreakFlameActive(count: number, active: boolean): boolean {
-  return count >= 1 && active;
+  return count >= STREAK_FLAME_MINIMUM && active;
+}
+
+// The count a restore would bring back; older API responses only send currentStreak.
+export function savedStreakCount(summary: Pick<StreakSummary, 'currentStreak' | 'savedStreak'> | null | undefined): number {
+  return summary?.savedStreak ?? summary?.currentStreak ?? 0;
 }
 
 export function crossedStreakMilestone(previous: number | null, current: number): boolean {
-  return previous !== null && [1, 3, 10, 30, 100].some(milestone => previous < milestone && current >= milestone);
+  // The streak grows by at most 1 a day, so a jump from 0 is a restore, not a new milestone.
+  if (previous === null || (previous === 0 && current > 1)) return false;
+  return [1, 3, 10, 30, 100].some(milestone => previous < milestone && current >= milestone);
 }
 
 export function streakExpiry(summary: Pick<StreakSummary, 'currentStreak' | 'active' | 'expiresAt'> | null | undefined, now = Date.now()) {

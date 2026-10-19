@@ -46,14 +46,11 @@ export class UserStatsService {
         }),
         this.database.user.findUnique({
           where: { id: userId },
-          select: { lastActionDate: true, currentStreak: true }
+          select: { currentStreak: true, lastChallengeAt: true, streakRestoredAt: true }
         })
       ]);
 
-      const resolvedStreak = resolveLiveStreak(
-        user?.currentStreak ?? 0,
-        user?.lastActionDate
-      );
+      const resolvedStreak = user ? resolveLiveStreak(user) : 0;
 
       const learningProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 

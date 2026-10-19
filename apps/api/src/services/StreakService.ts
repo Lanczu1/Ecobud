@@ -2,7 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { HttpError } from '../http/errorResponder';
 import { apiCache } from '../lib/cache';
-import { STREAK_MILESTONES, STREAK_WINDOW_MS, streakLastActivity, streakMonth, streakStatus } from '../utils/streakRules';
+import { STREAK_MILESTONES, STREAK_WINDOW_MS, liveStreak, streakLastActivity, streakMonth, streakStatus } from '../utils/streakRules';
 
 export class StreakService {
   constructor(private readonly database: PrismaClient = prisma) {}
@@ -12,7 +12,8 @@ export class StreakService {
     if (!user) throw new HttpError(404, 'User not found.');
     const lastActivity = streakLastActivity(user);
     return {
-      currentStreak: user.currentStreak,
+      currentStreak: liveStreak(user),
+      savedStreak: user.currentStreak,
       lastChallengeAt: user.lastChallengeAt,
       expiresAt: user.currentStreak >= 1 && lastActivity > 0 ? new Date(lastActivity + STREAK_WINDOW_MS) : null,
       ...streakStatus(user),
