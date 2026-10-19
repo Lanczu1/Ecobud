@@ -48,10 +48,10 @@ describe('Valid ID submission', () => {
     expect(prisma.idVerificationSubmission.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: 'resident', idType: 'valid', barangay: 'Yukos' }) }));
   });
 
-  it.each(['government', 'school', 'barangay'])('keeps older %s clients compatible', async idType => {
+  it.each(['government', 'school', 'barangay'])('saves an older %s client submission as a valid ID', async idType => {
     const response = await request(app).post('/id-verification/me').set('x-test-photo', 'yes').send({ ...payload, idType });
     expect(response.status).toBe(201);
-    expect(response.body.submission.idType).toBe(idType);
+    expect(prisma.idVerificationSubmission.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ idType: 'valid' }) }));
   });
 
   it.each([{ idType: 'other' }, { idType: '' }, { consent: 'false' }, { legalName: ' ' }])('rejects invalid fields before uploading: %j', async changes => {

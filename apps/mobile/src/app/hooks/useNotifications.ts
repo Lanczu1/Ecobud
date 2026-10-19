@@ -41,6 +41,9 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
       if (alive) setCount(page.unreadCount);
     });
     const refresh = refreshQueue.schedule;
+    // Only the first registration after login or a push setting change may show the
+    // permission dialog. Polls and returning to the app never ask again after a "Don't allow".
+    let mayPrompt = true;
     const register = (updatedToken?: string) => {
       if (!nativePush || !alive) return Promise.resolve();
       registrationQueue.current = registrationQueue.current.then(async () => {
@@ -55,7 +58,9 @@ export function useNotifications(token?: string, pushEnabled: boolean = true) {
           }
           if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('ecobud', { name: 'ECOBUD', importance: Notifications.AndroidImportance.HIGH });
           let permissions = await Notifications.getPermissionsAsync();
-          if (!permissions.granted && permissions.canAskAgain) permissions = await Notifications.requestPermissionsAsync();
+          const prompt = mayPrompt;
+          mayPrompt = false;
+          if (!permissions.granted && permissions.canAskAgain && prompt) permissions = await Notifications.requestPermissionsAsync();
           if (!alive) return;
           if (!permissions.granted) {
             if (deviceTokenRef.current) {

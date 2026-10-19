@@ -11,7 +11,7 @@ import { removeReviewedIdPhoto } from '../services/idDocumentCleanup';
 
 export const idVerificationRoutes = Router();
 idVerificationRoutes.use(authenticateRequest, (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
-const submissionSchema = z.object({ legalName: z.string().trim().min(2).max(120), idType: z.enum(['valid', 'government', 'school', 'barangay']), consent: z.literal('true') });
+const submissionSchema = z.object({ legalName: z.string().trim().min(2).max(120), idType: z.enum(['valid', 'government', 'school', 'barangay']).transform(() => 'valid' as const), consent: z.literal('true') });
 const reviewSchema = z.object({ status: z.enum(['approved', 'rejected']), reason: z.string().trim().max(500).optional() })
   .refine(value => value.status !== 'rejected' || Boolean(value.reason), { message: 'A rejection reason is required.', path: ['reason'] });
 const submissionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, keyGenerator: (req: AuthenticatedRequest) => req.auth!.userId, standardHeaders: true, legacyHeaders: false });

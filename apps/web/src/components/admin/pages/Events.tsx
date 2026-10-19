@@ -1185,7 +1185,6 @@ export function Events() {
   };
 
   const handleDownloadReport = async (eventId: string, format: 'pdf' | 'excel') => {
-    if (format === 'pdf' && !isAdmin) return;
     setReportLoading(eventId);
     try {
       const token = localStorage.getItem('ecobud_admin_token') || '';
@@ -1345,8 +1344,8 @@ export function Events() {
                 <div className="space-y-2">
                   <button
                     onClick={() => { if (reportModal.eventId) handleDownloadReport(reportModal.eventId, 'pdf'); setReportModal({ open: false, eventId: null, eventTitle: '' }); }}
-                    disabled={!isAdmin || reportLoading !== null}
-                    title={!isAdmin ? 'PDF reports are available to administrators only' : 'Download PDF report'}
+                    disabled={reportLoading !== null}
+                    title="Download PDF report"
                     className="w-full flex items-center gap-3 px-5 py-4 bg-red-50 text-red-700 font-semibold rounded-xl hover:bg-red-100 transition-colors text-left disabled:opacity-50"
                   >
                     {reportLoading === reportModal.eventId ? (

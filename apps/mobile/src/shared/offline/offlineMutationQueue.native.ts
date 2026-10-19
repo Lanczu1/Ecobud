@@ -144,10 +144,12 @@ export const offlineMutationQueue: OfflineMutationQueue = {
       id,
     );
 
-    // Prune already synced records older than 24 hours to prevent data lingering and database bloat
+    // Prune already synced records older than 24 hours to prevent data lingering and database bloat.
+    // updated_at holds ISO strings, so the cutoff must be ISO too for the text comparison to hold.
     try {
       await database.runAsync(
-        `DELETE FROM ${TABLE_NAME} WHERE synced = 1 AND updated_at < datetime('now', '-1 day')`,
+        `DELETE FROM ${TABLE_NAME} WHERE synced = 1 AND updated_at < ?`,
+        new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
       );
     } catch {
       // Best-effort cleanup
