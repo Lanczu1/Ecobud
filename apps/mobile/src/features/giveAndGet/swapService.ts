@@ -195,8 +195,8 @@ export const swapService = {
     await ecobudApi.deleteSwapListing(authToken, id);
   },
 
-  async sendSwapRequest(listingId: string, fromUserId: string, message?: string): Promise<SwapRequest> {
-    const data = await ecobudApi.sendSwapRequest(authToken, { listingId, message });
+  async sendSwapRequest(listingId: string, fromUserId: string, message?: string, quantity = 1): Promise<SwapRequest> {
+    const data = await ecobudApi.sendSwapRequest(authToken, { listingId, message, quantity });
     // A requested listing leaves Browse, so drop it from the cached pages too.
     readCache.patch<SwapListing[]>('["listings"', listings => listings.filter(listing => listing.id !== listingId));
     return formatRequest(data);
@@ -226,6 +226,7 @@ export const swapService = {
         unreadCount: row.unreadCount || row.unread_count || 0,
         status: row.status || 'pending',
         meetupMethod: row.meetupMethod || row.meetup_method || 'public',
+        requestedQuantity: row.requestedQuantity || 1,
       }));
     });
   },

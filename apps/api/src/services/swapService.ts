@@ -134,8 +134,14 @@ function formatMessage(row: any) {
 }
 
 // A listing takes one request at a time. These statuses hold it; a declined or
-// cancelled request frees it and it shows on Browse again.
-const OPEN_REQUEST_STATUSES = ['pending', 'accepted', 'completed'];
+// cancelled request frees it, and a completed one frees it while items are left.
+const OPEN_REQUEST_STATUSES = ['pending', 'accepted'];
+
+// Quantity is stored as text. Listings saved before it became digits-only count as one item.
+function itemsLeft(quantity: string) {
+  const count = Number.parseInt(quantity, 10);
+  return Number.isFinite(count) ? Math.max(0, count) : 1;
+}
 
 export const swapService = {
   async reportListing(id: string, reporterId: string, reason: string, reportName = 'Other') {
@@ -152,7 +158,7 @@ export const swapService = {
   }) {
     const { search, category, meetupMethod, sortBy = 'newest', limit = 20, offset = 0 } = params;
 
-    const where: any = { isActive: true, approvalStatus: 'approved', requests: { none: { status: { in: OPEN_REQUEST_STATUSES } } } };
+    const where: any = { isActive: true, approvalStatus: 'approved', quantity: { not: '0' }, requests: { none: { status: { in: OPEN_REQUEST_STATUSES } } } };
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -276,12 +282,13 @@ export const swapService = {
     apiCache.delete(`user_dashboard_${listing.userId}`);
   },
 
-  async sendSwapRequest(listingId: string, fromUserId: string, message?: string) {
+  async sendSwapRequest(listingId: string, fromUserId: string, message?: string, quantity = 1) {
     const listing = await prisma.swapListing.findUnique({
       where: { id: listingId },
       select: { userId: true, isActive: true },
     });
     if (!listing || !listing.isActive) throw new Error('Listing not found or inactive');
+    if (!Number.isInteger(quantity) || quantity < 1) throw new HttpError(400, 'Choose how many items you want.');
 
     if (listing.userId === fromUserId) {
       throw new Error('You cannot send a swap request to your own listing');
@@ -289,7 +296,10 @@ export const swapService = {
 
     return prisma.$transaction(async tx => {
       // Lock the listing so two people tapping Swap Now together cannot both get in.
-      await tx.$queryRaw`SELECT id FROM swap_listings WHERE id = ${listingId} FOR UPDATE`;
+      const [locked] = await tx.$queryRaw<{ quantity: string }[]>`SELECT quantity FROM swap_listings WHERE id = ${listingId} FOR UPDATE`;
+      const left = itemsLeft(locked?.quantity ?? '0');
+      if (left === 0) throw new HttpError(400, 'All items in this listing have been given away.');
+      if (quantity > left) throw new HttpError(400, `Only ${left} left in this listing.`);
       const taken = await tx.swapRequest.findFirst({
         where: { listingId, status: { in: OPEN_REQUEST_STATUSES } },
         select: { fromUserId: true },
@@ -307,6 +317,7 @@ export const swapService = {
           toUserId: listing.userId,
           status: 'pending',
           message: message ?? null,
+          quantity,
         },
       });
 
@@ -362,6 +373,12 @@ export const swapService = {
       if (!updated.count) throw new HttpError(409, 'Exchange changed. Refresh and try again.');
       await tx.swapConversation.updateMany({ where: { swapRequestId: requestId }, data: { status } });
       if (status !== 'completed') return [];
+      // Take the handed-over items off the listing. With items left it shows on Browse again.
+      const [locked] = await tx.$queryRaw<{ quantity: string }[]>`SELECT quantity FROM swap_listings WHERE id = ${swapReq.listingId} FOR UPDATE`;
+      await tx.swapListing.update({
+        where: { id: swapReq.listingId },
+        data: { quantity: String(Math.max(0, itemsLeft(locked?.quantity ?? '0') - swapReq.quantity)) },
+      });
       const rewards = await awardContentBadge(tx, 'exchange', swapReq.listingId, [swapReq.fromUserId, swapReq.toUserId]);
       for (const participant of new Set([swapReq.fromUserId, swapReq.toUserId])) {
         const milestone = await awardMilestoneBadges(tx, participant);
@@ -410,8 +427,9 @@ export const swapService = {
     const conversationIds = rows.map(row => row.id);
     // user1 sent the request and user2 owns the listing, so these are every participant.
     const participantIds = [...new Set(rows.flatMap(row => [row.user1Id, row.user2Id]))];
-    const [listings, accounts, profiles, lastMessages] = await Promise.all([
+    const [listings, requests, accounts, profiles, lastMessages] = await Promise.all([
       prisma.swapListing.findMany({ where: { id: { in: [...new Set(rows.map(row => row.listingId))] } } }),
+      prisma.swapRequest.findMany({ where: { id: { in: rows.map(row => row.swapRequestId) } }, select: { id: true, quantity: true } }),
       prisma.user.findMany({ where: { id: { in: participantIds } }, select: { id: true, name: true, createdAt: true } }),
       prisma.profile.findMany({ where: { userId: { in: participantIds } }, select: { userId: true, displayName: true, avatarUrl: true } }),
       prisma.$queryRaw<any[]>(Prisma.sql`
@@ -428,6 +446,7 @@ export const swapService = {
       for (const user of await prisma.user.findMany({ where: { id: { in: listingOwners } }, select: userSummarySelect })) usersById.set(user.id, user);
     }
     const listingsById = new Map(listings.map(listing => [listing.id, listing]));
+    const requestedQuantityById = new Map(requests.map(request => [request.id, request.quantity]));
     const lastMessageByConversation = new Map(lastMessages.map(message => [message.swapRequestId, message]));
     const unreadByConversation = new Map(unreadCounts.map((item) => [item.swapRequestId, item._count._all]));
 
@@ -446,6 +465,7 @@ export const swapService = {
         unreadCount: unreadByConversation.get(row.id) ?? 0,
         status: row.status,
         meetupMethod: listing.meetupMethod,
+        requestedQuantity: requestedQuantityById.get(row.swapRequestId) ?? 1,
       };
     });
   },

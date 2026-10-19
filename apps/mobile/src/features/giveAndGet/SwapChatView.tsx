@@ -12,6 +12,7 @@ import {
   Keyboard,
   AppState,
   DeviceEventEmitter,
+  Linking,
 } from 'react-native';
 import { Modal } from '../../shared/accessibility/primitives';
 import { Text, TextInput, TouchableOpacity } from '../../shared/accessibility/primitives';
@@ -79,6 +80,63 @@ function getStatusLabel(status: SwapRequestStatus): string {
     case 'cancelled': return 'Cancelled';
     default: return status;
   }
+}
+
+// Once the owner accepts, both members see where the handover happens.
+function MeetupCard({ conversation, isOwner }: { conversation: SwapConversation; isOwner: boolean }) {
+  const { theme } = useTheme();
+  const { listing } = conversation;
+  const method = conversation.meetupMethod;
+  const hasPin = Number.isFinite(listing.latitude) && Number.isFinite(listing.longitude);
+  const place = method === 'dropoff' ? undefined : listing.meetupLocation;
+
+  const title = method === 'pickup' ? 'Pickup address' : method === 'dropoff' ? 'Drop-off' : 'Meetup place';
+  let detail: string | undefined;
+  if (method === 'dropoff') {
+    detail = isOwner
+      ? `Ask ${conversation.otherUser.displayName} for their delivery address.`
+      : 'Send your delivery address here so the owner can drop it off.';
+  } else if (!place) {
+    detail = isOwner
+      ? 'Send the exact address in this chat.'
+      : `Ask ${listing.user.displayName} for the exact address.`;
+  }
+
+  const openMap = () => {
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${listing.latitude},${listing.longitude}`).catch(() => {});
+  };
+
+  return (
+    <View style={[localStyles.meetupCard, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+      <Ionicons name={method === 'dropoff' ? 'cube-outline' : 'location'} size={20} color={theme.colors.primary} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>{title}</Text>
+        {place ? (
+          <>
+            <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]}>{place}</Text>
+            {listing.meetupLandmark && listing.meetupLandmark !== place ? (
+              <Text style={[localStyles.meetupSub, { color: theme.colors.textMuted }]}>Landmark: {listing.meetupLandmark}</Text>
+            ) : null}
+          </>
+        ) : null}
+        {detail ? <Text style={[localStyles.meetupSub, { color: theme.colors.textPrimary }]}>{detail}</Text> : null}
+        {listing.meetupNotes ? (
+          <Text style={[localStyles.meetupSub, { color: theme.colors.textMuted }]} numberOfLines={2}>Note: {listing.meetupNotes}</Text>
+        ) : null}
+      </View>
+      {place && hasPin ? (
+        <TouchableOpacity
+          onPress={openMap}
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${place} in maps`}
+          style={[localStyles.mapBtn, { borderColor: theme.colors.primary }]}
+        >
+          <Ionicons name="map-outline" size={16} color={theme.colors.primary} />
+          <Text style={[localStyles.mapBtnText, { color: theme.colors.primary }]}>Map</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
 }
 
 export function SwapChatList({
@@ -530,7 +588,7 @@ export function SwapChatView({
           <View style={[localStyles.swapInfoItem, { backgroundColor: isDark ? theme.colors.card : '#F3FAF6' }]}>
             <Text style={[localStyles.swapInfoLabel, { color: theme.colors.textMuted }]}>Offering</Text>
             <Text style={[localStyles.swapInfoValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-              {conversation.listing.quantity} {conversation.listing.title}
+              {conversation.requestedQuantity} {conversation.listing.title}
             </Text>
           </View>
           <View style={[localStyles.swapInfoDivider, { backgroundColor: theme.colors.border }]} />
@@ -541,6 +599,8 @@ export function SwapChatView({
             </Text>
           </View>
         </View>
+
+        {(status === 'accepted' || status === 'completed') && <MeetupCard conversation={conversation} isOwner={isOwner} />}
 
         {status === 'pending' && isOwner && (
           <View style={[localStyles.actionBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
@@ -816,6 +876,34 @@ const localStyles = StyleSheet.create({
   swapInfoDivider: {
     width: 1,
     backgroundColor: '#F0F5F2',
+  },
+  meetupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(10),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(10),
+    borderBottomWidth: 1,
+  },
+  meetupSub: {
+    fontSize: responsiveFontSize(12),
+    lineHeight: responsiveFontSize(17),
+    marginTop: verticalScale(2),
+    flexShrink: 1,
+  },
+  mapBtn: {
+    minHeight: 44,
+    minWidth: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(4),
+    paddingHorizontal: scale(10),
+    borderRadius: moderateScale(12),
+    borderWidth: 1,
+  },
+  mapBtnText: {
+    fontSize: responsiveFontSize(13),
+    fontWeight: '700',
   },
   actionBar: {
     flexDirection: 'row',
