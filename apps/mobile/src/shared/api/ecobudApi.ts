@@ -1068,7 +1068,7 @@ export const ecobudApi = {
     const res = await uploadFileAsync<{ url: string }>('/swap/upload-image', token, uri);
     return res.url;
   },
-  sendSwapRequest: (token: string, body: { listingId: string; message?: string }) =>
+  sendSwapRequest: (token: string, body: { listingId: string; message?: string; quantity?: number }) =>
     request<any>('/swap/requests', { method: 'POST', token, body }),
   updateSwapRequestStatus: (token: string, requestId: string, status: string) =>
     request<any>(`/swap/requests/${requestId}/status`, { method: 'PATCH', token, body: { status } }),

@@ -97,6 +97,7 @@ export interface SwapConversation {
   unreadCount: number;
   status: SwapRequestStatus;
   meetupMethod: MeetupMethod;
+  requestedQuantity: number;
 }
 
 export const CATEGORY_LABELS: Record<SwapCategory, string> = {

@@ -242,10 +242,10 @@ export function MarketplaceHubView({
     setShowSwapDialog(true);
   };
 
-  const handleConfirmSwap = async (message: string) => {
+  const handleConfirmSwap = async (message: string, quantity: number) => {
     if (!selectedListing || !model.requireIdApproval()) return;
     try {
-      await swapService.sendSwapRequest(selectedListing.id, currentUserId, message);
+      await swapService.sendSwapRequest(selectedListing.id, currentUserId, message, quantity);
       setShowSwapDialog(false);
       await loadConversations();
       const convs = await swapService.fetchConversations(currentUserId);
@@ -306,6 +306,8 @@ export function MarketplaceHubView({
       setSelectedConversation(previous => previous?.swapRequestId === requestId ? { ...previous, status: 'completed' } : previous);
       setConversations(previous => previous.map(item => item.swapRequestId === requestId ? { ...item, status: 'completed' } : item));
       void loadConversations(false, true);
+      // Items left over put the listing back on Browse.
+      DeviceEventEmitter.emit('giveAndGetListingsChanged');
       showNotification({ title: 'Exchange completed', message: 'The Give & Get exchange is now marked complete.', tone: 'success' });
     } catch (err: any) {
       console.error('Failed to mark as completed:', err);

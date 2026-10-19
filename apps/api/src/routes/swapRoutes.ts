@@ -152,8 +152,8 @@ router.post('/upload-image', authenticateRequest, requireApprovedId, avatarUploa
 // Send swap request
 router.post('/requests', authenticateRequest, requireApprovedId, async (req: AuthenticatedRequest, res) => {
   try {
-    const { listingId, message } = req.body;
-    const request = await swapService.sendSwapRequest(listingId, req.auth!.userId, message);
+    const { listingId, message, quantity } = req.body;
+    const request = await swapService.sendSwapRequest(listingId, req.auth!.userId, message, quantity ?? 1);
     const listing = await swapService.fetchListingById(listingId);
     if (listing?.user?.id) {
       supabaseRealtimeService.publishSwapEvent({

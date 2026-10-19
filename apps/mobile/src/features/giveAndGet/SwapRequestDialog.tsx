@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,19 +23,26 @@ export function SwapRequestDialog({
   visible: boolean;
   listing: SwapListing | null;
   onClose: () => void;
-  onConfirm: (message: string) => Promise<void>;
+  onConfirm: (message: string, quantity: number) => Promise<void>;
 }) {
   const { theme, isDark } = useTheme();
   const [message, setMessage] = useState('');
+  const [quantity, setQuantity] = useState(1);
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (visible) setQuantity(1);
+  }, [visible, listing?.id]);
 
   if (!listing) return null;
   const isGiveaway = listing.lookingFor?.trim().toLowerCase() === 'giveaway';
+  const parsedLeft = Number.parseInt(listing.quantity, 10);
+  const itemsLeft = Number.isFinite(parsedLeft) && parsedLeft > 0 ? parsedLeft : 1;
 
   const handleConfirm = async () => {
     setSending(true);
     try {
-      await onConfirm(message);
+      await onConfirm(message, Math.min(quantity, itemsLeft));
       setMessage('');
     } finally {
       setSending(false);
@@ -83,6 +90,36 @@ export function SwapRequestDialog({
                 </Text>
               </View>
             </View>
+
+            {itemsLeft > 1 && (
+              <View style={localStyles.quantityRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[localStyles.messageLabel, { color: theme.colors.textPrimary, marginBottom: 0 }]}>How many do you need?</Text>
+                  <Text style={[localStyles.quantityHint, { color: theme.colors.textMuted }]}>{itemsLeft} available</Text>
+                </View>
+                <View style={[localStyles.stepper, { borderColor: theme.colors.inputBorder }]}>
+                  <TouchableOpacity
+                    onPress={() => setQuantity(value => Math.max(1, value - 1))}
+                    disabled={quantity <= 1 || sending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request one less"
+                    style={[localStyles.stepperBtn, quantity <= 1 && { opacity: 0.35 }]}
+                  >
+                    <Ionicons name="remove" size={18} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                  <Text style={[localStyles.stepperValue, { color: theme.colors.textPrimary }]} accessibilityLiveRegion="polite">{quantity}</Text>
+                  <TouchableOpacity
+                    onPress={() => setQuantity(value => Math.min(itemsLeft, value + 1))}
+                    disabled={quantity >= itemsLeft || sending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request one more"
+                    style={[localStyles.stepperBtn, quantity >= itemsLeft && { opacity: 0.35 }]}
+                  >
+                    <Ionicons name="add" size={18} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             <Text style={[localStyles.messageLabel, { color: theme.colors.textPrimary }]}>Add a message (optional):</Text>
             <TextInput
@@ -184,7 +221,7 @@ export function SwapAcceptedDialog({
               <View style={[localStyles.infoBox, isDark && { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
                 <Ionicons name="arrow-up" size={18} color="#2563EB" />
                 <Text style={[localStyles.infoBoxText, { color: theme.colors.textPrimary }]}>
-                  Delivery address has been shared in the chat.
+                  Share the delivery address in the chat.
                 </Text>
               </View>
             )}
@@ -298,6 +335,35 @@ const localStyles = StyleSheet.create({
     fontWeight: '700',
     color: ecoTheme.colors.text,
     marginBottom: verticalScale(6),
+  },
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(12),
+    width: '100%',
+    marginBottom: verticalScale(14),
+  },
+  quantityHint: {
+    fontSize: responsiveFontSize(11),
+    marginTop: verticalScale(2),
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: moderateScale(12),
+  },
+  stepperBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: {
+    minWidth: scale(28),
+    textAlign: 'center',
+    fontSize: responsiveFontSize(15),
+    fontWeight: '800',
   },
   messageInput: {
     width: '100%',
