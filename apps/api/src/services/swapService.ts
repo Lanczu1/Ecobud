@@ -535,7 +535,23 @@ export const swapService = {
         delivered: true,
       },
     });
-    return formatMessage(row);
+    // Staff can post without being a member; then nobody is notified, as before.
+    const isMember = conv.user1Id === senderId || conv.user2Id === senderId;
+    return {
+      message: formatMessage(row),
+      recipientId: isMember ? (conv.user1Id === senderId ? conv.user2Id : conv.user1Id) : null,
+      listingId: conv.listingId,
+    };
+  },
+
+  // The other member of the conversation, or null when userId is not in it.
+  async otherParticipant(conversationOrSwapRequestId: string, userId: string) {
+    const conv = await prisma.swapConversation.findFirst({
+      where: { OR: [{ id: conversationOrSwapRequestId }, { swapRequestId: conversationOrSwapRequestId }] },
+      select: { id: true, user1Id: true, user2Id: true },
+    });
+    if (!conv || (conv.user1Id !== userId && conv.user2Id !== userId)) return null;
+    return { conversationId: conv.id, userId: conv.user1Id === userId ? conv.user2Id : conv.user1Id };
   },
 
   async markMessagesRead(conversationOrSwapRequestId: string, userId: string) {
@@ -551,7 +567,7 @@ export const swapService = {
     if (conv.user1Id !== userId && conv.user2Id !== userId) throw new HttpError(403, 'You are not authorized to view this conversation');
     const swapRequestId = conv.id;
 
-    await prisma.swapMessage.updateMany({
+    const updated = await prisma.swapMessage.updateMany({
       where: {
         swapRequestId,
         NOT: { senderId: userId },
@@ -559,6 +575,11 @@ export const swapService = {
       },
       data: { read: true },
     });
+    return {
+      conversationId: swapRequestId,
+      senderId: conv.user1Id === userId ? conv.user2Id : conv.user1Id,
+      count: updated.count,
+    };
   },
 
   async fetchMyListings(userId: string) {

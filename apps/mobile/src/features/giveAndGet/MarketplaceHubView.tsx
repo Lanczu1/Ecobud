@@ -202,15 +202,19 @@ export function MarketplaceHubView({
           .on('broadcast', { event: 'swap' }, ({ payload }: any) => {
             const revision = payload?.revision;
             if (!revision || revision <= connectedAt) return;
+            const eventType = payload?.eventType;
+            // Chat events go straight to the open chat, which drops repeats by message id.
+            // They skip the revision check so a typing signal cannot hide a message sent with it.
+            if ((eventType === 'message' || eventType === 'read' || eventType === 'typing') && payload?.swapRequestId) {
+              DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId), { type: eventType, message: payload.message });
+              if (eventType !== 'message') return;
+            }
             if (revision <= (seenRevisions['swap'] ?? 0)) return;
             seenRevisions['swap'] = revision;
-            if (payload?.eventType === 'listing') {
+            if (eventType === 'listing') {
               DeviceEventEmitter.emit('giveAndGetListingsChanged');
             } else {
               void loadConversations(false, true);
-            }
-            if (payload?.eventType === 'message' && payload?.swapRequestId) {
-              DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
             }
           })
           .subscribe(status => setRealtimeLive(status === 'SUBSCRIBED'));

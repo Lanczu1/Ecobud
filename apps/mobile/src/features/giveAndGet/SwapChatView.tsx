@@ -285,6 +285,95 @@ function SwapChatListSkeleton() {
   );
 }
 
+// Bubble shapes in place of the first page, so the thread keeps its layout while it loads.
+const THREAD_BONES: { mine: boolean; width: `${number}%` }[] = [
+  { mine: false, width: '58%' },
+  { mine: false, width: '36%' },
+  { mine: true, width: '52%' },
+  { mine: false, width: '64%' },
+  { mine: true, width: '30%' },
+  { mine: true, width: '46%' },
+];
+
+function SwapChatThreadSkeleton() {
+  const { theme, isDark } = useTheme();
+  const opacity = useRef(new Animated.Value(0.55)).current;
+  const boneColor = isDark ? theme.colors.surfaceMuted : '#E4E9E6';
+
+  useEffect(() => {
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 1, duration: 750, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.55, duration: 750, useNativeDriver: true }),
+    ]));
+    pulse.start();
+    return () => pulse.stop();
+  }, [opacity]);
+
+  return (
+    <Animated.View
+      style={[localStyles.messagesScroll, localStyles.messagesContent, localStyles.threadSkeleton, { opacity }]}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading messages"
+    >
+      {THREAD_BONES.map((bone, index) => (
+        <View
+          key={index}
+          style={[
+            localStyles.boneBubble,
+            bone.mine ? localStyles.messageBubbleMine : localStyles.messageBubbleTheirs,
+            { width: bone.width, backgroundColor: boneColor, borderWidth: 0 },
+          ]}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
+// Three dots that rise in turn while the other member types, the same cue every chat app uses.
+function TypingBubble({ name }: { name: string }) {
+  const { theme } = useTheme();
+  const dots = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    const wave = Animated.loop(Animated.stagger(150, dots.map((dot) => Animated.sequence([
+      Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]))));
+    wave.start();
+    return () => wave.stop();
+  }, [dots]);
+
+  return (
+    <View
+      style={[localStyles.messageBubble, localStyles.messageBubbleTheirs, localStyles.typingBubble, { backgroundColor: theme.colors.card, borderColor: theme.colors.cardBorder }]}
+      accessible
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={`${name} is typing`}
+    >
+      {dots.map((dot, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            localStyles.typingDot,
+            {
+              backgroundColor: theme.colors.textMuted,
+              opacity: dot.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+              transform: [{ translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -verticalScale(3)] }) }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const TYPING_SEND_INTERVAL_MS = 3000;
+const TYPING_VISIBLE_MS = 5000;
+const FALLBACK_SYNC_MS = 10000;
+
+type ChatChange = { type?: 'message' | 'read' | 'typing'; message?: unknown };
+
 export function SwapChatView({
   conversation,
   currentUserId,
@@ -305,11 +394,17 @@ export function SwapChatView({
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [messages, setMessages] = useState<SwapChatMessage[]>([]);
+  const [messages, setMessages] = useState<SwapChatMessage[]>(() => swapService.getCachedMessages(conversation.id));
   const listPerformance = useListPerformance();
   const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(() => swapService.getCachedMessages(conversation.id).length === 0);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
+  const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Sends go out one after another so the thread keeps the order they were typed in.
+  const sendQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const tempCounterRef = useRef(0);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const scrollRef = useRef<FlatList<SwapChatMessage>>(null);
   const chatRootRef = useRef<View>(null);
@@ -361,6 +456,13 @@ export function SwapChatView({
         olderCursorRef.current = page.nextCursor;
         setHasOlder(Boolean(page.nextCursor));
         hasInitialPageRef.current = true;
+        // Cached messages that end before this page would leave a hole above it. Older pages refill that space.
+        const oldest = msgs[0];
+        if (page.nextCursor && oldest) {
+          setMessages(previous => previous.some(message => message.id === oldest.id)
+            ? previous
+            : mergeMessages(msgs, previous.filter(message => message.id.startsWith('temp_'))));
+        }
       } else if (page.nextCursor) {
         pendingRealtimeRefreshRef.current = true;
       } else {
@@ -427,17 +529,49 @@ export function SwapChatView({
     initialScrollRef.current = true;
     allowOlderRef.current = false;
     nearBottomRef.current = true;
-    setMessages([]);
+    const cached = swapService.getCachedMessages(conversation.id);
+    setMessages(cached);
     setHasOlder(false);
     setLoadingOlder(false);
     setMessagesError(null);
-    setLoading(true);
+    setOtherTyping(false);
+    setLoading(cached.length === 0);
     void loadMessages();
+    // Realtime carries new messages; this catches anything a dropped connection missed.
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') void loadMessages();
-    }, 30000);
-    const changed = DeviceEventEmitter.addListener('swapChatChanged', (conversationId: string) => {
-      if (conversationId !== conversation.id || AppState.currentState !== 'active') return;
+    }, FALLBACK_SYNC_MS);
+    const changed = DeviceEventEmitter.addListener('swapChatChanged', (conversationId: string, change?: ChatChange) => {
+      if (conversationId !== conversation.id) return;
+      if (change?.type === 'typing') {
+        setOtherTyping(true);
+        if (typingTimerRef.current !== null) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => setOtherTyping(false), TYPING_VISIBLE_MS);
+        return;
+      }
+      if (change?.type === 'read') {
+        setMessages(previous => previous.map(message => (
+          !message.read && String(message.senderId) === String(currentUserId) && !message.id.startsWith('temp_')
+            ? { ...message, read: true }
+            : message
+        )));
+        return;
+      }
+      const incoming = change?.type === 'message' ? swapService.formatRealtimeMessage(change.message) : null;
+      if (incoming) {
+        setOtherTyping(false);
+        setMessages(previous => mergeMessages(previous, [incoming]));
+        if (nearBottomRef.current) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+        if (AppState.currentState === 'active' && String(incoming.senderId) !== String(currentUserId)) {
+          if (markReadTimerRef.current !== null) clearTimeout(markReadTimerRef.current);
+          markReadTimerRef.current = setTimeout(() => {
+            markReadTimerRef.current = null;
+            swapService.markMessagesRead(conversation.id, currentUserId).catch(() => {});
+          }, 300);
+        }
+        return;
+      }
+      if (AppState.currentState !== 'active') return;
       if (messagesRequestRef.current) {
         pendingRealtimeRefreshRef.current = true;
       } else {
@@ -453,8 +587,18 @@ export function SwapChatView({
       clearInterval(interval);
       changed.remove();
       appState.remove();
+      if (typingTimerRef.current !== null) clearTimeout(typingTimerRef.current);
+      if (markReadTimerRef.current !== null) clearTimeout(markReadTimerRef.current);
     };
-  }, [conversation.id, loadMessages]);
+  }, [conversation.id, currentUserId, loadMessages]);
+
+  useEffect(() => {
+    swapService.cacheMessages(conversation.id, messages);
+  }, [conversation.id, messages]);
+
+  useEffect(() => {
+    if (otherTyping && nearBottomRef.current) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  }, [otherTyping]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -492,11 +636,9 @@ export function SwapChatView({
     };
   }, [updateKeyboardOverlap]);
 
-  const sendMessage = async (text: string, retryId?: string) => {
-    if (sending) return;
-    setSending(true);
-
-    const tempId = retryId ?? `temp_${Date.now()}`;
+  const sendMessage = (text: string, retryId?: string) => {
+    tempCounterRef.current += 1;
+    const tempId = retryId ?? `temp_${Date.now()}_${tempCounterRef.current}`;
     if (retryId) {
       setMessages((prev) => prev.map((m) => m.id === retryId ? { ...m, failed: false } : m));
     } else {
@@ -515,27 +657,43 @@ export function SwapChatView({
       }, 50);
     }
 
-    try {
-      const realMsg = await swapService.sendMessage(
-        conversation.id,
-        currentUserId,
-        text
-      );
-      if (scopeRef.current === scope) setMessages(prev => mergeMessages(prev.filter(m => m.id !== tempId), [realMsg]));
-    } catch {
-      if (scopeRef.current !== scope) return;
-      setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, failed: true } : m));
-    } finally {
-      if (scopeRef.current === scope) setSending(false);
-    }
+    sendQueueRef.current = sendQueueRef.current.then(async () => {
+      try {
+        const realMsg = await swapService.sendMessage(
+          conversation.id,
+          currentUserId,
+          text
+        );
+        if (scopeRef.current === scope) setMessages(prev => mergeMessages(prev.filter(m => m.id !== tempId), [realMsg]));
+      } catch {
+        if (scopeRef.current !== scope) return;
+        setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, failed: true } : m));
+      }
+    });
   };
 
   const handleSend = () => {
     const text = inputText.trim();
-    if (!text || sending) return;
+    if (!text) return;
     setInputText('');
-    void sendMessage(text);
+    lastTypingSentRef.current = 0;
+    sendMessage(text);
   };
+
+  const handleChangeText = (text: string) => {
+    setInputText(text);
+    const now = Date.now();
+    if (!text.trim() || now - lastTypingSentRef.current < TYPING_SEND_INTERVAL_MS) return;
+    lastTypingSentRef.current = now;
+    swapService.sendTyping(conversation.id).catch(() => {});
+  };
+
+  // Messenger-style receipt: one "Seen" under your newest message once the other member has read it.
+  const lastMineIndex = messages.reduce(
+    (found, message, index) => (String(message.senderId) === String(currentUserId) ? index : found),
+    -1,
+  );
+  const seenIndex = lastMineIndex >= 0 && messages[lastMineIndex].read ? lastMineIndex : -1;
 
   const bottomInset = keyboardVisible ? 0 : insets.bottom;
 
@@ -636,10 +794,8 @@ export function SwapChatView({
           </View>
         )}
 
-        {loading ? (
-          <View style={[localStyles.loadingWrap, { backgroundColor: theme.colors.background }]}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-          </View>
+        {loading && !messagesError ? (
+          <SwapChatThreadSkeleton />
         ) : (
           <FlatList
             ref={scrollRef}
@@ -663,6 +819,15 @@ export function SwapChatView({
                 <Text style={{ color: theme.colors.primary }}>{messagesError ?? 'Load older messages'}</Text>
               </TouchableOpacity>
             ) : null}
+            ListFooterComponent={otherTyping ? <TypingBubble name={conversation.otherUser.displayName} /> : null}
+            ListEmptyComponent={messagesError ? null : (
+              <View style={localStyles.threadEmpty}>
+                <Text style={[localStyles.threadEmptyTitle, { color: theme.colors.textPrimary }]}>No messages yet</Text>
+                <Text style={[localStyles.threadEmptyText, { color: theme.colors.textMuted }]}>
+                  Say hi to {conversation.otherUser.displayName} and agree on the handover.
+                </Text>
+              </View>
+            )}
             keyExtractor={(msg) => msg.id}
             initialNumToRender={16}
             maxToRenderPerBatch={12}
@@ -717,10 +882,12 @@ export function SwapChatView({
                       )}
                     </View>
                   </View>
+                  {index === seenIndex && (
+                    <Text style={[localStyles.seenLabel, { color: theme.colors.textMuted }]}>Seen</Text>
+                  )}
                   {msg.failed && (
                     <TouchableOpacity
-                      onPress={() => void sendMessage(msg.text, msg.id)}
-                      disabled={sending}
+                      onPress={() => sendMessage(msg.text, msg.id)}
                       accessibilityRole="button"
                       accessibilityLabel="Message not sent. Tap to retry"
                       style={localStyles.retryRow}
@@ -747,24 +914,20 @@ export function SwapChatView({
               placeholderTextColor={theme.colors.textMuted}
               accessibilityLabel="Message"
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleChangeText}
               multiline
               maxLength={1000}
               returnKeyType="default"
             />
             <TouchableOpacity
               onPress={handleSend}
-              disabled={!inputText.trim() || sending}
+              disabled={!inputText.trim()}
               accessibilityRole="button"
               accessibilityLabel="Send message"
-              accessibilityState={{ disabled: !inputText.trim() || sending }}
-              style={[localStyles.sendBtn, { backgroundColor: inputText.trim() && !sending ? theme.colors.primary : theme.colors.surfaceMuted }]}
+              accessibilityState={{ disabled: !inputText.trim() }}
+              style={[localStyles.sendBtn, { backgroundColor: inputText.trim() ? theme.colors.primary : theme.colors.surfaceMuted }]}
             >
-              {sending ? (
-                <ActivityIndicator size="small" color={theme.colors.textMuted} />
-              ) : (
-                <Ionicons name="send" size={19} color={inputText.trim() ? '#FFFFFF' : theme.colors.textMuted} />
-              )}
+              <Ionicons name="send" size={19} color={inputText.trim() ? '#FFFFFF' : theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
         )}
@@ -967,10 +1130,47 @@ const localStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
   },
-  loadingWrap: {
-    flex: 1,
+  threadSkeleton: {
+    justifyContent: 'flex-end',
+  },
+  boneBubble: {
+    height: verticalScale(36),
+    borderRadius: moderateScale(18),
+    marginBottom: verticalScale(10),
+  },
+  typingBubble: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: scale(4),
+    paddingVertical: verticalScale(13),
+    borderWidth: 1,
+  },
+  typingDot: {
+    width: scale(7),
+    height: scale(7),
+    borderRadius: scale(4),
+  },
+  seenLabel: {
+    alignSelf: 'flex-end',
+    fontSize: responsiveFontSize(11),
+    fontWeight: '600',
+    marginTop: -verticalScale(6),
+    marginBottom: verticalScale(10),
+  },
+  threadEmpty: {
+    alignItems: 'center',
+    paddingVertical: verticalScale(32),
+    paddingHorizontal: scale(24),
+    gap: verticalScale(4),
+  },
+  threadEmptyTitle: {
+    fontSize: responsiveFontSize(15),
+    fontWeight: '800',
+  },
+  threadEmptyText: {
+    fontSize: responsiveFontSize(13),
+    lineHeight: responsiveFontSize(19),
+    textAlign: 'center',
   },
   messagesScroll: {
     flex: 1,

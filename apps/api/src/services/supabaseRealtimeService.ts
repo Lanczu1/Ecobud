@@ -7,7 +7,7 @@ export type AdminRealtimeSection = 'dashboard' | 'users';
 export type RealtimeSection = 'learn' | 'challenges' | 'events' | 'tracker' | 'swap';
 type RealtimeActorRole = AccessRole | 'system';
 
-type SwapEventType = 'request' | 'message' | 'status' | 'listing';
+type SwapEventType = 'request' | 'message' | 'status' | 'listing' | 'read' | 'typing';
 
 interface SwapEventInput {
   actorUserId: string;
@@ -15,6 +15,8 @@ interface SwapEventInput {
   eventType: SwapEventType;
   listingId?: string;
   swapRequestId?: string;
+  // The new chat message itself, so the open chat can show it without a refetch.
+  message?: Record<string, unknown>;
 }
 
 interface RealtimeSignalInput {
@@ -283,6 +285,7 @@ class SupabaseRealtimeService {
       eventType: input.eventType,
       listingId: input.listingId ?? null,
       swapRequestId: input.swapRequestId ?? null,
+      ...(input.message ? { message: input.message } : {}),
     });
   }
 

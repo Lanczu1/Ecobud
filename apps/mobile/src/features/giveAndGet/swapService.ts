@@ -12,6 +12,9 @@ import type {
 
 let authToken = '';
 const readCache = new SwapReadCache();
+// Last messages seen per chat, so reopening a chat shows them at once while it syncs.
+const messageCache = new Map<string, SwapChatMessage[]>();
+const CACHED_MESSAGES_PER_CHAT = 60;
 type ListingFilters = {
   search?: string;
   category?: SwapCategory;
@@ -26,6 +29,7 @@ const listingsKey = (params: ListingFilters) => JSON.stringify([
 ]);
 
 function setAuthToken(token: string) {
+  if (token !== authToken) messageCache.clear();
   authToken = token;
   readCache.setScope(token);
 }
@@ -253,6 +257,25 @@ export const swapService = {
 
   async markMessagesRead(swapRequestId: string, userId: string): Promise<void> {
     await ecobudApi.markSwapMessagesRead(authToken, swapRequestId);
+  },
+
+  async sendTyping(conversationId: string): Promise<void> {
+    await ecobudApi.sendSwapTyping(authToken, conversationId);
+  },
+
+  getCachedMessages(conversationId: string): SwapChatMessage[] {
+    return messageCache.get(conversationId) ?? [];
+  },
+
+  // Unsent messages stay out: they belong to the screen that is sending them.
+  cacheMessages(conversationId: string, messages: SwapChatMessage[]) {
+    const saved = messages.filter(message => !message.id.startsWith('temp_'));
+    messageCache.set(conversationId, saved.slice(-CACHED_MESSAGES_PER_CHAT));
+  },
+
+  formatRealtimeMessage(row: unknown): SwapChatMessage | null {
+    const message = row && typeof row === 'object' ? formatMessage(row) : null;
+    return message?.id && message.timestamp ? message : null;
   },
 
   async uploadImage(uri: string, userId: string): Promise<string> {

@@ -21,6 +21,15 @@ const listingReportLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many reports. Please try again in an hour.' },
 });
+// The app sends at most one typing signal every 3 seconds; this caps anything faster.
+const typingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 40,
+  keyGenerator: (req) => (req as AuthenticatedRequest).auth!.userId,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many typing updates.' },
+});
 
 router.post('/listings/:id/report', authenticateRequest, listingReportLimiter, errorBoundary<AuthenticatedRequest>(async (req, res) => {
   const { reason, reportName } = swapReportSchema.parse(req.body);
@@ -272,47 +281,49 @@ router.post('/conversations/:conversationId/messages', authenticateRequest, asyn
   try {
     const { text, imageUrl } = req.body;
     const { conversationId } = req.params;
-    const message = await swapService.sendMessage(
+    const senderId = req.auth!.userId;
+    const { message, recipientId, listingId } = await swapService.sendMessage(
       conversationId,
-      req.auth!.userId,
+      senderId,
       req.auth!.role,
       text,
       imageUrl,
     );
-    const conversations = await swapService.fetchConversations(req.auth!.userId);
-    const conv = conversations.find((c) => c.id === req.params.conversationId);
-    if (conv) {
-      const targetUserId = conv.otherUser.id;
-      if (targetUserId && targetUserId !== req.auth!.userId) {
-        // Realtime UI update (in-app)
-        supabaseRealtimeService.publishSwapEvent({
-          actorUserId: req.auth!.userId,
-          targetUserId,
-          eventType: 'message',
-          swapRequestId: req.params.conversationId,
-        }).catch(() => {});
-
-        // Push notification for the recipient
-        const sender = await prisma.user.findUnique({
-          where: { id: req.auth!.userId },
-          select: { name: true, profile: { select: { displayName: true } } },
-        });
-        const senderName = sender?.profile?.displayName || sender?.name || 'Someone';
-        const listingTitle = conv.listing?.title || 'Give & Get';
-        const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : '📷 Image';
-        void sendDirectNotification({
-          userId: targetUserId,
-          type: 'swap',
-          title: `${senderName} sent you a message`,
-          message: `${listingTitle}: ${preview}`,
-          relatedId: conv.swapRequestId || conversationId,
-          relatedType: 'swap',
-          priority: 'high',
-          notificationKey: `swap_chat_msg:${message.id}`,
-        });
-      }
-    }
+    // The sender gets the saved message first; the recipient's copy rides on the realtime event.
     res.status(201).json(message);
+    if (!recipientId || recipientId === senderId) return;
+
+    supabaseRealtimeService.publishSwapEvent({
+      actorUserId: senderId,
+      targetUserId: recipientId,
+      eventType: 'message',
+      swapRequestId: message.swapRequestId,
+      message,
+    }).catch(() => {});
+
+    void (async () => {
+      const [sender, listing, conv] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: senderId },
+          select: { name: true, profile: { select: { displayName: true } } },
+        }),
+        prisma.swapListing.findUnique({ where: { id: listingId }, select: { title: true } }),
+        prisma.swapConversation.findUnique({ where: { id: message.swapRequestId }, select: { swapRequestId: true } }),
+      ]);
+      const senderName = sender?.profile?.displayName || sender?.name || 'Someone';
+      const listingTitle = listing?.title || 'Give & Get';
+      const preview = text ? (text.length > 60 ? text.slice(0, 57) + '…' : text) : '📷 Image';
+      await sendDirectNotification({
+        userId: recipientId,
+        type: 'swap',
+        title: `${senderName} sent you a message`,
+        message: `${listingTitle}: ${preview}`,
+        relatedId: conv?.swapRequestId || conversationId,
+        relatedType: 'swap',
+        priority: 'high',
+        notificationKey: `swap_chat_msg:${message.id}`,
+      });
+    })().catch(error => console.error('Error notifying swap message:', error));
   } catch (error: any) {
     console.error('Error sending message:', error);
     const status = error instanceof HttpError ? error.statusCode : error.message?.includes('authorized') ? 403 : 500;
@@ -322,8 +333,31 @@ router.post('/conversations/:conversationId/messages', authenticateRequest, asyn
 
 // Mark messages read
 router.patch('/conversations/:conversationId/read', authenticateRequest, errorBoundary(async (req: AuthenticatedRequest, res) => {
-  await swapService.markMessagesRead(req.params.conversationId, req.auth!.userId);
+  const result = await swapService.markMessagesRead(req.params.conversationId, req.auth!.userId);
   res.json({ success: true });
+  // Lets the sender's open chat switch to "Seen" without polling.
+  if (result.count > 0 && result.senderId !== req.auth!.userId) {
+    supabaseRealtimeService.publishSwapEvent({
+      actorUserId: req.auth!.userId,
+      targetUserId: result.senderId,
+      eventType: 'read',
+      swapRequestId: result.conversationId,
+    }).catch(() => {});
+  }
+}));
+
+// Typing signal for the other member's open chat. Nothing is stored.
+router.post('/conversations/:conversationId/typing', authenticateRequest, typingLimiter, errorBoundary(async (req: AuthenticatedRequest, res) => {
+  const other = await swapService.otherParticipant(req.params.conversationId, req.auth!.userId);
+  if (!other) throw new HttpError(403, 'You are not authorized to view this conversation');
+  res.status(204).end();
+  if (other.userId === req.auth!.userId) return;
+  supabaseRealtimeService.publishSwapEvent({
+    actorUserId: req.auth!.userId,
+    targetUserId: other.userId,
+    eventType: 'typing',
+    swapRequestId: other.conversationId,
+  }).catch(() => {});
 }));
 
 // Fetch user's own listings

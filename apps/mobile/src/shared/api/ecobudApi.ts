@@ -1090,6 +1090,8 @@ export const ecobudApi = {
     }),
   markSwapMessagesRead: (token: string, swapRequestId: string) =>
     request<void>(`/swap/conversations/${swapRequestId}/read`, { method: 'PATCH', token }),
+  sendSwapTyping: (token: string, conversationId: string) =>
+    request<void>(`/swap/conversations/${conversationId}/typing`, { method: 'POST', token }),
   fetchMySwapListings: (token: string) =>
     request<any[]>('/swap/my-listings', { token }),
 
