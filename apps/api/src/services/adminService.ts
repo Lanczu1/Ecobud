@@ -11,6 +11,8 @@ import { activityByDayQuery } from './adminActivityTrend';
 import { PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED } from './eventPhotoDeletion';
 import { CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED } from './challengePhotoDeletion';
 
+const EVENT_QR_TTL_MS = 24 * 60 * 60 * 1000;
+
 type ReviewerContext = {
   role: string;
   city?: string | null;
@@ -1368,10 +1370,8 @@ export class AdminService {
 
     const qrData = require('crypto').randomBytes(16).toString('hex');
 
-    // Set expiration to 1 hour after the event end time (or 24 hours if not set)
-    const expiresAt = event.endDatetime
-      ? new Date(new Date(event.endDatetime).getTime() + 60 * 60 * 1000)
-      : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Every code is valid for 24 hours from the moment it is generated.
+    const expiresAt = new Date(Date.now() + EVENT_QR_TTL_MS);
 
     return await prisma.eventQrCode.create({
       data: {

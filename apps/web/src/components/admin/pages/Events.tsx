@@ -26,7 +26,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { StatSkeleton, TableSkeleton, Skeleton } from './PageSkeletons';
 
-function QrExpiration({ expiresAt, createdAt }: { expiresAt?: string; createdAt?: string }) {
+function useSecondClock() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const tick = () => setNow(Date.now());
@@ -37,40 +37,79 @@ function QrExpiration({ expiresAt, createdAt }: { expiresAt?: string; createdAt?
       document.removeEventListener('visibilitychange', tick);
     };
   }, []);
+  return now;
+}
+
+const formatQrDeadline = (deadline: number) => new Date(deadline).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+
+// Shows the scannable code with a countdown while it is valid, and only the expired notice once it is not.
+function EventQrPanel({ qrData, expiresAt, createdAt, onDownload }: { qrData: string; expiresAt?: string; createdAt?: string; onDownload: () => void }) {
+  const now = useSecondClock();
   const deadline = expiresAt ? Date.parse(expiresAt) : NaN;
-  if (!Number.isFinite(deadline)) return <p className="mb-5 text-sm text-gray-500">Expiration time unavailable.</p>;
-  const remaining = Math.max(0, Math.ceil((deadline - now) / 1000));
-  const expired = remaining === 0;
-  const urgent = remaining <= 3600;
+  const remaining = Number.isFinite(deadline) ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null;
+
+  if (remaining === 0) {
+    return (
+      <div role="status" className="w-full mb-6 rounded-3xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 px-6 py-8 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">
+          <QrCode className="h-7 w-7" />
+        </div>
+        <p className="text-lg font-semibold text-red-700 dark:text-red-300">This QR code has expired</p>
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Expired {formatQrDeadline(deadline)}</p>
+        <p className="mt-4 text-sm text-gray-700 dark:text-gray-300">Scans no longer count as attendance. Generate a new code to keep checking people in. It will work for 24 hours.</p>
+      </div>
+    );
+  }
+
+  const urgent = remaining !== null && remaining <= 3600;
   const start = createdAt ? Date.parse(createdAt) : NaN;
-  const percent = Number.isFinite(start) && deadline > start ? Math.max(0, Math.min(100, (deadline - now) / (deadline - start) * 100)) : null;
-  const days = Math.floor(remaining / 86400);
-  const units = [
-    ...(days > 0 ? [{ label: 'Days', value: days }] : []),
-    { label: 'Hours', value: Math.floor(remaining / 3600) % 24 },
+  const percent = remaining !== null && Number.isFinite(start) && deadline > start ? Math.max(0, Math.min(100, (deadline - now) / (deadline - start) * 100)) : null;
+  const units = remaining === null ? [] : [
+    { label: 'Hours', value: Math.floor(remaining / 3600) },
     { label: 'Minutes', value: Math.floor(remaining / 60) % 60 },
     { label: 'Seconds', value: remaining % 60 },
   ];
+
   return (
-    <div className={`w-full mb-5 rounded-2xl border p-4 transition-colors duration-500 ${expired ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30' : urgent ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30' : 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30'}`}>
-      <div role="status" className={`flex items-center gap-2 text-sm font-semibold ${expired ? 'text-red-700 dark:text-red-300' : urgent ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
-        <Clock className="h-4 w-4" />
-        {expired ? 'QR code expired' : 'Time left to scan'}
+    <div className="flex flex-col items-center w-full">
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
+        <QRCodeCanvas
+          id="event-qr-canvas"
+          value={qrData}
+          size={240}
+          bgColor={"#ffffff"}
+          fgColor={"#126027"}
+          level={"H"}
+          includeMargin={false}
+        />
       </div>
-      {!expired && (
-        <div className="flex gap-2 mt-3" role="timer" aria-label={`${days} days, ${units.find(unit => unit.label === 'Hours')?.value} hours, ${units.find(unit => unit.label === 'Minutes')?.value} minutes remaining`}>
-          {units.map(unit => (
-            <div key={unit.label} className="flex-1 text-center rounded-lg bg-white/70 dark:bg-gray-900/60 py-2 overflow-hidden">
-              <span key={unit.value} className="block text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100 motion-safe:animate-[qr-tick_220ms_ease-out]">{String(unit.value).padStart(2, '0')}</span>
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">{unit.label}</span>
-            </div>
-          ))}
+      {remaining === null ? (
+        <p className="mb-5 text-sm text-gray-500">Expiration time unavailable.</p>
+      ) : (
+        <div className={`w-full mb-5 rounded-2xl border p-4 transition-colors duration-500 ${urgent ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30' : 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30'}`}>
+          <div className={`flex items-center gap-2 text-sm font-semibold ${urgent ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+            <Clock className="h-4 w-4" />
+            Time left to scan
+          </div>
+          <div className="flex gap-2 mt-3" role="timer" aria-label={`${units[0].value} hours, ${units[1].value} minutes remaining`}>
+            {units.map(unit => (
+              <div key={unit.label} className="flex-1 text-center rounded-lg bg-white/70 dark:bg-gray-900/60 py-2 overflow-hidden">
+                <span key={unit.value} className="block text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100 motion-safe:animate-[qr-tick_220ms_ease-out]">{String(unit.value).padStart(2, '0')}</span>
+                <span className="text-[10px] text-gray-600 dark:text-gray-400">{unit.label}</span>
+              </div>
+            ))}
+          </div>
+          {percent !== null && <div className="mt-3 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden" aria-hidden="true"><div style={{ width: `${percent}%` }} className={`h-full rounded-full motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-linear ${urgent ? 'bg-amber-500' : 'bg-emerald-500'}`} /></div>}
+          <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">Expires {formatQrDeadline(deadline)}</p>
+          <style>{`@keyframes qr-tick { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
         </div>
       )}
-      {percent !== null && <div className="mt-3 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden" aria-hidden="true"><div style={{ width: `${percent}%` }} className={`h-full rounded-full motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-linear ${expired ? 'bg-red-500' : urgent ? 'bg-amber-500' : 'bg-emerald-500'}`} /></div>}
-      <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">{expired ? 'Expired' : 'Expires'} {new Date(deadline).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'medium' })}</p>
-      {expired && <p className="mt-2 text-xs text-red-700 dark:text-red-300">This code can no longer verify attendance. Regenerating uses the same event expiration limit.</p>}
-      <style>{`@keyframes qr-tick { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <button
+        onClick={onDownload}
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 font-semibold rounded-xl hover:bg-blue-100 transition-colors mb-6"
+      >
+        <Download className="w-4 h-4" /> Download PNG
+      </button>
     </div>
   );
 }
@@ -1252,26 +1291,7 @@ export function Events() {
                   <Skeleton className="h-10 w-48 rounded-xl" />
                 </div>
               ) : qrModal.qrData ? (
-                <div className="flex flex-col items-center w-full">
-                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
-                    <QRCodeCanvas 
-                      id="event-qr-canvas"
-                      value={qrModal.qrData} 
-                      size={240} 
-                      bgColor={"#ffffff"} 
-                      fgColor={"#126027"} 
-                      level={"H"}
-                      includeMargin={false}
-                    />
-                  </div>
-                  <QrExpiration key={qrModal.qrData} expiresAt={qrModal.expiresAt} createdAt={qrModal.createdAt} />
-                  <button
-                    onClick={handleDownloadQr}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 font-semibold rounded-xl hover:bg-blue-100 transition-colors mb-6"
-                  >
-                    <Download className="w-4 h-4" /> Download PNG
-                  </button>
-                </div>
+                <EventQrPanel key={qrModal.qrData} qrData={qrModal.qrData} expiresAt={qrModal.expiresAt} createdAt={qrModal.createdAt} onDownload={handleDownloadQr} />
               ) : (
                 <div className="text-center p-8 bg-gray-100 rounded-3xl mb-6 border border-dashed border-gray-300 w-full">
                   <QrCode className="w-12 h-12 text-gray-400 mx-auto mb-3" />
