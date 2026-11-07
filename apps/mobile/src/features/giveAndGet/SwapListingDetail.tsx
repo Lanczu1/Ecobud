@@ -19,7 +19,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ecoTheme, useTheme } from '../../shared/theme/ecoTheme';
-import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { swapService } from './swapService';
 import { PublicProfileModal } from './PublicProfileModal';
 import { ListingReportsSection } from './ListingReportsSection';
@@ -28,35 +27,12 @@ import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-import { resolveMediaUrl } from '../../app/utils/appUtils';
+import { getValidImageUrl } from '../../app/utils/mediaUrl';
+import { getInitials, getTimeAgo } from './swapListingFormat';
 import { ConfirmDialog } from '../../shared/ui/ConfirmDialog';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
 import { BarangayListingMap, type ListingLocation } from './LagunaBarangayPickerMap';
 import * as Location from 'expo-location';
-
-function getValidImageUrl(url: string | null | undefined): string | undefined {
-  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-function getTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
-}
 
 export function SwapListingDetail({
   listing: initialListing,

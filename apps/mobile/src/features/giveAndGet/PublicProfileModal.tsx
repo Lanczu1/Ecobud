@@ -4,13 +4,8 @@ import { Modal } from '../../shared/accessibility/primitives';
 import { Text, TouchableOpacity } from '../../shared/accessibility/primitives';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../shared/theme/ecoTheme';
-import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
-import { resolveMediaUrl } from '../../app/utils/appUtils';
-
-function getValidImageUrl(url: string | null | undefined): string | undefined {
-  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
-}
+import { getValidImageUrl } from '../../app/utils/mediaUrl';
 
 function getInitials(name: string): string {
   if (!name) return '?';

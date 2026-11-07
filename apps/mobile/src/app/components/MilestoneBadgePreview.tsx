@@ -5,6 +5,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../utils/responsive';
 import { getLevelFromPoints } from './LevelCard';
+import { LEVEL_PERKS } from './UnifiedProgressCard';
 import { triggerImpactLight } from '../utils/haptics';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
@@ -12,19 +13,6 @@ export interface MilestoneBadgePreviewProps {
   ecoPoints: number;
   onPress?: () => void;
 }
-
-const LEVEL_PERKS: Record<number, string> = {
-  1: 'Basic habits & daily eco tracker',
-  2: 'Earn 1.1x coins on habits',
-  3: 'Unlock Community Missions',
-  4: 'Warrior Badge & exclusive shop rewards',
-  5: 'VIP Leaderboard highlight & event badges',
-  6: 'Bonus monthly eco points drop',
-  7: 'Special community leader permissions',
-  8: 'Official EcoBud Ambassador status',
-  9: 'Custom profile banner & title',
-  10: 'Max Tier: EcoBud Legend Trophy',
-};
 
 export function MilestoneBadgePreview({ ecoPoints, onPress }: MilestoneBadgePreviewProps) {
   const { theme, isDark } = useTheme();

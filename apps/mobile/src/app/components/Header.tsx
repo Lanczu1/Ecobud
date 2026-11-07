@@ -19,11 +19,7 @@ import { ConnectionStatusIndicator } from '../../shared/ui/ConnectionStatusIndic
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { useTheme } from '../../shared/theme/ecoTheme';
 
-import { resolveMediaUrl } from '../utils/appUtils';
-
-function initialsFromLabel(label: string) {
-  return label.trim().slice(0, 1).toUpperCase() || 'E';
-}
+import { initialsFromLabel, resolveMediaUrl } from '../utils/appUtils';
 
 function AvatarBubble({
   label,

@@ -15,29 +15,10 @@ import type { SwapListing } from './types';
 import { CATEGORY_LABELS, CONDITION_LABELS, MEETUP_LABELS } from './types';
 import { responsiveFontSize, moderateScale, scale, verticalScale } from '../../app/utils/responsive';
 import { resolveMediaUrl } from '../../app/utils/appUtils';
+import { getInitials, getTimeAgo } from './swapListingFormat';
 
 function getValidImageUrl(url: string | null | undefined, width?: number): string | undefined {
   return resolveMediaUrl(url, ecobudApiOrigin, width ? { width, quality: 75 } : undefined) || undefined;
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-function getTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
 }
 
 function getConditionColor(condition: string): string {

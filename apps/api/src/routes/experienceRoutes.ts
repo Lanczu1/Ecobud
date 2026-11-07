@@ -7,18 +7,10 @@ import { chatRateLimiter } from '../http/chatRateLimiter';
 import { getEcoGuideReply, type ChatHistoryMessage } from '../services/ecoGuideService';
 import { resolveLiveStreak } from '../utils/gamificationUtils';
 import { apiCache } from '../lib/cache';
+import { getDateKey } from '../utils/dateKey';
 
 const experienceRoutes = Router();
 const LEADERBOARD_SIZE = 100;
-
-const getDateKey = (date = new Date()) => {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-};
 
 
 

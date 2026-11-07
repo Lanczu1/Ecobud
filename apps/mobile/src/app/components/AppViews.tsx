@@ -68,6 +68,7 @@ import { DailyTipCard } from './DailyTipCard';
 import { ContinueLessonCard } from './ContinueLessonCard';
 import { CommunityImpactCard } from './CommunityImpactCard';
 import { ecobudApiOrigin, type ChallengeWithProgress } from '../../shared/api/ecobudApi';
+import { getValidImageUrl } from '../utils/mediaUrl';
 import { mobileStorage } from '../../shared/storage/mobileStorage';
 import { ChallengesViewSkeleton, LeaderboardSkeleton, TrackerCardsSkeleton } from '../../shared/ui/SkeletonLoaders';
 import { triggerSelectionHaptic } from '../utils/haptics';
@@ -75,10 +76,6 @@ import { useAccessibility } from '../../shared/accessibility/AccessibilityContex
 import { TextSizeMultiplierContext } from '../../shared/accessibility/primitives';
 import { VerificationStatusBadge } from './VerificationStatusBadge';
 import { TrackerStreakCard } from './TrackerStreakCard';
-
-const getValidImageUrl = (url: string | null | undefined) => {
-  return resolveMediaUrl(url, ecobudApiOrigin) || undefined;
-};
 
 type ContentLayoutMode = 'grid' | 'list';
 
