@@ -1,4 +1,9 @@
 # Replace api.example.com and certificate paths before enabling.
+# Cloudflare sits in front of this server. Without the real client IP, every limit below
+# and the API's own rate limits would count all visitors as a few Cloudflare addresses.
+# deploy/README.md shows how to generate this file.
+include /etc/nginx/snippets/cloudflare-real-ip.conf;
+real_ip_header CF-Connecting-IP;
 limit_req_zone $binary_remote_addr zone=ecobud_api:10m rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=ecobud_connections:10m;
 # Reuse connections to the API instead of opening one per request.
@@ -6,9 +11,19 @@ upstream ecobud_api_upstream {
     server 127.0.0.1:3000;
     keepalive 32;
 }
+# Requests for any other host name get no response and no default nginx page.
+server {
+    listen 80 default_server;
+    listen 443 ssl default_server;
+    server_name _;
+    server_tokens off;
+    ssl_reject_handshake on;
+    return 444;
+}
 server {
     listen 80;
     server_name api.example.com;
+    server_tokens off;
     return 301 https://api.example.com$request_uri;
 }
 server {
