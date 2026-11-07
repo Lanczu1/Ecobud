@@ -1,3 +1,4 @@
+import './webCryptoPolyfill';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? '';
@@ -10,6 +11,7 @@ const supabaseClient = hasSupabaseRealtimeConfig
       auth: {
         autoRefreshToken: false,
         detectSessionInUrl: false,
+        flowType: 'pkce',
         persistSession: false,
       },
     })

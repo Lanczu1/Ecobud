@@ -39,7 +39,7 @@ import { supabaseClient } from '../../shared/supabase/supabaseClient';
 import { realtimeService } from '../../shared/supabase/realtimeService';
 import { startFallbackPoll } from '../../shared/supabase/realtimeHealth';
 import { ecobudApi, EcoBudApiError, type IdVerificationStatus, type EcoBadge } from '../../shared/api/ecobudApi';
-import { resolveMediaUrl, shiftMonth } from '../utils/appUtils';
+import { formatChatTime, resolveMediaUrl, shiftMonth } from '../utils/appUtils';
 import { ecobudApiOrigin } from '../../shared/api/ecobudApi';
 import { lessonDownloads, type LessonDownloadIndex } from '../../shared/offline/lessonDownloads';
 import { triggerImpactLight, triggerSuccessHaptic, triggerWarningHaptic } from '../utils/haptics';
@@ -112,10 +112,6 @@ const mergeLessonDetails = (current: LessonWithProgress[], incoming: LessonWithP
   });
 };
 
-function formatChatTime(isoDate: string) {
-  return new Date(isoDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
 const formatPhParts = (date: Date, options: Intl.DateTimeFormatOptions) => {
   const parts = new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila',
@@ -183,8 +179,8 @@ export function useHomeDashboard(): EcoBudMobileModel {
   const [assistantQuickReplies, setAssistantQuickReplies] = useState<string[]>([
     'How to compost?', 'What goes in recycling?', 'Tips for reducing waste', 'Tell me about eco-points',
   ]);
-  const [authEmail, setAuthEmail] = useState('member@ecobud.app');
-  const [authPassword, setAuthPassword] = useState('eco12345');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
   const [authMode, setAuthMode] = useState<AuthMode>('member');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -1712,87 +1708,21 @@ export function useHomeDashboard(): EcoBudMobileModel {
         return;
       }
 
-      let accessToken: string | null = null;
-      let refreshToken: string | null = null;
-      let authCode: string | null = null;
-
-      if (authResult.url) {
-        try {
-          const cleanUrl = authResult.url.replace('#', '?');
-          const urlObj = new URL(cleanUrl);
-          accessToken = urlObj.searchParams.get('access_token');
-          refreshToken = urlObj.searchParams.get('refresh_token');
-          authCode = urlObj.searchParams.get('code');
-
-          if (!accessToken && !authCode && cleanUrl.includes('=')) {
-            const matches = cleanUrl.match(/access_token=([^&]+)/);
-            if (matches && matches[1]) {
-              accessToken = decodeURIComponent(matches[1]);
-            }
-            const refreshMatches = cleanUrl.match(/refresh_token=([^&]+)/);
-            if (refreshMatches && refreshMatches[1]) {
-              refreshToken = decodeURIComponent(refreshMatches[1]);
-            }
-            const codeMatches = cleanUrl.match(/code=([^&]+)/);
-            if (codeMatches && codeMatches[1]) {
-              authCode = decodeURIComponent(codeMatches[1]);
-            }
-          }
-        } catch (urlErr) {
-          // Ignore URL parsing error silently
-        }
+      // PKCE only: tokens placed directly in the redirect URL are never accepted.
+      const authCode = authResult.url.match(/[?&]code=([^&#]+)/)?.[1];
+      if (!authCode) {
+        throw new Error('Google sign-in could not be completed. Please try again.');
       }
 
-      let authEmail = '';
-      let authDisplayName = '';
-      let authAvatarUrl = '';
-
-      if (authCode) {
-        try {
-          const { data: codeData, error: codeErr } = await supabaseClient.auth.exchangeCodeForSession(authCode);
-          if (!codeErr && codeData?.user?.email) {
-            authEmail = codeData.user.email;
-            authDisplayName = codeData.user.user_metadata?.full_name || codeData.user.user_metadata?.name || '';
-            authAvatarUrl = codeData.user.user_metadata?.avatar_url || codeData.user.user_metadata?.picture || '';
-          }
-        } catch (e) {
-          // Silently fallback
-        }
+      const { data: codeData, error: codeError } = await supabaseClient.auth.exchangeCodeForSession(decodeURIComponent(authCode));
+      const authEmail = codeData?.user?.email;
+      if (codeError || !authEmail) {
+        throw new Error('Google sign-in could not be completed. Please try again.');
       }
 
-      if (!authEmail && accessToken) {
-        try {
-          const { data: sessionData, error: setSessionError } = await supabaseClient.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          });
-
-          if (!setSessionError && sessionData?.user?.email) {
-            authEmail = sessionData.user.email;
-            authDisplayName = sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name || '';
-            authAvatarUrl = sessionData.user.user_metadata?.avatar_url || sessionData.user.user_metadata?.picture || '';
-          }
-        } catch (sessionErr) {
-          // Silently fallback
-        }
-      }
-
-      if (!authEmail) {
-        try {
-          const { data: userData } = await supabaseClient.auth.getUser();
-          if (userData?.user?.email) {
-            authEmail = userData.user.email;
-            authDisplayName = userData.user.user_metadata?.full_name || userData.user.user_metadata?.name || '';
-            authAvatarUrl = userData.user.user_metadata?.avatar_url || userData.user.user_metadata?.picture || '';
-          }
-        } catch (userErr) {
-          // Silently fallback
-        }
-      }
-
-      if (!authEmail) {
-        return;
-      }
+      const authMetadata = codeData.user?.user_metadata;
+      const authDisplayName: string = authMetadata?.full_name || authMetadata?.name || '';
+      const authAvatarUrl: string = authMetadata?.avatar_url || authMetadata?.picture || '';
 
       const { data: verifiedSession } = await supabaseClient.auth.getSession();
       const supabaseAccessToken = verifiedSession.session?.access_token;
