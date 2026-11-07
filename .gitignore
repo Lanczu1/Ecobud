@@ -87,7 +87,12 @@ apps/api/ecobud-project-firebase-adminsdk-*.json
 **/*.jks
 apps/mobile/credentials.json
 
+# Project documents
+*.pdf
+*.docx
+
 *.sql
+!apps/api/prisma/migrations/**/migration.sql
 !apps/api/prisma/migrations/20261002060000_badge_milestones/migration.sql
 !apps/api/prisma/migrations/20261002040000_remove_legacy_badges/migration.sql
 !apps/api/prisma/migrations/20261002041000_clear_legacy_badge_labels/migration.sql
@@ -105,3 +110,5 @@ releases/ecobud-announcement-push-supabase-migrated-20261002.zip
 !apps/api/prisma/migrations/20261004000000_mobile_cursor_paging/migration.sql
 !apps/api/prisma/migrations/20261005000000_admin_notifications/migration.sql
 !apps/api/prisma/migrations/20261013000000_lesson_video_credits/migration.sql
+
+apps/api/prisma/
