@@ -42,10 +42,36 @@ const createLogRecord = (
   };
 };
 
+const LOCAL_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+// This script deletes every user, so it must never reach a shared or hosted database.
+function assertLocalDatabase() {
+  let host = '';
+  try {
+    host = new URL(process.env.DATABASE_URL ?? '').hostname;
+  } catch {
+    // An unreadable address is treated as not local.
+  }
+  if (!LOCAL_DATABASE_HOSTS.has(host)) {
+    throw new Error('Demo seeding only runs against a localhost database. Check DATABASE_URL.');
+  }
+}
+
+function requireSeedPassword(name: string) {
+  const value = process.env[name]?.trim();
+  if (!value || value.length < 12) {
+    throw new Error(`Set ${name} to a local password of at least 12 characters.`);
+  }
+  return value;
+}
+
 async function main() {
   if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEMO_SEED !== 'true') {
     throw new Error('Destructive demo seeding requires ALLOW_DEMO_SEED=true and is forbidden in production.');
   }
+  assertLocalDatabase();
+  const seedAdminPassword = requireSeedPassword('SEED_ADMIN_PASSWORD');
+  const seedModeratorPassword = requireSeedPassword('SEED_MODERATOR_PASSWORD');
   await prisma.presenceSession.deleteMany();
   await prisma.habitCheckIn.deleteMany();
   await prisma.challengeSubmission.deleteMany();
@@ -66,10 +92,9 @@ async function main() {
   await prisma.event.deleteMany();
   await prisma.user.deleteMany();
 
-  const [adminPassword, memberPassword, moderatorPassword] = await Promise.all([
-    PasswordService.hash('admin12345'),
-    PasswordService.hash('eco12345'),
-    PasswordService.hash('moderator123'),
+  const [adminPassword, moderatorPassword] = await Promise.all([
+    PasswordService.hash(seedAdminPassword),
+    PasswordService.hash(seedModeratorPassword),
   ]);
 
   const admin = await prisma.user.create({
@@ -383,9 +408,9 @@ async function main() {
 
   console.log('ECOBUD seed complete.\n');
   console.log('--- ADMIN ACCOUNT ---');
-  console.log('Admin login (All 52 Barangays): admin@ecobud.app / admin12345\n');
+  console.log('Admin login (All 52 Barangays): admin@ecobud.app\n');
   
-  console.log('--- 52 BARANGAY MODERATOR ACCOUNTS (Password: moderator123) ---');
+  console.log('--- 52 BARANGAY MODERATOR ACCOUNTS ---');
   BARANGAYS.forEach((barangay) => {
     const emailPrefix = barangay.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     const email = barangay === 'Abo'

@@ -111,9 +111,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
 
 ## Demo Accounts
 
-- Member mobile login: `member@ecobud.local / eco12345`
-- Admin web login: `admin@ecobud.local / admin12345`
-- Moderator login: `moderator@ecobud.local / moderator123`
+`npm run db:seed` deletes existing data before creating demo accounts, so it only runs against a database on `localhost`. To use it, set `ALLOW_DEMO_SEED=true`, `SEED_ADMIN_PASSWORD` and `SEED_MODERATOR_PASSWORD` in your local `apps/api/.env`. Never commit those passwords.
 
 ## Validation Commands
 
