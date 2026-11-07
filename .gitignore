@@ -83,6 +83,9 @@ apps/api/ecobud-project-firebase-adminsdk-*.json
 
 # Local Android signing keys
 **/debug.keystore
+**/*.keystore
+**/*.jks
+apps/mobile/credentials.json
 
 *.sql
 !apps/api/prisma/migrations/20261002060000_badge_milestones/migration.sql

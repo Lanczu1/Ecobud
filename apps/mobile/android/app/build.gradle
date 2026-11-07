@@ -63,6 +63,18 @@ react {
     autolinkLibrariesWithApp()
 }
 
+gradle.taskGraph.whenReady { graph ->
+    def releaseTasks = ['assembleRelease', 'bundleRelease', 'packageRelease']
+    def buildsRelease = graph.allTasks.any { it.project == project && releaseTasks.contains(it.name) }
+    if (buildsRelease && android.buildTypes.release.signingConfig?.storeFile?.name == 'debug.keystore') {
+        throw new GradleException(
+            'Release builds cannot use the public debug key. Set ECOBUD_RELEASE_STORE_FILE, ' +
+            'ECOBUD_RELEASE_STORE_PASSWORD, ECOBUD_RELEASE_KEY_ALIAS and ECOBUD_RELEASE_KEY_PASSWORD ' +
+            'in your user-level ~/.gradle/gradle.properties (never in this repository).'
+        )
+    }
+}
+
 /**
  * Set this to true in release builds to optimize the app using [R8](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization).
  */
@@ -104,15 +116,22 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (findProperty('ECOBUD_RELEASE_STORE_FILE')) {
+            release {
+                storeFile file(findProperty('ECOBUD_RELEASE_STORE_FILE'))
+                storePassword findProperty('ECOBUD_RELEASE_STORE_PASSWORD')
+                keyAlias findProperty('ECOBUD_RELEASE_KEY_ALIAS')
+                keyPassword findProperty('ECOBUD_RELEASE_KEY_PASSWORD')
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // The check below stops a release build that would still use the public debug key.
+            signingConfig findProperty('ECOBUD_RELEASE_STORE_FILE') ? signingConfigs.release : signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
