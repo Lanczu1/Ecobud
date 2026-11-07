@@ -1,3 +1,4 @@
+import { mediaObjectPath } from '../http/mediaCleanupAccess';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
@@ -121,21 +122,7 @@ class SupabaseStorageService {
     if (!this.client || !fileUrlOrPath) return false;
 
     try {
-      let pathToDelete = fileUrlOrPath;
-
-      // If full URL is provided, extract the path relative to the bucket
-      if (fileUrlOrPath.startsWith('http://') || fileUrlOrPath.startsWith('https://')) {
-        const bucketMarker = `/${this.bucketName}/`;
-        const index = fileUrlOrPath.indexOf(bucketMarker);
-        if (index !== -1) {
-          pathToDelete = decodeURIComponent(fileUrlOrPath.substring(index + bucketMarker.length));
-        } else {
-          // Might not be a Supabase URL in our bucket
-          return false;
-        }
-      }
-
-      pathToDelete = pathToDelete.replace(/^\/+/, '');
+      const pathToDelete = mediaObjectPath(/^https?:\/\//i.test(fileUrlOrPath) ? fileUrlOrPath : `/uploads/${fileUrlOrPath.replace(/^\/+/, '')}`);
 
       const { error } = await this.client.storage
         .from(this.bucketName)

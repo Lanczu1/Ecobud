@@ -10,9 +10,8 @@ import { SwapRequestDialog, SwapAcceptedDialog } from './SwapRequestDialog';
 import { SwapChatView } from './SwapChatView';
 import { swapService } from './swapService';
 import { ecobudApi } from '../../shared/api/ecobudApi';
-import { supabaseClient } from '../../shared/supabase/supabaseClient';
+import { subscribeAuthenticatedRealtime } from '../../shared/supabase/authenticatedRealtime';
 import type { SwapListing, SwapConversation } from './types';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import { ScreenTransition } from '../../shared/ui/ScreenTransition';
 import { ReportListingDialog } from './ReportListingDialog';
 import { useInAppNotification } from '../../shared/ui/InAppNotification';
@@ -184,48 +183,18 @@ export function MarketplaceHubView({
   }, [screen, onScreenStateChange]);
 
   useEffect(() => {
-    if (!token || !supabaseClient) return;
-    let channel: RealtimeChannel | null = null;
-
-    (async () => {
-      try {
-        const session = await ecobudApi.fetchRealtimeSession(token);
-        if (!session.enabled || !session.channels?.userSwap) return;
-
-        const connectedAt = Date.now();
-        const seenRevisions: Record<string, number> = {};
-
-        channel = supabaseClient
-          .channel(session.channels.userSwap, {
-            config: { broadcast: { ack: false, self: false } },
-          })
-          .on('broadcast', { event: 'swap' }, ({ payload }: any) => {
-            const revision = payload?.revision;
-            if (!revision || revision <= connectedAt) return;
-            if (revision <= (seenRevisions['swap'] ?? 0)) return;
-            seenRevisions['swap'] = revision;
-            if (payload?.eventType === 'listing') {
-              DeviceEventEmitter.emit('giveAndGetListingsChanged');
-            } else {
-              void loadConversations(false, true);
-            }
-            if (payload?.eventType === 'message' && payload?.swapRequestId) {
-              DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
-            }
-          })
-          .subscribe(status => setRealtimeLive(status === 'SUBSCRIBED'));
-      } catch {
-        // Supabase not configured or failed — silently ignore
-      }
-    })();
-
-    return () => {
-      setRealtimeLive(false);
-      if (channel && supabaseClient) {
-        supabaseClient.removeChannel(channel);
-      }
-    };
+    if (!token) return;
+    return subscribeAuthenticatedRealtime(token, {
+      onStatus: setRealtimeLive,
+      onMessage: ({ event, payload }) => {
+        if (event !== 'swap') return;
+        if (payload.eventType === 'listing') DeviceEventEmitter.emit('giveAndGetListingsChanged');
+        else void loadConversations(false, true);
+        if (payload.eventType === 'message' && payload.swapRequestId) DeviceEventEmitter.emit('swapChatChanged', String(payload.swapRequestId));
+      },
+    });
   }, [token, loadConversations]);
+
 
   if (!token) return null;
 

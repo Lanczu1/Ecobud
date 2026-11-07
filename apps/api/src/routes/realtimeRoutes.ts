@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { openResidentStream, streamSessionActive } from '../services/residentStream';
 import { z } from 'zod';
 import {
   authenticateRequest,
@@ -27,6 +28,8 @@ realtimeRoutes.get(
     return res.json(supabaseRealtimeService.getSession(auth.userId, auth.role));
   }),
 );
+
+realtimeRoutes.get('/user-stream', authenticateRequest, requireUserAccess, openResidentStream);
 
 const ADMIN_STREAM_MAX_MS = 10 * 60 * 1000;
 
@@ -59,13 +62,14 @@ realtimeRoutes.get(
       pending = setTimeout(() => {
         pending = null;
         if (closed) return;
-        res.write(`data: ${JSON.stringify({ sections: sections === 'all' ? 'all' : [...sections], own })}\n\n`);
+        const data = JSON.stringify({ sections: sections === 'all' ? 'all' : [...sections], own });
+        void streamSessionActive(req).then(active => { if (!active) close(); else if (!closed) res.write(`data: ${data}\n\n`); });
         sections = new Set();
         own = true;
       }, 250);
     };
     const unsubscribe = adminLiveEvents.subscribe(send);
-    const heartbeat = setInterval(() => { if (!closed) res.write(': ping\n\n'); }, 25_000);
+    const heartbeat = setInterval(() => { void streamSessionActive(req).then(active => { if (!active) close(); else if (!closed) res.write(': ping\n\n'); }); }, 15_000);
     const close = () => {
       if (closed) return;
       closed = true;
@@ -76,7 +80,7 @@ realtimeRoutes.get(
       res.end();
     };
     const lifetime = setTimeout(close, ADMIN_STREAM_MAX_MS);
-    req.on('close', close);
+    res.once('close', close);
   },
 );
 

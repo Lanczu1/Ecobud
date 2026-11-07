@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AccessRole } from '../security/tokenService';
 import { adminLiveEvents } from './adminLiveEvents';
+import { residentLiveEvents } from './residentLiveEvents';
 
 export type AdminRealtimeSection = 'dashboard' | 'users';
 export type RealtimeSection = 'learn' | 'challenges' | 'events' | 'tracker' | 'swap';
@@ -135,40 +136,8 @@ class SupabaseRealtimeService {
     return Boolean(this.getClient() && this.getChannelSecret());
   }
 
-  getSession(
-    userId: string,
-    role: AccessRole = 'user',
-  ): { enabled: boolean; channels: RealtimeChannelMap | null } {
-    if (!this.isEnabled()) {
-      return {
-        enabled: false,
-        channels: null,
-      };
-    }
-
-    const channels: RealtimeChannelMap = {
-      globalChallenges: GLOBAL_CHANNELS.challenges,
-      globalEvents: GLOBAL_CHANNELS.events,
-      globalLearn: GLOBAL_CHANNELS.learn,
-      presenceMembers: PRESENCE_CHANNELS.members,
-      userChallenges: this.buildUserChannel(userId, 'challenges'),
-      userLearn: this.buildUserChannel(userId, 'learn'),
-      userNotice: this.buildUserChannel(userId, 'notice'),
-      userEvents: this.buildUserChannel(userId, 'events'),
-      userSwap: this.buildUserChannel(userId, 'swap'),
-      userTracker: this.buildUserChannel(userId, 'tracker'),
-    };
-
-    if (role === 'moderator' || role === 'admin') {
-      channels.adminDashboard = ADMIN_CHANNELS.dashboard;
-      channels.adminPresence = PRESENCE_CHANNELS.members;
-      channels.adminUsers = ADMIN_CHANNELS.users;
-    }
-
-    return {
-      enabled: true,
-      channels,
-    };
+  getSession(_userId: string, _role: AccessRole = 'user') {
+    return { enabled: true, channels: null, transport: 'api-stream' as const };
   }
 
   async publishGlobalSectionRefresh(section: RealtimeSection, input: RealtimeSignalInput) {
@@ -279,6 +248,7 @@ class SupabaseRealtimeService {
   async publishSwapEvent(input: SwapEventInput) {
     const channel = this.buildUserChannel(input.targetUserId, 'swap');
     return this.publish(channel, 'swap', {
+      userId: input.targetUserId,
       actorUserId: input.actorUserId,
       eventType: input.eventType,
       listingId: input.listingId ?? null,
@@ -287,20 +257,20 @@ class SupabaseRealtimeService {
   }
 
   private async publish(channelName: string, event: string, payload: Record<string, unknown>) {
-    const client = this.getClient();
-
-    if (!client) {
-      return false;
+    const envelope: Record<string, unknown> = { ...payload, revision: Date.now(), updatedAt: new Date().toISOString() };
+    const locallyDelivered = payload.audience === 'global' || typeof payload.userId === 'string';
+    if (payload.audience === 'global') {
+      const { actorUserId, entityId, ...publicPayload } = envelope;
+      residentLiveEvents.publish({ event, audience: 'global', payload: publicPayload });
+    } else if (typeof payload.userId === 'string') {
+      residentLiveEvents.publish({ event, audience: 'user', userId: payload.userId, payload: envelope });
     }
-
-    const channel = client.channel(channelName);
+    const client = this.getClient();
+    if (!client) return true;
+    const channel = client.channel(channelName, { config: { private: true } });
 
     try {
-      const response = await channel.httpSend(event, {
-        ...payload,
-        revision: Date.now(),
-        updatedAt: new Date().toISOString(),
-      });
+      const response = await channel.httpSend(event, envelope);
 
       if (!response.success) {
         console.error(
@@ -310,12 +280,12 @@ class SupabaseRealtimeService {
         );
       }
 
-      return response.success;
+      return response.success || locallyDelivered;
     } catch (error: any) {
       if (error?.name !== 'AbortError') {
         console.error(`Failed to publish Supabase realtime payload for ${channelName}.`, error);
       }
-      return false;
+      return locallyDelivered;
     } finally {
       await client.removeChannel(channel);
     }

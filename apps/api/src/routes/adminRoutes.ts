@@ -56,7 +56,7 @@ adminRoutes.post("/users/:userId/unblock", requireAdminAccess, AdminController.u
 adminRoutes.get("/challenges", AdminController.getChallenges);
 adminRoutes.post("/challenges", AdminController.createChallenge);
 adminRoutes.put("/challenges/:id", requireAdminAccess, AdminController.updateChallenge);
-adminRoutes.delete("/challenges/:id", AdminController.deleteChallenge);
+adminRoutes.delete("/challenges/:id", requireAdminAccess, AdminController.deleteChallenge);
 
 // Dashboard Stats
 adminRoutes.get("/stats", requireAdminAccess, AdminController.getDashboardStats);

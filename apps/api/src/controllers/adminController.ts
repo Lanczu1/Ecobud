@@ -11,6 +11,8 @@ import path from "path";
 import { parseAdminPagination } from '../utils/adminPagination';
 import { HttpError } from '../http/errorResponder';
 import { parseLessonVideoCredits } from '../services/lessonVideoCredits';
+import { randomUUID } from 'crypto';
+import { authorizeMediaCleanup, localUploadPath } from '../http/mediaCleanupAccess';
 
 function contentSaveError(error: any, res: Response, fallback: string) {
   if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
@@ -39,8 +41,7 @@ const safelyDeleteUpload = async (url?: string | null) => {
     await supabaseStorageService.deleteFile(url);
     return;
   }
-  const relativePath = url.replace(/^\/uploads\//, '');
-  const filePath = path.join(__dirname, '..', '..', 'uploads', ...relativePath.split('/'));
+  const filePath = localUploadPath(url, path.join(__dirname, '..', '..', 'uploads'));
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
@@ -487,7 +488,7 @@ export class AdminController {
         return res.status(400).json({ message: "No file uploaded." });
       }
       const ext = path.extname(req.file.originalname) || '.jpg';
-      const destinationPath = `challenges/general/challenge-${Date.now()}${ext}`;
+      const destinationPath = `challenges/drafts/${req.auth!.userId}/${randomUUID()}${ext}`;
       const fileUrl = await supabaseStorageService.uploadFile(
         destinationPath,
         req.file.path,
@@ -515,11 +516,16 @@ export class AdminController {
   static async deleteImage(req: AuthenticatedRequest, res: Response) {
     try {
       const { url } = req.body;
-      if (!url) return res.status(400).json({ message: 'URL is required' });
-
+      if (typeof url !== 'string' || !url) return res.status(400).json({ message: 'URL is required' });
+      const objectPath = authorizeMediaCleanup(url, req.auth!);
+      if (req.auth!.role === 'moderator') {
+        const inUse = await prisma.challenge.findFirst({ where: { imageUrl: { endsWith: `/${objectPath}` } }, select: { id: true } });
+        if (inUse) return res.status(403).json({ message: 'This image belongs to a saved challenge.' });
+      }
       await safelyDeleteUpload(url);
       return res.json({ message: 'Image deleted successfully' });
     } catch (error: any) {
+      if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
       return res.status(500).json({ message: 'Failed to delete image' });
     }
   }

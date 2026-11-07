@@ -102,7 +102,7 @@ const resolveApiBase = () => {
   return 'http://localhost:3000/api';
 };
 
-const API_BASE = resolveApiBase();
+export const API_BASE = resolveApiBase();
 const apiOrigin = API_BASE.replace(/\/api$/, '');
 
 export type IdVerificationStatus = 'not_submitted' | 'pending' | 'approved' | 'rejected';
