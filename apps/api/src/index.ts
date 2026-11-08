@@ -1,5 +1,6 @@
 // Load .env before any module that reads process.env at import time.
 import 'dotenv/config';
+import type { AuthenticatedRequest } from './http/authentication';
 import { startIdDocumentCleanup, stopIdDocumentCleanup } from './services/idDocumentCleanup';
 import { notificationRoutes } from './routes/notificationRoutes';
 import { adminNotificationRoutes } from './routes/adminNotificationRoutes';
@@ -71,7 +72,18 @@ if (production) {
 app.use((req, res, next) => {
   res.once('finish', () => {
     if ([401, 403, 429].includes(res.statusCode) || res.statusCode >= 500) {
-      console.warn(JSON.stringify({ event: 'security_response', method: req.method, route: req.route?.path || 'unmatched', status: res.statusCode, timestamp: new Date().toISOString() }));
+      console.warn(JSON.stringify({
+        event: 'security_response',
+        method: req.method,
+        route: req.route?.path || 'unmatched',
+        // Path only: query strings can carry tokens or personal data.
+        path: req.originalUrl.split('?')[0].slice(0, 200),
+        status: res.statusCode,
+        ip: req.ip ?? null,
+        userId: (req as AuthenticatedRequest).auth?.userId ?? null,
+        userAgent: req.get('user-agent')?.slice(0, 200) ?? null,
+        timestamp: new Date().toISOString(),
+      }));
     }
   });
   next();
