@@ -15,6 +15,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createTotpSecret, createTotpUri, encryptTotpSecret, decryptTotpSecret, verifyTotp, makeRecoveryCodes, hashRecoveryCode } from '../security/totp';
+import { recordAuthEvent } from '../security/authAudit';
 
 const userRoutes = Router();
 
@@ -312,6 +313,7 @@ userRoutes.post('/me/mfa/totp/confirm', authenticateRequest, requireUserAccess, 
       await tx.mfaEnrollment.deleteMany({ where: { userId: req.auth!.userId } });
       return tx.user.findUniqueOrThrow({ where: { id: req.auth!.userId }, include: { profile: true } });
     });
+    recordAuthEvent(req, 'AUTH_MFA_ENABLED', { userId: updatedUser.id, method: 'mfa_totp' });
     return res.json({ success: true, recoveryCodes, ...issueMobileSessionTokens(updatedUser) });
   }));
 
@@ -330,6 +332,7 @@ userRoutes.post('/me/mfa/recovery-codes/rotate', authenticateRequest, requireUse
       await tx.mfaRecoveryCode.deleteMany({ where: { userId: user.id } });
       await tx.mfaRecoveryCode.createMany({ data: recoveryCodes.map((recoveryCode) => ({ userId: user.id, codeHash: hashRecoveryCode(recoveryCode) })) });
     });
+    recordAuthEvent(req, 'AUTH_MFA_RECOVERY_ROTATED', { userId: user.id, method: 'mfa_totp' });
     return res.json({ recoveryCodes });
   }));
 
@@ -359,6 +362,7 @@ userRoutes.post('/me/mfa/disable', authenticateRequest, requireUserAccess, secur
       await tx.mfaEnrollment.deleteMany({ where: { userId: user.id } });
       return tx.user.update({ where: { id: user.id }, data: { totpSecretEncrypted: null, totpEnabledAt: null, totpLastUsedStep: null, sessionVersion: { increment: 1 } }, include: { profile: true } });
     });
+    recordAuthEvent(req, 'AUTH_MFA_DISABLED', { userId: user.id, method: step !== null ? 'mfa_totp' : 'mfa_recovery' });
     return res.json({ success: true, ...issueMobileSessionTokens(updatedUser) });
   }));
 
@@ -443,6 +447,8 @@ userRoutes.patch(
           data: { ...updateData, sessionVersion: { increment: 1 } },
         });
       });
+      if (updateData.passwordHash) recordAuthEvent(req, 'AUTH_PASSWORD_CHANGED', { userId: user.id, method: 'password' });
+      if (updateData.email) recordAuthEvent(req, 'AUTH_EMAIL_CHANGED', { userId: user.id, method: 'password' });
     }
 
     const newToken = TokenService.sign({

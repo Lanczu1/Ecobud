@@ -10,6 +10,7 @@ import { emailCodeHash } from '../security/emailChange';
 import { JWT_SECRET } from '../security/tokenService';
 import { PasswordService } from '../security/passwordService';
 import { SignupOtpSendLimiter } from '../security/signupOtpSendLimiter';
+import { recordAuthEvent } from '../security/authAudit';
 
 export const passwordResetRoutes = Router();
 const requestTrafficLimiter = rateLimit({
@@ -169,5 +170,6 @@ passwordResetRoutes.post('/complete', verifyLimiter, errorBoundary(async (req, r
     });
     if (updated.count !== 1) throw invalidGrant();
   });
+  recordAuthEvent(req, 'AUTH_PASSWORD_RESET', { userId: claims.userId, method: 'password' });
   return res.json({ success: true, message: 'Password updated. Sign in with your new password.' });
 }));

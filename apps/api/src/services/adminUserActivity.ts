@@ -112,6 +112,7 @@ export function activityQuery(filters: ReturnType<typeof parseActivityQuery>) {
       UNION ALL
       SELECT 'audit:' || t.id, t.id, t."userId", 'Admin audit log', 'administration', REPLACE(t.action, '_', ' '),
         'recorded', 0, 0, t.timestamp, t.details FROM audit_logs t JOIN residents u ON u.id = t."userId"
+        WHERE LEFT(t.action, 5) <> 'AUTH_'
     ), filtered AS (
       SELECT r.*, u.name, u.email, u.barangay, u.points AS "currentPoints", u.coins AS "currentCoins", u.knowledge AS "currentKnowledge"
       FROM records r JOIN residents u ON u.id = r."userId" WHERE TRUE

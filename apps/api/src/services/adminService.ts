@@ -10,6 +10,7 @@ import { getTotalCoinsRedeemed } from './redemptionStatsService';
 import { activityByDayQuery } from './adminActivityTrend';
 import { PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED } from './eventPhotoDeletion';
 import { CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED } from './challengePhotoDeletion';
+import { AUTH_AUDIT_PREFIX } from '../security/authAudit';
 
 const EVENT_QR_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -1180,6 +1181,7 @@ export class AdminService {
 
   static async getAuditLogs() {
     return await prisma.auditLog.findMany({
+      where: { NOT: { action: { startsWith: AUTH_AUDIT_PREFIX } } },
       orderBy: { timestamp: 'desc' },
       include: {
         user: {
@@ -1194,7 +1196,8 @@ export class AdminService {
   }
 
   static async clearAuditLogs() {
-    return await prisma.auditLog.deleteMany({ where: { action: { notIn: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED, CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED] } } });
+    // Authentication events are security records and are never cleared from the dashboard.
+    return await prisma.auditLog.deleteMany({ where: { action: { notIn: [PHOTO_DELETE_PENDING, PHOTO_DELETE_APPROVED, CHALLENGE_PHOTO_DELETE_PENDING, CHALLENGE_PHOTO_DELETE_APPROVED] }, NOT: { action: { startsWith: AUTH_AUDIT_PREFIX } } } });
   }
 
   // Event Management

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Router } from 'express';
 import { passwordResetRoutes } from './passwordResetRoutes';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
@@ -17,6 +17,7 @@ import { emailCodeHash } from '../security/emailChange';
 import { welcomeEmail } from '../services/welcomeEmail';
 import { sendDirectNotification } from '../services/notificationService';
 import { hashRecoveryCode, decryptTotpSecret, verifyTotp } from '../security/totp';
+import { AuthMethod, recordAuthEvent } from '../security/authAudit';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -99,9 +100,10 @@ async function requireMfaChallenge(userId: string, clientType: SessionClient) {
   return { mfaRequired: true as const, challengeToken: TokenService.signMfaChallenge({ userId, challengeId: id, clientType }), expiresAt: expiresAt.toISOString() };
 }
 
-function assertAccountNotLocked(email: string): void {
+function assertAccountNotLocked(email: string, audit?: { req: Request; userId?: string; method: AuthMethod }): void {
   const lockStatus = LoginAttemptTracker.isLocked(email.trim().toLowerCase());
   if (lockStatus.locked) {
+    if (audit) recordAuthEvent(audit.req, 'AUTH_LOCKED_ATTEMPT', { userId: audit.userId, email, method: audit.method });
     throw new HttpError(
       429,
       `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 300) / 60)} minute(s).`,
@@ -418,6 +420,7 @@ authRoutes.post(
     // Check account-level lockout
     const lockStatus = LoginAttemptTracker.isLocked(normalizedEmail);
     if (lockStatus.locked) {
+      recordAuthEvent(req, 'AUTH_LOCKED_ATTEMPT', { email: normalizedEmail, method: 'password' });
       throw new HttpError(
         429,
         `Too many failed login attempts. This account is temporarily locked for security. Please try again in ${Math.ceil((lockStatus.remainingSeconds || 300) / 60)} minute(s).`,
@@ -431,7 +434,9 @@ authRoutes.post(
 
     if (!user) {
       const failureResult = LoginAttemptTracker.recordFailure(normalizedEmail);
+      recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { email: normalizedEmail, method: 'password', reason: 'unknown_email' });
       if (failureResult.locked) {
+        recordAuthEvent(req, 'AUTH_LOCKOUT', { email: normalizedEmail, method: 'password' });
         throw new HttpError(429, 'Too many failed login attempts. Your account has been temporarily locked for 5 minutes.');
       }
       throw new HttpError(401, `Incorrect email or password. ${failureResult.remainingAttempts} login attempt(s) remaining.`);
@@ -441,7 +446,9 @@ authRoutes.post(
 
     if (!passwordMatches) {
       const failureResult = LoginAttemptTracker.recordFailure(normalizedEmail);
+      recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'password', reason: 'wrong_password' });
       if (failureResult.locked) {
+        recordAuthEvent(req, 'AUTH_LOCKOUT', { userId: user.id, method: 'password' });
         throw new HttpError(
           429,
           `Too many failed login attempts. Your account has been temporarily locked for 5 minutes.`,
@@ -451,16 +458,19 @@ authRoutes.post(
     }
 
     if (user.status !== 'active') {
+      recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'password', reason: 'account_' + user.status });
       throw new HttpError(403, getInactiveStatusMessage(user.status));
     }
 
     if (user.totpEnabledAt) {
       if (!user.totpSecretEncrypted) throw new HttpError(503, 'Authenticator verification is unavailable. Contact support before signing in.');
+      recordAuthEvent(req, 'AUTH_MFA_CHALLENGE', { userId: user.id, method: 'password' });
       return res.json(await requireMfaChallenge(user.id, payload.clientType));
     }
 
     // Reset failed attempts upon successful login
     LoginAttemptTracker.recordSuccess(normalizedEmail);
+    recordAuthEvent(req, 'AUTH_LOGIN_SUCCESS', { userId: user.id, method: 'password' });
 
     return res.json(toAuthResponse(user, payload.clientType));
   }),
@@ -484,7 +494,7 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
     throw new HttpError(401, 'This sign-in verification expired. Please sign in again.');
   }
   const user = challenge.user;
-  assertAccountNotLocked(user.email);
+  assertAccountNotLocked(user.email, { req, userId: user.id, method: 'mfa_totp' });
   if (user.status !== 'active' || !user.totpEnabledAt || !user.totpSecretEncrypted) {
     throw new HttpError(401, 'Authenticator verification could not be completed. Please sign in again.');
   }
@@ -492,6 +502,7 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
   const normalizedCode = payload.code.replace(/[\s-]/g, '').toUpperCase();
   const secret = decryptTotpSecret(user.totpSecretEncrypted);
   const step = verifyTotp(secret, normalizedCode);
+  let mfaMethod: AuthMethod = 'mfa_totp';
   if (step !== null) {
     await prisma.$transaction(async (tx) => {
       const reserved = await tx.user.updateMany({
@@ -510,9 +521,12 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
       return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
     });
     if (!matching) {
-      LoginAttemptTracker.recordFailure(user.email);
+      const failureResult = LoginAttemptTracker.recordFailure(user.email);
+      recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'mfa_totp', reason: 'invalid_mfa_code' });
+      if (failureResult.locked) recordAuthEvent(req, 'AUTH_LOCKOUT', { userId: user.id, method: 'mfa_totp' });
       throw new HttpError(401, 'The authenticator code or recovery code is invalid.');
     }
+    mfaMethod = 'mfa_recovery';
     await prisma.$transaction(async (tx) => {
       const consumedRecovery = await tx.mfaRecoveryCode.updateMany({ where: { id: matching.id, usedAt: null }, data: { usedAt: new Date() } });
       if (consumedRecovery.count !== 1) throw new HttpError(401, 'That recovery code has already been used.');
@@ -522,6 +536,7 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
   }
 
   LoginAttemptTracker.recordSuccess(user.email);
+  recordAuthEvent(req, 'AUTH_LOGIN_SUCCESS', { userId: user.id, method: mfaMethod });
   return res.json(toAuthResponse(user, challengeClaims.clientType));
 }));
 
@@ -537,7 +552,7 @@ authRoutes.post(
     const payload = googleAuthSchema.parse(req.body);
     const identity = await verifyGoogleIdentity(payload.accessToken);
     const normalizedEmail = identity.email;
-    assertAccountNotLocked(normalizedEmail);
+    assertAccountNotLocked(normalizedEmail, { req, method: 'google' });
     const displayName = identity.name;
 
     let user = await prisma.user.findUnique({
@@ -545,6 +560,7 @@ authRoutes.post(
       include: { profile: true },
     });
 
+    const newAccount = !user;
     if (!user) {
       // Find a non-conflicting display name
       let uniqueDisplayName = displayName;
@@ -614,9 +630,11 @@ authRoutes.post(
     } else {
       if (user.role !== 'user' || (user.googleIdentityId && user.googleIdentityId !== identity.id) ||
           (!user.googleIdentityId && !identity.canLinkByEmail)) {
+        recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'google', reason: 'google_not_allowed' });
         throw new HttpError(403, 'Use your password to sign in to this account.');
       }
       if (user.status !== 'active') {
+        recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'google', reason: 'account_' + user.status });
         throw new HttpError(403, getInactiveStatusMessage(user.status));
       }
       if (!user.googleIdentityId) {
@@ -632,8 +650,10 @@ authRoutes.post(
 
     if (user.totpEnabledAt) {
       if (!user.totpSecretEncrypted) throw new HttpError(503, 'Authenticator verification is unavailable. Contact support before signing in.');
+      recordAuthEvent(req, 'AUTH_MFA_CHALLENGE', { userId: user.id, method: 'google' });
       return res.json(await requireMfaChallenge(user.id, payload.clientType));
     }
+    recordAuthEvent(req, 'AUTH_LOGIN_SUCCESS', { userId: user.id, method: 'google', newAccount });
     return res.json(toAuthResponse(user, payload.clientType));
   }),
 );
