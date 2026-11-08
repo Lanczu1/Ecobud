@@ -1,3 +1,5 @@
+// Load .env before any module that reads process.env at import time.
+import 'dotenv/config';
 import { startIdDocumentCleanup, stopIdDocumentCleanup } from './services/idDocumentCleanup';
 import { notificationRoutes } from './routes/notificationRoutes';
 import { adminNotificationRoutes } from './routes/adminNotificationRoutes';
@@ -7,7 +9,6 @@ import { announcementAdminRoutes, announcementResidentRoutes } from './routes/an
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationService';
 import { startStreakReminderScheduler, stopStreakReminderScheduler } from './services/streakReminderScheduler';
 import { startEventStartScheduler, stopEventStartScheduler } from './services/eventStartScheduler';
-import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import path from 'path';
@@ -97,6 +98,11 @@ app.use((_req, res, next) => {
 });
 
 app.use(express.json({ limit: '100kb' }));
+// Express 5 leaves req.body undefined when no parser ran; handlers expect an object.
+app.use((req, _res, next) => {
+  req.body ??= {};
+  next();
+});
 
 // Serve uploads directory statically with security headers and caching
 app.use(

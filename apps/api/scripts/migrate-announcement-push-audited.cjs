@@ -4,7 +4,9 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const {PrismaClient}=require('@prisma/client');
-const db=new PrismaClient();
+// Built by `npm run build`.
+const {createDatabaseAdapter}=require('../dist/databaseAdapter.js');
+const db=new PrismaClient({adapter:createDatabaseAdapter(process.env.DIRECT_URL)});
 const migration='20261002020000_announcement_notifications';
 const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const inventorySql=`SELECT jsonb_build_object(

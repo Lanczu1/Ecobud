@@ -24,7 +24,9 @@ if (require.main === module) {
   } else {
     require('dotenv').config({ quiet: true });
     const { PrismaClient } = require('@prisma/client');
-    const db = new PrismaClient();
+    // Built by `npm run build`. Session connection: LOCK TABLE needs one transaction.
+    const { createDatabaseAdapter } = require('../dist/databaseAdapter.js');
+    const db = new PrismaClient({ adapter: createDatabaseAdapter(process.env.DIRECT_URL) });
     db.$transaction(async tx => {
       for (const sql of activationSql) await tx.$executeRawUnsafe(sql);
     }, { timeout: 30000 }).then(() => {

@@ -45,7 +45,7 @@ export const errorResponder = (
 };
 
 export const errorBoundary =
-  <T extends Request>(
+  <T extends Request = Request & { params: Record<string, string> }>(
     handler: (req: T, res: Response, next: NextFunction) => Promise<unknown>,
   ) =>
   (req: Request, res: Response, next: NextFunction) =>

@@ -37,7 +37,8 @@ adminBadgeRoutes.get('/', errorBoundary(async (_req, res) => {
 }));
 
 adminBadgeRoutes.get('/source/:type/:id', errorBoundary(async (req, res) => {
-  const field = { lesson: 'lessonId', challenge: 'challengeId', event: 'eventId', exchange: 'swapListingId' }[req.params.type];
+  const sourceFields: Record<string, string | undefined> = { lesson: 'lessonId', challenge: 'challengeId', event: 'eventId', exchange: 'swapListingId' };
+  const field = Object.hasOwn(sourceFields, req.params.type) ? sourceFields[req.params.type] : undefined;
   if (!field) throw new HttpError(400, 'Invalid badge source.');
   const badge = await prisma.badge.findFirst({ where: { [field]: req.params.id } });
   return res.json({ badge });

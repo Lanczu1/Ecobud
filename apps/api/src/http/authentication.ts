@@ -8,6 +8,8 @@ import { ZodError } from 'zod';
 
 export interface AuthenticatedRequest extends Request {
   auth?: TokenSession;
+  // Express 5 types allow string[] for wildcard params; no route here uses wildcards.
+  params: Record<string, string>;
 }
 
 const AUTH_CACHE_SECONDS = 5;

@@ -1,10 +1,11 @@
 /// <reference types="node" />
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { createDatabaseAdapter } from '../src/databaseAdapter';
 import { PasswordService } from '../src/security/passwordService';
 import { TransparencyHasher } from '../src/utils/transparencyHasher';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createDatabaseAdapter() });
 
 const addDays = (days: number) => {
   const date = new Date();

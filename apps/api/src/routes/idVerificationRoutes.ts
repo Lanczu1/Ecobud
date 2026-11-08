@@ -14,7 +14,7 @@ idVerificationRoutes.use(authenticateRequest, (_req, res, next) => { res.setHead
 const submissionSchema = z.object({ legalName: z.string().trim().min(2).max(120), idType: z.enum(['valid', 'government', 'school', 'barangay']).transform(() => 'valid' as const), consent: z.literal('true') });
 const reviewSchema = z.object({ status: z.enum(['approved', 'rejected']), reason: z.string().trim().max(500).optional() })
   .refine(value => value.status !== 'rejected' || Boolean(value.reason), { message: 'A rejection reason is required.', path: ['reason'] });
-const submissionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, keyGenerator: (req: AuthenticatedRequest) => req.auth!.userId, standardHeaders: true, legacyHeaders: false });
+const submissionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, keyGenerator: (req) => (req as AuthenticatedRequest).auth!.userId, standardHeaders: true, legacyHeaders: false });
 const publicSubmission = { id: true, legalName: true, idType: true, status: true, reason: true, submittedAt: true, reviewedAt: true } as const;
 
 idVerificationRoutes.get('/me', errorBoundary(async (req: AuthenticatedRequest, res) => {
