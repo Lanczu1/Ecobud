@@ -85,6 +85,7 @@ apps/api/ecobud-project-firebase-adminsdk-*.json
 **/debug.keystore
 **/*.keystore
 **/*.jks
+**/.android/
 apps/mobile/credentials.json
 
 # Project documents

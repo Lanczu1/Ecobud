@@ -1,0 +1,23 @@
+[33mcommit 5b0d7fdd51ae32d2827873acaf6657929caff975[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32msecurity-hardening[m[33m, [m[1;31morigin/security-hardening[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Lanczu1 <streamlancetv@gmail.com>
+Date:   Sun Nov 8 20:59:35 2026 +0800
+
+    feat: report web and mobile crashes to Sentry
+    
+    Production web builds and release mobile builds send errors to Sentry.
+    No user details, cookies, headers, bodies, query strings, console logs
+    or screenshots are sent. The web CSP allows the Sentry ingest host. The
+    mobile SDK has a native part, so it takes effect from the next APK.
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+ apps/mobile/App.tsx                         |   1 [32m+[m
+ apps/mobile/package-lock.json               | 355 [32m++++++++++++++++++++++++++[m[31m--[m
+ apps/mobile/package.json                    |   1 [32m+[m
+ apps/mobile/src/shared/monitoring/sentry.ts |  31 [32m+++[m
+ apps/web/package-lock.json                  | 120 [32m++++++++++[m
+ apps/web/package.json                       |   1 [32m+[m
+ apps/web/src/main.tsx                       |   8 [32m+[m[31m-[m
+ apps/web/src/monitoring/sentry.ts           |  40 [32m++++[m
+ apps/web/vercel.json                        |   2 [32m+[m[31m-[m
+ 9 files changed, 538 insertions(+), 21 deletions(-)
