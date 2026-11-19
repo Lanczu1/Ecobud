@@ -1115,6 +1115,10 @@ export function useHomeDashboard(): EcoBudMobileModel {
                 })).catch(() => {});
               }).catch(() => {});
               void (async () => {
+                // SECURITY: renew the session on every app start. The server re-checks the account
+                // (active, same sessionVersion) and keeps the 90-day limit from the original login.
+                // 401/403 means the session was revoked or expired: wipe it and return to sign-in.
+                // Network errors keep the saved session so the app still opens offline.
                 if (parsed.refreshToken) {
                   try {
                     activeSession = await homeService.refreshSession(parsed.refreshToken);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Sun, Moon, UserCog } from 'lucide-react';
 import type { AdminSection } from './AdminSidebar';
 import { NotificationBell } from './NotificationBell';
+import { getAdminUserJson } from '../../utils/adminSession';
 
 interface AdminHeaderProps {
   activeSection?: AdminSection;
@@ -17,7 +18,7 @@ export function AdminHeader({ isDark,onToggleDark }: AdminHeaderProps) {
     return () => { window.removeEventListener('online',update); window.removeEventListener('offline',update); clearInterval(timer); };
   },[]);
   let user;
-  try { user=JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { user=null; }
+  try { user=JSON.parse(getAdminUserJson() || 'null'); } catch { user=null; }
   const name=user?.profile?.displayName || user?.name || (user?.role==='moderator' ? 'Moderator' : 'Admin');
   const city=user?.city || user?.profile?.city;
   const role=user?.role==='moderator' ? city ? `Moderator · Brgy. ${city}` : 'Community Moderator' : 'Administrator';

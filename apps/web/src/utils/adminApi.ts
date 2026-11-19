@@ -1,3 +1,5 @@
+import { getAdminToken, signOutAdminTabs } from './adminSession';
+
 export const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:3000';
 const API_BASE = `${API_HOST}/api`;
 
@@ -9,9 +11,7 @@ function newClientId() {
 /** This tab's id. The server echoes it on live pushes, so the tab can tell its own changes from other people's. */
 export const ADMIN_CLIENT_ID = newClientId();
 
-function getToken(): string {
-  return localStorage.getItem('ecobud_admin_token') || '';
-}
+const getToken = getAdminToken;
 
 function authHeaders(): Record<string, string> {
   return {
@@ -39,11 +39,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
     }
 
     if (res.status === 401) {
-      localStorage.removeItem('ecobud_admin_token');
-      localStorage.removeItem('ecobud_admin_user');
-      localStorage.removeItem('ecobud_admin_authenticated');
-      localStorage.removeItem('ecobud_admin_session_started_at');
-      localStorage.removeItem('ecobud_admin_last_activity_at');
+      // Only tabs holding the rejected token are signed out; a tab with a newer login keeps it.
+      signOutAdminTabs('same-token', 'rejected');
       window.location.href = '/';
     }
 
@@ -207,6 +204,22 @@ export function adminPutForm<T>(path: string, body: FormData): Promise<T> {
 
 export function adminDelete(path: string): Promise<void> {
   return adminWrite<void>(path, { method: 'DELETE', headers: authHeaders() });
+}
+
+// Tells the API this dashboard is in use, so typing for a long time without other requests does not
+// reach the server's idle limit. A 401 here signs the tab out like any other request.
+export async function pingAdminSession(): Promise<void> {
+  await handleResponse<void>(await fetch(`${API_BASE}/web-session/activity`, { method: 'POST', headers: authHeaders() }));
+}
+
+// Ends this browser's session on the server, so the token stops working even if it was copied.
+// keepalive lets the request finish if the page is closing.
+export function endAdminServerSession(token: string): Promise<void> {
+  return fetch(`${API_BASE}/web-session/logout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    keepalive: true,
+  }).then(() => undefined, () => undefined);
 }
 
 // Saves a file response (PDF, Excel) using the server's filename when it sends one.

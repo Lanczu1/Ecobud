@@ -1,35 +1,64 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { API_HOST } from './utils/adminApi';
+import { API_HOST, endAdminServerSession, pingAdminSession } from './utils/adminApi';
 import { WebAuthView } from './components/WebAuthView';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminSection } from './components/admin/AdminSidebar';
 import { ToastProvider } from './context/ToastContext';
 import { AdminNotificationProvider } from './components/admin/AdminNotificationProvider';
 import { adminHref, revokeAdminPushSession } from './services/adminNotifications';
+import {
+  clearAdminSession, getAdminSessionTimes, getAdminToken, getAdminUserJson, hasAdminCredentials,
+  onAdminSessionChange, recordAdminActivity, removeLegacyAdminSession, requestSharedAdminSession,
+  saveAdminSession, signOutAdminTabs, type SignOutReason,
+} from './utils/adminSession';
 import { BadgesPageSkeleton } from './components/admin/pages/BadgesSkeleton';
 import { BarangayReportsPageSkeleton, SystemReportsPageSkeleton } from './components/admin/pages/ReportsSkeleton';
 import { AdminPageSkeleton } from './components/admin/pages/PageSkeletons';
 
-const WEB_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+// SECURITY: admin sessions are short because admins can change everyone's data.
+// Idle: signed out after 30 minutes with no click, key, scroll or touch in any open dashboard tab.
+// Absolute: signed out 12 hours after login, which matches the API's web token lifetime (no refresh token on web).
+// Logout and both timeouts also end the session on the API (/api/web-session/logout), so a copied
+// token stops working too. The API ends a session on its own after 35 idle minutes or 12 hours.
+// Closing the tab or browser also signs out, because the session is kept in sessionStorage (see utils/adminSession.ts).
+const WEB_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const WEB_ABSOLUTE_TIMEOUT_MS = 12 * 60 * 60 * 1000;
-const WEB_SESSION_STARTED_KEY = 'ecobud_admin_session_started_at';
-const WEB_LAST_ACTIVITY_KEY = 'ecobud_admin_last_activity_at';
 
-function clearStoredAdminSession() {
-  if (localStorage.getItem('ecobud_admin_token')) void revokeAdminPushSession().catch(() => {});
-  localStorage.removeItem('ecobud_admin_token');
-  localStorage.removeItem('ecobud_admin_user');
-  localStorage.removeItem('ecobud_admin_authenticated');
-  localStorage.removeItem(WEB_SESSION_STARTED_KEY);
-  localStorage.removeItem(WEB_LAST_ACTIVITY_KEY);
+// Removes push alerts for this session, then ends the session on the server. Runs in that order
+// because removing push alerts needs the session to still be open.
+function endServerSession() {
+  const token = getAdminToken();
+  if (!token) return;
+  void revokeAdminPushSession().catch(() => {}).then(() => endAdminServerSession(token));
 }
 
+// This tab only, without telling other tabs: a new tab with no session must not sign out the open ones.
+function clearStoredAdminSession() {
+  endServerSession();
+  clearAdminSession();
+}
+
+// Logout and timeouts: this tab and every other open dashboard tab.
+function signOutEverywhere(reason: SignOutReason) {
+  endServerSession();
+  signOutAdminTabs('all', reason);
+}
+
+function startingSection(): AdminSection {
+  try {
+    return JSON.parse(getAdminUserJson() || 'null')?.role === 'moderator' ? 'Announcements' : 'Dashboard';
+  } catch {
+    return 'Dashboard';
+  }
+}
+
+// Runs on page load. A browser that restores closed tabs can bring sessionStorage back,
+// so both timeouts are still checked here.
 function hasValidStoredAdminSession(): boolean {
+  removeLegacyAdminSession();
   const now = Date.now();
-  const startedAt = Number(localStorage.getItem(WEB_SESSION_STARTED_KEY));
-  const lastActivityAt = Number(localStorage.getItem(WEB_LAST_ACTIVITY_KEY));
-  const hasCredentials = Boolean(localStorage.getItem('ecobud_admin_token') && localStorage.getItem('ecobud_admin_authenticated') === 'true');
-  if (!hasCredentials || !startedAt || !lastActivityAt || now - startedAt >= WEB_ABSOLUTE_TIMEOUT_MS || now - lastActivityAt >= WEB_IDLE_TIMEOUT_MS) {
+  const { startedAt, lastActivityAt } = getAdminSessionTimes();
+  if (!hasAdminCredentials() || !startedAt || !lastActivityAt || now - startedAt >= WEB_ABSOLUTE_TIMEOUT_MS || now - lastActivityAt >= WEB_IDLE_TIMEOUT_MS) {
     clearStoredAdminSession();
     return false;
   }
@@ -148,23 +177,12 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return hasValidStoredAdminSession();
   });
-  const [activeSection, setActiveSection] = useState<AdminSection>(() => {
-    const userJson = localStorage.getItem('ecobud_admin_user');
-    if (userJson) {
-      try {
-        const user = JSON.parse(userJson);
-        if (user.role === 'moderator') {
-          return 'Announcements';
-        }
-      } catch (e) {
-        // ignore parse error
-      }
-    }
-    return 'Dashboard';
-  });
+  // A new tab waits briefly for an open tab to share its session before showing the login screen.
+  const [checkingOtherTabs, setCheckingOtherTabs] = useState(() => !isAuthenticated);
+  const [activeSection, setActiveSection] = useState<AdminSection>(startingSection);
   const adminUserRole = (() => {
     try {
-      return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null')?.role as string | undefined;
+      return JSON.parse(getAdminUserJson() || 'null')?.role as string | undefined;
     } catch {
       return undefined;
     }
@@ -176,6 +194,34 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) preloadPages(adminUserRole);
   }, [isAuthenticated, adminUserRole]);
+
+  useEffect(() => {
+    if (!checkingOtherTabs) return;
+    let cancelled = false;
+    void requestSharedAdminSession().then(shared => {
+      if (cancelled) return;
+      // The shared session goes through the same 30-minute idle and 12-hour checks as a stored one.
+      if (shared && hasValidStoredAdminSession()) {
+        setActiveSection(startingSection());
+        setIsAuthenticated(true);
+      }
+      setCheckingOtherTabs(false);
+    });
+    return () => { cancelled = true; };
+  }, [checkingOtherTabs]);
+
+  // Logins, logouts and timeouts in other tabs.
+  useEffect(() => onAdminSessionChange(change => {
+    if (change.kind === 'signed-in') {
+      setAuthError(null);
+      setActiveSection(startingSection());
+      setIsAuthenticated(true);
+      return;
+    }
+    setIsAuthenticated(false);
+    setAuthError(change.reason === 'logout' ? null : 'Your session expired. Please sign in again.');
+    window.location.hash = '';
+  }), []);
 
   useEffect(() => {
     const update=() => setRouteHash(window.location.hash);
@@ -247,19 +293,26 @@ export default function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
     let lastWrite = 0;
+    let lastPing = Date.now();
     const recordActivity = () => {
       const now = Date.now();
       if (now - lastWrite >= 30_000) {
-        localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(now));
+        recordAdminActivity(now);
         lastWrite = now;
       }
+      // The server's idle limit is 35 minutes, so a ping every 2 minutes of use keeps it behind this
+      // tab's 30-minute limit: the browser always times out first.
+      if (now - lastPing >= 120_000) {
+        lastPing = now;
+        void pingAdminSession().catch(() => {});
+      }
     };
+    // Checked every 30 seconds while the dashboard is open.
     const enforceTimeout = () => {
       const now = Date.now();
-      const startedAt = Number(localStorage.getItem(WEB_SESSION_STARTED_KEY));
-      const lastActivityAt = Number(localStorage.getItem(WEB_LAST_ACTIVITY_KEY));
+      const { startedAt, lastActivityAt } = getAdminSessionTimes();
       if (!startedAt || !lastActivityAt || now - startedAt >= WEB_ABSOLUTE_TIMEOUT_MS || now - lastActivityAt >= WEB_IDLE_TIMEOUT_MS) {
-        clearStoredAdminSession();
+        signOutEverywhere('expired');
         setIsAuthenticated(false);
         setAuthError('Your session expired. Please sign in again.');
       }
@@ -289,24 +342,23 @@ export default function App() {
       throw new Error(msg);
     }
 
+    // Keeps regular users off the dashboard screens only. Real protection is the API's
+    // requireAdminAccess / requireModeratorAccess on every admin request.
     if (data.user.role !== 'admin' && data.user.role !== 'moderator') {
       const msg = 'Access denied. Admin or moderator role required.';
       setAuthError(msg);
       throw new Error(msg);
     }
 
-    localStorage.setItem('ecobud_admin_token', data.token);
-    localStorage.setItem('ecobud_admin_user', JSON.stringify(data.user));
-    localStorage.setItem('ecobud_admin_authenticated', 'true');
-    const signedInAt = Date.now();
-    localStorage.setItem(WEB_SESSION_STARTED_KEY, String(signedInAt));
-    localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(signedInAt));
+    // SECURITY: sessionStorage is readable by any script on this page. An injected script (XSS or a
+    // compromised package) could copy this admin token; an httpOnly cookie would prevent that.
+    saveAdminSession(data.token, data.user);
     setIsAuthenticated(true);
     setActiveSection(data.user.role === 'moderator' ? 'Announcements' : 'Dashboard');
   };
 
   const handleLogout = () => {
-    clearStoredAdminSession();
+    signOutEverywhere('logout');
     setIsAuthenticated(false);
     window.location.hash='';
   };
@@ -335,6 +387,9 @@ export default function App() {
       </ToastProvider>
     );
   }
+
+  // Blank for up to 300 ms instead of flashing the login screen at someone an open tab is about to sign in.
+  if (checkingOtherTabs) return null;
 
   return (
     <ToastProvider>

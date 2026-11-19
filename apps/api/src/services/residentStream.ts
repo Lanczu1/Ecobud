@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../http/authentication';
 import { prisma } from '../prismaClient';
 import { TokenService } from '../security/tokenService';
+import { WebSessionService } from '../security/webSessionService';
 import { residentLiveEvents } from './residentLiveEvents';
 
 const connections = new Map<string, number>();
@@ -9,6 +10,8 @@ const connections = new Map<string, number>();
 export async function streamSessionActive(req: AuthenticatedRequest) {
   try {
     const token = TokenService.verify(req.headers.authorization!.slice('Bearer '.length));
+    // A web dashboard stream closes once its session is logged out or idles out.
+    if (token.clientType === 'web' && (!token.sessionId || !await WebSessionService.isActive(token.sessionId, token.userId, { touch: false }))) return false;
     const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { role: true, status: true, sessionVersion: true } });
     return Boolean(token.userId === req.auth!.userId && user && user.status === 'active' && user.role === req.auth!.role && user.sessionVersion === token.sessionVersion);
   } catch { return false; }

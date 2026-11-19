@@ -1,5 +1,6 @@
 import { adminDelete, adminGet, adminPost, API_HOST } from '../utils/adminApi';
 import type { AdminSection } from '../components/admin/AdminSidebar';
+import { getAdminToken } from '../utils/adminSession';
 
 export const notificationCategories = ['verification','challenge','event','swap','reward','learning','announcement','system'] as const;
 export type NotificationCategory = typeof notificationCategories[number];
@@ -70,7 +71,7 @@ export async function disableBrowserPush() {
   const sub = await reg?.pushManager.getSubscription();
   if (!sub) return;
   const res = await fetch(`${API_HOST}/api/admin/notifications/subscriptions`,{ method:'DELETE',headers: {
-    'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('ecobud_admin_token') || ''}` },body:JSON.stringify({ endpoint:sub.endpoint }) });
+    'Content-Type':'application/json',Authorization:`Bearer ${getAdminToken()}` },body:JSON.stringify({ endpoint:sub.endpoint }) });
   if (!res.ok) throw new Error('Could not disable browser alerts. Retry while connected.');
   await sub.unsubscribe();
 }

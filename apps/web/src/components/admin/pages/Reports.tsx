@@ -17,6 +17,7 @@ import { useAdminStats } from '../useAdminStats';
 import { API_HOST } from '../../../utils/adminApi';
 import { useToast } from '../../../context/ToastContext';
 import { BarChartSkeleton, KpiCardsSkeleton, OverviewCardsSkeleton, SummaryRowsSkeleton } from './ReportsSkeleton';
+import { getAdminToken } from '../../../utils/adminSession';
 
 export function Reports() {
   const { stats, loading, error } = useAdminStats('Failed to load report data.');
@@ -52,7 +53,7 @@ export function Reports() {
     setExporting(format);
     setExportError(null);
     try {
-      const token = localStorage.getItem('ecobud_admin_token') || '';
+      const token = getAdminToken();
       const response = await fetch(`${API_HOST}/api/reports/analytics/${format}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

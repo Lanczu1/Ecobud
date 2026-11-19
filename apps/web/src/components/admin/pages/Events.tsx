@@ -25,6 +25,7 @@ import { GeoJSON, MapContainer, TileLayer, Marker, useMapEvents, useMap } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { StatSkeleton, TableSkeleton, Skeleton } from './PageSkeletons';
+import { getAdminToken, getAdminUserJson } from '../../../utils/adminSession';
 
 function useSecondClock() {
   const [now, setNow] = useState(() => Date.now());
@@ -822,7 +823,7 @@ export function Events() {
     const params = new URLSearchParams({ page: '1', pageSize: '25' });
     const target = notificationTarget('event'); if (target) params.set('recordId', target);
     try {
-      const user = JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null');
+      const user = JSON.parse(getAdminUserJson() || 'null');
       const city = user?.role === 'moderator' ? user.city?.trim() : '';
       if (city) params.set('barangay', city);
     } catch { /* no stored user */ }
@@ -840,7 +841,7 @@ export function Events() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [barangayFilter, setBarangayFilter] = useState(() => {
     try {
-      const user = JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null');
+      const user = JSON.parse(getAdminUserJson() || 'null');
       return user?.role === 'moderator' ? user.city?.trim() || '' : '';
     } catch {
       return '';
@@ -866,7 +867,7 @@ export function Events() {
   const [photoTabOpened, setPhotoTabOpened] = useState(activeTab === 'photoRequests');
   if (activeTab === 'photoRequests' && !photoTabOpened) setPhotoTabOpened(true);
   const adminUser = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null'); } catch { return null; }
+    try { return JSON.parse(getAdminUserJson() || 'null'); } catch { return null; }
   }, []);
   const [reportDataCache, setReportDataCache] = useState<Record<string, EventReportData>>({});
   const [reportStatsCache, setReportStatsCache] = useState<Record<string, EventReportStats>>({});
@@ -1226,7 +1227,7 @@ export function Events() {
   const handleDownloadReport = async (eventId: string, format: 'pdf' | 'excel') => {
     setReportLoading(eventId);
     try {
-      const token = localStorage.getItem('ecobud_admin_token') || '';
+      const token = getAdminToken();
       const url = `${API_HOST}/api/reports/events/${eventId}/${format === 'pdf' ? 'pdf' : 'excel'}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Failed to generate report');
@@ -1349,7 +1350,7 @@ export function Events() {
                   <span className="text-sm font-semibold text-gray-900">
                     {(() => {
                       try {
-                        const userJson = localStorage.getItem('ecobud_admin_user');
+                        const userJson = getAdminUserJson();
                         const user = userJson ? JSON.parse(userJson) : null;
                         return user?.name || user?.email || 'Admin';
                       } catch { return 'Admin'; }

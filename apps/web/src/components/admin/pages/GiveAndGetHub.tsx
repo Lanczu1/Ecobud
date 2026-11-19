@@ -36,6 +36,7 @@ import { AdminPagination } from '../AdminPagination';
 import { useToast } from '../../../context/ToastContext';
 import { ListingReportsModal } from './ListingReportsModal';
 import { CardGridSkeleton, StatCardsSkeleton } from './PageSkeletons';
+import { getAdminUserJson } from '../../../utils/adminSession';
 
 interface SwapListingItem {
   id: string;
@@ -515,7 +516,7 @@ function ListingFullDetailsModal({
   onPreviewImages: (images: string[], idx: number, title: string) => void;
   onViewReports: (listing: SwapListingItem) => void;
 }) {
-  const isAdmin = (() => { try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'admin'; } catch { return false; } })();
+  const isAdmin = (() => { try { return JSON.parse(getAdminUserJson() || '{}').role === 'admin'; } catch { return false; } })();
   const badgeReward = useContentBadgeReward('exchange', listing.id, isAdmin);
   const [savingBadge, setSavingBadge] = useState(false);
   const [badgeNotice, setBadgeNotice] = useState('');

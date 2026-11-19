@@ -306,6 +306,7 @@ userRoutes.post('/me/mfa/totp/confirm', authenticateRequest, requireUserAccess, 
     if (step === null) throw new HttpError(400, 'That code is invalid. Check your authenticator app and try again.');
     const recoveryCodes = makeRecoveryCodes();
     const updatedUser = await prisma.$transaction(async (tx) => {
+      // SECURITY: enabling 2FA raises sessionVersion, ending every session that was opened without 2FA.
       const updated = await tx.user.updateMany({ where: { id: req.auth!.userId, totpEnabledAt: null }, data: { totpSecretEncrypted: enrollment.secretEncrypted, totpEnabledAt: new Date(), totpLastUsedStep: BigInt(step), sessionVersion: { increment: 1 } } });
       if (updated.count !== 1) throw new HttpError(409, 'Authenticator setup has already been completed.');
       await tx.mfaRecoveryCode.deleteMany({ where: { userId: req.auth!.userId } });

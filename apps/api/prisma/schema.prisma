@@ -59,6 +59,7 @@ model User {
   notifications                Notification[]
   challengeAiAttemptLimits     ChallengeAiAttemptLimit[]
   mfaLoginChallenges           MfaLoginChallenge[]
+  webSessions                  WebSession[]
   mfaRecoveryCodes             MfaRecoveryCode[]
   mfaEnrollments               MfaEnrollment[]
   giveAndGetItems              GiveAndGetItem[]
@@ -219,6 +220,33 @@ model MfaLoginChallenge {
   @@index([expiresAt])
   @@index([userId, consumedAt])
   @@map("mfa_login_challenges")
+}
+
+// One row per web dashboard login (admin or moderator). Lets the API end one browser session on
+// logout or after 35 idle minutes without signing the account out of the mobile app.
+model WebSession {
+  id             String    @id
+  userId         String    @map("user_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  expiresAt      DateTime  @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("web_sessions")
+}
+
+// Failed sign-in counts per email, kept in the database so a lock survives API restarts.
+model LoginAttempt {
+  email          String    @id
+  count          Int       @default(0)
+  firstAttemptAt DateTime  @map("first_attempt_at")
+  lockedUntil    DateTime? @map("locked_until")
+
+  @@index([firstAttemptAt])
+  @@map("login_attempts")
 }
 
 model MfaRecoveryCode {

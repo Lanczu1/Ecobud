@@ -20,6 +20,7 @@ import { AdminPagination } from '../AdminPagination';
 import { useModalScrollLock } from '../../../hooks/useModalScrollLock';
 import { useToast } from '../../../context/ToastContext';
 import { latestSubmissionFirst, submissionActivityAt } from '../../../utils/submissionActivity';
+import { getAdminUserJson } from '../../../utils/adminSession';
 
 interface Challenge {
   id: string;
@@ -694,7 +695,7 @@ export function Challenges() {
   const [submissionsSpinning, runSubmissionsRefresh] = useRefreshSpin();
   const lastSearch = useRef('');
   const lastSubSearch = useRef('');
-  const userJson = localStorage.getItem('ecobud_admin_user');
+  const userJson = getAdminUserJson();
   const loggedInUser = useMemo(() => {
     if (!userJson) return null;
     try {

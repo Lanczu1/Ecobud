@@ -1,3 +1,5 @@
+import { getAdminUserJson } from './adminSession';
+
 export const DRAFT_LIMIT = 3;
 export type DraftSection = 'announcements' | 'learning' | 'challenges' | 'events' | 'redeem';
 export interface LocalDraft<T> {
@@ -25,7 +27,7 @@ function openDatabase() {
 }
 
 export function draftScope(section: DraftSection) {
-  const user = JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null');
+  const user = JSON.parse(getAdminUserJson() || 'null');
   if (!user?.id) throw new Error('Sign in to save local drafts.');
   return `${user.id}:${section}`;
 }
