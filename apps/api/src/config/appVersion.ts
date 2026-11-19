@@ -9,7 +9,7 @@ const VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z
 export const readAppVersionConfig = (
   env: NodeJS.ProcessEnv = process.env,
 ): AppVersionConfig => {
-  const latestVersion = env.APP_LATEST_VERSION?.trim() || '1.2.0';
+  const latestVersion = env.APP_LATEST_VERSION?.trim() || '1.2.1';
   const minimumVersion = env.APP_MINIMUM_VERSION?.trim() || '1.2.0';
   const updateUrl = env.APP_UPDATE_URL?.trim() || 'ecobud://';
 
