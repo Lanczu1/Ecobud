@@ -13,6 +13,7 @@ import { Mascot } from 'page-mascot';
 
 import wordmarkImg from '../../assets/ecobud_wordmark.png';
 import wordmarkDarkImg from '../../assets/ecobud_wordmark_dark.png';
+import { getAdminUserJson } from '../../utils/adminSession';
 
 export type AdminSection = 'Dashboard' | 'Users' | 'Learning Content' | 'Challenges' | 'Badges' | 'Events' | 'Give and Get Hub' | 'Redeem' | 'Reports' | 'Announcements' | 'ID Verification' | 'User Activity & Transactions' | 'Notifications';
 interface SidebarProps {
@@ -36,7 +37,7 @@ const menuItems: { name: AdminSection; icon: React.ElementType }[] = [
 ];
 
 export function AdminSidebar({ onLogout, activeSection, onNavigate }: SidebarProps) {
-  const userJson = localStorage.getItem('ecobud_admin_user');
+  const userJson = getAdminUserJson();
   const user = userJson ? JSON.parse(userJson) : null;
   const isModerator = user?.role === 'moderator';
 

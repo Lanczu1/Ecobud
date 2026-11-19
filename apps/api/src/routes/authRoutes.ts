@@ -12,6 +12,7 @@ import nodemailer from 'nodemailer';
 import { emailRegistrationSchema } from '../security/emailValidator';
 import { SignupOtpSendLimiter } from '../security/signupOtpSendLimiter';
 import { LoginAttemptTracker } from '../security/loginAttemptTracker';
+import { WebSessionService } from '../security/webSessionService';
 import { verifyGoogleIdentity } from '../security/googleIdentity';
 import { emailCodeHash } from '../security/emailChange';
 import { welcomeEmail } from '../services/welcomeEmail';
@@ -32,6 +33,9 @@ const transporter = nodemailer.createTransport({
 
 const authRoutes = Router();
 
+// SECURITY: per-IP cap of 30 requests per 15 minutes on every /api/auth route (applied with
+// authRoutes.use below) against password and code guessing. The per-account lockout in
+// LoginAttemptTracker covers attackers who rotate IPs.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
@@ -100,8 +104,10 @@ async function requireMfaChallenge(userId: string, clientType: SessionClient) {
   return { mfaRequired: true as const, challengeToken: TokenService.signMfaChallenge({ userId, challengeId: id, clientType }), expiresAt: expiresAt.toISOString() };
 }
 
-function assertAccountNotLocked(email: string, audit?: { req: Request; userId?: string; method: AuthMethod }): void {
-  const lockStatus = LoginAttemptTracker.isLocked(email.trim().toLowerCase());
+// SECURITY: per-account lockout gate for the email-code, 2FA and Google sign-in paths.
+// Password login runs the same check inline at the top of POST /login.
+async function assertAccountNotLocked(email: string, audit?: { req: Request; userId?: string; method: AuthMethod }): Promise<void> {
+  const lockStatus = await LoginAttemptTracker.isLocked(email.trim().toLowerCase());
   if (lockStatus.locked) {
     if (audit) recordAuthEvent(audit.req, 'AUTH_LOCKED_ATTEMPT', { userId: audit.userId, email, method: audit.method });
     throw new HttpError(
@@ -111,7 +117,7 @@ function assertAccountNotLocked(email: string, audit?: { req: Request; userId?: 
   }
 }
 
-const toAuthResponse = (user: {
+const toAuthResponse = async (user: {
   id: string;
   name: string;
   email: string;
@@ -127,6 +133,9 @@ const toAuthResponse = (user: {
   streakRestoredAt: Date | null;
   profile: { displayName: string; avatarUrl: string | null; city?: string | null } | null;
 }, clientType: SessionClient = 'mobile', authTime = Math.floor(Date.now() / 1000)) => {
+  // Web logins get a server-side session so logout and the idle limit can end this token early.
+  const sessionId = clientType === 'web' ? await WebSessionService.create(user.id) : undefined;
+  // SECURITY: The token records the user's sessionVersion and original login time (authTime), which lets the server cancel it later and end it on time.
   const token = TokenService.sign({
     userId: user.id,
     name: user.name,
@@ -137,10 +146,12 @@ const toAuthResponse = (user: {
     sessionVersion: user.sessionVersion,
     clientType,
     authTime,
+    sessionId,
   });
 
   return {
     token,
+    // Mobile only. The web admin gets no refresh token, so its session ends 12 hours after login.
     refreshToken: clientType === 'mobile'
       ? TokenService.signRefresh({ userId: user.id, sessionVersion: user.sessionVersion, authTime })
       : undefined,
@@ -228,7 +239,7 @@ authRoutes.post(
   '/register',
   errorBoundary(async (req, res) => {
     const payload = registerSchema.parse(req.body);
-    assertAccountNotLocked(payload.email);
+    await assertAccountNotLocked(payload.email);
     const displayName = payload.name ?? payload.displayName!;
     const [existingUser, existingProfile] = await Promise.all([
       prisma.user.findUnique({ where: { email: payload.email } }),
@@ -318,7 +329,7 @@ authRoutes.post(
       });
     }
 
-    return res.status(201).json(toAuthResponse(user, payload.clientType));
+    return res.status(201).json(await toAuthResponse(user, payload.clientType));
   }),
 );
 
@@ -327,7 +338,7 @@ authRoutes.post(
   signupOtpIpLimiter,
   errorBoundary(async (req, res) => {
     const { email } = otpSchema.parse(req.body);
-    assertAccountNotLocked(email);
+    await assertAccountNotLocked(email);
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
@@ -411,14 +422,18 @@ authRoutes.post(
   }),
 );
 
+// SECURITY: This is the only route that exchanges a password for a session, so every protection below must stay on it.
 authRoutes.post(
   '/login',
   errorBoundary(async (req, res) => {
+    // SECURITY: Strange or oversized input is rejected before it reaches the database or bcrypt.
     const payload = loginSchema.parse(req.body);
+    // SECURITY: The email is lowercased so Admin@x.com and admin@x.com can't be used as separate accounts to get around the lockout.
     const normalizedEmail = payload.email.trim().toLowerCase();
 
     // Check account-level lockout
-    const lockStatus = LoginAttemptTracker.isLocked(normalizedEmail);
+    // SECURITY: After 5 wrong passwords the account is locked for 5 minutes, so an attacker can't keep guessing even after switching IP addresses.
+    const lockStatus = await LoginAttemptTracker.isLocked(normalizedEmail);
     if (lockStatus.locked) {
       recordAuthEvent(req, 'AUTH_LOCKED_ATTEMPT', { email: normalizedEmail, method: 'password' });
       throw new HttpError(
@@ -433,7 +448,7 @@ authRoutes.post(
     });
 
     if (!user) {
-      const failureResult = LoginAttemptTracker.recordFailure(normalizedEmail);
+      const failureResult = await LoginAttemptTracker.recordFailure(normalizedEmail);
       recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { email: normalizedEmail, method: 'password', reason: 'unknown_email' });
       if (failureResult.locked) {
         recordAuthEvent(req, 'AUTH_LOCKOUT', { email: normalizedEmail, method: 'password' });
@@ -442,10 +457,11 @@ authRoutes.post(
       throw new HttpError(401, `Incorrect email or password. ${failureResult.remainingAttempts} login attempt(s) remaining.`);
     }
 
+    // SECURITY: The password is checked against the stored hash, so the real password is never stored or shown anywhere.
     const passwordMatches = await PasswordService.compare(payload.password, user.passwordHash);
 
     if (!passwordMatches) {
-      const failureResult = LoginAttemptTracker.recordFailure(normalizedEmail);
+      const failureResult = await LoginAttemptTracker.recordFailure(normalizedEmail);
       recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'password', reason: 'wrong_password' });
       if (failureResult.locked) {
         recordAuthEvent(req, 'AUTH_LOCKOUT', { userId: user.id, method: 'password' });
@@ -469,10 +485,11 @@ authRoutes.post(
     }
 
     // Reset failed attempts upon successful login
-    LoginAttemptTracker.recordSuccess(normalizedEmail);
+    await LoginAttemptTracker.recordSuccess(normalizedEmail);
     recordAuthEvent(req, 'AUTH_LOGIN_SUCCESS', { userId: user.id, method: 'password' });
 
-    return res.json(toAuthResponse(user, payload.clientType));
+    // SECURITY: A token is issued only after every check above has passed, and its type (web or mobile) sets its time limit.
+    return res.json(await toAuthResponse(user, payload.clientType));
   }),
 );
 
@@ -494,7 +511,7 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
     throw new HttpError(401, 'This sign-in verification expired. Please sign in again.');
   }
   const user = challenge.user;
-  assertAccountNotLocked(user.email, { req, userId: user.id, method: 'mfa_totp' });
+  await assertAccountNotLocked(user.email, { req, userId: user.id, method: 'mfa_totp' });
   if (user.status !== 'active' || !user.totpEnabledAt || !user.totpSecretEncrypted) {
     throw new HttpError(401, 'Authenticator verification could not be completed. Please sign in again.');
   }
@@ -521,7 +538,7 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
       return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
     });
     if (!matching) {
-      const failureResult = LoginAttemptTracker.recordFailure(user.email);
+      const failureResult = await LoginAttemptTracker.recordFailure(user.email);
       recordAuthEvent(req, 'AUTH_LOGIN_FAILED', { userId: user.id, method: 'mfa_totp', reason: 'invalid_mfa_code' });
       if (failureResult.locked) recordAuthEvent(req, 'AUTH_LOCKOUT', { userId: user.id, method: 'mfa_totp' });
       throw new HttpError(401, 'The authenticator code or recovery code is invalid.');
@@ -535,9 +552,9 @@ authRoutes.post('/mfa/verify', otpLimiter, errorBoundary(async (req, res) => {
     });
   }
 
-  LoginAttemptTracker.recordSuccess(user.email);
+  await LoginAttemptTracker.recordSuccess(user.email);
   recordAuthEvent(req, 'AUTH_LOGIN_SUCCESS', { userId: user.id, method: mfaMethod });
-  return res.json(toAuthResponse(user, challengeClaims.clientType));
+  return res.json(await toAuthResponse(user, challengeClaims.clientType));
 }));
 
 const googleAuthSchema = z.object({
@@ -552,7 +569,7 @@ authRoutes.post(
     const payload = googleAuthSchema.parse(req.body);
     const identity = await verifyGoogleIdentity(payload.accessToken);
     const normalizedEmail = identity.email;
-    assertAccountNotLocked(normalizedEmail, { req, method: 'google' });
+    await assertAccountNotLocked(normalizedEmail, { req, method: 'google' });
     const displayName = identity.name;
 
     let user = await prisma.user.findUnique({
@@ -654,10 +671,13 @@ authRoutes.post(
       return res.json(await requireMfaChallenge(user.id, payload.clientType));
     }
     recordAuthEvent(req, 'AUTH_LOGIN_SUCCESS', { userId: user.id, method: 'google', newAccount });
-    return res.json(toAuthResponse(user, payload.clientType));
+    return res.json(await toAuthResponse(user, payload.clientType));
   }),
 );
 
+// SECURITY: mobile session renewal. The refresh token alone is not enough: the account must still be
+// active and on the same sessionVersion, so a suspended or logged-out session cannot renew.
+// The original authTime is passed on, keeping the 90-day limit counted from the password login.
 authRoutes.post(
   '/refresh',
   authLimiter,
@@ -678,7 +698,7 @@ authRoutes.post(
       throw new HttpError(401, 'Your mobile session is no longer valid. Please sign in again.');
     }
 
-    return res.json(toAuthResponse(user, 'mobile', refreshSession.authTime));
+    return res.json(await toAuthResponse(user, 'mobile', refreshSession.authTime));
   }),
 );
 
@@ -695,6 +715,8 @@ authRoutes.post(
     }
 
     // Refresh JWTs are stateless, so invalidate the account's current sessions.
+    // SECURITY: this signs the account out on every device (web included), not only this phone.
+    // The web dashboard does not use this route. It ends only its own session through /api/web-session/logout.
     await prisma.user.updateMany({
       where: { id: refreshSession.userId, sessionVersion: refreshSession.sessionVersion },
       data: { sessionVersion: { increment: 1 } },

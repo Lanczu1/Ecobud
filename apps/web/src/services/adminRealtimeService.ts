@@ -1,4 +1,5 @@
 import { ADMIN_CLIENT_ID, API_HOST, markForeignChangePush, markOwnChangePush } from '../utils/adminApi';
+import { getAdminToken } from '../utils/adminSession';
 
 export interface PresenceData {
   onlineUserIds: string[];
@@ -116,7 +117,7 @@ class AdminRealtimeService {
 
   private async openStream() {
     if (this.stream || this.subscribers.size === 0) return;
-    const token = localStorage.getItem('ecobud_admin_token');
+    const token = getAdminToken();
     const controller = new AbortController();
     this.stream = controller;
     let wasLive = false;

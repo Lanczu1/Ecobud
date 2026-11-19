@@ -96,7 +96,10 @@ const AUTH_COPY: Record<
   },
 };
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOGIN_LOCKOUT_STORAGE_KEY = 'ecobud.mobile.loginLockouts';
+// Matches the API's 5-minute lockout, plus a minute of slack for its rounding up to whole minutes.
+const LOGIN_LOCKOUT_MAX_MS = 6 * 60_000;
+const EMAIL_REGEX =/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DUPLICATE_EMAIL_ERROR_FRAGMENT = 'account already exists for this email';
 
 const TRUSTED_DOMAINS = new Set([
@@ -305,6 +308,46 @@ export function AuthView({
       onClearAuthError();
     }
   }, [loginAttemptState?.lockedUntil, isLoginLocked, email, onClearAuthError]);
+
+  // The server keeps the lock across app restarts, so the countdown is saved too. Without this the
+  // login button looked usable again after a restart while the account was still locked.
+  const lockoutsLoaded = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    mobileStorage.getItem(LOGIN_LOCKOUT_STORAGE_KEY)
+      .then(raw => {
+        if (cancelled) return;
+        lockoutsLoaded.current = true;
+        if (!raw) return;
+        const saved = JSON.parse(raw) as Record<string, number>;
+        const now = Date.now();
+        const restored: Record<string, { remaining: number; lockedUntil: number }> = {};
+        for (const [account, lockedUntil] of Object.entries(saved)) {
+          // Skip expired locks, and locks further out than one lockout period (device clock changed).
+          if (typeof lockedUntil === 'number' && lockedUntil > now && lockedUntil - now <= LOGIN_LOCKOUT_MAX_MS) {
+            restored[account] = { remaining: 0, lockedUntil };
+          }
+        }
+        setLoginNow(now);
+        // A lock reported by the server while storage was loading is newer, so it wins.
+        setLoginAttempts(current => ({ ...restored, ...current }));
+      })
+      .catch(() => { if (!cancelled) lockoutsLoaded.current = true; });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!lockoutsLoaded.current) return;
+    const now = Date.now();
+    const active: Record<string, number> = {};
+    for (const [account, state] of Object.entries(loginAttempts)) {
+      if (state.lockedUntil > now) active[account] = state.lockedUntil;
+    }
+    const write = Object.keys(active).length
+      ? mobileStorage.setItem(LOGIN_LOCKOUT_STORAGE_KEY, JSON.stringify(active))
+      : mobileStorage.removeItem(LOGIN_LOCKOUT_STORAGE_KEY);
+    write.catch(() => undefined);
+  }, [loginAttempts]);
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardSpace, setKeyboardSpace] = useState(0);
 

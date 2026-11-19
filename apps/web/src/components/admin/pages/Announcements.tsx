@@ -19,6 +19,7 @@ import './Announcements.css';
 import { AnnouncementEditor } from './AnnouncementEditor';
 import { AnnouncementDestinationPicker, destinationKindFor } from './AnnouncementDestinationPicker';
 import { StatSkeleton, Skeleton } from './PageSkeletons';
+import { getAdminUserJson } from '../../../utils/adminSession';
 
 const categories = [
   'General',
@@ -402,7 +403,7 @@ export function Announcements() {
     return () => urls.forEach(url => URL.revokeObjectURL(url));
   }, [pendingImages]);
   const isModerator = (() => {
-    try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'moderator'; }
+    try { return JSON.parse(getAdminUserJson() || '{}').role === 'moderator'; }
     catch { return false; }
   })();
   // Reopening the page shows the last list at once and refreshes it behind the scenes.

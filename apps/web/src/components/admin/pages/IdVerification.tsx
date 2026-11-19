@@ -12,6 +12,7 @@ import { adminGet, adminPatch, API_HOST, getLastAdminData } from '../../../utils
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { notificationTarget } from '../../../services/adminNotifications';
 import { AdminPagination } from '../AdminPagination';
+import { getAdminToken, getAdminUserJson } from '../../../utils/adminSession';
 
 type Submission = {
   id: string; legalName: string; idType: string; barangay: string;
@@ -32,7 +33,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString('en-US', {
 
 async function fetchDocument(id: string, signal: AbortSignal) {
   const response = await fetch(`${API_HOST}/api/id-verification/review/${encodeURIComponent(id)}/document`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem('ecobud_admin_token') || ''}` },
+    headers: { Authorization: `Bearer ${getAdminToken()}` },
     cache: 'no-store', signal,
   });
   if (!response.ok) {
@@ -102,7 +103,7 @@ export function IdVerification() {
   useModalScrollLock(Boolean(selected));
   const assignedBarangay = useMemo(() => {
     try {
-      const user = JSON.parse(localStorage.getItem('ecobud_admin_user') || 'null');
+      const user = JSON.parse(getAdminUserJson() || 'null');
       return user?.city || user?.profile?.city || '';
     } catch { return ''; }
   }, []);

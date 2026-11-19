@@ -4,6 +4,7 @@ import { BarangayReportSkeleton } from './ReportsSkeleton';
 import { useAdminLiveRefresh } from '../../../hooks/useAdminLiveRefresh';
 import { ALL_BUT_PRESENCE } from '../../../services/adminRealtimeService';
 import { Reports as SystemReports } from './Reports';
+import { getAdminToken, getAdminUserJson } from '../../../utils/adminSession';
 
 type Report = {
   barangay: string | null; barangays: string[]; from: string; to: string; generatedAt: string; notes: string;
@@ -15,7 +16,7 @@ const todayPht = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0,
 export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
   const [isAdmin] = useState(() => {
     if (role) return role === 'admin';
-    try { return JSON.parse(localStorage.getItem('ecobud_admin_user') || '{}').role === 'admin'; } catch { return false; }
+    try { return JSON.parse(getAdminUserJson() || '{}').role === 'admin'; } catch { return false; }
   });
   const [system, setSystem] = useState(false);
   const [from, setFrom] = useState(() => `${todayPht().slice(0, 7)}-01`);
@@ -73,7 +74,7 @@ export function Reports({ role }: { role?: 'admin' | 'moderator' } = {}) {
     setExporting(format); setExportError('');
     try {
       const response = await fetch(`${API_HOST}/api/admin/reports/barangay/${format}?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('ecobud_admin_token') || ''}` },
+        headers: { Authorization: `Bearer ${getAdminToken()}` },
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));

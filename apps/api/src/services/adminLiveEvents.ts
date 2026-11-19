@@ -42,6 +42,7 @@ export function adminClientId(value: unknown): string | null {
 // Path prefixes under /api, longest first where they overlap. Anything unlisted refreshes every screen.
 const SECTION_ROUTES: [prefix: string, sections: AdminLiveSection[]][] = [
   ['/admin/upload', []],
+  ['/web-session', []],
   ['/admin/transcribe', []],
   ['/admin/challenges', ['challenges']],
   ['/admin/submissions', ['challenges', 'events']],

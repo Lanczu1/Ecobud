@@ -1,73 +1,69 @@
 /**
- * In-memory Login Attempt Tracker to prevent account-targeted brute force attacks.
- * Tracks failed login attempts per email with exponential/progressive lockout.
+ * Login attempt tracker against account-targeted brute force.
+ * 5 failures within 15 minutes lock the email for a fixed 5 minutes.
+ *
+ * SECURITY: counts live in the login_attempts table, so restarting or redeploying the API does not
+ * clear a lock, and every API instance sees the same counts.
  */
-
-interface AttemptRecord {
-  count: number;
-  lockedUntil: number;
-  firstAttemptAt: number;
-}
+import { Prisma } from '@prisma/client';
+import { prisma } from '../prismaClient';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 5 * 60 * 1000;
+// Failures older than this no longer count toward a lock.
+const FAILURE_WINDOW_MS = 15 * 60 * 1000;
 
-const attempts = new Map<string, AttemptRecord>();
+const normalize = (email: string) => email.trim().toLowerCase();
 
-// Cleanup stale records every 10 minutes
+// Rows that are not locked and whose failures are outside the window have no effect, so remove them.
 setInterval(() => {
-  const now = Date.now();
-  for (const [email, record] of attempts.entries()) {
-    if (now > record.lockedUntil && now - record.firstAttemptAt > LOCKOUT_DURATION_MS) {
-      attempts.delete(email);
-    }
-  }
-}, 10 * 60 * 1000);
+  const now = new Date();
+  prisma.loginAttempt.deleteMany({
+    where: {
+      firstAttemptAt: { lt: new Date(now.getTime() - FAILURE_WINDOW_MS) },
+      OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }],
+    },
+  }).catch(() => undefined);
+}, 10 * 60 * 1000).unref();
 
 export const LoginAttemptTracker = {
-  isLocked(email: string): { locked: boolean; remainingSeconds?: number } {
-    const normalizedEmail = email.trim().toLowerCase();
-    const record = attempts.get(normalizedEmail);
-    if (!record) return { locked: false };
-
+  async isLocked(email: string): Promise<{ locked: boolean; remainingSeconds?: number }> {
+    const record = await prisma.loginAttempt.findUnique({ where: { email: normalize(email) } });
     const now = Date.now();
-    if (now < record.lockedUntil) {
-      const remainingSeconds = Math.ceil((record.lockedUntil - now) / 1000);
-      return { locked: true, remainingSeconds };
-    }
-
-    // Lockout expired, reset if needed
-    if (record.count >= MAX_FAILED_ATTEMPTS) {
-      attempts.delete(normalizedEmail);
-    }
-
-    return { locked: false };
+    if (!record?.lockedUntil || record.lockedUntil.getTime() <= now) return { locked: false };
+    return { locked: true, remainingSeconds: Math.ceil((record.lockedUntil.getTime() - now) / 1000) };
   },
 
-  recordFailure(email: string): { locked: boolean; remainingAttempts: number; remainingSeconds?: number } {
-    const normalizedEmail = email.trim().toLowerCase();
-    const now = Date.now();
-    const record = attempts.get(normalizedEmail) || {
-      count: 0,
-      lockedUntil: 0,
-      firstAttemptAt: now,
-    };
-
-    record.count += 1;
-
-    if (record.count >= MAX_FAILED_ATTEMPTS) {
-      record.lockedUntil = now + LOCKOUT_DURATION_MS;
-      attempts.set(normalizedEmail, record);
-      const remainingSeconds = Math.ceil(LOCKOUT_DURATION_MS / 1000);
-      return { locked: true, remainingAttempts: 0, remainingSeconds };
+  async recordFailure(email: string): Promise<{ locked: boolean; remainingAttempts: number; remainingSeconds?: number }> {
+    const now = new Date();
+    const lockUntil = new Date(now.getTime() + LOCKOUT_DURATION_MS);
+    const windowStart = new Date(now.getTime() - FAILURE_WINDOW_MS);
+    // Start counting again after a lock has ended or when the earlier failures are outside the window.
+    const restart = Prisma.sql`(("login_attempts"."locked_until" IS NOT NULL AND "login_attempts"."locked_until" <= ${now})
+      OR ("login_attempts"."locked_until" IS NULL AND "login_attempts"."first_attempt_at" <= ${windowStart}))`;
+    // One statement, so two wrong passwords sent at the same moment are both counted.
+    const rows = await prisma.$queryRaw<{ count: number; locked_until: Date | null }[]>`
+      INSERT INTO "login_attempts" ("email", "count", "first_attempt_at", "locked_until")
+      VALUES (${normalize(email)}, 1, ${now}, NULL)
+      ON CONFLICT ("email") DO UPDATE SET
+        "count" = CASE WHEN ${restart} THEN 1 ELSE "login_attempts"."count" + 1 END,
+        "first_attempt_at" = CASE WHEN ${restart} THEN ${now} ELSE "login_attempts"."first_attempt_at" END,
+        "locked_until" = CASE
+          WHEN ${restart} THEN NULL
+          WHEN "login_attempts"."locked_until" > ${now} THEN "login_attempts"."locked_until"
+          WHEN "login_attempts"."count" + 1 >= ${MAX_FAILED_ATTEMPTS} THEN ${lockUntil}
+          ELSE NULL
+        END
+      RETURNING "count", "locked_until"`;
+    const row = rows[0];
+    const lockedUntil = row?.locked_until ? new Date(row.locked_until).getTime() : 0;
+    if (lockedUntil > now.getTime()) {
+      return { locked: true, remainingAttempts: 0, remainingSeconds: Math.ceil((lockedUntil - now.getTime()) / 1000) };
     }
-
-    attempts.set(normalizedEmail, record);
-    return { locked: false, remainingAttempts: MAX_FAILED_ATTEMPTS - record.count };
+    return { locked: false, remainingAttempts: Math.max(0, MAX_FAILED_ATTEMPTS - Number(row?.count ?? 1)) };
   },
 
-  recordSuccess(email: string): void {
-    const normalizedEmail = email.trim().toLowerCase();
-    attempts.delete(normalizedEmail);
+  async recordSuccess(email: string): Promise<void> {
+    await prisma.loginAttempt.deleteMany({ where: { email: normalize(email) } });
   },
 };

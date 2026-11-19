@@ -166,6 +166,8 @@ passwordResetRoutes.post('/complete', verifyLimiter, errorBoundary(async (req, r
     if (consumed.count !== 1) throw invalidGrant();
     const updated = await tx.user.updateMany({
       where: { id: claims.userId, email: claims.email, sessionVersion: claims.sessionVersion, status: 'active', role: 'user', googleIdentityId: null },
+      // SECURITY: raising sessionVersion signs out every device, so a thief who had the old
+      // password or a stolen token loses access the moment the password is reset.
       data: { passwordHash, sessionVersion: { increment: 1 } },
     });
     if (updated.count !== 1) throw invalidGrant();

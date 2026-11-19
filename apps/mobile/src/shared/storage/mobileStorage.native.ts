@@ -69,6 +69,8 @@ export const mobileStorage = {
   },
 
   async setItem(key: string, value: string) {
+    // SECURITY: the login session (access and refresh tokens) goes to SecureStore, the OS-encrypted
+    // keystore, and any plain copy left by older versions in SQLite/AsyncStorage is deleted.
     if (isSecureKey(key)) {
       await SecureStore.setItemAsync(key, value);
       await sqliteStorage.removeItemAsync(key).catch(() => undefined);
